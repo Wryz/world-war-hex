@@ -1,22 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Hex Kingdoms - Board Game
+
+A strategic hexagonal grid board game built with React, TypeScript, and Tailwind CSS.
+
+## Project Structure
+
+The game is organized into modular components for better maintainability:
+
+### Core Components
+
+- `GameController`: Main game controller that manages game state and orchestrates the different phases
+- `GameBoard`: Renders the hexagonal game board
+- `HexTile`: Individual hexagon tile component
+
+### Game Phases
+
+- `src/components/game/phases/`
+  - `SetupPhase`: Initial game phase for placing the player's base
+  - `PlanningPhase`: Main game phase for purchasing units and planning moves
+
+### Combat System
+
+- `src/components/game/combat/`
+  - `CombatResolver`: Handles combat resolution between units
+
+### UI Components
+
+- `src/components/game/dashboard/`
+  - `GameDashboard`: Game information dashboard showing player and enemy units
+- `src/components/game/shared/`
+  - `GameOverScreen`: End game screen showing the winner
+  - `SaveGameButton`: Button for saving the current game
+
+### Game Intro
+
+- `src/components/game/intro/`
+  - `IntroScreen`: Initial screen for starting/loading a game and selecting difficulty
+
+### Storage Utilities
+
+- `src/components/game/storage/`
+  - `GameStorage`: Utilities for saving/loading game state
+
+### Helper Utilities
+
+- `src/components/game/utils/`
+  - `UnitHelpers`: Helper functions for unit types, icons, and names
+
+### Game Logic
+
+- `src/lib/game/`
+  - `gameState.ts`: Core game state management
+  - `hexUtils.ts`: Utility functions for hex grid calculations
+
+### AI Player
+
+- `src/lib/ai/`
+  - `aiPlayer.ts`: AI decision making for moves and combat
+
+## Game Features
+
+- Hexagonal grid-based strategy game
+- Save and load game functionality
+- Multiple unit types with different abilities
+- Resource management
+- Turn-based combat system
+- AI opponent with configurable difficulty levels
 
 ## Getting Started
 
-First, run the development server:
-
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Run the development server: `npm run dev`
+4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 

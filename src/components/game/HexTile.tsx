@@ -34,18 +34,19 @@ const axialToWorld = (coordinates: HexCoordinates): [number, number, number] => 
 
 // Terrain type colors
 const TERRAIN_COLORS: Record<TerrainType, string> = {
-  plain: '#8bc34a',
-  mountain: '#9e9e9e',
-  forest: '#33691e',
-  water: '#2196f3',
-  desert: '#ffc107',
-  resource: '#ff9800'
+  plain: '#8bc34a',    // Brighter green for plains
+  mountain: '#a0a0a0', // Lighter gray for mountains
+  forest: '#2e7d32',   // Darker green for forests
+  water: '#4fc3f7',    // Brighter blue for water
+  desert: '#ffd54f',   // Brighter yellow for desert
+  resource: '#ffb74d'  // Brighter orange for resources
 };
 
 interface HexTileProps {
   hex: Hex;
   isSelected?: boolean;
   isHighlighted?: boolean;
+  isHovered?: boolean;
   onClick?: () => void;
   onContextMenu?: () => void;
   onPointerOver?: () => void;
@@ -56,12 +57,14 @@ export const HexTile: React.FC<HexTileProps> = ({
   hex,
   isSelected = false,
   isHighlighted = false,
+  isHovered = false,
   onClick,
   onContextMenu,
   onPointerOver,
   onPointerOut
 }) => {
   const meshRef = useRef<THREE.Mesh>(null);
+  const topFaceRef = useRef<THREE.Mesh>(null);
   
   // Get terrain-based height
   const terrainHeight = TERRAIN_HEIGHTS[hex.terrain] || BASE_HEIGHT;
@@ -137,27 +140,72 @@ export const HexTile: React.FC<HexTileProps> = ({
       return new THREE.Color(baseColor).offsetHSL(0, 0, 0.2);
     }
     
-    if (isHighlighted) {
-      return new THREE.Color(baseColor).offsetHSL(0, 0, 0.1);
+    if (isHighlighted || isHovered) {
+      // More noticeable color change on hover - brighter and slightly saturated
+      return new THREE.Color(baseColor).offsetHSL(0, 0.1, 0.15);
     }
     
     return new THREE.Color(baseColor);
-  }, [hex.terrain, isSelected, isHighlighted]);
+  }, [hex.terrain, isSelected, isHighlighted, isHovered]);
   
   // Add a darker color for the sides
   const sideColor = useMemo(() => {
+    if (isHovered) {
+      // Brighter sides when hovered
+      return new THREE.Color(TERRAIN_COLORS[hex.terrain]).offsetHSL(0, 0.05, 0);
+    }
     return new THREE.Color(TERRAIN_COLORS[hex.terrain]).offsetHSL(0, 0, -0.1);
-  }, [hex.terrain]);
+  }, [hex.terrain, isHovered]);
   
-  // Apply gentle hover animation
+  // Apply gentle hover animation and handle hover detection
   useFrame(() => {
-    if (meshRef.current && isHighlighted) {
+    if (meshRef.current) {
+      // Handle elevation animation when highlighted or hovered
       const currentY = meshRef.current.position.y;
-      // Lift the entire hex slightly when highlighted
-      const targetY = isHighlighted ? 0.05 : 0;
-      meshRef.current.position.y = THREE.MathUtils.lerp(currentY, targetY, 0.1);
+      
+      // More noticeable elevation change on hover
+      const targetY = isHovered ? 0.15 : isHighlighted ? 0.08 : 0;
+      
+      // Faster transition when hovering (0.2) than when returning to normal (0.1)
+      const lerpFactor = isHovered ? 0.2 : 0.1;
+      
+      meshRef.current.position.y = THREE.MathUtils.lerp(currentY, targetY, lerpFactor);
+      
+      // Update top face reference for hover detection
+      if (topFaceRef.current) {
+        // Set top face position to follow the main mesh
+        topFaceRef.current.position.y = meshRef.current.position.y + hexHeight;
+      }
     }
   });
+  
+  // Create an invisible mesh for the top face of the hex
+  // This will be used for hover detection
+  const hexTopShape = useMemo(() => {
+    const shape = new THREE.Shape();
+    const vertices = [];
+    
+    // Create pointy-top hexagon shape
+    for (let i = 0; i < 6; i++) {
+      // Start with top point (Math.PI/2 is up in the XZ plane)
+      const angle = (Math.PI / 3) * i + Math.PI/2;
+      vertices.push(new THREE.Vector2(
+        // Make the hover detection area slightly larger (110%) for better user experience
+        HEX_SIZE * 1.05 * Math.cos(angle),
+        HEX_SIZE * 1.05 * Math.sin(angle)
+      ));
+    }
+    
+    shape.moveTo(vertices[0].x, vertices[0].y);
+    
+    for (let i = 1; i < 6; i++) {
+      shape.lineTo(vertices[i].x, vertices[i].y);
+    }
+    
+    shape.lineTo(vertices[0].x, vertices[0].y);
+    
+    return shape;
+  }, []);
   
   // Calculate the total height including bevel
   const bevelThickness = 0.05;
@@ -190,6 +238,19 @@ export const HexTile: React.FC<HexTileProps> = ({
           metalness={0.1}
           flatShading={true}
         />
+      </mesh>
+      
+      {/* Invisible top face mesh for hover detection - positioned exactly at the top surface */}
+      <mesh 
+        ref={topFaceRef}
+        position={[0, totalHeight - 0.03, 0]} /* Position it right at the top surface */
+        rotation={[-Math.PI / 2, 0, 0]}
+        visible={false}
+        onPointerOver={onPointerOver}
+        onPointerOut={onPointerOut}
+      >
+        <shapeGeometry args={[hexTopShape]} />
+        <meshBasicMaterial transparent opacity={0} />
       </mesh>
       
       {/* Base indicator - position at the top of the hex */}

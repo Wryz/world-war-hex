@@ -3,6 +3,11 @@ import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { GameState, Hex, HexCoordinates, Unit } from '@/types/game';
 import { HexTile, UnitMesh } from './HexTile';
+import LandscapeModels from './landscape/LandscapeModels';
+import SkyDome from './environment/Sky';
+import Clouds from './environment/Clouds';
+import Fog from './environment/Fog';
+import { Html } from '@react-three/drei';
 
 // Constants for hex height calculation (should match those in HexTile.tsx)
 const BASE_HEIGHT = 0.5;
@@ -43,6 +48,7 @@ interface GameBoardProps {
   onUnitClick: (unit: Unit) => void;
   selectedHex?: Hex;
   validMoves?: HexCoordinates[];
+  gameStarted: boolean;
 }
 
 export const GameBoard: React.FC<GameBoardProps> = ({
@@ -50,27 +56,48 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   onHexClick,
   onUnitClick,
   selectedHex,
-  validMoves = []
+  validMoves = [],
+  gameStarted
 }) => {
   // Set up scene with appropriate lighting and camera
   return (
     <div className="w-full h-full">
       <Canvas shadows>
+        {/* Add the sky component */}
+        <SkyDome />
+        
+        {/* Add clouds if game has started */}
+        {gameStarted && <Clouds count={15} height={100} />}
+        
+        {/* Add subtle fog for depth */}
+        <Fog color="#e6f7ff" near={80} far={150} />
+        
         {/* Improved lighting for 3D terrain */}
-        <ambientLight intensity={0.6} />
+        <ambientLight intensity={0.8} /> {/* Slightly reduced to increase contrast */}
         <directionalLight
-          position={[10, 15, 5]}
-          intensity={1}
+          position={[20, 25, 10]}
+          intensity={1.3}
           castShadow
           shadow-mapSize-width={2048}
           shadow-mapSize-height={2048}
+          shadow-camera-far={150}
+          shadow-camera-left={-50}
+          shadow-camera-right={50}
+          shadow-camera-top={50}
+          shadow-camera-bottom={-50}
+          color="#fffaf0" // Warm sunlight color
         />
         {/* Add a secondary light source for better depth perception */}
         <directionalLight
-          position={[-8, 10, -8]}
-          intensity={0.4}
-          color="#b0c4de"
+          position={[-15, 10, -15]}
+          intensity={0.7}
+          color="#e6f7ff" // Slight blue tint for sky reflection
         />
+        
+        {/* Landscape terrain with hexagonal tiles */}
+        {gameStarted && <LandscapeModels boardRadius={15} />}
+        
+        {/* Game board scene with interactive elements */}
         <BoardScene
           gameState={gameState}
           onHexClick={onHexClick}
@@ -78,19 +105,22 @@ export const GameBoard: React.FC<GameBoardProps> = ({
           selectedHex={selectedHex}
           validMoves={validMoves}
         />
+        
         <OrbitControls 
           enablePan={false}
-          enableZoom={false}
+          enableZoom={true}  // Allow zooming for better exploration
           enableRotate={true}
           target={[0, 0, 0]} // Keep focused on center
-          minPolarAngle={Math.PI / 8} // Lock to 45 degrees
-          maxPolarAngle={Math.PI / 4} // Lock to 45 degrees
+          minPolarAngle={Math.PI / 10} // Allow slightly more top-down view
+          maxPolarAngle={Math.PI / 3}  // Allow more angled view to see the terrain
+          minDistance={20}             // Prevent zooming in too close
+          maxDistance={60}             // Prevent zooming out too far
         />
-        {/* Fixed camera position looking down at 45 degrees */}
+        {/* Fixed camera position looking down at a slightly higher angle */}
         <PerspectiveCamera 
           makeDefault 
-          position={[0, 15, 15]} 
-          fov={60}
+          position={[5, 20, 20]} 
+          fov={65}
         />
       </Canvas>
     </div>
@@ -151,10 +181,15 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   
   // Handle mouse out for hexes
   const handleHexPointerOut = useCallback(
-    () => {
-      setHoveredHex(null);
+    (hex: Hex) => {
+      // Only clear if this hex is the currently hovered one
+      if (hoveredHex && 
+          hoveredHex.coordinates.q === hex.coordinates.q && 
+          hoveredHex.coordinates.r === hex.coordinates.r) {
+        setHoveredHex(null);
+      }
     },
-    []
+    [hoveredHex]
   );
   
   // Calculate if a hex is selected
@@ -167,48 +202,80 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     [selectedHex]
   );
   
+  // Check if a hex is currently hovered
+  const isHexHovered = useCallback(
+    (hex: Hex) => {
+      if (!hoveredHex) return false;
+      return hex.coordinates.q === hoveredHex.coordinates.q && 
+             hex.coordinates.r === hoveredHex.coordinates.r;
+    },
+    [hoveredHex]
+  );
+  
   return (
-    <group>
-      {/* Render all hexes */}
-      {gameState.hexGrid.map(hex => (
+    <>
+      {/* Environment elements */}
+      <SkyDome />
+      <Clouds count={15} />
+      <Fog color="#e6f7ff" near={80} far={150} />
+      
+      {/* Lighting setup */}
+      <ambientLight intensity={0.8} />
+      <directionalLight
+        position={[50, 50, 25]}
+        intensity={1.2} 
+        castShadow
+        shadow-mapSize-width={2048}
+        shadow-mapSize-height={2048}
+        shadow-camera-far={100}
+        shadow-camera-left={-30}
+        shadow-camera-right={30}
+        shadow-camera-top={30}
+        shadow-camera-bottom={-30}
+      />
+      
+      {/* Landscape and terrain */}
+      <LandscapeModels boardRadius={15} />
+      
+      {/* Game hex grid */}
+      {gameState.hexGrid.map((hex: Hex) => (
         <HexTile
-          key={hex.id}
+          key={`${hex.coordinates.q},${hex.coordinates.r}`}
           hex={hex}
           isSelected={isHexSelected(hex)}
-          isHighlighted={
-            (hoveredHex && hex.id === hoveredHex.id) ||
-            isValidMoveTarget(hex)
-          }
+          isHighlighted={isValidMoveTarget(hex)}
+          isHovered={isHexHovered(hex)} 
           onClick={() => handleHexClick(hex)}
           onPointerOver={() => handleHexPointerOver(hex)}
-          onPointerOut={handleHexPointerOut}
+          onPointerOut={() => handleHexPointerOut(hex)}
         />
       ))}
       
-      {/* Render all units */}
+      {/* Units on the board */}
       {gameState.hexGrid
-        .filter(hex => hex.unit)
-        .map(hex => {
-          // Calculate correct position based on hex height
-          const hexHeight = getHexHeight(hex);
-          const [x, , z] = axialToWorld(hex.coordinates);
-          // Add bevel thickness (should match value in HexTile.tsx)
-          const bevelThickness = 0.05;
-          const totalHeight = hexHeight + bevelThickness;
-          // Position unit on top of hex
-          const unitPosition: [number, number, number] = [x, totalHeight + 0.3, z];
+        .filter((hex: Hex) => hex.unit)
+        .map((hex: Hex) => {
+          if (!hex.unit) return null;
           
           return (
             <UnitMesh
-              key={hex.unit!.id}
-              unit={hex.unit!}
-              position={unitPosition}
-              hexHeight={hexHeight}
+              key={hex.unit.id}
+              unit={hex.unit}
+              position={axialToWorld(hex.coordinates)}
+              hexHeight={getHexHeight(hex)}
               onClick={(e) => handleUnitClick(hex.unit!, e)}
             />
           );
-        })
-      }
-    </group>
+        })}
+      
+      {/* Hover info */}
+      {hoveredHex && (
+        <Html position={axialToWorld(hoveredHex.coordinates)} style={{ pointerEvents: 'none' }}>
+          <div className="bg-[var(--background)] bg-opacity-80 p-2 rounded text-[var(--parchment)] text-xs">
+            {hoveredHex.terrain}
+          </div>
+        </Html>
+      )}
+    </>
   );
 }; 
