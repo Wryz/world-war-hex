@@ -24,7 +24,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
       <HexBackground />
       
       <div className="container mx-auto px-4 py-8 flex flex-col items-center justify-center min-h-screen z-10 relative">
-        <div className="backdrop-blur-md bg-opacity-70 bg-[var(--background)] rounded-lg shadow-2xl p-6 md:p-8 max-w-4xl w-full border-2 border-[var(--primary)]">
+        <div className="backdrop-blur-md bg-opacity-70 bg-[var(--background)] rounded-lg shadow-2xl p-6 md:p-8 max-w-4xl w-full border-2 border-[var(--foreground)]">
           <div className="flex justify-center mb-6">
             <Image 
               src="/world-war-hex-logo.png" 
@@ -53,8 +53,8 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
                   className={`
                     p-5 rounded-lg text-xl font-bold transition-all duration-300
                     ${selectedDifficulty === level 
-                      ? 'bg-[var(--primary)] text-[var(--background)] transform scale-110 shadow-lg border-2 border-white' 
-                      : 'bg-[var(--background)] bg-opacity-80 text-[var(--primary)] border-2 border-[var(--primary)] hover:bg-[var(--primary-light)] hover:text-[var(--background)]'
+                      ? 'bg-[var(--foreground)] text-[var(--background)] transform scale-110 shadow-lg border-2 border-white' 
+                      : 'bg-[var(--background)] bg-opacity-80 text-[var(--primary)] border-2 border-[var(--foreground)] hover:bg-[var(--accent-light)] hover:text-[var(--background)]'
                     }
                   `}
                 >
@@ -70,10 +70,10 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
           <div className="flex flex-col md:flex-row justify-center space-y-4 md:space-y-0 md:space-x-6">
             <button
               onClick={() => onStartGame(selectedDifficulty)}
-              className="bg-[var(--primary)] text-[var(--background)] py-4 px-10 rounded-lg text-2xl font-bold transition-all duration-300 
-                hover:bg-[var(--primary-light)] hover:shadow-lg hover:scale-105 
+              className="bg-[var(--foreground)] text-[var(--background)] py-4 px-10 rounded-lg text-2xl font-bold transition-all duration-300 
+                hover:bg-[var(--accent-light)] hover:shadow-lg hover:scale-105 
                 active:transform active:scale-95
-                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--primary)]"
+                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--foreground)]"
             >
               ⚔️ Begin Conquest
             </button>
@@ -81,10 +81,10 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
             {hasSavedGame && onContinueGame && (
               <button
                 onClick={onContinueGame}
-                className="bg-[var(--secondary)] text-[var(--background)] py-4 px-10 rounded-lg text-2xl font-bold transition-all duration-300 
-                  hover:bg-[var(--secondary-light)] hover:shadow-lg hover:scale-105 
+                className="bg-[var(--accent)] text-[var(--background)] py-4 px-10 rounded-lg text-2xl font-bold transition-all duration-300 
+                  hover:bg-[var(--accent-light)] hover:shadow-lg hover:scale-105 
                   active:transform active:scale-95
-                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--secondary)]"
+                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--accent)]"
               >
                 🔄 Continue Battle
               </button>

@@ -22,7 +22,7 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
   onEndTurn
 }) => (
   <div className="absolute inset-x-0 bottom-0 p-4">
-    <div className="bg-[var(--parchment)] border-2 border-[var(--primary)] rounded-md p-4 shadow-lg max-w-4xl mx-auto z-10">
+    <div className="bg-[var(--parchment)] border-2 border-[var(--foreground)] rounded-md p-4 shadow-lg max-w-4xl mx-auto z-10">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-[var(--secondary)] font-bold text-lg">Planning Phase</h3>
         <div className="flex items-center">
@@ -49,7 +49,7 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
               <button
                 onClick={() => onUnitPurchase('infantry')}
                 disabled={gameState.players.player.points < 10}
-                className={`flex flex-col items-center p-2 rounded-md border border-[var(--primary)] ${
+                className={`flex flex-col items-center p-2 rounded-md border border-[var(--foreground)] ${
                   gameState.players.player.points >= 10 
                     ? 'bg-[var(--parchment)] hover:bg-[var(--accent-light)] text-[var(--secondary)] cursor-pointer' 
                     : 'bg-[var(--background)] bg-opacity-10 text-[var(--primary)] text-opacity-50 cursor-not-allowed'
@@ -63,7 +63,7 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
               <button
                 onClick={() => onUnitPurchase('artillery')}
                 disabled={gameState.players.player.points < 15}
-                className={`flex flex-col items-center p-2 rounded-md border border-[var(--primary)] ${
+                className={`flex flex-col items-center p-2 rounded-md border border-[var(--foreground)] ${
                   gameState.players.player.points >= 15 
                     ? 'bg-[var(--parchment)] hover:bg-[var(--accent-light)] text-[var(--secondary)] cursor-pointer' 
                     : 'bg-[var(--background)] bg-opacity-10 text-[var(--primary)] text-opacity-50 cursor-not-allowed'
@@ -77,7 +77,7 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
               <button
                 onClick={() => onUnitPurchase('helicopter')}
                 disabled={gameState.players.player.points < 20}
-                className={`flex flex-col items-center p-2 rounded-md border border-[var(--primary)] ${
+                className={`flex flex-col items-center p-2 rounded-md border border-[var(--foreground)] ${
                   gameState.players.player.points >= 20 
                     ? 'bg-[var(--parchment)] hover:bg-[var(--accent-light)] text-[var(--secondary)] cursor-pointer' 
                     : 'bg-[var(--background)] bg-opacity-10 text-[var(--primary)] text-opacity-50 cursor-not-allowed'
@@ -91,7 +91,7 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
               <button
                 onClick={() => onUnitPurchase('tank')}
                 disabled={gameState.players.player.points < 20}
-                className={`flex flex-col items-center p-2 rounded-md border border-[var(--primary)] ${
+                className={`flex flex-col items-center p-2 rounded-md border border-[var(--foreground)] ${
                   gameState.players.player.points >= 20 
                     ? 'bg-[var(--parchment)] hover:bg-[var(--accent-light)] text-[var(--secondary)] cursor-pointer' 
                     : 'bg-[var(--background)] bg-opacity-10 text-[var(--primary)] text-opacity-50 cursor-not-allowed'
@@ -105,7 +105,7 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
               <button
                 onClick={() => onUnitPurchase('medic')}
                 disabled={gameState.players.player.points < 15}
-                className={`flex flex-col items-center p-2 rounded-md border border-[var(--primary)] ${
+                className={`flex flex-col items-center p-2 rounded-md border border-[var(--foreground)] ${
                   gameState.players.player.points >= 15 
                     ? 'bg-[var(--parchment)] hover:bg-[var(--accent-light)] text-[var(--secondary)] cursor-pointer' 
                     : 'bg-[var(--background)] bg-opacity-10 text-[var(--primary)] text-opacity-50 cursor-not-allowed'
@@ -130,7 +130,7 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
                     <span className="font-semibold">Terrain:</span> {selectedHex.terrain || "Plain"}
                   </p>
                   {selectedUnit && (
-                    <div className="mt-2 p-2 bg-[var(--primary)] bg-opacity-20 rounded-md">
+                    <div className="mt-2 p-2 bg-[var(--background)] bg-opacity-20 rounded-md">
                       <p className="text-[var(--secondary)]">
                         <span className="font-semibold">Unit:</span> {getUnitTypeName(selectedUnit.type)}
                       </p>

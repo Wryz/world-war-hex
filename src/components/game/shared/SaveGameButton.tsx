@@ -29,7 +29,7 @@ export const SaveGameButton: React.FC<SaveGameButtonProps> = ({
           alert(saved ? 'Game saved successfully!' : 'Failed to save game.');
         }}
         className="py-2 px-4 rounded-lg flex items-center border-2 transition-all duration-200 
-          bg-[var(--accent)] text-[var(--parchment)] border-[var(--secondary)] 
+          bg-[var(--background)] text-[var(--parchment)] border-[var(--secondary)] 
           shadow-md hover:shadow-lg hover:brightness-110 hover:-translate-y-0.5"
       >
         <span className="mr-2">💾</span> Save Game

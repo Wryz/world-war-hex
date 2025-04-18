@@ -1,12 +1,11 @@
 'use client';
 
 import { GameController } from '@/components/game/GameController';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 
 export default function PlayGame() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const [shouldContinue, setShouldContinue] = useState(false);
   const [gameDifficulty, setGameDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
@@ -31,10 +30,6 @@ export default function PlayGame() {
     
     setIsLoading(false);
   }, [searchParams]);
-
-  const handleReturnToHome = () => {
-    router.push('/');
-  };
 
   if (isLoading) {
     return (
@@ -65,7 +60,6 @@ export default function PlayGame() {
       <GameController 
         initialDifficulty={gameDifficulty} 
         shouldContinueGame={shouldContinue}
-        onReturnToHome={handleReturnToHome}
       />
     </div>
   );

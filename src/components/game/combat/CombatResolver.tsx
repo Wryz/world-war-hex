@@ -46,7 +46,7 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({
           </div>
         </div>
         
-        <div className="relative h-4 bg-[var(--secondary)] bg-opacity-40 rounded-full overflow-hidden">
+        <div className="relative h-4 bg-[var(--background)] bg-opacity-40 rounded-full overflow-hidden">
           <div 
             className="absolute top-0 left-0 h-full bg-gradient-to-r from-red-500 to-yellow-500"
             style={{ width: `${attackerWinChance}%` }}
@@ -58,7 +58,7 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({
       </div>
       
       <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-[var(--secondary)] p-2 rounded">
+        <div className="bg-[var(--background)] p-2 rounded">
           <h3 className={`font-semibold ${isPlayerDefending ? 'text-red-400' : 'text-blue-400'}`}>
             Attacking Units ({combat.attackers.length})
           </h3>
@@ -70,7 +70,7 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({
             ))}
           </ul>
         </div>
-        <div className="bg-[var(--secondary)] p-2 rounded">
+        <div className="bg-[var(--background)] p-2 rounded">
           <h3 className={`font-semibold ${isPlayerDefending ? 'text-blue-400' : 'text-red-400'}`}>
             Defending Units ({combat.defenders.length})
           </h3>
@@ -88,13 +88,13 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({
         <div className="flex space-x-2 mt-4">
           <button 
             onClick={() => onResolveCombat(unresolvedCombatIndex, false)}
-            className="flex-1 bg-[var(--accent)] hover:bg-[var(--accent-light)] text-[var(--parchment)] font-bold py-2 px-4 rounded border border-[var(--secondary)]"
+            className="flex-1 bg-[var(--accent)] hover:bg-[var(--accent-light)] text-[var(--parchment)] font-bold py-2 px-4 rounded border border-[var(--foreground)]"
           >
             Stand & Fight
           </button>
           <button 
             onClick={() => onResolveCombat(unresolvedCombatIndex, true)}
-            className="flex-1 bg-[var(--primary)] hover:bg-[var(--primary-light)] text-[var(--parchment)] font-bold py-2 px-4 rounded border border-[var(--secondary)]"
+            className="flex-1 bg-[var(--foreground)] hover:bg-[var(--accent-light)] text-[var(--parchment)] font-bold py-2 px-4 rounded border border-[var(--foreground)]"
           >
             Retreat
           </button>
@@ -105,7 +105,7 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({
         <div className="mt-4">
           <p className="mb-2 text-center italic">AI is deciding whether to retreat...</p>
           <button 
-            className="w-full bg-[var(--secondary)] text-[var(--parchment)] font-bold py-2 px-4 rounded opacity-50 cursor-wait"
+            className="w-full bg-[var(--foreground)] text-[var(--parchment)] font-bold py-2 px-4 rounded opacity-50 cursor-wait"
             disabled
           >
             Waiting for AI decision

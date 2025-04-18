@@ -26,7 +26,7 @@ export const GameDashboard: React.FC<GameDashboardProps> = ({
   return (
     <>
       {/* Player base health (top left) */}
-      <div className="fixed top-4 left-4 bg-[var(--primary)] bg-opacity-80 p-3 rounded-md border-2 border-[var(--secondary)] shadow-md pointer-events-auto z-10 max-w-[240px]">
+      <div className="fixed top-4 left-4 bg-[var(--background)] bg-opacity-80 p-3 rounded-md border-2 border-[var(--secondary)] shadow-md pointer-events-auto z-10 max-w-[240px]">
         <h3 className="text-[var(--parchment)] font-bold">Your Castle</h3>
         <div className="w-full h-4 bg-[var(--background)] bg-opacity-40 rounded-full overflow-hidden mt-1">
           <div
@@ -55,7 +55,7 @@ export const GameDashboard: React.FC<GameDashboardProps> = ({
                 onClick={() => onUnitSelect(unit)}
               >
                 <div className="flex items-center">
-                  <div className="w-6 h-6 mr-2 flex items-center justify-center bg-[var(--primary)] rounded-full text-xs text-[var(--parchment)]">
+                  <div className="w-6 h-6 mr-2 flex items-center justify-center bg-[var(--foreground)] rounded-full text-xs text-[var(--parchment)]">
                     {getUnitTypeEmoji(unit.type)}
                   </div>
                   <div className="flex-1">
@@ -85,7 +85,7 @@ export const GameDashboard: React.FC<GameDashboardProps> = ({
       </div>
 
       {/* AI base health (top right) */}
-      <div className="fixed top-4 right-4 bg-[var(--primary)] bg-opacity-80 p-3 rounded-md border-2 border-[var(--secondary)] shadow-md pointer-events-auto z-10 max-w-[240px]">
+      <div className="fixed top-4 right-4 bg-[var(--background)] bg-opacity-80 p-3 rounded-md border-2 border-[var(--secondary)] shadow-md pointer-events-auto z-10 max-w-[240px]">
         <h3 className="text-[var(--parchment)] font-bold">Enemy Castle</h3>
         <div className="w-full h-4 bg-[var(--background)] bg-opacity-40 rounded-full overflow-hidden mt-1">
           <div
@@ -114,7 +114,7 @@ export const GameDashboard: React.FC<GameDashboardProps> = ({
                 onClick={() => onUnitSelect(unit)}
               >
                 <div className="flex items-center">
-                  <div className="w-6 h-6 mr-2 flex items-center justify-center bg-[var(--primary)] rounded-full text-xs text-[var(--parchment)]">
+                  <div className="w-6 h-6 mr-2 flex items-center justify-center bg-[var(--foreground)] rounded-full text-xs text-[var(--parchment)]">
                     {getUnitTypeEmoji(unit.type)}
                   </div>
                   <div className="flex-1">
@@ -144,7 +144,7 @@ export const GameDashboard: React.FC<GameDashboardProps> = ({
       </div>
 
       {/* Game info (center bottom) */}
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-[var(--accent)] bg-opacity-80 p-3 rounded-md border-2 border-[var(--secondary)] shadow-md z-10">
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-[var(--foreground)] bg-opacity-80 p-3 rounded-md border-2 border-[var(--secondary)] shadow-md z-10">
         <h2 className="text-[var(--parchment)] text-lg font-bold text-center">Turn {turnNumber}</h2>
         <p className="text-[var(--parchment)] text-center">{isAITurn ? "Enemy's Turn" : "Your Turn"}</p>
         <p className="text-[var(--parchment)] text-center">

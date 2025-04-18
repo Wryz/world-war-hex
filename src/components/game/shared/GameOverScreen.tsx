@@ -11,7 +11,7 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({ winner, onRestar
          style={{
            backgroundColor: 'var(--parchment)',
            borderColor: 'var(--accent)',
-           boxShadow: `0 4px 30px var(--primary)`
+           boxShadow: `0 4px 30px var(--foreground)`
          }}>
       <h1 className="text-4xl font-bold mb-6"
           style={{ color: winner === 'player' ? 'var(--accent)' : 'var(--primary)' }}>
@@ -29,7 +29,7 @@ export const GameOverScreen: React.FC<GameOverScreenProps> = ({ winner, onRestar
           backgroundColor: 'var(--accent)',
           color: 'var(--parchment)',
           borderColor: 'var(--secondary)',
-          boxShadow: `0 4px 8px var(--primary-light)`
+          boxShadow: `0 4px 8px var(--foreground)`
         }}
       >
         Begin New Campaign

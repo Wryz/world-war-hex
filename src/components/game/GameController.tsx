@@ -17,7 +17,6 @@ interface GameControllerProps {
 export const GameController: React.FC<GameControllerProps> = ({ 
   initialDifficulty = 'medium',
   shouldContinueGame = false,
-  onReturnToHome
 }) => {
   // Use our custom hook to handle all game logic
   const {
@@ -138,15 +137,6 @@ export const GameController: React.FC<GameControllerProps> = ({
       />
       {renderGameUI()}
       
-      {/* Add home button to return to intro screen */}
-      {onReturnToHome && (
-        <button 
-          onClick={onReturnToHome}
-          className="fixed top-4 right-4 z-20 py-2 px-3 bg-[var(--background)] text-[var(--parchment)] rounded-md hover:bg-[var(--secondary-light)] transition-colors shadow-md"
-        >
-          ⌂ Home
-        </button>
-      )}
     </div>
   );
 }; 
