@@ -190,8 +190,23 @@ export const useGameHandlers = () => {
 
   // Handle base selection during setup phase
   const handleBaseSelection = (hex: Hex) => {
-    // Cannot place base on resource hexes or when already placed
-    if (hex.isResourceHex || gameState.hexGrid.some(h => h.isBase && h.owner === 'player')) return;
+    // Cannot place base when already placed
+    if (gameState.hexGrid.some(h => h.isBase && h.owner === 'player')) return;
+    
+    // Cannot place base on water, resource hexes, or non-edge hexes
+    if (hex.isResourceHex || hex.terrain === 'water') return;
+    
+    // Check if this is an edge hex - edge hexes have the maximum coordinate value
+    // in at least one of their coordinates (q or r) for our hexagonal grid
+    const gridSize = DEFAULT_SETTINGS.gridSize;
+    const isEdgeHex = Math.abs(hex.coordinates.q) === gridSize || 
+                      Math.abs(hex.coordinates.r) === gridSize ||
+                      Math.abs(hex.coordinates.q + hex.coordinates.r) === gridSize;
+    
+    if (!isEdgeHex) {
+      // Not an edge hex, so we don't allow base placement here
+      return;
+    }
     
     // Update game state with player base location
     const updatedState = setBaseLocation(gameState, 'player', hex.coordinates);
@@ -203,14 +218,21 @@ export const useGameHandlers = () => {
       let maxDistance = 0;
       let furthestHex: Hex | null = null;
       
-      // Find the hex furthest from player base that's not a resource
-      for (const hex of updatedState.hexGrid) {
-        if (hex.isResourceHex) continue;
+      // Find the hex furthest from player base that's not a resource or water
+      for (const h of updatedState.hexGrid) {
+        if (h.isResourceHex || h.terrain === 'water') continue;
         
-        const distance = getHexDistance(hex.coordinates, playerBase.coordinates);
+        // Check if this is an edge hex
+        const isHexEdge = Math.abs(h.coordinates.q) === gridSize || 
+                          Math.abs(h.coordinates.r) === gridSize ||
+                          Math.abs(h.coordinates.q + h.coordinates.r) === gridSize;
+        
+        if (!isHexEdge) continue;
+        
+        const distance = getHexDistance(h.coordinates, playerBase.coordinates);
         if (distance > maxDistance) {
           maxDistance = distance;
-          furthestHex = hex;
+          furthestHex = h;
         }
       }
       

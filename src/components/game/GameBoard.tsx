@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { GameState, Hex, HexCoordinates, Unit } from '@/types/game';
@@ -8,6 +8,7 @@ import SkyDome from './environment/Sky';
 import Clouds from './environment/Clouds';
 import Fog from './environment/Fog';
 import { Html } from '@react-three/drei';
+import { DEFAULT_SETTINGS } from '@/lib/game/gameState';
 
 // Constants for hex height calculation (should match those in HexTile.tsx)
 const BASE_HEIGHT = 0.5;
@@ -144,14 +145,44 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 }) => {
   const [hoveredHex, setHoveredHex] = useState<Hex | null>(null);
   
+  // Determine if we're in setup phase
+  const isSetupPhase = gameState.currentPhase === 'setup';
+  
+  // Identify valid base placement hexes (edge hexes that are not water or resource)
+  const validBasePlacementHexes = useMemo(() => {
+    if (!isSetupPhase) return [];
+    
+    const gridSize = DEFAULT_SETTINGS.gridSize;
+    return gameState.hexGrid.filter(hex => {
+      // Check if it's an edge hex
+      const isEdgeHex = Math.abs(hex.coordinates.q) === gridSize || 
+                        Math.abs(hex.coordinates.r) === gridSize ||
+                        Math.abs(hex.coordinates.q + hex.coordinates.r) === gridSize;
+                        
+      // Check if it's a valid terrain type
+      const isValidTerrain = hex.terrain !== 'water' && !hex.isResourceHex;
+      
+      return isEdgeHex && isValidTerrain;
+    });
+  }, [isSetupPhase, gameState.hexGrid]);
+  
   // Check if a hex is a valid move target
   const isValidMoveTarget = useCallback(
     (hex: Hex) => {
+      // During setup phase, highlight valid base placement hexes
+      if (isSetupPhase) {
+        return validBasePlacementHexes.some(
+          validHex => validHex.coordinates.q === hex.coordinates.q && 
+                     validHex.coordinates.r === hex.coordinates.r
+        );
+      }
+      
+      // Otherwise show valid movement targets
       return validMoves.some(
         coords => coords.q === hex.coordinates.q && coords.r === hex.coordinates.r
       );
     },
-    [validMoves]
+    [validMoves, isSetupPhase, validBasePlacementHexes]
   );
   
   // Handle hex click
@@ -220,7 +251,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       <Fog color="#e6f7ff" near={80} far={150} />
       
       {/* Lighting setup */}
-      <ambientLight intensity={0.8} />
+      <ambientLight intensity={0.2} />
       <directionalLight
         position={[50, 50, 25]}
         intensity={1.2} 
@@ -271,8 +302,19 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {/* Hover info */}
       {hoveredHex && (
         <Html position={axialToWorld(hoveredHex.coordinates)} style={{ pointerEvents: 'none' }}>
-          <div className="bg-[var(--background)] bg-opacity-80 p-2 rounded text-[var(--parchment)] text-xs">
-            {hoveredHex.terrain}
+          <div className="bg-[var(--background)] bg-opacity-60 w-[96px] p-2 rounded text-[var(--parchment)] text-xs">
+            <div>{hoveredHex.terrain}</div>
+            {isSetupPhase && (
+              <div className={isValidMoveTarget(hoveredHex) ? 'text-green-400' : 'text-red-400'}>
+                {isValidMoveTarget(hoveredHex) 
+                  ? 'Valid base location' 
+                  : hoveredHex.terrain === 'water'
+                    ? 'Cannot build on water'
+                    : hoveredHex.isResourceHex
+                      ? 'Cannot build on resources' 
+                      : 'Not on map edge'}
+              </div>
+            )}
           </div>
         </Html>
       )}

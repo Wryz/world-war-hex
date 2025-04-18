@@ -2,10 +2,11 @@
 
 import { GameController } from '@/components/game/GameController';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import Link from 'next/link';
 
-export default function PlayGame() {
+// Create a client component that uses searchParams
+function GameContent() {
   const searchParams = useSearchParams();
   const [shouldContinue, setShouldContinue] = useState(false);
   const [gameDifficulty, setGameDifficulty] = useState<'easy' | 'medium' | 'hard'>('medium');
@@ -62,5 +63,23 @@ export default function PlayGame() {
         shouldContinueGame={shouldContinue}
       />
     </div>
+  );
+}
+
+// Loading fallback for Suspense
+function GameLoading() {
+  return (
+    <div className="w-screen h-screen bg-[var(--background)] flex items-center justify-center text-[var(--parchment)]">
+      <div className="animate-pulse">Loading game...</div>
+    </div>
+  );
+}
+
+// Main page component with Suspense boundary
+export default function PlayGame() {
+  return (
+    <Suspense fallback={<GameLoading />}>
+      <GameContent />
+    </Suspense>
   );
 } 

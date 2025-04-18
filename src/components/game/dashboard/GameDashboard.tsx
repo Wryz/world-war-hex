@@ -144,7 +144,7 @@ export const GameDashboard: React.FC<GameDashboardProps> = ({
       </div>
 
       {/* Game info (center bottom) */}
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-[var(--foreground)] bg-opacity-80 p-3 rounded-md border-2 border-[var(--secondary)] shadow-md z-10">
+      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-[var(--background)] bg-opacity-80 p-3 rounded-md border-2 border-[var(--secondary)] shadow-md z-10">
         <h2 className="text-[var(--parchment)] text-lg font-bold text-center">Turn {turnNumber}</h2>
         <p className="text-[var(--parchment)] text-center">{isAITurn ? "Enemy's Turn" : "Your Turn"}</p>
         <p className="text-[var(--parchment)] text-center">

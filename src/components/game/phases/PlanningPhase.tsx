@@ -22,9 +22,9 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
   onEndTurn
 }) => (
   <div className="absolute inset-x-0 bottom-0 p-4">
-    <div className="bg-[var(--parchment)] border-2 border-[var(--foreground)] rounded-md p-4 shadow-lg max-w-4xl mx-auto z-10">
+    <div className="bg-[var(--background)] border-2 border-[var(--foreground)] rounded-md p-4 shadow-lg max-w-4xl mx-auto z-10">
       <div className="flex justify-between items-center mb-4">
-        <h3 className="text-[var(--secondary)] font-bold text-lg">Planning Phase</h3>
+        <h3 className="text-[var(--primary)] font-bold text-lg">Planning Phase</h3>
         <div className="flex items-center">
           <p className="text-[var(--primary)] mr-2">Time remaining:</p>
           <span className="bg-[var(--background)] text-[var(--parchment)] px-3 py-1 rounded-md font-mono">{timer}s</span>
@@ -152,7 +152,7 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
           <div className="text-center">
             <div className="flex items-center justify-between">
               <div className="text-left">
-                <p className="text-[var(--secondary)]">
+                <p className="text-[var(--primary)]">
                   <span className="font-semibold">Treasury:</span> {gameState.players.player.points} gold
                 </p>
               </div>
