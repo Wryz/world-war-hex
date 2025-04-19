@@ -10,6 +10,7 @@ import { useGameHandlers } from './handlers/GameEventHandlers';
 import { LoadingManagerProvider } from './utils/LoadingManager';
 import GameAssetPreloader from './utils/GameAssetPreloader';
 import LoadingScreen from './utils/LoadingScreen';
+import Barracks from './Barracks';
 
 interface GameControllerProps {
   initialDifficulty?: 'easy' | 'medium' | 'hard';
@@ -64,7 +65,18 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
     
     switch (gameState.currentPhase) {
       case 'setup':
-        return <SetupPhase />;
+        // Check if a hex is selected and it's a valid base location
+        const baseSelectionConfirmMode = selectedHex !== null && selectedHex !== undefined;
+        const isValidBaseLocation = selectedHex && validMoves.some(
+          coords => coords.q === selectedHex.coordinates.q && coords.r === selectedHex.coordinates.r
+        );
+
+        return (
+          <SetupPhase 
+            isConfirmMode={baseSelectionConfirmMode}
+            selectedHexValid={!!isValidBaseLocation}
+          />
+        );
         
       case 'planning':
         return (
@@ -86,13 +98,18 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
                 difficulty={difficulty}
               />
             )}
+            {/* Barracks component for troop recruitment */}
+            <Barracks
+              availableGold={gameState.players.player.points}
+              onUnitPurchase={handleUnitPurchase}
+              isAITurn={isAITurn}
+            />
             <PlanningPhase
               gameState={gameState}
               selectedHex={selectedHex}
               selectedUnit={selectedUnit}
               isAITurn={isAITurn}
               timer={timer}
-              onUnitPurchase={handleUnitPurchase}
               onEndTurn={handleEndTurn}
             />
           </>

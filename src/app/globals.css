@@ -71,3 +71,47 @@ button:hover {
 .animate-pulse {
   animation: pulse 1.5s infinite ease-in-out;
 }
+
+/* Castle health bar with pointed top */
+.clip-path-castle-bar {
+  clip-path: polygon(
+    0% 0%,    /* Top left */
+    100% 0%,  /* Top right */
+    100% 100%, /* Bottom right */
+    0% 100%    /* Bottom left */
+  );
+  border-radius: 4px;
+}
+
+/* Player castle health bar (pointed bit on right side) */
+.clip-path-player-castle {
+  clip-path: polygon(
+    0% 0%,      /* Top left */
+    90% 0%,     /* Top right before point */
+    100% 0%,   /* Right point (center) */
+    90% 100%,   /* Bottom right after point */
+    0% 100%     /* Bottom left */
+  );
+  border-radius: 4px;
+}
+
+/* Enemy castle health bar (pointed bit on left side) */
+.clip-path-enemy-castle {
+  clip-path: polygon(
+    10% 0%,     /* Top left after point */
+    100% 0%,    /* Top right */
+    100% 100%,  /* Bottom right */
+    10% 100%,   /* Bottom left after point */
+    0% 0%      /* Left point (center) */
+  );
+  border-radius: 4px;
+}
+
+/* Text shadow for better readability on transparent backgrounds */
+.text-shadow-sm {
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.text-shadow-md {
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+}

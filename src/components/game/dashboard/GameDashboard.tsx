@@ -25,28 +25,20 @@ export const GameDashboard: React.FC<GameDashboardProps> = ({
 
   return (
     <>
-      {/* Player base health (top left) */}
-      <div className="fixed top-4 left-4 bg-[var(--background)] bg-opacity-80 p-3 rounded-md border-2 border-[var(--secondary)] shadow-md pointer-events-auto z-10 max-w-[240px]">
-        <h3 className="text-[var(--parchment)] font-bold">Your Castle</h3>
-        <div className="w-full h-4 bg-[var(--background)] bg-opacity-40 rounded-full overflow-hidden mt-1">
-          <div
-            className={`h-full rounded-full ${
-              playerBaseHealth / BASE_MAX_HEALTH > 0.6
-                ? 'bg-green-500'
-                : playerBaseHealth / BASE_MAX_HEALTH > 0.3
-                  ? 'bg-yellow-500'
-                  : 'bg-red-500'
-            }`}
-            style={{ width: `${(playerBaseHealth / BASE_MAX_HEALTH) * 100}%` }}
-          ></div>
+      {/* Sidebar Dashboard (left side) */}
+      <div className="fixed left-0 top-0 bottom-0 w-64 bg-[var(--background)] bg-opacity-80 border-r-2 border-[var(--secondary)] shadow-md pointer-events-auto z-10 flex flex-col overflow-hidden">
+        {/* Game info at the top of sidebar */}
+        <div className="p-4 border-b border-[var(--secondary)]">
+          <h2 className="text-[var(--parchment)] text-lg font-bold">Turn {turnNumber}</h2>
+          <p className="text-[var(--parchment)]">{isAITurn ? "Enemy's Turn" : "Your Turn"}</p>
+          <p className="text-[var(--parchment)]">
+            <span className="font-bold">Treasury:</span> {gameState.players.player.points} gold
+          </p>
         </div>
-        <p className="text-[var(--parchment)] text-sm mt-1 mb-2">
-          {playerBaseHealth}/{BASE_MAX_HEALTH} Strength
-        </p>
-
-        {/* Player unit health bars */}
-        <div className="border-t border-[var(--secondary)] pt-2 mt-1">
-          <h4 className="text-[var(--parchment)] text-sm font-bold mb-1">Your Forces</h4>
+        
+        {/* Player forces */}
+        <div className="p-4 border-b border-[var(--secondary)] flex-shrink-0">
+          <h3 className="text-[var(--parchment)] font-bold mb-2">Your Forces</h3>
           <div className="max-h-40 overflow-y-auto pr-1">
             {playerUnits.map(unit => (
               <div
@@ -82,30 +74,10 @@ export const GameDashboard: React.FC<GameDashboardProps> = ({
             )}
           </div>
         </div>
-      </div>
-
-      {/* AI base health (top right) */}
-      <div className="fixed top-4 right-4 bg-[var(--background)] bg-opacity-80 p-3 rounded-md border-2 border-[var(--secondary)] shadow-md pointer-events-auto z-10 max-w-[240px]">
-        <h3 className="text-[var(--parchment)] font-bold">Enemy Castle</h3>
-        <div className="w-full h-4 bg-[var(--background)] bg-opacity-40 rounded-full overflow-hidden mt-1">
-          <div
-            className={`h-full rounded-full ${
-              aiBaseHealth / BASE_MAX_HEALTH > 0.6
-                ? 'bg-green-500'
-                : aiBaseHealth / BASE_MAX_HEALTH > 0.3
-                  ? 'bg-yellow-500'
-                  : 'bg-red-500'
-            }`}
-            style={{ width: `${(aiBaseHealth / BASE_MAX_HEALTH) * 100}%` }}
-          ></div>
-        </div>
-        <p className="text-[var(--parchment)] text-sm mt-1 mb-2">
-          {aiBaseHealth}/{BASE_MAX_HEALTH} Strength
-        </p>
-
-        {/* Enemy unit health bars */}
-        <div className="border-t border-[var(--secondary)] pt-2 mt-1">
-          <h4 className="text-[var(--parchment)] text-sm font-bold mb-1">Enemy Forces</h4>
+        
+        {/* Enemy forces */}
+        <div className="p-4 flex-1 overflow-y-auto">
+          <h3 className="text-[var(--parchment)] font-bold mb-2">Enemy Forces</h3>
           <div className="max-h-40 overflow-y-auto pr-1">
             {enemyUnits.map(unit => (
               <div
@@ -143,13 +115,52 @@ export const GameDashboard: React.FC<GameDashboardProps> = ({
         </div>
       </div>
 
-      {/* Game info (center bottom) */}
-      <div className="fixed bottom-4 left-1/2 transform -translate-x-1/2 bg-[var(--background)] bg-opacity-80 p-3 rounded-md border-2 border-[var(--secondary)] shadow-md z-10">
-        <h2 className="text-[var(--parchment)] text-lg font-bold text-center">Turn {turnNumber}</h2>
-        <p className="text-[var(--parchment)] text-center">{isAITurn ? "Enemy's Turn" : "Your Turn"}</p>
-        <p className="text-[var(--parchment)] text-center">
-          <span className="font-bold">Treasury:</span> {gameState.players.player.points} gold
-        </p>
+      {/* Player base health (top left) - transparent */}
+      <div className="fixed top-4 left-[calc(16rem+12px)] bg-transparent p-3 pointer-events-auto z-10 max-w-[240px]">
+        <h3 className="text-[var(--parchment)] font-bold text-shadow-md">Your Castle</h3>
+        <div className="relative h-6 w-36 mt-1">
+          {/* Player castle health bar with point on right side */}
+          <div className="absolute inset-0 clip-path-player-castle bg-[var(--background)] bg-opacity-40"></div>
+          {/* Health fill */}
+          <div
+            className={`absolute inset-0 clip-path-player-castle ${
+              playerBaseHealth / BASE_MAX_HEALTH > 0.6
+                ? 'bg-green-500'
+                : playerBaseHealth / BASE_MAX_HEALTH > 0.3
+                  ? 'bg-yellow-500'
+                  : 'bg-red-500'
+            }`}
+            style={{ width: `${(playerBaseHealth / BASE_MAX_HEALTH) * 100}%` }}
+          ></div>
+          {/* Health text overlay */}
+          <p className="absolute inset-0 flex items-center justify-center text-white text-shadow-sm text-xs font-bold">
+            {playerBaseHealth}/{BASE_MAX_HEALTH}
+          </p>
+        </div>
+      </div>
+
+      {/* AI base health (top right) - transparent */}
+      <div className="fixed top-4 right-4 bg-transparent p-3 pointer-events-auto z-10 max-w-[240px] text-right">
+        <h3 className="text-[var(--parchment)] font-bold text-shadow-md">Enemy Castle</h3>
+        <div className="relative h-6 w-36 mt-1 ml-auto">
+          {/* Enemy castle health bar with point on left side */}
+          <div className="absolute inset-0 clip-path-enemy-castle bg-[var(--background)] bg-opacity-40"></div>
+          {/* Health fill - this time right-aligned */}
+          <div
+            className={`absolute top-0 bottom-0 right-0 clip-path-enemy-castle ${
+              aiBaseHealth / BASE_MAX_HEALTH > 0.6
+                ? 'bg-green-500'
+                : aiBaseHealth / BASE_MAX_HEALTH > 0.3
+                  ? 'bg-yellow-500'
+                  : 'bg-red-500'
+            }`}
+            style={{ width: `${(aiBaseHealth / BASE_MAX_HEALTH) * 100}%` }}
+          ></div>
+          {/* Health text overlay */}
+          <p className="absolute inset-0 flex items-center justify-center text-white text-shadow-sm text-xs font-bold">
+            {aiBaseHealth}/{BASE_MAX_HEALTH}
+          </p>
+        </div>
       </div>
     </>
   );

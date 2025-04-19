@@ -1,8 +1,9 @@
-import { useState, useCallback, useMemo, Suspense } from 'react';
+import { useState, useCallback, useMemo, Suspense, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
 import { GameState, Hex, HexCoordinates, Unit } from '@/types/game';
-import { HexTile, UnitMesh } from './HexTile';
+import { HexTile } from './HexTile';
+import { UnitMesh } from './UnitMesh';
 import LandscapeModels from './landscape/LandscapeModels';
 import SkyDome from './environment/Sky';
 import Clouds from './environment/Clouds';
@@ -132,6 +133,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   gameStarted
 }) => {
   const [hoveredHex, setHoveredHex] = useState<Hex | null>(null);
+  const [baseSelectionConfirmMode, setBaseSelectionConfirmMode] = useState<boolean>(false);
   
   // Determine if we're in setup phase
   const isSetupPhase = gameState.currentPhase === 'setup';
@@ -173,17 +175,57 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     [validMoves, isSetupPhase, validBasePlacementHexes]
   );
   
+  // Check if a hex is a valid setup tile
+  const isValidSetupTile = useCallback(
+    (hex: Hex) => {
+      if (!isSetupPhase) return false;
+      
+      return validBasePlacementHexes.some(
+        validHex => validHex.coordinates.q === hex.coordinates.q && 
+                   validHex.coordinates.r === hex.coordinates.r
+      );
+    },
+    [isSetupPhase, validBasePlacementHexes]
+  );
+  
   // Handle hex click
   const handleHexClick = useCallback(
     (hex: Hex) => {
+      // Call the parent onClick handler
       onHexClick(hex);
+      
+      // Update the confirmation mode state based on the current state
+      if (isSetupPhase) {
+        // If clicking a valid hex, enter confirmation mode
+        const isHexValid = isValidSetupTile(hex);
+        
+        // If we already have a selected hex and we're clicking it again, 
+        // this will be a confirmation handled by the parent
+        if (selectedHex && 
+            selectedHex.coordinates.q === hex.coordinates.q && 
+            selectedHex.coordinates.r === hex.coordinates.r) {
+          // After confirmation, exit confirmation mode
+          setBaseSelectionConfirmMode(false);
+        } else {
+          // Initial selection - enter confirmation mode if it's a valid hex
+          setBaseSelectionConfirmMode(isHexValid);
+        }
+      }
     },
-    [onHexClick]
+    [onHexClick, isSetupPhase, selectedHex, isValidSetupTile]
   );
+  
+  // Reset confirmation mode when exiting setup phase
+  useEffect(() => {
+    if (!isSetupPhase) {
+      setBaseSelectionConfirmMode(false);
+    }
+  }, [isSetupPhase]);
   
   // Handle unit click
   const handleUnitClick = useCallback(
-    (unit: Unit, event: React.MouseEvent) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (unit: Unit, event: any) => {
       event.stopPropagation();
       onUnitClick(unit);
     },
@@ -265,14 +307,17 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {/* Landscape terrain */}
       {gameStarted && assetsLoaded && <LandscapeModels boardRadius={15} />}
       
-      {/* Game hex grid - always render but only make it interactive when assets are loaded */}
-      {gameState.hexGrid.map((hex: Hex) => (
+      {/* Hex grid and units */}
+      {gameState.hexGrid.map(hex => (
         <HexTile
-          key={`${hex.coordinates.q},${hex.coordinates.r}`}
+          key={hex.id}
           hex={hex}
           isSelected={isHexSelected(hex)}
           isHighlighted={isValidMoveTarget(hex)}
-          isHovered={isHexHovered(hex)} 
+          isHovered={isHexHovered(hex)}
+          isSetupPhase={isSetupPhase}
+          isValidSetupTile={isValidSetupTile(hex)}
+          isBaseSelectionConfirmMode={baseSelectionConfirmMode && isHexSelected(hex)}
           onClick={() => assetsLoaded && handleHexClick(hex)}
           onPointerOver={() => assetsLoaded && handleHexPointerOver(hex)}
           onPointerOut={() => assetsLoaded && handleHexPointerOut(hex)}
@@ -285,9 +330,12 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         .map((hex: Hex) => {
           if (!hex.unit) return null;
           
+          // Create a unique key by combining unit.id with position coordinates
+          const uniqueKey = `${hex.unit.id}-${hex.coordinates.q}-${hex.coordinates.r}`;
+          
           return (
             <UnitMesh
-              key={hex.unit.id}
+              key={uniqueKey}
               unit={hex.unit}
               position={axialToWorld(hex.coordinates)}
               hexHeight={getHexHeight(hex)}

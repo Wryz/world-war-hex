@@ -452,7 +452,38 @@ export const useGameHandlers = () => {
   const handleHexClick = useCallback((hex: Hex) => {
     switch (gameState.currentPhase) {
       case 'setup':
-        handleBaseSelection(hex);
+        // During setup, we need to implement a two-step selection process:
+        // 1. First click selects the hex (handled in GameBoard component)
+        // 2. Second click on the same hex confirms the selection
+        
+        // If we're clicking the same hex as what's already selected, this is a confirmation
+        if (selectedHex && 
+            selectedHex.coordinates.q === hex.coordinates.q && 
+            selectedHex.coordinates.r === hex.coordinates.r) {
+          // This is a confirmation click - place the base
+          handleBaseSelection(hex);
+        } else {
+          // This is the first click - just select the hex to show green/red ring
+          setSelectedHex(hex);
+          
+          // Calculate valid moves to help GameController determine if the selected hex is valid
+          const gridSize = DEFAULT_SETTINGS.gridSize;
+          
+          // Add validMoves for eligible base placement hexes
+          const validBasePlacementHexes = gameState.hexGrid.filter(h => {
+            // Check if it's an edge hex
+            const isEdgeHex = Math.abs(h.coordinates.q) === gridSize || 
+                              Math.abs(h.coordinates.r) === gridSize ||
+                              Math.abs(h.coordinates.q + h.coordinates.r) === gridSize;
+                              
+            // Check if it's a valid terrain type
+            const isValidTerrain = h.terrain !== 'water' && !h.isResourceHex;
+            
+            return isEdgeHex && isValidTerrain;
+          });
+          
+          setValidMoves(validBasePlacementHexes.map(h => h.coordinates));
+        }
         break;
       
       case 'planning':
@@ -490,7 +521,7 @@ export const useGameHandlers = () => {
         setSelectedHex(hex);
         break;
     }
-  }, [gameState, selectedUnit, isAITurn]);
+  }, [gameState, selectedUnit, isAITurn, selectedHex]);
 
   // Handle unit click  
   const handleUnitClick = useCallback((unit: Unit) => {
@@ -500,6 +531,90 @@ export const useGameHandlers = () => {
     if (unit.owner !== 'player') {
       setSelectedUnit(null);
       return;
+    }
+    
+    // Check if this unit already has a pending move
+    const hasPendingMove = gameState.pendingMoves.some(move => move.unitId === unit.id);
+    
+    // If unit has a pending move, find that move
+    if (hasPendingMove) {
+      const pendingMove = gameState.pendingMoves.find(move => move.unitId === unit.id);
+      if (!pendingMove) return; // Shouldn't happen but TypeScript wants it
+      
+      // Cancel the pending move and return the unit to its original position
+      const updatedPendingMoves = gameState.pendingMoves.filter(move => move.unitId !== unit.id);
+      
+      // Find the source and current destination hexes
+      const sourceHex = findHexByCoordinates(gameState.hexGrid, pendingMove.from);
+      const destHex = findHexByCoordinates(gameState.hexGrid, unit.position);
+      
+      if (!sourceHex || !destHex) return;
+      
+      // Create a copy of the hex grid
+      const updatedHexGrid = [...gameState.hexGrid];
+      
+      // Find the indices of the source and current hexes
+      const sourceHexIndex = updatedHexGrid.findIndex(
+        h => h.coordinates.q === pendingMove.from.q && h.coordinates.r === pendingMove.from.r
+      );
+      
+      const currentHexIndex = updatedHexGrid.findIndex(
+        h => h.coordinates.q === unit.position.q && h.coordinates.r === unit.position.r
+      );
+      
+      if (sourceHexIndex !== -1 && currentHexIndex !== -1) {
+        // Create updated unit with original position
+        const updatedUnit = {
+          ...unit,
+          position: pendingMove.from
+        };
+        
+        // Update the player's units array
+        const updatedPlayerUnits = gameState.players.player.units.map(u => 
+          u.id === unit.id ? updatedUnit : u
+        );
+        
+        // Update the grid to move the unit back
+        updatedHexGrid[currentHexIndex] = {
+          ...updatedHexGrid[currentHexIndex],
+          unit: undefined
+        };
+        
+        updatedHexGrid[sourceHexIndex] = {
+          ...updatedHexGrid[sourceHexIndex],
+          unit: updatedUnit
+        };
+        
+        // Update the game state
+        setGameState({
+          ...gameState,
+          pendingMoves: updatedPendingMoves,
+          hexGrid: updatedHexGrid,
+          players: {
+            ...gameState.players,
+            player: {
+              ...gameState.players.player,
+              units: updatedPlayerUnits
+            }
+          }
+        });
+        
+        // Select the unit at its original position
+        setSelectedUnit(updatedUnit);
+        
+        // Calculate valid moves for this unit from its original position
+        const hexesInRange = getHexesInRange(updatedHexGrid, pendingMove.from, unit.movementRange);
+        const validMoveCoords = hexesInRange
+          .filter(hex => {
+            // Filter to empty hexes or enemy base
+            if (hex.unit && !(hex.isBase && hex.owner !== unit.owner)) return false;
+            return true;
+          })
+          .map(hex => hex.coordinates);
+        
+        setValidMoves(validMoveCoords);
+        return;
+      }
     }
     
     setSelectedUnit(unit);

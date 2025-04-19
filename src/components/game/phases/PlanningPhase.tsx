@@ -1,5 +1,5 @@
 import React from 'react';
-import { GameState, Hex, Unit, UnitType } from '@/types/game';
+import { GameState, Hex, Unit } from '@/types/game';
 import { getUnitTypeName } from '../utils/UnitHelpers';
 
 interface PlanningPhaseProps {
@@ -8,17 +8,14 @@ interface PlanningPhaseProps {
   selectedUnit: Unit | null;
   isAITurn: boolean;
   timer: number;
-  onUnitPurchase: (unitType: UnitType) => void;
   onEndTurn: () => void;
 }
 
 export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
-  gameState,
   selectedHex,
   selectedUnit,
   isAITurn,
   timer,
-  onUnitPurchase,
   onEndTurn
 }) => (
   <div className="absolute inset-x-0 bottom-0 p-4">
@@ -41,83 +38,8 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
             ></div>
           </div>
         </div>
-      ) : (
+      ) :
         <>
-          <div className="mb-4">
-            <h4 className="text-[var(--primary)] font-semibold mb-2">Recruit Troops</h4>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
-              <button
-                onClick={() => onUnitPurchase('infantry')}
-                disabled={gameState.players.player.points < 10}
-                className={`flex flex-col items-center p-2 rounded-md border border-[var(--foreground)] ${
-                  gameState.players.player.points >= 10 
-                    ? 'bg-[var(--parchment)] hover:bg-[var(--accent-light)] text-[var(--secondary)] cursor-pointer' 
-                    : 'bg-[var(--background)] bg-opacity-10 text-[var(--primary)] text-opacity-50 cursor-not-allowed'
-                }`}
-              >
-                <span className="text-2xl mb-1">🗡️</span>
-                <span className="font-semibold text-sm">Swordsmen</span>
-                <span className="text-xs mt-1">10 gold</span>
-              </button>
-              
-              <button
-                onClick={() => onUnitPurchase('artillery')}
-                disabled={gameState.players.player.points < 15}
-                className={`flex flex-col items-center p-2 rounded-md border border-[var(--foreground)] ${
-                  gameState.players.player.points >= 15 
-                    ? 'bg-[var(--parchment)] hover:bg-[var(--accent-light)] text-[var(--secondary)] cursor-pointer' 
-                    : 'bg-[var(--background)] bg-opacity-10 text-[var(--primary)] text-opacity-50 cursor-not-allowed'
-                }`}
-              >
-                <span className="text-2xl mb-1">🏹</span>
-                <span className="font-semibold text-sm">Archers</span>
-                <span className="text-xs mt-1">15 gold</span>
-              </button>
-              
-              <button
-                onClick={() => onUnitPurchase('helicopter')}
-                disabled={gameState.players.player.points < 20}
-                className={`flex flex-col items-center p-2 rounded-md border border-[var(--foreground)] ${
-                  gameState.players.player.points >= 20 
-                    ? 'bg-[var(--parchment)] hover:bg-[var(--accent-light)] text-[var(--secondary)] cursor-pointer' 
-                    : 'bg-[var(--background)] bg-opacity-10 text-[var(--primary)] text-opacity-50 cursor-not-allowed'
-                }`}
-              >
-                <span className="text-2xl mb-1">🐎</span>
-                <span className="font-semibold text-sm">Knights</span>
-                <span className="text-xs mt-1">20 gold</span>
-              </button>
-              
-              <button
-                onClick={() => onUnitPurchase('tank')}
-                disabled={gameState.players.player.points < 20}
-                className={`flex flex-col items-center p-2 rounded-md border border-[var(--foreground)] ${
-                  gameState.players.player.points >= 20 
-                    ? 'bg-[var(--parchment)] hover:bg-[var(--accent-light)] text-[var(--secondary)] cursor-pointer' 
-                    : 'bg-[var(--background)] bg-opacity-10 text-[var(--primary)] text-opacity-50 cursor-not-allowed'
-                }`}
-              >
-                <span className="text-2xl mb-1">🛡️</span>
-                <span className="font-semibold text-sm">Pikemen</span>
-                <span className="text-xs mt-1">20 gold</span>
-              </button>
-              
-              <button
-                onClick={() => onUnitPurchase('medic')}
-                disabled={gameState.players.player.points < 15}
-                className={`flex flex-col items-center p-2 rounded-md border border-[var(--foreground)] ${
-                  gameState.players.player.points >= 15 
-                    ? 'bg-[var(--parchment)] hover:bg-[var(--accent-light)] text-[var(--secondary)] cursor-pointer' 
-                    : 'bg-[var(--background)] bg-opacity-10 text-[var(--primary)] text-opacity-50 cursor-not-allowed'
-                }`}
-              >
-                <span className="text-2xl mb-1">⚒️</span>
-                <span className="font-semibold text-sm">Siege</span>
-                <span className="text-xs mt-1">15 gold</span>
-              </button>
-            </div>
-          </div>
-          
           <div className="mb-4">
             <h4 className="text-[var(--primary)] font-semibold mb-2">Selection Info</h4>
             <div className="bg-[var(--background)] bg-opacity-10 p-3 rounded-md">
@@ -149,23 +71,16 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
             </div>
           </div>
           
-          <div className="text-center">
-            <div className="flex items-center justify-between">
-              <div className="text-left">
-                <p className="text-[var(--primary)]">
-                  <span className="font-semibold">Treasury:</span> {gameState.players.player.points} gold
-                </p>
-              </div>
-              <button 
-                onClick={onEndTurn}
-                className="bg-[var(--accent)] hover:bg-[var(--accent-light)] text-[var(--parchment)] font-bold py-2 px-6 rounded-md border-2 border-[var(--secondary)] transition duration-200 shadow-md"
-              >
-                End Turn
-              </button>
-            </div>
+          <div className="flex justify-center">
+            <button
+              onClick={onEndTurn}
+              className="bg-[var(--accent)] text-[var(--secondary)] font-bold py-2 px-8 rounded-md hover:bg-[var(--accent-light)] transition-colors"
+            >
+              End Turn
+            </button>
           </div>
         </>
-      )}
+      }
     </div>
   </div>
 ); 
