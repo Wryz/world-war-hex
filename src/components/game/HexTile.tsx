@@ -150,11 +150,15 @@ export const HexTile: React.FC<HexTileProps> = ({
   
   // Add a darker color for the sides
   const sideColor = useMemo(() => {
+    return new THREE.Color(TERRAIN_COLORS[hex.terrain]).offsetHSL(0, 0, -0.05);
+  }, [hex.terrain]);
+
+  const textColor = useMemo(() => {
     if (isHovered) {
       // Brighter sides when hovered
       return new THREE.Color(TERRAIN_COLORS[hex.terrain]).offsetHSL(0, 0.05, 0);
     }
-    return new THREE.Color(TERRAIN_COLORS[hex.terrain]).offsetHSL(0, 0, -0.1);
+    return new THREE.Color(TERRAIN_COLORS[hex.terrain]).offsetHSL(0, 0, -0.3);
   }, [hex.terrain, isHovered]);
   
   // Apply gentle hover animation and handle hover detection
@@ -330,12 +334,12 @@ export const HexTile: React.FC<HexTileProps> = ({
       {/* Coordinates for debugging (can be removed in production) */}
       {process.env.NODE_ENV === 'development' && (
         <Text 
-          position={[0, totalHeight + 0.3, 0]} 
+          position={[0, totalHeight + 0.15, 0]} 
           fontSize={0.4}
-          color="black"
+          color={textColor}
           anchorX="center"
           anchorY="middle"
-          rotation={[-90, 0, 0]} // Text faces up
+          rotation={[-Math.PI / 2, 0, 0]} // Text faces up
         >
           {`${hex.coordinates.q},${hex.coordinates.r}`}
         </Text>
