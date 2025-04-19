@@ -57,7 +57,7 @@ function GameContent() {
   }
 
   return (
-    <div className="w-screen h-screen bg-[var(--background)]">
+    <div className="w-screen h-screen overflow-hidden bg-[var(--background)]">
       <GameController 
         initialDifficulty={gameDifficulty} 
         shouldContinueGame={shouldContinue}

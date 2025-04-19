@@ -82,13 +82,14 @@ export const SkyDome: React.FC = () => {
   };
   
   return (
-    <mesh ref={skyRef} scale={[1, 1, 1]}>
+    <mesh ref={skyRef} scale={[1, 1, 1]} renderOrder={-1000}>
       <sphereGeometry args={[1000, 32, 15]} />
       <shaderMaterial 
         side={THREE.BackSide}
         vertexShader={vertexShader}
         fragmentShader={fragmentShader}
         uniforms={uniforms}
+        depthWrite={false}
       />
     </mesh>
   );

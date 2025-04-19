@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GameBoard } from './GameBoard';
 import { GameDashboard } from './dashboard/GameDashboard';
 import { PlanningPhase } from './phases/PlanningPhase';
@@ -7,6 +7,9 @@ import { CombatResolver } from './combat/CombatResolver';
 import { GameOverScreen } from './shared/GameOverScreen';
 import { SaveGameButton } from './shared/SaveGameButton';
 import { useGameHandlers } from './handlers/GameEventHandlers';
+import { LoadingManagerProvider } from './utils/LoadingManager';
+import GameAssetPreloader from './utils/GameAssetPreloader';
+import LoadingScreen from './utils/LoadingScreen';
 
 interface GameControllerProps {
   initialDifficulty?: 'easy' | 'medium' | 'hard';
@@ -14,7 +17,8 @@ interface GameControllerProps {
   onReturnToHome?: () => void;
 }
 
-export const GameController: React.FC<GameControllerProps> = ({ 
+// The inner game component that uses the preloaded assets
+const GameControllerInner: React.FC<GameControllerProps> = ({ 
   initialDifficulty = 'medium',
   shouldContinueGame = false,
 }) => {
@@ -136,7 +140,37 @@ export const GameController: React.FC<GameControllerProps> = ({
         gameStarted={gameStarted}
       />
       {renderGameUI()}
-      
     </div>
+  );
+};
+
+// The main controller that provides the loading manager
+export const GameController: React.FC<GameControllerProps> = (props) => {
+  // Always render the game, but loading screen will be on top initially
+  const [loadingComplete, setLoadingComplete] = useState(false);
+
+  // This function will be called when loading is complete and animation is finished
+  const handleLoadingComplete = () => {
+    // Loading screen has faded out completely
+    setLoadingComplete(true);
+  };
+
+  return (
+    <LoadingManagerProvider>
+      <GameAssetPreloader>
+        <div className="relative w-full h-full">
+          {/* Always render the game component */}
+          <GameControllerInner {...props} />
+          
+          {/* Loading screen will fade itself out when complete */}
+          {!loadingComplete && (
+            <LoadingScreen 
+              onLoadingComplete={handleLoadingComplete} 
+              className="pointer-events-auto" 
+            />
+          )}
+        </div>
+      </GameAssetPreloader>
+    </LoadingManagerProvider>
   );
 }; 

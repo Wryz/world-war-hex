@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as THREE from 'three';
+import { useLoadingManager, getCachedModel } from './LoadingManager';
 
-// Cache for loaded models to avoid loading the same model multiple times
+// Legacy model cache for backward compatibility
 const modelCache = new Map<string, THREE.Group>();
 
 // Create a loader
@@ -14,11 +15,18 @@ const createLoader = () => {
 // Get a cached model or load it if not cached
 export const loadGLTFModel = (url: string): Promise<THREE.Group> => {
   return new Promise((resolve, reject) => {
-    // Check if model is already in cache
+    // First try to get from the LoadingManager cache
+    const cachedModel = getCachedModel(url);
+    if (cachedModel) {
+      resolve(cachedModel);
+      return;
+    }
+    
+    // Try to get from legacy cache
     if (modelCache.has(url)) {
-      const cachedModel = modelCache.get(url);
-      if (cachedModel) {
-        resolve(cachedModel.clone());
+      const legacyCachedModel = modelCache.get(url);
+      if (legacyCachedModel) {
+        resolve(legacyCachedModel.clone());
         return;
       }
     }
@@ -46,7 +54,7 @@ export const loadGLTFModel = (url: string): Promise<THREE.Group> => {
           }
         });
         
-        // Store in cache
+        // Store in legacy cache
         modelCache.set(url, model);
         
         // Return a clone to avoid modifying the cached version
@@ -54,8 +62,7 @@ export const loadGLTFModel = (url: string): Promise<THREE.Group> => {
       },
       // Progress callback
       () => {
-        // Progress callback - can be used to show loading status
-        // console.log(`${(xhr.loaded / xhr.total) * 100}% loaded`);
+        // Progress callback - now handled by LoadingManager
       },
       // Error callback
       (error) => {
@@ -71,11 +78,30 @@ export const useGLTF = (url: string) => {
   const [model, setModel] = useState<THREE.Group | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
+  const { registerAsset, getAsset, startLoading } = useLoadingManager();
 
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
     
+    // Register the asset with the LoadingManager
+    registerAsset(url, 'model');
+    
+    // Start loading if not already in progress
+    startLoading();
+    
+    // Check if the model is already loaded in the LoadingManager
+    const asset = getAsset(url);
+    if (asset && asset.loaded) {
+      const cachedModel = getCachedModel(url);
+      if (cachedModel && isMounted) {
+        setModel(cachedModel);
+        setLoading(false);
+        return;
+      }
+    }
+    
+    // Fall back to the old loading mechanism if not in LoadingManager
     loadGLTFModel(url)
       .then((loadedModel) => {
         if (isMounted) {
@@ -94,7 +120,7 @@ export const useGLTF = (url: string) => {
     return () => {
       isMounted = false;
     };
-  }, [url]);
+  }, [url, registerAsset, getAsset, startLoading]);
 
   return { model, loading, error };
 };
@@ -131,16 +157,14 @@ export const Model: React.FC<ModelProps> = ({
   );
 };
 
-// Preload a model for later use
-export const preloadModel = (url: string): void => {
-  if (!modelCache.has(url)) {
-    loadGLTFModel(url).catch(err => {
-      console.warn(`Failed to preload model: ${url}`, err);
-    });
-  }
+// Preload a model for later use - now uses LoadingManager
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const preloadModel = (_url: string): void => {
+  // This is now handled by the LoadingManager
 };
 
-// Function to preload multiple models
-export const preloadModels = (urls: string[]): void => {
-  urls.forEach(url => preloadModel(url));
+// Function to preload multiple models - now uses LoadingManager
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const preloadModels = (_urls: string[]): void => {
+  // This is now handled by the LoadingManager
 }; 

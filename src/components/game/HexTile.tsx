@@ -330,7 +330,7 @@ export const HexTile: React.FC<HexTileProps> = ({
       {/* Coordinates for debugging (can be removed in production) */}
       {process.env.NODE_ENV === 'development' && (
         <Text 
-          position={[0, totalHeight + 0.2, 0]} 
+          position={[0, totalHeight + 0.3, 0]} 
           fontSize={0.4}
           color="black"
           anchorX="center"
