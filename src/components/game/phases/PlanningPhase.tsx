@@ -45,21 +45,21 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
             <div className="bg-[var(--background)] bg-opacity-10 p-3 rounded-md">
               {selectedHex ? (
                 <div>
-                  <p className="text-[var(--secondary)]">
+                  <p className="text-[var(--primary)]">
                     <span className="font-semibold">Location:</span> Selected
                   </p>
-                  <p className="text-[var(--secondary)]">
+                  <p className="text-[var(--primary)]">
                     <span className="font-semibold">Terrain:</span> {selectedHex.terrain || "Plain"}
                   </p>
                   {selectedUnit && (
                     <div className="mt-2 p-2 bg-[var(--background)] bg-opacity-20 rounded-md">
-                      <p className="text-[var(--secondary)]">
+                      <p className="text-[var(--primary)]">
                         <span className="font-semibold">Unit:</span> {getUnitTypeName(selectedUnit.type)}
                       </p>
-                      <p className="text-[var(--secondary)]">
+                      <p className="text-[var(--primary)]">
                         <span className="font-semibold">Health:</span> {selectedUnit.lifespan}/{selectedUnit.maxLifespan}
                       </p>
-                      <p className="text-[var(--secondary)]">
+                      <p className="text-[var(--primary)]">
                         <span className="font-semibold">Owner:</span> {selectedUnit.owner === 'player' ? 'You' : 'Enemy'}
                       </p>
                     </div>
@@ -74,7 +74,7 @@ export const PlanningPhase: React.FC<PlanningPhaseProps> = ({
           <div className="flex justify-center">
             <button
               onClick={onEndTurn}
-              className="bg-[var(--accent)] text-[var(--secondary)] font-bold py-2 px-8 rounded-md hover:bg-[var(--accent-light)] transition-colors"
+              className="bg-[var(--accent)] text-[var(--primary)] font-bold py-2 px-8 rounded-md hover:bg-[var(--accent-light)] transition-colors"
             >
               End Turn
             </button>

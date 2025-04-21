@@ -4,17 +4,16 @@ import {
   Hex, 
   HexCoordinates, 
   Unit, 
-  UnitType
+  UnitType,
+  GamePhase
 } from '@/types/game';
 import { 
   getHexDistance, 
-  getHexesInRange, 
-  findHexByCoordinates 
+  getHexesInRange
 } from '@/lib/game/hexUtils';
 import { 
   initializeGameState, 
   UNITS, 
-  setBaseLocation, 
   addPendingMove, 
   addPendingPurchase, 
   executeMoves,
@@ -30,6 +29,15 @@ import {
   clearSavedGame 
 } from '../storage/GameStorage';
 
+// Define a type to track original unit positions
+interface OriginalUnitPosition {
+  unitId: string;
+  position: HexCoordinates;
+}
+
+// Base max health constant (same value as in gameState.ts)
+const BASE_MAX_HEALTH = 50;
+
 export const useGameHandlers = () => {
   // State variables
   const [hasSavedGame, setHasSavedGame] = useState(false);
@@ -40,9 +48,12 @@ export const useGameHandlers = () => {
   );
   const [selectedHex, setSelectedHex] = useState<Hex | null>(null);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
+  const [selectedUnitTypeForPurchase, setSelectedUnitTypeForPurchase] = useState<UnitType | null>(null);
   const [validMoves, setValidMoves] = useState<HexCoordinates[]>([]);
   const [isAITurn, setIsAITurn] = useState(false);
   const [timer, setTimer] = useState(DEFAULT_SETTINGS.planningPhaseTime);
+  // Track original positions of units at the start of each planning phase
+  const [originalUnitPositions, setOriginalUnitPositions] = useState<OriginalUnitPosition[]>([]);
 
   // Check for saved game on mount
   useEffect(() => {
@@ -54,6 +65,7 @@ export const useGameHandlers = () => {
   useEffect(() => {
     setSelectedHex(null);
     setSelectedUnit(null);
+    setSelectedUnitTypeForPurchase(null);
     setValidMoves([]);
   }, [gameState.currentPhase]);
 
@@ -82,6 +94,19 @@ export const useGameHandlers = () => {
     };
   }, [gameState.currentPhase, isAITurn]);
 
+  // Effect to track original positions when planning phase starts
+  useEffect(() => {
+    if (gameState.currentPhase === 'planning') {
+      // Store the original positions of all player units at the start of planning phase
+      const playerUnits = gameState.players.player.units;
+      const positions: OriginalUnitPosition[] = playerUnits.map(unit => ({
+        unitId: unit.id,
+        position: { ...unit.position }
+      }));
+      setOriginalUnitPositions(positions);
+    }
+  }, [gameState.currentPhase, gameState.turnNumber]);
+
   // Execute all pending moves
   const executeAllMoves = () => {
     // Execute all player and AI moves
@@ -91,7 +116,7 @@ export const useGameHandlers = () => {
     if (updatedState.combats.length > 0) {
       updatedState = {
         ...updatedState,
-        currentPhase: 'combat'
+        currentPhase: 'combat' as GamePhase
       };
     } else {
       // No combats, advance to next round
@@ -99,12 +124,38 @@ export const useGameHandlers = () => {
         ...updatedState,
         turnNumber: updatedState.turnNumber + 1,
         planningTimeRemaining: DEFAULT_SETTINGS.planningPhaseTime,
-        currentPhase: 'planning'
+        currentPhase: 'planning' as GamePhase,
+        // Add 5 gold to both players at the start of each new turn
+        players: {
+          ...updatedState.players,
+          player: {
+            ...updatedState.players.player,
+            points: updatedState.players.player.points + 5
+          },
+          ai: {
+            ...updatedState.players.ai,
+            points: updatedState.players.ai.points + 5
+          }
+        }
       };
       
       // Toggle player turn
       setIsAITurn(!isAITurn);
+      
+      // Also record the original positions of all units for the new planning phase
+      const playerUnits = updatedState.players.player.units;
+      const positions: OriginalUnitPosition[] = playerUnits.map(unit => ({
+        unitId: unit.id,
+        position: { ...unit.position }
+      }));
+      setOriginalUnitPositions(positions);
     }
+    
+    // Clear any selections regardless of phase transition
+    setSelectedHex(null);
+    setSelectedUnit(null);
+    setValidMoves([]);
+    setSelectedUnitTypeForPurchase(null);
     
     setGameState(updatedState);
   };
@@ -193,8 +244,8 @@ export const useGameHandlers = () => {
     // Cannot place base when already placed
     if (gameState.hexGrid.some(h => h.isBase && h.owner === 'player')) return;
     
-    // Cannot place base on water, resource hexes, or non-edge hexes
-    if (hex.isResourceHex || hex.terrain === 'water') return;
+    // Cannot place base on water, resource hexes, mountain hexes, or non-edge hexes
+    if (hex.isResourceHex || hex.terrain === 'water' || hex.terrain === 'mountain') return;
     
     // Check if this is an edge hex - edge hexes have the maximum coordinate value
     // in at least one of their coordinates (q or r) for our hexagonal grid
@@ -208,60 +259,128 @@ export const useGameHandlers = () => {
       return;
     }
     
-    // Update game state with player base location
-    const updatedState = setBaseLocation(gameState, 'player', hex.coordinates);
+    // Create a copy of the original state to work with
+    const newState = { ...gameState };
+    const newHexGrid = [...newState.hexGrid];
     
-    // If player base is set, AI will automatically place base on opposite side
-    if (updatedState.hexGrid.some(h => h.isBase && h.owner === 'player')) {
-      // Place AI base on a different side of the map
-      const playerBase = updatedState.hexGrid.find(h => h.isBase && h.owner === 'player')!;
-      let maxDistance = 0;
-      let furthestHex: Hex | null = null;
-      
-      // Find the hex furthest from player base that's not a resource or water
-      for (const h of updatedState.hexGrid) {
-        if (h.isResourceHex || h.terrain === 'water') continue;
-        
-        // Check if this is an edge hex
-        const isHexEdge = Math.abs(h.coordinates.q) === gridSize || 
-                          Math.abs(h.coordinates.r) === gridSize ||
-                          Math.abs(h.coordinates.q + h.coordinates.r) === gridSize;
-        
-        if (!isHexEdge) continue;
-        
-        const distance = getHexDistance(h.coordinates, playerBase.coordinates);
-        if (distance > maxDistance) {
-          maxDistance = distance;
-          furthestHex = h;
-        }
+    // Find and update the player base hex directly
+    const playerHexIndex = newHexGrid.findIndex(
+      h => h.coordinates.q === hex.coordinates.q && h.coordinates.r === hex.coordinates.r
+    );
+    
+    if (playerHexIndex === -1) return;
+    
+    // Update the hex for player base
+    newHexGrid[playerHexIndex] = {
+      ...newHexGrid[playerHexIndex],
+      isBase: true,
+      owner: 'player',
+      baseHealth: BASE_MAX_HEALTH
+    };
+    
+    // Update player information
+    const updatedPlayers = {
+      ...newState.players,
+      player: {
+        ...newState.players.player,
+        baseLocation: hex.coordinates,
+        baseHealth: BASE_MAX_HEALTH,
+        maxBaseHealth: BASE_MAX_HEALTH
       }
+    };
+    
+    // Now find the best location for AI base
+    let maxDistance = 0;
+    let furthestHexIndex = -1;
+    
+    // Find the hex furthest from player base
+    for (let i = 0; i < newHexGrid.length; i++) {
+      const h = newHexGrid[i];
       
-      if (furthestHex) {
-        const finalState = setBaseLocation(updatedState, 'ai', furthestHex.coordinates);
-        setGameState({
-          ...finalState,
-          currentPhase: 'planning'
-        });
+      // Skip invalid hexes
+      if (h.isResourceHex || h.terrain === 'water' || h.terrain === 'mountain') continue;
+      
+      // Check if it's an edge hex
+      const isHexEdge = Math.abs(h.coordinates.q) === gridSize || 
+                        Math.abs(h.coordinates.r) === gridSize ||
+                        Math.abs(h.coordinates.q + h.coordinates.r) === gridSize;
+      
+      if (!isHexEdge) continue;
+      
+      const distance = getHexDistance(h.coordinates, hex.coordinates);
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        furthestHexIndex = i;
       }
+    }
+    
+    // If we found a valid hex for AI base, update it
+    if (furthestHexIndex !== -1) {
+      // Update the hex for AI base
+      const aiCoordinates = newHexGrid[furthestHexIndex].coordinates;
+      
+      newHexGrid[furthestHexIndex] = {
+        ...newHexGrid[furthestHexIndex],
+        isBase: true,
+        owner: 'ai',
+        baseHealth: BASE_MAX_HEALTH
+      };
+      
+      // Update AI information
+      updatedPlayers.ai = {
+        ...updatedPlayers.ai,
+        baseLocation: aiCoordinates,
+        baseHealth: BASE_MAX_HEALTH,
+        maxBaseHealth: BASE_MAX_HEALTH
+      };
+      
+      // Create the final state with both bases and move to planning phase
+      const finalState: GameState = {
+        ...newState,
+        hexGrid: newHexGrid,
+        players: updatedPlayers,
+        currentPhase: 'planning' as GamePhase,
+        turnNumber: 1,
+        planningTimeRemaining: DEFAULT_SETTINGS.planningPhaseTime
+      };
+      
+      // Apply the complete state update in a single operation
+      setGameState(finalState);
+      
+      // Also record the original positions of all units for the new planning phase
+      // For the first planning phase, there might not be any units yet, but set it up anyway
+      const playerUnits = finalState.players.player.units;
+      const positions: OriginalUnitPosition[] = playerUnits.map(unit => ({
+        unitId: unit.id,
+        position: { ...unit.position }
+      }));
+      setOriginalUnitPositions(positions);
     } else {
-      setGameState(updatedState);
+      // Just update player base if no AI base location found (shouldn't happen)
+      const partialState: GameState = {
+        ...newState,
+        hexGrid: newHexGrid,
+        players: updatedPlayers
+      };
+      
+      setGameState(partialState);
     }
   };
 
   // Handle unit purchase during planning phase
-  const handleUnitPurchase = (unitType: UnitType) => {
-    if (!selectedHex || gameState.currentPhase !== 'planning' || isAITurn) return;
+  const handleUnitPurchase = (unitType: UnitType): boolean => {
+    if (!selectedHex || gameState.currentPhase !== 'planning' || isAITurn) return false;
     
     // Check if player can afford this unit
     const unitInfo = UNITS[unitType];
-    if (!unitInfo || gameState.players.player.points < unitInfo.cost) return;
+    if (!unitInfo || gameState.players.player.points < unitInfo.cost) return false;
     
-    // Ensure this is a valid placement (close to base)
+    // Ensure this is a valid placement (close to base and not on mountain or water)
     const playerBase = gameState.hexGrid.find(h => h.isBase && h.owner === 'player');
-    if (!playerBase) return;
+    if (!playerBase) return false;
     
     const isNearBase = getHexDistance(selectedHex.coordinates, playerBase.coordinates) === 1;
-    if (!isNearBase || selectedHex.unit) return;
+    if (!isNearBase || selectedHex.unit || selectedHex.terrain === 'mountain' || selectedHex.terrain === 'water') return false;
     
     // Add this unit purchase to pending purchases
     const newGameState = addPendingPurchase(
@@ -270,9 +389,109 @@ export const useGameHandlers = () => {
       unitType, 
       selectedHex.coordinates
     );
+
+    console.log('newGameState', newGameState)
     
-    setGameState(newGameState);
+    // Create a temporary unit object for visual preview
+    const previewUnit: Unit = {
+      id: `temp-${unitType}-${Date.now()}`,
+      type: unitType,
+      owner: 'player',
+      position: selectedHex.coordinates,
+      movementRange: UNITS[unitType].movementRange,
+      attackPower: UNITS[unitType].attackPower,
+      lifespan: UNITS[unitType].lifespan,
+      maxLifespan: UNITS[unitType].maxLifespan,
+      cost: UNITS[unitType].cost,
+      abilities: [...UNITS[unitType].abilities],
+      hasMoved: false,
+      isEngagedInCombat: false
+    };
+
+    console.log('previewUnit', previewUnit)
+    
+    // Create a visually updated hex grid to show the unit
+    const visuallyUpdatedHexGrid = [...newGameState.hexGrid];
+    const hexIndex = visuallyUpdatedHexGrid.findIndex(
+      h => h.coordinates.q === selectedHex.coordinates.q && h.coordinates.r === selectedHex.coordinates.r
+    );
+    
+    if (hexIndex !== -1) {
+      visuallyUpdatedHexGrid[hexIndex] = {
+        ...visuallyUpdatedHexGrid[hexIndex],
+        unit: previewUnit
+      };
+    }
+    
+    // Update the points to show immediate visual feedback of cost
+    const updatedPoints = newGameState.players.player.points - unitInfo.cost;
+    
+    // Clear the selection and update game state
+    setGameState({
+      ...newGameState,
+      selectedUnitTypeForPurchase: null,
+      hexGrid: visuallyUpdatedHexGrid,
+      players: {
+        ...newGameState.players,
+        player: {
+          ...newGameState.players.player,
+          points: updatedPoints
+        }
+      }
+    });
+    
+    // Clear the selection state variables
     setSelectedHex(null);
+    setSelectedUnitTypeForPurchase(null);
+    
+    // Return true to indicate successful purchase
+    return true;
+  };
+
+  // Handle selection of unit type from barracks
+  const handleUnitTypeSelect = (unitType: UnitType) => {
+    if (gameState.currentPhase !== 'planning' || isAITurn) return;
+    
+    // Check if player can afford this unit
+    const unitInfo = UNITS[unitType];
+    if (!unitInfo || gameState.players.player.points < unitInfo.cost) return;
+    
+    // Set the selected unit type
+    setSelectedUnitTypeForPurchase(unitType);
+    
+    // Clear any selected unit (as we're now placing a new unit)
+    setSelectedUnit(null);
+    
+    // Find the player's base
+    const playerBase = gameState.hexGrid.find(h => h.isBase && h.owner === 'player');
+    if (!playerBase) return;
+    
+    // Get all hexes within 1 tile of the base
+    const hexesNearBase = getHexesInRange(gameState.hexGrid, playerBase.coordinates, 1);
+    
+    // Filter to only empty hexes (no units or other structures)
+    const validPlacementHexes = hexesNearBase.filter(hex => 
+      // Must be empty (no existing unit)
+      !hex.unit && 
+      // Cannot place on the base itself
+      !hex.isBase &&
+      // Cannot place on water or mountain tiles
+      hex.terrain !== 'water' &&
+      hex.terrain !== 'mountain'
+    );
+    
+    // Set valid moves to the coordinates of these hexes
+    const validMoveCoordinates = validPlacementHexes.map(hex => ({ ...hex.coordinates }));
+    setValidMoves(validMoveCoordinates);
+    
+    // Update game state with the selected unit type
+    setGameState({
+      ...gameState,
+      selectedUnitTypeForPurchase: unitType
+    });
+    
+    // Select the base hex to make it visually clear what's happening
+    setSelectedHex(playerBase);
   };
 
   // Handle move unit during planning phase
@@ -285,69 +504,76 @@ export const useGameHandlers = () => {
     
     if (!isValidMove) return;
     
-    const unitHex = findHexByCoordinates(gameState.hexGrid, unit.position);
-    if (!unitHex) return;
+    // Find the original position from the start of the planning phase
+    let originalPosition = unit.position;
+    const originalPositionData = originalUnitPositions.find(pos => pos.unitId === unit.id);
+    if (originalPositionData) {
+      originalPosition = originalPositionData.position;
+    }
     
-    // Add this move to the pending moves
+    // Get the player's base
+    const playerBase = gameState.hexGrid.find(h => h.isBase && h.owner === 'player');
+    
+    // Check if unit is a newly purchased unit (from this turn)
+    const isNewlyPurchasedUnit = gameState.pendingPurchases.some(
+      purchase => 
+        purchase.playerId === gameState.players.player.id && 
+        purchase.position.q === unit.position.q && 
+        purchase.position.r === unit.position.r
+    );
+    
+    // For newly purchased units, check if target is still around the base
+    if (isNewlyPurchasedUnit && playerBase) {
+      const distanceFromBase = getHexDistance(targetHex.coordinates, playerBase.coordinates);
+      if (distanceFromBase > 1) {
+        // Not within range of base, don't allow the move
+        return;
+      }
+    } else {
+      // Regular unit - verify it's within range of original position
+      // Verify that the target hex is actually within the unit's movement range from its original position
+      const distanceFromOriginal = getHexDistance(originalPosition, targetHex.coordinates);
+      if (distanceFromOriginal > unit.movementRange) {
+        console.warn('Target is outside unit\'s movement range from original position');
+        return;
+      }
+    }
+    
+    // First, check if unit already has a pending move
+    const hasPendingMove = gameState.pendingMoves.some(move => move.unitId === unit.id);
+    let updatedGameState = gameState;
+    
+    // If there's a pending move, cancel it first so we don't stack moves
+    if (hasPendingMove) {
+      // Find and remove the existing pending move
+      updatedGameState = {
+        ...gameState,
+        pendingMoves: gameState.pendingMoves.filter(move => move.unitId !== unit.id)
+      };
+    }
+    
+    // Special case: If we're moving to the original position, just cancel the pending move
+    if (targetHex.coordinates.q === originalPosition.q && 
+        targetHex.coordinates.r === originalPosition.r) {
+      setGameState(updatedGameState);
+      
+      // Clear selection
+      setSelectedUnit(null);
+      setValidMoves([]);
+      return;
+    }
+    
+    // Add this move to the pending moves - using the original position as the "from" position
+    // This ensures that the move is registered correctly when executed
     const newGameState = addPendingMove(
-      gameState,
+      updatedGameState,
       unit.id,
-      gameState.players.player.id,
+      updatedGameState.players.player.id,
       targetHex.coordinates
     );
     
-    // Create a visually updated state to immediately show the unit movement
-    // This doesn't affect the actual game logic, which happens during executeAllMoves
-    const visuallyUpdatedHexGrid = [...newGameState.hexGrid];
-    
-    // Find the indices of the source and target hexes
-    const sourceHexIndex = visuallyUpdatedHexGrid.findIndex(
-      h => h.coordinates.q === unit.position.q && h.coordinates.r === unit.position.r
-    );
-    
-    const targetHexIndex = visuallyUpdatedHexGrid.findIndex(
-      h => h.coordinates.q === targetHex.coordinates.q && h.coordinates.r === targetHex.coordinates.r
-    );
-    
-    if (sourceHexIndex !== -1 && targetHexIndex !== -1) {
-      // Create updated unit with new position
-      const updatedUnit = {
-        ...unit,
-        position: targetHex.coordinates
-      };
-      
-      // Update the player's units array with the new position
-      const updatedPlayerUnits = newGameState.players.player.units.map(u => 
-        u.id === unit.id ? updatedUnit : u
-      );
-      
-      // Update the grid to move the unit visually
-      visuallyUpdatedHexGrid[sourceHexIndex] = {
-        ...visuallyUpdatedHexGrid[sourceHexIndex],
-        unit: undefined
-      };
-      
-      visuallyUpdatedHexGrid[targetHexIndex] = {
-        ...visuallyUpdatedHexGrid[targetHexIndex],
-        unit: updatedUnit
-      };
-      
-      // Set the visually updated state
-      setGameState({
-        ...newGameState,
-        hexGrid: visuallyUpdatedHexGrid,
-        players: {
-          ...newGameState.players,
-          player: {
-            ...newGameState.players.player,
-            units: updatedPlayerUnits
-          }
-        }
-      });
-    } else {
-      // If we couldn't find the hexes, just use the original state update
-      setGameState(newGameState);
-    }
+    // Update the game state with the new pending move
+    setGameState(newGameState);
     
     // Clear selection
     setSelectedUnit(null);
@@ -379,18 +605,46 @@ export const useGameHandlers = () => {
       if (playerBaseDestroyed || aiBaseDestroyed) {
         setGameState({
           ...updatedState,
-          currentPhase: 'gameOver',
+          currentPhase: 'gameOver' as GamePhase,
           winner: playerBaseDestroyed ? 'ai' : 'player'
         });
       } else {
         // No win yet, advance to next round
-        setGameState({
+        const nextTurnState = {
           ...updatedState,
           turnNumber: updatedState.turnNumber + 1,
           planningTimeRemaining: DEFAULT_SETTINGS.planningPhaseTime,
-          currentPhase: 'planning',
-          combats: []
-        });
+          currentPhase: 'planning' as GamePhase,
+          combats: [],
+          // Add 5 gold to both players at the start of each new turn
+          players: {
+            ...updatedState.players,
+            player: {
+              ...updatedState.players.player,
+              points: updatedState.players.player.points + 5
+            },
+            ai: {
+              ...updatedState.players.ai,
+              points: updatedState.players.ai.points + 5
+            }
+          }
+        };
+        
+        setGameState(nextTurnState);
+        
+        // Also record the original positions of all units for the new planning phase
+        const playerUnits = nextTurnState.players.player.units;
+        const positions: OriginalUnitPosition[] = playerUnits.map(unit => ({
+          unitId: unit.id,
+          position: { ...unit.position }
+        }));
+        setOriginalUnitPositions(positions);
+        
+        // Clear any selections when transitioning to planning phase
+        setSelectedHex(null);
+        setSelectedUnit(null);
+        setValidMoves([]);
+        setSelectedUnitTypeForPurchase(null);
         
         // Toggle player turn
         setIsAITurn(!isAITurn);
@@ -435,20 +689,7 @@ export const useGameHandlers = () => {
     }, 1000);
   };
 
-  // Handle unit selection from dashboard
-  const handleUnitSelect = (unit: Unit) => {
-    setSelectedUnit(unit);
-    // Find the hex containing the unit
-    const unitHex = gameState.hexGrid.find(
-      hex => hex.unit && hex.unit.id === unit.id
-    );
-    if (unitHex) {
-      setSelectedHex(unitHex);
-      // TODO: Pan camera to the hex (would require ref to camera controls)
-    }
-  };
-
-  // Handle hex click based on game phase
+  // Handle hex click - extended to track placed unit hex
   const handleHexClick = useCallback((hex: Hex) => {
     switch (gameState.currentPhase) {
       case 'setup':
@@ -476,8 +717,10 @@ export const useGameHandlers = () => {
                               Math.abs(h.coordinates.r) === gridSize ||
                               Math.abs(h.coordinates.q + h.coordinates.r) === gridSize;
                               
-            // Check if it's a valid terrain type
-            const isValidTerrain = h.terrain !== 'water' && !h.isResourceHex;
+            // Check if it's a valid terrain type (not water, not resource, not mountain)
+            const isValidTerrain = h.terrain !== 'water' && 
+                                   !h.isResourceHex && 
+                                   h.terrain !== 'mountain';
             
             return isEdgeHex && isValidTerrain;
           });
@@ -487,27 +730,164 @@ export const useGameHandlers = () => {
         break;
       
       case 'planning':
+        if (isAITurn) {
+          // Don't allow player actions during AI turn
+          setSelectedHex(hex);
+          setSelectedUnit(null);
+          setValidMoves([]);
+          return;
+        }
+
+        // Check if this hex is the destination of a pending move (for cancellation)
+        const pendingMoveToThisHex = gameState.pendingMoves.find(move => 
+          move.to.q === hex.coordinates.q && move.to.r === hex.coordinates.r
+        );
+        
+        if (pendingMoveToThisHex) {
+          // We're clicking on a hex that has a pending move destination - cancel the move
+          const updatedState = {
+            ...gameState,
+            pendingMoves: gameState.pendingMoves.filter(move => move.unitId !== pendingMoveToThisHex.unitId)
+          };
+          
+          setGameState(updatedState);
+          setSelectedHex(hex);
+          setSelectedUnit(null);
+          setValidMoves([]);
+          return;
+        }
+        
         // If we have a selected unit, try to move it
         if (selectedUnit && !isAITurn) {
           handleUnitMove(selectedUnit, hex);
-        } else if (hex.isResourceHex) {
-          // Show info about resource hex
+        } else if (selectedUnitTypeForPurchase && !isAITurn) {
+          // If we have a unit type selected for purchase, first check if the hex is valid
           setSelectedHex(hex);
-        } else if (hex.isBase) {
-          // Show base info
-          setSelectedHex(hex);
-        } else if (!hex.unit) {
-          // Select hex for unit placement
-          setSelectedHex(hex);
-          setSelectedUnit(null);
           
           // Check if it's a valid placement position (near base)
           const playerBase = gameState.hexGrid.find(h => h.isBase && h.owner === 'player');
           if (playerBase) {
             const isNearBase = getHexDistance(hex.coordinates, playerBase.coordinates) === 1;
-            if (!isNearBase) {
+            
+            // Ensure we're not placing on water, mountains, an existing unit, or the base itself
+            const isValidPlacement = isNearBase && 
+                                    !hex.unit && 
+                                    !hex.isBase && 
+                                    hex.terrain !== 'water' &&
+                                    hex.terrain !== 'mountain';
+            
+            if (isValidPlacement) {
+              // Valid location, try to purchase the unit
+              handleUnitPurchase(selectedUnitTypeForPurchase);
+            } else {
+              // Not a valid placement - clear selected unit type
+              setSelectedUnitTypeForPurchase(null);
+              // Also clear it from the game state
+              setGameState({
+                ...gameState,
+                selectedUnitTypeForPurchase: null
+              });
               setValidMoves([]);
             }
+          }
+        } else if (hex.unit) {
+          // If clicking on a unit, select it and set as the selected unit
+          setSelectedHex(hex);
+          
+          // Check if unit is player's unit
+          if (hex.unit.owner === 'player' && !isAITurn) {
+            // Check if this unit was bought in the current planning phase
+            const isNewlyPurchasedUnit = gameState.pendingPurchases.some(
+              purchase => 
+                purchase.playerId === gameState.players.player.id && 
+                purchase.position.q === hex.unit!.position.q && 
+                purchase.position.r === hex.unit!.position.r
+            );
+            
+            // Don't let the player move newly purchased units outside the base area
+            if (isNewlyPurchasedUnit) {
+              setSelectedUnit(hex.unit);
+              
+              // Get the player's base for range calculations
+              const playerBase = gameState.hexGrid.find(h => h.isBase && h.owner === 'player');
+              
+              if (playerBase) {
+                // For newly purchased units, restrict movement to hexes around the base
+                const hexesAroundBase = getHexesInRange(gameState.hexGrid, playerBase.coordinates, 1);
+                const validHexesAroundBase = hexesAroundBase.filter(h => 
+                  !h.unit && !h.isBase && h.terrain !== 'water' && h.terrain !== 'mountain'
+                );
+                
+                setValidMoves(validHexesAroundBase.map(h => h.coordinates));
+              }
+            } else {
+              // This is an existing unit (not newly purchased)
+              
+              // Find the unit's original position from the start of planning phase
+              let originalPosition = hex.unit.position;
+              const originalPositionData = originalUnitPositions.find(pos => pos.unitId === hex.unit!.id);
+              if (originalPositionData) {
+                originalPosition = originalPositionData.position;
+              }
+              
+              // Select the unit
+              setSelectedUnit(hex.unit);
+              
+              // Calculate valid moves from the ORIGINAL position, not current position
+              const hexesInRange = getHexesInRange(gameState.hexGrid, originalPosition, hex.unit.movementRange);
+              
+              // Filter valid movement targets - exclude tiles with other units, water, mountains, etc.
+              const validMoveCoords = hexesInRange
+                .filter(h => {
+                  // Skip if hex has a unit (unless it's our currently selected unit)
+                  if (h.unit && h.unit.id !== hex.unit!.id) return false;
+                  
+                  // Skip terrain obstacles
+                  if (h.terrain === 'water' || h.terrain === 'mountain') return false;
+                  
+                  // Allow moving to the original position (effectively canceling a move)
+                  return true;
+                })
+                .map(h => h.coordinates);
+              
+              // Set valid move destinations
+              setValidMoves(validMoveCoords);
+            }
+          } else {
+            // Not a player unit or AI turn
+            setSelectedUnit(null);
+            setValidMoves([]);
+          }
+        } else if (hex.isResourceHex) {
+          // Show info about resource hex
+          setSelectedHex(hex);
+          setSelectedUnit(null);
+          setValidMoves([]);
+        } else if (hex.isBase) {
+          // Show base info
+          setSelectedHex(hex);
+          setSelectedUnit(null);
+          setValidMoves([]);
+        } else {
+          // Select empty hex
+          setSelectedHex(hex);
+          setSelectedUnit(null);
+          
+          // If we have a unit type selected for purchase, we'll check if this is a valid placement
+          if (selectedUnitTypeForPurchase && !isAITurn) {
+            // Check if it's a valid placement position (near base)
+            const playerBase = gameState.hexGrid.find(h => h.isBase && h.owner === 'player');
+            if (playerBase) {
+              const isNearBase = getHexDistance(hex.coordinates, playerBase.coordinates) === 1;
+              if (!isNearBase) {
+                // Invalid placement location - clear selected unit type
+                setSelectedUnitTypeForPurchase(null);
+                setValidMoves([]);
+              }
+            }
+          } else {
+            // No unit type selected, clear valid moves
+            setValidMoves([]);
           }
         }
         break;
@@ -521,126 +901,27 @@ export const useGameHandlers = () => {
         setSelectedHex(hex);
         break;
     }
-  }, [gameState, selectedUnit, isAITurn, selectedHex]);
+  }, [gameState, selectedUnit, isAITurn, selectedHex, selectedUnitTypeForPurchase, originalUnitPositions]);
 
-  // Handle unit click  
-  const handleUnitClick = useCallback((unit: Unit) => {
-    if (gameState.currentPhase !== 'planning' || isAITurn) return;
+  // Handle unit selection from dashboard
+  const handleUnitSelect = (unit: Unit) => {
+    // Find the hex containing the unit
+    const unitHex = gameState.hexGrid.find(
+      hex => hex.unit && hex.unit.id === unit.id
+    );
     
-    // Can only select player's units
-    if (unit.owner !== 'player') {
-      setSelectedUnit(null);
-      return;
+    if (unitHex) {
+      // Simulate clicking the hex with the unit
+      handleHexClick(unitHex);
     }
-    
-    // Check if this unit already has a pending move
-    const hasPendingMove = gameState.pendingMoves.some(move => move.unitId === unit.id);
-    
-    // If unit has a pending move, find that move
-    if (hasPendingMove) {
-      const pendingMove = gameState.pendingMoves.find(move => move.unitId === unit.id);
-      if (!pendingMove) return; // Shouldn't happen but TypeScript wants it
-      
-      // Cancel the pending move and return the unit to its original position
-      const updatedPendingMoves = gameState.pendingMoves.filter(move => move.unitId !== unit.id);
-      
-      // Find the source and current destination hexes
-      const sourceHex = findHexByCoordinates(gameState.hexGrid, pendingMove.from);
-      const destHex = findHexByCoordinates(gameState.hexGrid, unit.position);
-      
-      if (!sourceHex || !destHex) return;
-      
-      // Create a copy of the hex grid
-      const updatedHexGrid = [...gameState.hexGrid];
-      
-      // Find the indices of the source and current hexes
-      const sourceHexIndex = updatedHexGrid.findIndex(
-        h => h.coordinates.q === pendingMove.from.q && h.coordinates.r === pendingMove.from.r
-      );
-      
-      const currentHexIndex = updatedHexGrid.findIndex(
-        h => h.coordinates.q === unit.position.q && h.coordinates.r === unit.position.r
-      );
-      
-      if (sourceHexIndex !== -1 && currentHexIndex !== -1) {
-        // Create updated unit with original position
-        const updatedUnit = {
-          ...unit,
-          position: pendingMove.from
-        };
-        
-        // Update the player's units array
-        const updatedPlayerUnits = gameState.players.player.units.map(u => 
-          u.id === unit.id ? updatedUnit : u
-        );
-        
-        // Update the grid to move the unit back
-        updatedHexGrid[currentHexIndex] = {
-          ...updatedHexGrid[currentHexIndex],
-          unit: undefined
-        };
-        
-        updatedHexGrid[sourceHexIndex] = {
-          ...updatedHexGrid[sourceHexIndex],
-          unit: updatedUnit
-        };
-        
-        // Update the game state
-        setGameState({
-          ...gameState,
-          pendingMoves: updatedPendingMoves,
-          hexGrid: updatedHexGrid,
-          players: {
-            ...gameState.players,
-            player: {
-              ...gameState.players.player,
-              units: updatedPlayerUnits
-            }
-          }
-        });
-        
-        // Select the unit at its original position
-        setSelectedUnit(updatedUnit);
-        
-        // Calculate valid moves for this unit from its original position
-        const hexesInRange = getHexesInRange(updatedHexGrid, pendingMove.from, unit.movementRange);
-        const validMoveCoords = hexesInRange
-          .filter(hex => {
-            // Filter to empty hexes or enemy base
-            if (hex.unit && !(hex.isBase && hex.owner !== unit.owner)) return false;
-            return true;
-          })
-          .map(hex => hex.coordinates);
-        
-        setValidMoves(validMoveCoords);
-        return;
-      }
-    }
-    
-    setSelectedUnit(unit);
-    
-    // Calculate valid moves for this unit
-    const unitHex = findHexByCoordinates(gameState.hexGrid, unit.position);
-    if (!unitHex) return;
-    
-    // Show movement range
-    const hexesInRange = getHexesInRange(gameState.hexGrid, unit.position, unit.movementRange);
-    const validMoveCoords = hexesInRange
-      .filter(hex => {
-        // Filter to empty hexes or enemy base
-        if (hex.unit && !(hex.isBase && hex.owner !== unit.owner)) return false;
-        return true;
-      })
-      .map(hex => hex.coordinates);
-    
-    setValidMoves(validMoveCoords);
-  }, [gameState, isAITurn]);
+  };
 
   return {
     // State
     gameState,
     selectedHex,
     selectedUnit,
+    selectedUnitTypeForPurchase,
     validMoves,
     isAITurn,
     timer,
@@ -650,9 +931,9 @@ export const useGameHandlers = () => {
     
     // Handlers
     handleHexClick,
-    handleUnitClick,
     handleUnitSelect,
     handleUnitPurchase,
+    handleUnitTypeSelect,
     handleEndTurn,
     handleCombatResolve,
     handleStartGame,

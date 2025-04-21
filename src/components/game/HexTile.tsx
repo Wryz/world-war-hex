@@ -1,8 +1,8 @@
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Hex, HexCoordinates, TerrainType } from '@/types/game';
 import * as THREE from 'three';
-import { Text } from '@react-three/drei';
+import { playSound } from './utils/SoundPlayer';
 
 // Hex geometry
 const HEX_SIZE = 1.0;
@@ -10,7 +10,6 @@ const HEX_SIZE = 1.0;
 const BASE_HEIGHT = 0.5;
 const MIN_HEIGHT = 0.1;
 const MAX_HEIGHT = 1.2;
-const BASE_MAX_HEALTH = 50; // Base max health constant
 
 // Terrain heights - scale these to make more dramatic landscape
 const TERRAIN_HEIGHTS: Record<TerrainType, number> = {
@@ -50,7 +49,10 @@ interface HexTileProps {
   isSetupPhase?: boolean;
   isValidSetupTile?: boolean;
   isBaseSelectionConfirmMode?: boolean;
+  isPendingMoveDestination?: boolean;
+  isTargetMovePosition?: boolean;
   onClick?: () => void;
+  onDoubleClick?: () => void;
   onContextMenu?: () => void;
   onPointerOver?: () => void;
   onPointerOut?: () => void;
@@ -64,7 +66,10 @@ export const HexTile: React.FC<HexTileProps> = ({
   isSetupPhase = false,
   isValidSetupTile = false,
   isBaseSelectionConfirmMode = false,
+  isPendingMoveDestination = false,
+  isTargetMovePosition = false,
   onClick,
+  onDoubleClick,
   onContextMenu,
   onPointerOver,
   onPointerOut
@@ -72,6 +77,30 @@ export const HexTile: React.FC<HexTileProps> = ({
   const meshRef = useRef<THREE.Mesh>(null);
   const topFaceRef = useRef<THREE.Mesh>(null);
   const ringRef = useRef<THREE.Mesh>(null);
+  const targetPosRingRef = useRef<THREE.Mesh>(null);
+  const pendingMoveRingRef = useRef<THREE.Mesh>(null);
+  
+  // Wrapped handlers with sound effects
+  const handleClick = useCallback(() => {
+    // Play selection sound
+    playSound('hex-select-sound', 0.2);
+    // Call the original onClick handler
+    if (onClick) onClick();
+  }, [onClick]);
+  
+  const handleDoubleClick = useCallback(() => {
+    // Play confirmation sound
+    playSound('hex-select-sound', 0.3);
+    // Call the original onDoubleClick handler
+    if (onDoubleClick) onDoubleClick();
+  }, [onDoubleClick]);
+  
+  const handleHover = useCallback(() => {
+    // Play hover sound
+    playSound('hex-hover-sound', 0.05); // Lower volume for hover sound
+    // Call the original onPointerOver handler
+    if (onPointerOver) onPointerOver();
+  }, [onPointerOver]);
   
   // Get terrain-based height
   const terrainHeight = TERRAIN_HEIGHTS[hex.terrain] || BASE_HEIGHT;
@@ -198,7 +227,7 @@ export const HexTile: React.FC<HexTileProps> = ({
     
     if (isHighlighted || isHovered || (isSetupPhase && isValidSetupTile)) {
       // More noticeable color change on hover - brighter and slightly saturated
-      return new THREE.Color(baseColor).offsetHSL(0, 0.1, 0.15);
+      return new THREE.Color(baseColor).offsetHSL(0, 0.2, 0.25);
     }
     
     return new THREE.Color(baseColor);
@@ -229,22 +258,34 @@ export const HexTile: React.FC<HexTileProps> = ({
         topFaceRef.current.position.y = meshRef.current.position.y + hexHeight;
       }
       
-      // Update ring animation
-      if (ringRef.current) {
+      // Update main selection ring animation
+      if (ringRef.current && isSelected) {
         // Make the ring float above the hex
         const baseRingHeight = hexHeight + 0.05;
         const time = state.clock.getElapsedTime();
         
         // Animate the ring's height with a gentle sine wave
-        const floatOffset = isSelected ? Math.sin(time * 0.8) * 0.15 : 0;
+        const floatOffset = Math.sin(time * 0.8) * 0.15;
         
         // Position the ring just above the hex and apply the floating animation
         ringRef.current.position.y = baseRingHeight + floatOffset;
         
         // Also make it slowly rotate for a more dynamic effect
-        if (isSelected) {
-          ringRef.current.rotation.y = time * 0.2;
-        }
+        ringRef.current.rotation.y = time * 0.2;
+      }
+      
+      // Update target position ring animation
+      if (targetPosRingRef.current && isTargetMovePosition) {
+        const time = state.clock.getElapsedTime();
+        targetPosRingRef.current.position.y = Math.sin(time * 0.5) * 0.05;
+        targetPosRingRef.current.rotation.y = -time * 0.1;
+      }
+      
+      // Update pending move ring animation
+      if (pendingMoveRingRef.current && isPendingMoveDestination) {
+        const time = state.clock.getElapsedTime();
+        pendingMoveRingRef.current.position.y = Math.sin(time * 0.7) * 0.1;
+        pendingMoveRingRef.current.rotation.y = time * 0.15;
       }
     }
   });
@@ -288,9 +329,10 @@ export const HexTile: React.FC<HexTileProps> = ({
         ref={meshRef}
         position={[0, 0, 0]}
         geometry={geometry}
-        onClick={onClick}
+        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         onContextMenu={onContextMenu}
-        onPointerOver={onPointerOver}
+        onPointerOver={handleHover}
         onPointerOut={onPointerOut}
       >
         {/* We'll use separate materials for top and sides for better visuals */}
@@ -313,15 +355,44 @@ export const HexTile: React.FC<HexTileProps> = ({
       {/* Invisible top face mesh for hover detection - positioned exactly at the top surface */}
       <mesh 
         ref={topFaceRef}
-        position={[0, totalHeight - 0.03, 0]} /* Position it right at the top surface */
-        onClick={onClick}
+        position={[0, totalHeight + 0.15, 0]} /* Position it right at the top surface */
+        onClick={handleClick}
+        onDoubleClick={handleDoubleClick}
         onContextMenu={onContextMenu}
-        onPointerOver={onPointerOver}
+        onPointerOver={handleHover}
         onPointerOut={onPointerOut}
       >
         <shapeGeometry args={[hexTopShape]} />
         <meshBasicMaterial transparent opacity={0} side={THREE.DoubleSide} />
       </mesh>
+      
+      {/* Pending Move Destination Indicator */}
+      {isPendingMoveDestination && (
+        <group position={[0, totalHeight + 0.2, 0]}>
+          {/* Pulsing ring to indicate planned movement */}
+          <mesh ref={pendingMoveRingRef}>
+            <ringGeometry args={[0.8, 1.0, 32]} />
+            <meshStandardMaterial 
+              color="#FFD700" // Gold color
+              emissive="#FFA500" // Orange glow
+              emissiveIntensity={0.7}
+              transparent={true}
+              opacity={0.8}
+              side={THREE.DoubleSide}
+            />
+          </mesh>
+          
+          {/* Arrow pointing down to indicate "target" */}
+          <mesh position={[0, 0.3, 0]} rotation={[0, 0, Math.PI]}>
+            <coneGeometry args={[0.3, 0.6, 4]} />
+            <meshStandardMaterial 
+              color="#FFD700" 
+              emissive="#FFA500"
+              emissiveIntensity={0.7}
+            />
+          </mesh>
+        </group>
+      )}
       
       {/* Base selection confirm mode indicator */}
       {isBaseSelectionConfirmMode && isSelected && isValidSetupTile && (
@@ -336,7 +407,7 @@ export const HexTile: React.FC<HexTileProps> = ({
       )}
       
       {/* Vertical hex ring extending to sky - glowing effect */}
-      {isSelected && (
+      {(isSelected || isTargetMovePosition) && (
         <group>
           {/* Create multiple stacked rings with decreasing opacity */}
           {[...Array(8)].map((_, index) => {
@@ -349,13 +420,17 @@ export const HexTile: React.FC<HexTileProps> = ({
               ? (isValidSetupTile 
                 ? (index < 2 ? "#4CAF50" : "#81C784") 
                 : (index < 2 ? "#F44336" : "#E57373"))
-              : (index < 2 ? "#ffffff" : "#aaaaff");
+              : isTargetMovePosition
+                ? (index < 2 ? "#4169E1" : "#1E90FF") // Blue colors for target move position
+                : (index < 2 ? "#ffffff" : "#aaaaff");
               
             const emissiveColor = isSetupPhase
               ? (isValidSetupTile
                 ? (index < 3 ? "#2E7D32" : "#388E3C")
                 : (index < 3 ? "#C62828" : "#D32F2F"))
-              : (index < 3 ? "#aaaaff" : "#8888ff");
+              : isTargetMovePosition
+                ? (index < 3 ? "#1E90FF" : "#4169E1") // Blue emissive for target move position
+                : (index < 3 ? "#aaaaff" : "#8888ff");
             
             return (
               <mesh 
@@ -391,104 +466,6 @@ export const HexTile: React.FC<HexTileProps> = ({
               emissiveIntensity={0.5}
             />
           </mesh>
-          
-          {/* Base health bar - redesigned with straight top/bottom and side points */}
-          {hex.baseHealth !== undefined && (
-            <group position={[0, 0.5, 0]}>
-              {/* Health bar background */}
-              <group>
-                {/* Base rectangle for background */}
-                <mesh position={[0, 0, 0]}>
-                  <boxGeometry args={[1.5, 0.2, 0.1]} />
-                  <meshBasicMaterial color="#444444" transparent={true} opacity={0.5} />
-                </mesh>
-                
-                {/* Side point - on right side for player, left side for enemy */}
-                {hex.owner === 'player' ? (
-                  // Player's castle - right-pointing arrow
-                  <group position={[0.75, 0, 0]}>
-                    <mesh rotation={[0, 0, Math.PI / 2]}>
-                      <coneGeometry args={[0.1, 0.3, 4, 1]} />
-                      <meshBasicMaterial color="#444444" transparent={true} opacity={0.5} />
-                    </mesh>
-                  </group>
-                ) : (
-                  // Enemy's castle - left-pointing arrow
-                  <group position={[-0.75, 0, 0]}>
-                    <mesh rotation={[0, 0, -Math.PI / 2]}>
-                      <coneGeometry args={[0.1, 0.3, 4, 1]} />
-                      <meshBasicMaterial color="#444444" transparent={true} opacity={0.5} />
-                    </mesh>
-                  </group>
-                )}
-              </group>
-              
-              {/* Health bar fill */}
-              <group scale={[hex.baseHealth / BASE_MAX_HEALTH, 1, 1]} position={[(hex.baseHealth / BASE_MAX_HEALTH - 1) * 0.75, 0, 0.02]}>
-                {/* Base rounded box for fill */}
-                <mesh>
-                  <boxGeometry args={[1.5, 0.2, 0.08]} />
-                  <meshBasicMaterial 
-                    color={
-                      hex.baseHealth / BASE_MAX_HEALTH > 0.6 
-                        ? '#4caf50' 
-                        : hex.baseHealth / BASE_MAX_HEALTH > 0.3 
-                          ? '#ff9800' 
-                          : '#f44336'
-                    } 
-                  />
-                </mesh>
-                
-                {/* Side point fill - on right side for player, left side for enemy */}
-                {hex.baseHealth / BASE_MAX_HEALTH > 0.9 && hex.owner === 'player' && (
-                  // Player's castle - right-pointing arrow (only shows when health is high)
-                  <group position={[0.75, 0, 0]}>
-                    <mesh rotation={[0, 0, Math.PI / 2]}>
-                      <coneGeometry args={[0.1, 0.3, 4, 1]} />
-                      <meshBasicMaterial 
-                        color={
-                          hex.baseHealth / BASE_MAX_HEALTH > 0.6 
-                            ? '#4caf50' 
-                            : hex.baseHealth / BASE_MAX_HEALTH > 0.3 
-                              ? '#ff9800' 
-                              : '#f44336'
-                        } 
-                      />
-                    </mesh>
-                  </group>
-                )}
-                
-                {hex.baseHealth / BASE_MAX_HEALTH > 0.9 && hex.owner === 'ai' && (
-                  // Enemy's castle - left-pointing arrow (only shows when health is high)
-                  <group position={[-0.75, 0, 0]}>
-                    <mesh rotation={[0, 0, -Math.PI / 2]}>
-                      <coneGeometry args={[0.1, 0.3, 4, 1]} />
-                      <meshBasicMaterial 
-                        color={
-                          hex.baseHealth / BASE_MAX_HEALTH > 0.6 
-                            ? '#4caf50' 
-                            : hex.baseHealth / BASE_MAX_HEALTH > 0.3 
-                              ? '#ff9800' 
-                              : '#f44336'
-                        } 
-                      />
-                    </mesh>
-                  </group>
-                )}
-              </group>
-              
-              {/* Health text */}
-              <Text 
-                position={[0, 0.25, 0.1]} 
-                fontSize={0.2}
-                color="white"
-                anchorX="center"
-                anchorY="middle"
-              >
-                {`${hex.baseHealth}/${BASE_MAX_HEALTH}`}
-              </Text>
-            </group>
-          )}
         </group>
       )}
     </group>

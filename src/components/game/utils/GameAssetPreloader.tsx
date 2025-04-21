@@ -15,14 +15,17 @@ const GAME_ASSETS: Record<string, AssetEntry[]> = {
     { url: '/models/tree-2.glb', id: 'tree2-model' },
     { url: '/models/bush-1.glb', id: 'bush-model' },
     { url: '/models/rock-gold-1.glb', id: 'gold-rock-model' },
+    { url: '/models/blue-knight.glb', id: 'blue-knight-model' },
+    { url: '/models/red-knight.glb', id: 'red-knight-model' },
   ],
   textures: [
     { url: '/textures/sky.jpg', id: 'sky-texture' },
     { url: '/textures/grass_texture.jpg', id: 'grass-plain-texture' },
   ],
   audio: [
-    // Add audio resources here if needed
-    // { url: '/audio/background-music.mp3', id: 'background-music' },
+    // Game sound effects
+    { url: '/sounds/hover-1.mp3', id: 'hex-hover-sound' },
+    { url: '/sounds/select-1.mp3', id: 'hex-select-sound' },
   ]
 };
 

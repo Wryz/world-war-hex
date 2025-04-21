@@ -37,14 +37,14 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
     
     // Event handlers
     handleHexClick,
-    handleUnitClick,
     handleUnitSelect,
     handleUnitPurchase,
     handleEndTurn,
     handleCombatResolve,
     handleStartGame,
     handleContinueGame,
-    handleRestart
+    handleRestart,
+    handleUnitTypeSelect
   } = useGameHandlers();
 
   // Start or continue game when the component mounts
@@ -101,7 +101,7 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
             {/* Barracks component for troop recruitment */}
             <Barracks
               availableGold={gameState.players.player.points}
-              onUnitPurchase={handleUnitPurchase}
+              onUnitTypeSelect={handleUnitTypeSelect}
               isAITurn={isAITurn}
             />
             <PlanningPhase
@@ -153,8 +153,10 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
         selectedHex={selectedHex ?? undefined}
         validMoves={validMoves}
         onHexClick={handleHexClick}
-        onUnitClick={handleUnitClick}
+        onUnitClick={handleUnitSelect}
         gameStarted={gameStarted}
+        onUnitPurchase={handleUnitPurchase}
+        isAITurn={isAITurn}
       />
       {renderGameUI()}
     </div>

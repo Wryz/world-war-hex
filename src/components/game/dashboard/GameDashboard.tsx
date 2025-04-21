@@ -26,7 +26,7 @@ export const GameDashboard: React.FC<GameDashboardProps> = ({
   return (
     <>
       {/* Sidebar Dashboard (left side) */}
-      <div className="fixed left-0 top-0 bottom-0 w-64 bg-[var(--background)] bg-opacity-80 border-r-2 border-[var(--secondary)] shadow-md pointer-events-auto z-10 flex flex-col overflow-hidden">
+      <div className="fixed left-0 top-0 bottom-0 w-64 bg-opacity-0 pointer-events-auto z-10 flex flex-col overflow-hidden">
         {/* Game info at the top of sidebar */}
         <div className="p-4 border-b border-[var(--secondary)]">
           <h2 className="text-[var(--parchment)] text-lg font-bold">Turn {turnNumber}</h2>

@@ -75,6 +75,7 @@ export interface GameState {
   pendingPurchases: Purchase[];
   combats: Combat[];
   settings?: GameSettings;
+  selectedUnitTypeForPurchase?: UnitType | null;
 }
 
 export type GamePhase = 

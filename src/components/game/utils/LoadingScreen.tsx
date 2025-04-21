@@ -216,7 +216,7 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({
         {/* Progress bar */}
         <div className="mb-4 bg-gray-300 rounded-full h-5 overflow-hidden border border-[var(--foreground)]">
           <div 
-            className={`h-full transition-all duration-300 ease-out flex items-center justify-end pr-2 text-xs font-bold ${isCompleting ? 'bg-green-500' : 'bg-[var(--accent)]'}`}
+            className={`h-full transition-all duration-300 ease-out flex items-center justify-end pr-2 text-xs font-bold ${isCompleting ? 'bg-green-500 text-green-700' : 'bg-[var(--accent)]'}`}
             style={{ width: isCompleting ? '100%' : `${percentLoaded}%` }}
           >
             {isCompleting ? 'Done!' : (percentLoaded > 10 && `${percentLoaded}%`)}

@@ -45,6 +45,8 @@ The game is organized into modular components for better maintainability:
 
 - `src/components/game/utils/`
   - `UnitHelpers`: Helper functions for unit types, icons, and names
+  - `LoadingManager`: Asset loading and management
+  - `SoundPlayer`: Sound effects playback and volume control
 
 ### Game Logic
 
@@ -65,6 +67,7 @@ The game is organized into modular components for better maintainability:
 - Resource management
 - Turn-based combat system
 - AI opponent with configurable difficulty levels
+- Interactive sound effects for enhanced gameplay experience
 
 ## Getting Started
 

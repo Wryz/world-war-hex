@@ -13,13 +13,13 @@ const TROOP_INFO: Record<UnitType, { cost: number, description: string }> = {
 
 interface BarracksProps {
   availableGold: number;
-  onUnitPurchase: (unitType: UnitType) => void;
+  onUnitTypeSelect: (unitType: UnitType) => void;
   isAITurn: boolean;
 }
 
 const Barracks: React.FC<BarracksProps> = ({ 
   availableGold, 
-  onUnitPurchase,
+  onUnitTypeSelect,
   isAITurn
 }) => {
   // If it's AI's turn, don't show the barracks
@@ -38,7 +38,7 @@ const Barracks: React.FC<BarracksProps> = ({
           return (
             <button
               key={troopType}
-              onClick={() => canAfford && onUnitPurchase(troopType)}
+              onClick={() => canAfford && onUnitTypeSelect(troopType)}
               disabled={!canAfford}
               className={`
                 flex flex-col items-center p-2 rounded-md border transition-all
@@ -59,7 +59,7 @@ const Barracks: React.FC<BarracksProps> = ({
       
       <div className="mt-3 text-center text-[var(--parchment)] text-sm">
         <p><strong>Available Gold:</strong> {availableGold}</p>
-        <p className="mt-1 text-xs italic">Select a hex near your base to deploy troops</p>
+        <p className="mt-1 text-xs italic">Select a unit to see where it can be deployed</p>
       </div>
     </div>
   );

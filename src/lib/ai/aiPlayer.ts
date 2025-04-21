@@ -274,7 +274,7 @@ const decidePurchase = (
   const adjacentPositions = getNeighbors(aiBase.coordinates);
   const validPositions = adjacentPositions.filter(pos => {
     const hex = findHexByCoordinates(state.hexGrid, pos);
-    return hex && !hex.unit && hex.terrain !== 'water';
+    return hex && !hex.unit && hex.terrain !== 'water' && hex.terrain !== 'mountain';
   });
   
   if (validPositions.length === 0) {

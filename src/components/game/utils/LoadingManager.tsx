@@ -260,22 +260,23 @@ export const LoadingManagerProvider: React.FC<LoadingManagerProviderProps> = ({
   // Load audio (no progress tracking)
   const loadAudio = useCallback((asset: Asset) => {
     return new Promise<void>((resolve, reject) => {
-      const audio = new Audio();
-      audio.src = asset.url;
-      
-      audio.addEventListener('canplaythrough', () => {
-        // Update asset status
-        setAssets(currentAssets => 
-          currentAssets.map(a => 
-            a.id === asset.id 
-              ? { ...a, loaded: true, progress: 1 }
-              : a
-          )
-        );
-        resolve();
-      });
-      
-      audio.addEventListener('error', (err) => {
+      try {
+        // Dynamically import the preloadSound function to avoid circular dependencies
+        import('./SoundPlayer').then(({ preloadSound }) => {
+          // Use the preload function from SoundPlayer
+          preloadSound(asset.url, asset.id);
+
+          // Update asset status
+          setAssets(currentAssets => 
+            currentAssets.map(a => 
+              a.id === asset.id 
+                ? { ...a, loaded: true, progress: 1 }
+                : a
+            )
+          );
+          resolve();
+        });
+      } catch (err) {
         console.error(`Error loading audio from ${asset.url}:`, err);
         setAssets(currentAssets => 
           currentAssets.map(a => 
@@ -285,10 +286,7 @@ export const LoadingManagerProvider: React.FC<LoadingManagerProviderProps> = ({
           )
         );
         reject(err);
-      });
-      
-      // Start loading
-      audio.load();
+      }
     });
   }, []);
 
