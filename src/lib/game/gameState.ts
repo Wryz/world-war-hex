@@ -322,7 +322,6 @@ export const getValidBaseLocations = (state: GameState): Hex[] => {
   return state.hexGrid.filter(hex => isValidBaseLocation(state.hexGrid, hex, gridSize));
 };
 
-// Place the player's base and an AI base as far away as possible, then start the first turn
 // Neutral camps placed between the castles, and how close to a castle they may be
 const CAMP_COUNT = 2;
 const MIN_CAMP_CASTLE_DISTANCE = 3;
@@ -335,7 +334,8 @@ const placeCamps = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoo
   const center = { q: 0, r: 0 };
 
   const candidatesWithin = (tolerance: number) => state.hexGrid.filter(hex => {
-    if (hex.isBase || hex.isResourceHex || isImpassable(hex)) return false;
+    // Camps don't replace gold mines or healing springs
+    if (hex.isBase || hex.isResourceHex || isImpassable(hex) || TERRAIN_EFFECTS[hex.terrain].healPerTurn) return false;
     const toPlayer = getHexDistance(hex.coordinates, playerBase);
     const toAi = getHexDistance(hex.coordinates, aiBase);
     return Math.abs(toPlayer - toAi) <= tolerance &&
@@ -376,6 +376,8 @@ const placeCamps = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoo
   }
 };
 
+// Place the player's base and an AI base as far away as possible, add the neutral camps,
+// then start the first turn
 export const placeBases = (state: GameState, coordinates: HexCoordinates): GameState => {
   if (state.currentPhase !== 'setup') return state;
 
