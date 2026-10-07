@@ -1,447 +1,200 @@
-import { useRef, useMemo, useCallback } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { memo, useRef, useMemo } from 'react';
+import { useFrame, ThreeEvent } from '@react-three/fiber';
 import { Hex, TerrainType } from '@/types/game';
 import * as THREE from 'three';
 import { playSound } from './utils/SoundPlayer';
-
 import {
   HEX_SIZE,
   BEVEL_THICKNESS,
   axialToWorld,
-  getHexHeight
+  getHexHeight,
+  getHexSurfaceHeight
 } from './utils/boardGeometry';
 
 // Terrain type colors
 const TERRAIN_COLORS: Record<TerrainType, string> = {
-  plain: '#8bc34a',    // Brighter green for plains
-  mountain: '#a0a0a0', // Lighter gray for mountains
-  forest: '#2e7d32',   // Darker green for forests
-  water: '#4fc3f7',    // Brighter blue for water
-  desert: '#ffd54f',   // Brighter yellow for desert
-  resource: '#ffb74d'  // Brighter orange for resources
+  plain: '#8bc34a',
+  mountain: '#9e9e9e',
+  forest: '#4c8c3c',
+  water: '#4fc3f7',
+  desert: '#f2d17a',
+  resource: '#e0b25a'
+};
+
+// What kind of highlight a tile shows
+export type HexHighlight = 'none' | 'move' | 'deploy' | 'base';
+
+const HIGHLIGHT_COLORS: Record<Exclude<HexHighlight, 'none'>, string> = {
+  move: '#ffffff',
+  deploy: '#7dd3fc',
+  base: '#86efac'
 };
 
 interface HexTileProps {
   hex: Hex;
+  highlight?: HexHighlight;
   isSelected?: boolean;
-  isHighlighted?: boolean;
+  // Selected but not a legal choice (e.g. an invalid castle location)
+  isInvalidSelection?: boolean;
   isHovered?: boolean;
-  isSetupPhase?: boolean;
-  isValidSetupTile?: boolean;
-  isBaseSelectionConfirmMode?: boolean;
-  isPendingMoveDestination?: boolean;
-  isTargetMovePosition?: boolean;
-  onClick?: () => void;
-  onDoubleClick?: () => void;
-  onContextMenu?: () => void;
-  onPointerOver?: () => void;
-  onPointerOut?: () => void;
+  onHexClick: (hex: Hex) => void;
+  onHexDoubleClick?: (hex: Hex) => void;
+  onHexHover: (hex: Hex) => void;
+  onHexHoverEnd: (hex: Hex) => void;
 }
 
-export const HexTile: React.FC<HexTileProps> = ({
+const createHexShape = (size: number) => {
+  const shape = new THREE.Shape();
+  for (let i = 0; i < 6; i++) {
+    // Pointy-top hexagon
+    const angle = (Math.PI / 3) * i + Math.PI / 2;
+    const x = size * Math.cos(angle);
+    const y = size * Math.sin(angle);
+    if (i === 0) shape.moveTo(x, y);
+    else shape.lineTo(x, y);
+  }
+  shape.closePath();
+  return shape;
+};
+
+// Outline ring geometry shared by every tile
+const ringGeometry = (() => {
+  const outer = createHexShape(HEX_SIZE * 0.98);
+  outer.holes.push(createHexShape(HEX_SIZE * 0.82));
+  const geometry = new THREE.ShapeGeometry(outer);
+  geometry.rotateX(-Math.PI / 2);
+  return geometry;
+})();
+
+const HexTileComponent: React.FC<HexTileProps> = ({
   hex,
+  highlight = 'none',
   isSelected = false,
-  isHighlighted = false,
+  isInvalidSelection = false,
   isHovered = false,
-  isSetupPhase = false,
-  isValidSetupTile = false,
-  isBaseSelectionConfirmMode = false,
-  isPendingMoveDestination = false,
-  isTargetMovePosition = false,
-  onClick,
-  onDoubleClick,
-  onContextMenu,
-  onPointerOver,
-  onPointerOut
+  onHexClick,
+  onHexDoubleClick,
+  onHexHover,
+  onHexHoverEnd
 }) => {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const topFaceRef = useRef<THREE.Mesh>(null);
-  const ringRef = useRef<THREE.Mesh>(null);
-  const targetPosRingRef = useRef<THREE.Mesh>(null);
-  const pendingMoveRingRef = useRef<THREE.Mesh>(null);
-  
-  // Wrapped handlers with sound effects
-  const handleClick = useCallback(() => {
-    // Play selection sound
-    playSound('hex-select-sound', 0.2);
-    // Call the original onClick handler
-    if (onClick) onClick();
-  }, [onClick]);
-  
-  const handleDoubleClick = useCallback(() => {
-    // Play confirmation sound
-    playSound('hex-select-sound', 0.3);
-    // Call the original onDoubleClick handler
-    if (onDoubleClick) onDoubleClick();
-  }, [onDoubleClick]);
-  
-  const handleHover = useCallback(() => {
-    // Play hover sound
-    playSound('hex-hover-sound', 0.05); // Lower volume for hover sound
-    // Call the original onPointerOver handler
-    if (onPointerOver) onPointerOver();
-  }, [onPointerOver]);
-  
-  // Get terrain-based height
+  const liftRef = useRef<THREE.Group>(null);
+  const selectionRingRef = useRef<THREE.Mesh>(null);
+
   const hexHeight = getHexHeight(hex);
-  
-  // Position hex in world - always on the ground plane (y=0)
+  const surfaceHeight = getHexSurfaceHeight(hex);
   const [x, , z] = axialToWorld(hex.coordinates);
-  
-  // Create the hex geometry with points facing up/down
+
+  // Extruded hexagon with bottom at y=0
   const geometry = useMemo(() => {
-    // Create a flat regular hexagon shape with points facing up/down
-    const shape = new THREE.Shape();
-    const vertices = [];
-    
-    // Start at the top point and go clockwise - for pointy top hexes
-    for (let i = 0; i < 6; i++) {
-      // Start with top point (Math.PI/2 is up in the XZ plane)
-      const angle = (Math.PI / 3) * i + Math.PI/2;
-      vertices.push(new THREE.Vector2(
-        HEX_SIZE * Math.cos(angle),
-        HEX_SIZE * Math.sin(angle)
-      ));
-    }
-    
-    shape.moveTo(vertices[0].x, vertices[0].y);
-    
-    for (let i = 1; i < 6; i++) {
-      shape.lineTo(vertices[i].x, vertices[i].y);
-    }
-    
-    shape.lineTo(vertices[0].x, vertices[0].y);
-    
-    // Fixed bevel settings to ensure consistent bottom alignment
-    const bevelThickness = BEVEL_THICKNESS;
-    const bevelSize = BEVEL_THICKNESS;
-    
-    // For the extrude, we'll create the shape in the XY plane
-    // Three.js will extrude along the Y axis, but we'll rotate it later
-    const extrudeSettings = {
+    const hexGeometry = new THREE.ExtrudeGeometry(createHexShape(HEX_SIZE), {
       steps: 1,
       depth: hexHeight,
       bevelEnabled: true,
-      bevelThickness,
-      bevelSize,
+      bevelThickness: BEVEL_THICKNESS,
+      bevelSize: BEVEL_THICKNESS,
       bevelOffset: 0,
-      bevelSegments: 3
-    };
-    
-    // Create geometry and rotate it to get pointy-top hexes facing up in 3D space
-    const hexGeometry = new THREE.ExtrudeGeometry(shape, extrudeSettings);
-    
-    // Rotate the geometry so that the hexes are facing up with points at top and bottom
-    // We need to rotate around the X axis to get the hex to face up in 3D space
+      bevelSegments: 2
+    });
     hexGeometry.rotateX(-Math.PI / 2);
-    
-    // By default, ExtrudeGeometry places the base shape at y=0 and extrudes upward.
-    // After rotation, this means the bottom of the shape is at y=-bevelThickness
-    // and we need to translate it up to have the bottom exactly at y=0
-    hexGeometry.translate(0, bevelThickness, 0);
-    
+    hexGeometry.translate(0, BEVEL_THICKNESS, 0);
     return hexGeometry;
   }, [hexHeight]);
-  
-  // Create the hex ring geometry for selection indicator
-  const ringGeometry = useMemo(() => {
-    const outerShape = new THREE.Shape();
-    const innerShape = new THREE.Path();
-    const outerSize = HEX_SIZE * 1.1; // Slightly larger than the hex
-    const innerSize = HEX_SIZE * 1.05; // Slightly smaller than the outer ring
-    const vertices = [];
-    const innerVertices = [];
-    
-    // Create the outer shape
-    for (let i = 0; i < 6; i++) {
-      const angle = (Math.PI / 3) * i + Math.PI/2;
-      vertices.push(new THREE.Vector2(
-        outerSize * Math.cos(angle),
-        outerSize * Math.sin(angle)
-      ));
-    }
-    
-    outerShape.moveTo(vertices[0].x, vertices[0].y);
-    for (let i = 1; i < 6; i++) {
-      outerShape.lineTo(vertices[i].x, vertices[i].y);
-    }
-    outerShape.lineTo(vertices[0].x, vertices[0].y);
-    
-    // Create the inner shape (hole)
-    for (let i = 0; i < 6; i++) {
-      const angle = (Math.PI / 3) * i + Math.PI/2;
-      innerVertices.push(new THREE.Vector2(
-        innerSize * Math.cos(angle),
-        innerSize * Math.sin(angle)
-      ));
-    }
-    
-    innerShape.moveTo(innerVertices[0].x, innerVertices[0].y);
-    for (let i = 1; i < 6; i++) {
-      innerShape.lineTo(innerVertices[i].x, innerVertices[i].y);
-    }
-    innerShape.lineTo(innerVertices[0].x, innerVertices[0].y);
-    
-    // Add the inner shape as a hole to the outer shape
-    outerShape.holes.push(innerShape);
-    
-    // Create the ring geometry
-    const ringGeometry = new THREE.ShapeGeometry(outerShape);
-    ringGeometry.rotateX(-Math.PI / 2);
-    
-    return ringGeometry;
-  }, []);
-  
-  // Determine material color based on terrain and selection state
-  const color = useMemo(() => {
-    const baseColor = TERRAIN_COLORS[hex.terrain];
-    
-    if (isSelected) {
-      return new THREE.Color(baseColor).offsetHSL(0, 0, 0.2);
-    }
-    
-    if (isHighlighted || isHovered || (isSetupPhase && isValidSetupTile)) {
-      // More noticeable color change on hover - brighter and slightly saturated
-      return new THREE.Color(baseColor).offsetHSL(0, 0.2, 0.25);
-    }
-    
-    return new THREE.Color(baseColor);
-  }, [hex.terrain, isSelected, isHighlighted, isHovered, isSetupPhase, isValidSetupTile]);
-  
-  // Add a darker color for the sides
-  const sideColor = useMemo(() => {
-    return new THREE.Color(TERRAIN_COLORS[hex.terrain]).offsetHSL(0, 0, -0.05);
-  }, [hex.terrain]);
 
-  // Apply gentle hover animation and handle hover detection
+  const color = useMemo(() => {
+    const base = new THREE.Color(TERRAIN_COLORS[hex.terrain]);
+    if (isHovered) return base.offsetHSL(0, 0.05, 0.12);
+    if (highlight !== 'none') return base.offsetHSL(0, 0.05, 0.08);
+    return base;
+  }, [hex.terrain, isHovered, highlight]);
+
+  const sideColor = useMemo(
+    () => new THREE.Color(TERRAIN_COLORS[hex.terrain]).offsetHSL(0, -0.05, -0.15),
+    [hex.terrain]
+  );
+
   useFrame((state) => {
-    if (meshRef.current) {
-      // Handle elevation animation when highlighted or hovered
-      const currentY = meshRef.current.position.y;
-      
-      // More noticeable elevation change on hover
-      const targetY = isHovered ? 0.15 : (isHighlighted || (isSetupPhase && isValidSetupTile)) ? 0.08 : 0;
-      
-      // Faster transition when hovering (0.2) than when returning to normal (0.1)
-      const lerpFactor = isHovered ? 0.2 : 0.1;
-      
-      meshRef.current.position.y = THREE.MathUtils.lerp(currentY, targetY, lerpFactor);
-      
-      // Update top face reference for hover detection
-      if (topFaceRef.current) {
-        // Set top face position to follow the main mesh
-        topFaceRef.current.position.y = meshRef.current.position.y + hexHeight;
-      }
-      
-      // Update main selection ring animation
-      if (ringRef.current && isSelected) {
-        // Make the ring float above the hex
-        const baseRingHeight = hexHeight + 0.05;
-        const time = state.clock.getElapsedTime();
-        
-        // Animate the ring's height with a gentle sine wave
-        const floatOffset = Math.sin(time * 0.8) * 0.15;
-        
-        // Position the ring just above the hex and apply the floating animation
-        ringRef.current.position.y = baseRingHeight + floatOffset;
-        
-        // Also make it slowly rotate for a more dynamic effect
-        ringRef.current.rotation.y = time * 0.2;
-      }
-      
-      // Update target position ring animation
-      if (targetPosRingRef.current && isTargetMovePosition) {
-        const time = state.clock.getElapsedTime();
-        targetPosRingRef.current.position.y = Math.sin(time * 0.5) * 0.05;
-        targetPosRingRef.current.rotation.y = -time * 0.1;
-      }
-      
-      // Update pending move ring animation
-      if (pendingMoveRingRef.current && isPendingMoveDestination) {
-        const time = state.clock.getElapsedTime();
-        pendingMoveRingRef.current.position.y = Math.sin(time * 0.7) * 0.1;
-        pendingMoveRingRef.current.rotation.y = time * 0.15;
-      }
+    // Gently raise highlighted and hovered tiles
+    if (liftRef.current) {
+      const targetY = isHovered ? 0.06 : highlight !== 'none' ? 0.03 : 0;
+      liftRef.current.position.y = THREE.MathUtils.lerp(liftRef.current.position.y, targetY, 0.2);
+    }
+
+    if (selectionRingRef.current) {
+      const time = state.clock.getElapsedTime();
+      selectionRingRef.current.position.y = surfaceHeight + 0.04 + Math.sin(time * 3) * 0.03;
     }
   });
-  
-  // Create an invisible mesh for the top face of the hex
-  // This will be used for hover detection
-  const hexTopShape = useMemo(() => {
-    const shape = new THREE.Shape();
-    const vertices = [];
-    
-    // Create pointy-top hexagon shape
-    for (let i = 0; i < 6; i++) {
-      // Start with top point (Math.PI/2 is up in the XZ plane)
-      const angle = (Math.PI / 3) * i + Math.PI/2;
-      vertices.push(new THREE.Vector2(
-        // Make the hover detection area slightly larger (110%) for better user experience
-        HEX_SIZE * 1.05 * Math.cos(angle),
-        HEX_SIZE * 1.05 * Math.sin(angle)
-      ));
-    }
-    
-    shape.moveTo(vertices[0].x, vertices[0].y);
-    
-    for (let i = 1; i < 6; i++) {
-      shape.lineTo(vertices[i].x, vertices[i].y);
-    }
-    
-    shape.lineTo(vertices[0].x, vertices[0].y);
-    
-    return shape;
-  }, []);
-  
-  // Calculate the total height including bevel
-  const totalHeight = hexHeight + BEVEL_THICKNESS;
+
+  const handleClick = (e: ThreeEvent<MouseEvent>) => {
+    // Only the tile nearest the camera should react
+    e.stopPropagation();
+    playSound('hex-select-sound', 0.2);
+    onHexClick(hex);
+  };
+
+  const handleDoubleClick = (e: ThreeEvent<MouseEvent>) => {
+    e.stopPropagation();
+    onHexDoubleClick?.(hex);
+  };
+
+  const handlePointerOver = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
+    playSound('hex-hover-sound', 0.05);
+    onHexHover(hex);
+  };
+
+  const handlePointerOut = () => onHexHoverEnd(hex);
+
+  const isWater = hex.terrain === 'water';
+  const highlightColor = highlight !== 'none' ? HIGHLIGHT_COLORS[highlight] : null;
+  const selectionColor = isInvalidSelection ? '#ef4444' : '#facc15';
 
   return (
     <group position={[x, 0, z]}>
-      {/* Main hex tile - positioned with bottom at y=0 as adjusted in the geometry */}
-      <mesh 
-        ref={meshRef}
-        position={[0, 0, 0]}
-        geometry={geometry}
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
-        onContextMenu={onContextMenu}
-        onPointerOver={handleHover}
-        onPointerOut={onPointerOut}
-      >
-        {/* We'll use separate materials for top and sides for better visuals */}
-        <meshStandardMaterial 
-          attach="material-0" // Top face
-          color={color} 
-          roughness={0.8}
-          metalness={0.2}
-          flatShading={true}
-        />
-        <meshStandardMaterial 
-          attach="material-1" // Side faces
-          color={sideColor} 
-          roughness={0.9}
-          metalness={0.1}
-          flatShading={true}
-        />
-      </mesh>
-      
-      {/* Invisible top face mesh for hover detection - positioned exactly at the top surface */}
-      <mesh 
-        ref={topFaceRef}
-        position={[0, totalHeight + 0.15, 0]} /* Position it right at the top surface */
-        onClick={handleClick}
-        onDoubleClick={handleDoubleClick}
-        onContextMenu={onContextMenu}
-        onPointerOver={handleHover}
-        onPointerOut={onPointerOut}
-      >
-        <shapeGeometry args={[hexTopShape]} />
-        <meshBasicMaterial transparent opacity={0} side={THREE.DoubleSide} />
-      </mesh>
-      
-      {/* Pending Move Destination Indicator */}
-      {isPendingMoveDestination && (
-        <group position={[0, totalHeight + 0.2, 0]}>
-          {/* Pulsing ring to indicate planned movement */}
-          <mesh ref={pendingMoveRingRef}>
-            <ringGeometry args={[0.8, 1.0, 32]} />
-            <meshStandardMaterial 
-              color="#FFD700" // Gold color
-              emissive="#FFA500" // Orange glow
-              emissiveIntensity={0.7}
-              transparent={true}
-              opacity={0.8}
-              side={THREE.DoubleSide}
-            />
-          </mesh>
-          
-          {/* Arrow pointing down to indicate "target" */}
-          <mesh position={[0, 0.3, 0]} rotation={[0, 0, Math.PI]}>
-            <coneGeometry args={[0.3, 0.6, 4]} />
-            <meshStandardMaterial 
-              color="#FFD700" 
-              emissive="#FFA500"
-              emissiveIntensity={0.7}
-            />
-          </mesh>
-        </group>
-      )}
-      
-      {/* Base selection confirm mode indicator */}
-      {isBaseSelectionConfirmMode && isSelected && isValidSetupTile && (
-        <mesh position={[0, totalHeight + 0.4, 0]}>
-          <cylinderGeometry args={[0.8, 0.8, 0.2, 6]} />
-          <meshStandardMaterial 
-            color={"#4CAF50"} 
-            emissive={"#2E7D32"}
-            emissiveIntensity={0.7}
+      <group ref={liftRef}>
+        <mesh
+          geometry={geometry}
+          onClick={handleClick}
+          onDoubleClick={handleDoubleClick}
+          onPointerOver={handlePointerOver}
+          onPointerOut={handlePointerOut}
+          receiveShadow
+        >
+          {/* Top face */}
+          <meshStandardMaterial
+            attach="material-0"
+            color={color}
+            roughness={isWater ? 0.2 : 0.85}
+            metalness={isWater ? 0.3 : 0.05}
+            flatShading
+          />
+          {/* Side faces */}
+          <meshStandardMaterial
+            attach="material-1"
+            color={sideColor}
+            roughness={0.9}
+            metalness={0.05}
+            flatShading
           />
         </mesh>
-      )}
-      
-      {/* Vertical hex ring extending to sky - glowing effect */}
-      {(isSelected || isTargetMovePosition) && (
-        <group>
-          {/* Create multiple stacked rings with decreasing opacity */}
-          {[...Array(8)].map((_, index) => {
-            const height = totalHeight + 0.1 + index * 0.5;
-            const scale = 1 + index * 0.08;
-            const opacity = 0.7 - index * 0.09; // Decrease opacity as we go higher
-            
-            // Use appropriate colors based on selection state and validity in setup phase
-            const ringColor = isSetupPhase 
-              ? (isValidSetupTile 
-                ? (index < 2 ? "#4CAF50" : "#81C784") 
-                : (index < 2 ? "#F44336" : "#E57373"))
-              : isTargetMovePosition
-                ? (index < 2 ? "#4169E1" : "#1E90FF") // Blue colors for target move position
-                : (index < 2 ? "#ffffff" : "#aaaaff");
-              
-            const emissiveColor = isSetupPhase
-              ? (isValidSetupTile
-                ? (index < 3 ? "#2E7D32" : "#388E3C")
-                : (index < 3 ? "#C62828" : "#D32F2F"))
-              : isTargetMovePosition
-                ? (index < 3 ? "#1E90FF" : "#4169E1") // Blue emissive for target move position
-                : (index < 3 ? "#aaaaff" : "#8888ff");
-            
-            return (
-              <mesh 
-                key={index}
-                position={[0, height, 0]}
-                scale={[scale, 1, scale]}
-                geometry={ringGeometry}
-                renderOrder={9}
-              >
-                <meshStandardMaterial 
-                  color={ringColor} 
-                  emissive={emissiveColor}
-                  emissiveIntensity={0.7 - index * 0.08}
-                  transparent={true} 
-                  opacity={opacity}
-                  side={THREE.DoubleSide}
-                  depthWrite={false}
-                />
-              </mesh>
-            );
-          })}
-        </group>
-      )}
-      
-      {/* Base indicator - position at the top of the hex */}
-      {hex.isBase && (
-        <group position={[0, totalHeight + 0.3, 0]}>
-          <mesh>
-            <cylinderGeometry args={[0.8, 0.8, 0.3, 6]} />
-            <meshStandardMaterial 
-              color={hex.owner === 'player' ? '#2196f3' : '#f44336'} 
-              emissive={hex.owner === 'player' ? '#1976d2' : '#d32f2f'}
-              emissiveIntensity={0.5}
-            />
+
+        {/* Highlight outline for tiles that can be chosen */}
+        {highlightColor && (
+          <mesh geometry={ringGeometry} position={[0, surfaceHeight + 0.02, 0]} renderOrder={2}>
+            <meshBasicMaterial color={highlightColor} transparent opacity={0.85} depthWrite={false} />
           </mesh>
-        </group>
+        )}
+      </group>
+
+      {/* Selection outline */}
+      {isSelected && (
+        <mesh ref={selectionRingRef} geometry={ringGeometry} position={[0, surfaceHeight + 0.04, 0]} scale={1.08} renderOrder={3}>
+          <meshBasicMaterial color={selectionColor} transparent opacity={0.95} depthWrite={false} />
+        </mesh>
       )}
     </group>
   );
 };
+
+// Memoised so hovering one tile doesn't re-render the whole board
+export const HexTile = memo(HexTileComponent);

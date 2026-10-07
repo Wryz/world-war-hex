@@ -1,128 +1,96 @@
 import React from 'react';
-import { GameState, Unit } from '@/types/game';
-import { getUnitTypeName } from '../utils/UnitHelpers';
+import { GameState } from '@/types/game';
+import { CombatantPreview, getCombatPreview } from '@/lib/game/gameState';
+import { getUnitTypeEmoji, getUnitTypeName } from '../utils/UnitHelpers';
+import { PANEL_CLASS, SIDE_COLORS } from '../hud/styles';
+import { TERRAIN_ICONS } from '../hud/terrainInfo';
 
 interface CombatResolverProps {
   gameState: GameState;
   onResolveCombat: (combatIndex: number, retreat: boolean) => void;
 }
 
-export const CombatResolver: React.FC<CombatResolverProps> = ({ 
-  gameState, onResolveCombat 
-}) => {
+const Combatant: React.FC<{ entry: CombatantPreview }> = ({ entry }) => {
+  const { unit } = entry;
+  const color = SIDE_COLORS[unit.owner];
+
+  return (
+    <li className="rounded-lg bg-slate-800 p-2">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-bold" style={{ color }}>
+          {getUnitTypeEmoji(unit.type)} {unit.owner === 'player' ? 'Your' : 'Enemy'} {getUnitTypeName(unit.type)}
+        </span>
+        <span className="text-xs tabular-nums">❤️ {unit.lifespan}/{unit.maxLifespan}</span>
+      </div>
+      <div className="mt-1 flex items-center justify-between text-xs">
+        <span>⚔️ {Number.isInteger(entry.power) ? entry.power : entry.power.toFixed(1)} · {TERRAIN_ICONS[entry.terrain]}</span>
+        <span className={`font-bold ${entry.destroyed ? 'text-red-400' : 'text-amber-300'}`}>
+          {entry.destroyed ? '☠ would be destroyed' : `takes -${entry.damageTaken}`}
+        </span>
+      </div>
+      {entry.modifiers.length > 0 && (
+        <div className="mt-1 text-[11px] font-semibold text-emerald-300">{entry.modifiers.join(' · ')}</div>
+      )}
+    </li>
+  );
+};
+
+// Explains the current battle - who is fighting, terrain modifiers and the expected outcome
+export const CombatResolver: React.FC<CombatResolverProps> = ({ gameState, onResolveCombat }) => {
   const unresolvedCombatIndex = gameState.combats.findIndex(c => !c.resolved);
   if (unresolvedCombatIndex === -1) return null;
-  
-  const storedCombat = gameState.combats[unresolvedCombatIndex];
-  
-  // Show the units' current stats - earlier battles this turn may have damaged or destroyed them
-  const getLiveUnits = (units: Unit[]) => units
-    .map(unit => gameState.players[unit.owner].units.find(u => u.id === unit.id))
-    .filter((unit): unit is Unit => !!unit);
-  const combat = {
-    ...storedCombat,
-    attackers: getLiveUnits(storedCombat.attackers),
-    defenders: getLiveUnits(storedCombat.defenders)
-  };
-  
-  const attackerStrength = combat.attackers.reduce((sum, unit) => sum + unit.attackPower, 0);
-  const defenderStrength = combat.defenders.reduce((sum, unit) => sum + unit.attackPower, 0);
-  const isPlayerDefending = storedCombat.defenders.some(unit => unit.owner === 'player');
-  
-  // Calculate winning probability based on attack power
-  const totalStrength = attackerStrength + defenderStrength;
-  const attackerWinChance = totalStrength > 0 ? Math.round((attackerStrength / totalStrength) * 100) : 50;
-  
+
+  const combat = gameState.combats[unresolvedCombatIndex];
+  const preview = getCombatPreview(gameState, combat);
+  const isPlayerDefending = combat.defenders.some(unit => unit.owner === 'player');
+
   return (
-    <div className="fixed top-16 right-4 p-4 bg-[var(--background)] bg-opacity-90 text-[var(--parchment)] rounded-lg w-80 z-10">
-      <h2 className="text-xl font-bold mb-2">Combat Phase</h2>
-      <p className="mb-3">Battle {unresolvedCombatIndex + 1} of {gameState.combats.length}</p>
-      
-      <div className="mb-4">
-        <div className="flex justify-between items-center mb-2">
-          <div className="flex-1 text-center">
-            <h3 className={`font-semibold ${isPlayerDefending ? 'text-red-400' : 'text-blue-400'}`}>
-              Attackers
-            </h3>
-            <p className="text-2xl font-bold">{attackerStrength}</p>
-          </div>
-          <div className="text-center px-2">
-            <span className="text-lg">vs</span>
-          </div>
-          <div className="flex-1 text-center">
-            <h3 className={`font-semibold ${isPlayerDefending ? 'text-blue-400' : 'text-red-400'}`}>
-              Defenders
-            </h3>
-            <p className="text-2xl font-bold">{defenderStrength}</p>
-          </div>
-        </div>
-        
-        <div className="relative h-4 bg-[var(--background)] bg-opacity-40 rounded-full overflow-hidden">
-          <div 
-            className="absolute top-0 left-0 h-full bg-gradient-to-r from-red-500 to-yellow-500"
-            style={{ width: `${attackerWinChance}%` }}
-          ></div>
-          <div className="absolute top-0 left-0 w-full h-full flex justify-center items-center text-xs font-bold">
-            {attackerWinChance}% / {100 - attackerWinChance}%
-          </div>
-        </div>
+    <div className={`${PANEL_CLASS} fixed right-3 bottom-4 z-30 w-80 p-4 text-sm`}>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-black">⚔️ Battle</h2>
+        <span className="text-xs text-slate-400">{unresolvedCombatIndex + 1} of {gameState.combats.length}</span>
       </div>
-      
-      <div className="grid grid-cols-2 gap-3 mb-4">
-        <div className="bg-[var(--background)] p-2 rounded">
-          <h3 className={`font-semibold ${isPlayerDefending ? 'text-red-400' : 'text-blue-400'}`}>
-            Attacking Units ({combat.attackers.length})
-          </h3>
-          <ul className="text-sm">
-            {combat.attackers.map((unit, index) => (
-              <li key={unit.id ?? index} className="mb-1">
-                {getUnitTypeName(unit.type)} - HP: {unit.lifespan}/{unit.maxLifespan}
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="bg-[var(--background)] p-2 rounded">
-          <h3 className={`font-semibold ${isPlayerDefending ? 'text-blue-400' : 'text-red-400'}`}>
-            Defending Units ({combat.defenders.length})
-          </h3>
-          <ul className="text-sm">
-            {combat.defenders.map((unit, index) => (
-              <li key={unit.id ?? index} className="mb-1">
-                {getUnitTypeName(unit.type)} - HP: {unit.lifespan}/{unit.maxLifespan}
-              </li>
-            ))}
-          </ul>
-        </div>
+      <p className="mt-1 text-xs text-slate-300">
+        {isPlayerDefending
+          ? 'Your unit is under attack. Fight back, or retreat to a safe hex (no damage).'
+          : 'Your troops attack. Damage is split between the units on each side.'}
+      </p>
+
+      <div className="mt-3 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+        Attackers · total ⚔️ {preview.attackerPower}
       </div>
-      
-      {isPlayerDefending && (
-        <div className="flex space-x-2 mt-4">
-          <button 
+      <ul className="mt-1 flex flex-col gap-1">
+        {preview.attackers.map(entry => <Combatant key={entry.unit.id} entry={entry} />)}
+      </ul>
+
+      <div className="mt-3 text-[11px] font-bold uppercase tracking-wide text-slate-400">
+        Defender · total ⚔️ {preview.defenderPower}
+      </div>
+      <ul className="mt-1 flex flex-col gap-1">
+        {preview.defenders.map(entry => <Combatant key={entry.unit.id} entry={entry} />)}
+      </ul>
+
+      {isPlayerDefending ? (
+        <div className="mt-4 flex gap-2">
+          <button
             onClick={() => onResolveCombat(unresolvedCombatIndex, false)}
-            className="flex-1 bg-[var(--accent)] hover:bg-[var(--accent-light)] text-[var(--parchment)] font-bold py-2 px-4 rounded border border-[var(--foreground)]"
+            className="flex-1 rounded-lg bg-amber-500 hover:bg-amber-400 py-2 font-bold text-slate-900"
           >
-            Stand & Fight
+            Stand &amp; Fight
           </button>
-          <button 
+          <button
             onClick={() => onResolveCombat(unresolvedCombatIndex, true)}
-            className="flex-1 bg-[var(--foreground)] hover:bg-[var(--accent-light)] text-[var(--parchment)] font-bold py-2 px-4 rounded border border-[var(--foreground)]"
+            className="flex-1 rounded-lg bg-slate-700 hover:bg-slate-600 py-2 font-bold"
           >
             Retreat
           </button>
         </div>
-      )}
-      
-      {!isPlayerDefending && (
-        <div className="mt-4">
-          <p className="mb-2 text-center italic">Enemy is deciding whether to retreat...</p>
-          <button 
-            className="w-full bg-[var(--foreground)] text-[var(--parchment)] font-bold py-2 px-4 rounded opacity-50 cursor-wait"
-            disabled
-          >
-            Waiting for AI decision
-          </button>
+      ) : (
+        <div className="mt-4 flex items-center justify-center gap-2 rounded-lg bg-slate-800 py-2 text-xs italic text-slate-300">
+          <span className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse" />
+          The enemy is deciding whether to retreat…
         </div>
       )}
     </div>
   );
-}; 
+};

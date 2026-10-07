@@ -1,19 +1,45 @@
-import { useState, useCallback, useMemo, Suspense, useEffect, useRef } from 'react';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, PerspectiveCamera } from '@react-three/drei';
-import { GameState, Hex, HexCoordinates, Unit, UnitType } from '@/types/game';
-import { HexTile } from './HexTile';
-import { UnitMesh } from './UnitMesh';
+import { memo, useState, useCallback, useMemo, Suspense, useEffect, useRef } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { Html, PerspectiveCamera } from '@react-three/drei';
+import * as THREE from 'three';
+import { GameState, Hex, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
+import { HexTile, HexHighlight } from './HexTile';
+import { UnitMesh, CombatRole, OWNER_COLORS } from './UnitMesh';
+import { Castle } from './Castle';
+import { BoardDecorations } from './BoardDecorations';
+import { MovePath } from './MovePath';
 import LandscapeModels from './landscape/LandscapeModels';
 import SkyDome from './environment/Sky';
-import Clouds from './environment/Clouds';
 import Fog from './environment/Fog';
-import { Html } from '@react-three/drei';
-import { UNITS, getValidBaseLocations } from '@/lib/game/gameState';
-import { axialToWorld, getHexHeight, getHexSurfaceHeight } from './utils/boardGeometry';
+import {
+  UNITS,
+  BASE_MAX_HEALTH,
+  TERRAIN_EFFECTS,
+  TERRAIN_BONUS_ATTACK_MULTIPLIER,
+  findBaseHex,
+  findTerrainPath,
+  getActivePlayer,
+  getMovePath,
+  getValidBaseLocations
+} from '@/lib/game/gameState';
+import { getHexDistance } from '@/lib/game/hexUtils';
+import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
 import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
 import { playSound } from './utils/SoundPlayer';
+import { getUnitTypeName } from './utils/UnitHelpers';
+import { TERRAIN_ICONS } from './hud/terrainInfo';
+
+const coordKey = (c: HexCoordinates) => `${c.q},${c.r}`;
+
+// Camera framing: a fixed, almost top-down view from behind the active side's castle
+const CAMERA_ELEVATION = THREE.MathUtils.degToRad(68);
+const CAMERA_FOV = 45;
+// Radius of the playing field in world units, plus a margin for the HUD
+const BOARD_VIEW_RADIUS = 18;
+// Look slightly towards the viewing side's castle so it stays clear of the bottom HUD
+const CAMERA_TARGET_OFFSET = 3.5;
+const CAMERA_TURN_SPEED = 2.2;
 
 interface GameBoardProps {
   gameState: GameState;
@@ -21,89 +47,131 @@ interface GameBoardProps {
   onUnitClick: (unit: Unit) => void;
   onUnitPurchase: (unitType: UnitType, hex: Hex) => boolean;
   selectedHex?: Hex;
+  selectedUnit?: Unit | null;
   validMoves?: HexCoordinates[];
   selectedUnitTypeForPurchase?: UnitType | null;
   gameStarted: boolean;
   isAITurn: boolean;
 }
 
-export const GameBoard: React.FC<GameBoardProps> = ({
-  gameState,
-  onHexClick,
-  onUnitClick,
-  onUnitPurchase,
-  selectedHex,
-  validMoves = [],
-  selectedUnitTypeForPurchase = null,
-  gameStarted,
-  isAITurn
-}) => {
+const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
   // Use loading state from the parent provider
   const { isComplete: assetsLoaded } = useLoadingManager();
 
-  // Set up scene with appropriate lighting and camera
   return (
     <div className="w-full h-full">
-      <Canvas shadows>
-        {/* Wrap all 3D elements in Suspense */}
+      {/* Cap the pixel ratio so high-DPI screens stay smooth */}
+      <Canvas shadows dpr={[1, 1.5]}>
         <Suspense fallback={null}>
           {/* Sky background - always visible */}
           <SkyDome />
-          
+
           {/* Basic lighting that's always available */}
           <ambientLight intensity={0.4} />
-          <directionalLight position={[10, 10, 5]} intensity={0.6} />
 
-          {/* Game board scene with interactive elements */}
-          <BoardScene
-            gameState={gameState}
-            onHexClick={onHexClick}
-            onUnitClick={onUnitClick}
-            onUnitPurchase={onUnitPurchase}
-            selectedHex={selectedHex}
-            validMoves={validMoves}
-            assetsLoaded={assetsLoaded}
-            gameStarted={gameStarted}
-            selectedUnitTypeForPurchase={selectedUnitTypeForPurchase}
-            isAITurn={isAITurn}
-          />
-          
-          {/* Camera controls */}
-          <OrbitControls 
-            enablePan={false}
-            enableZoom={true}  // Allow zooming for better exploration
-            enableRotate={true}
-            target={[0, 0, 0]} // Keep focused on center
-            minPolarAngle={Math.PI / 10} // Allow slightly more top-down view
-            maxPolarAngle={Math.PI / 3}  // Allow more angled view to see the terrain
-            minDistance={20}             // Prevent zooming in too close
-            maxDistance={60}             // Prevent zooming out too far
-          />
-          
-          {/* Fixed camera position looking down at a slightly higher angle */}
-          <PerspectiveCamera 
-            makeDefault 
-            position={[5, 20, 20]} 
-            fov={65}
-            far={3000}
-          />
+          <BoardScene {...props} assetsLoaded={assetsLoaded} />
+
+          <PerspectiveCamera makeDefault fov={CAMERA_FOV} near={0.1} far={3000} position={[0, 35, 14]} />
+          <CameraRig gameState={props.gameState} />
         </Suspense>
       </Canvas>
     </div>
   );
 };
 
-interface BoardSceneProps {
-  gameState: GameState;
-  onHexClick: (hex: Hex) => void;
-  onUnitClick: (unit: Unit) => void;
-  onUnitPurchase: (unitType: UnitType, hex: Hex) => boolean;
-  selectedHex?: Hex;
-  validMoves?: HexCoordinates[];
+// Memoised so HUD updates (like the turn timer) don't re-render the 3D scene
+export const GameBoard = memo(GameBoardComponent);
+
+// Smallest signed difference between two angles
+const angleDelta = (from: number, to: number) => {
+  let delta = (to - from) % (Math.PI * 2);
+  if (delta > Math.PI) delta -= Math.PI * 2;
+  if (delta < -Math.PI) delta += Math.PI * 2;
+  return delta;
+};
+
+// Fixed camera that looks down on the board from behind the castle of the side whose turn it is,
+// swinging smoothly around the board when the turn changes. The player can't move it.
+const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
+  const { camera, size } = useThree();
+  const azimuthRef = useRef<number | null>(null);
+
+  const viewSide: PlayerType = gameState.currentPhase === 'setup' ? 'player' : getActivePlayer(gameState);
+
+  const targetAzimuth = useMemo(() => {
+    const base = findBaseHex(gameState, viewSide);
+    if (!base) return 0;
+    const [x, , z] = axialToWorld(base.coordinates);
+    // Camera sits on the castle's side of the board, looking across it
+    return Math.atan2(x, z);
+    // Only depends on where the bases are, not on the rest of the state
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.players.player.baseLocation, gameState.players.ai.baseLocation, viewSide]);
+
+  useFrame((_, rawDelta) => {
+    const delta = Math.min(rawDelta, 0.1);
+    const current = azimuthRef.current ?? targetAzimuth;
+    const azimuth = current + angleDelta(current, targetAzimuth) * Math.min(1, delta * CAMERA_TURN_SPEED);
+    azimuthRef.current = azimuth;
+
+    // Pull back far enough that the whole board fits on screen
+    const perspective = camera as THREE.PerspectiveCamera;
+    const halfFov = THREE.MathUtils.degToRad(perspective.fov / 2);
+    const aspect = size.width / Math.max(size.height, 1);
+    const distance = Math.max(
+      BOARD_VIEW_RADIUS / Math.tan(halfFov),
+      BOARD_VIEW_RADIUS / (Math.tan(halfFov) * aspect)
+    );
+
+    const targetX = Math.sin(azimuth) * CAMERA_TARGET_OFFSET;
+    const targetZ = Math.cos(azimuth) * CAMERA_TARGET_OFFSET;
+    const horizontal = distance * Math.cos(CAMERA_ELEVATION);
+    camera.position.set(
+      targetX + Math.sin(azimuth) * horizontal,
+      distance * Math.sin(CAMERA_ELEVATION),
+      targetZ + Math.cos(azimuth) * horizontal
+    );
+    camera.lookAt(targetX, 0, targetZ);
+  });
+
+  return null;
+};
+
+interface BoardSceneProps extends GameBoardProps {
   assetsLoaded: boolean;
-  gameStarted: boolean;
-  selectedUnitTypeForPurchase?: UnitType | null;
-  isAITurn: boolean;
+}
+
+// World position on top of a hex's tile
+const surfacePosition = (hex: Hex): [number, number, number] => {
+  const [x, , z] = axialToWorld(hex.coordinates);
+  return [x, getHexSurfaceHeight(hex), z];
+};
+
+const toVector = ([x, y, z]: [number, number, number]) => new THREE.Vector3(x, y, z);
+
+// Short labels for the terrain effects that currently help a unit
+const getTerrainBadges = (unit: Unit, hex: Hex | undefined): string[] => {
+  if (!hex) return [];
+  const badges: string[] = [];
+  const effect = TERRAIN_EFFECTS[hex.terrain];
+
+  if (effect.damageTakenMultiplier < 1) {
+    badges.push(`${TERRAIN_ICONS[hex.terrain]} -${Math.round((1 - effect.damageTakenMultiplier) * 100)}% dmg`);
+  }
+  if (hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) {
+    badges.push(`⚔️ +${Math.round((TERRAIN_BONUS_ATTACK_MULTIPLIER - 1) * 100)}% atk`);
+  }
+  if (hex.isResourceHex) {
+    badges.push(`${TERRAIN_ICONS.resource} +${hex.resourceValue ?? 0} gold`);
+  }
+  return badges;
+};
+
+interface DamagePopup {
+  id: number;
+  position: [number, number, number];
+  text: string;
+  color: string;
 }
 
 const BoardScene: React.FC<BoardSceneProps> = ({
@@ -112,434 +180,420 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   onUnitClick,
   onUnitPurchase,
   selectedHex,
+  selectedUnit = null,
   validMoves = [],
   assetsLoaded,
   gameStarted,
-  selectedUnitTypeForPurchase,
-  isAITurn
+  selectedUnitTypeForPurchase = null
 }) => {
-  const [hoveredHex, setHoveredHex] = useState<Hex | null>(null);
-  const [baseSelectionConfirmMode, setBaseSelectionConfirmMode] = useState<boolean>(false);
+  const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const [placedUnitHex, setPlacedUnitHex] = useState<Hex | null>(null);
-  const [originalUnitHex, setOriginalUnitHex] = useState<Hex | null>(null);
-  const [targetMoveHex, setTargetMoveHex] = useState<Hex | null>(null);
-  
-  // Create refs for our callback functions to solve circular dependencies
-  const handleHexDoubleClickRef = useRef<(hex: Hex) => void>(() => {});
-  
-  // Store the currently selected unit from the selectedHex
-  const selectedUnit = selectedHex?.unit || null;
-  
-  // Clear placedUnitHex when selectedUnitTypeForPurchase becomes null or phase changes
+  const [popups, setPopups] = useState<DamagePopup[]>([]);
+
+  const { hexGrid, currentPhase, pendingMoves, pendingPurchases, combats, players } = gameState;
+  const isSetupPhase = currentPhase === 'setup';
+
+  const hexByKey = useMemo(() => new Map(hexGrid.map(hex => [coordKey(hex.coordinates), hex])), [hexGrid]);
+  const hoveredHex = hoveredKey ? hexByKey.get(hoveredKey) ?? null : null;
+
+  // Clear the placement preview when leaving placement mode
   useEffect(() => {
-    if (!selectedUnitTypeForPurchase || gameState.currentPhase !== 'planning') {
+    if (!selectedUnitTypeForPurchase || currentPhase !== 'planning') {
       setPlacedUnitHex(null);
     }
-  }, [selectedUnitTypeForPurchase, gameState.currentPhase]);
-  
-  // Clear original and target positions when game phase changes or no unit is selected
-  useEffect(() => {
-    if (gameState.currentPhase !== 'planning') {
-      setOriginalUnitHex(null);
-      setTargetMoveHex(null);
-    } else if (!selectedUnit) {
-      // Only clear original unit hex when no unit is selected
-      setOriginalUnitHex(null);
-      // Don't clear target move hex here - it will be handled in handleHexClick and handleUnitClick
-    }
-  }, [gameState.currentPhase, selectedUnit]);
-  
-  // Determine if we're in setup phase
-  const isSetupPhase = gameState.currentPhase === 'setup';
-  
-  // Identify valid base placement hexes (edge hexes that are not water, mountain, or resource)
-  const validBasePlacementHexes = useMemo(() => {
-    if (!isSetupPhase) return [];
-    
-    return getValidBaseLocations(gameState);
-  }, [isSetupPhase, gameState]);
-  
-  // Check if a hex is a valid move target
-  const isValidMoveTarget = useCallback(
-    (hex: Hex) => {
-      // During setup phase, highlight valid base placement hexes
-      if (isSetupPhase) {
-        return validBasePlacementHexes.some(
-          validHex => validHex.coordinates.q === hex.coordinates.q && 
-                     validHex.coordinates.r === hex.coordinates.r
-        );
-      }
-      
-      // Otherwise show valid movement targets
-      return validMoves.some(
-        coords => coords.q === hex.coordinates.q && coords.r === hex.coordinates.r
-      );
-    },
-    [validMoves, isSetupPhase, validBasePlacementHexes]
-  );
-  
-  // Check if a hex is a valid setup tile
-  const isValidSetupTile = useCallback(
-    (hex: Hex) => {
-      if (!isSetupPhase) return false;
-      
-      return validBasePlacementHexes.some(
-        validHex => validHex.coordinates.q === hex.coordinates.q && 
-                   validHex.coordinates.r === hex.coordinates.r
-      );
-    },
-    [isSetupPhase, validBasePlacementHexes]
-  );
-  
-  // Check if a hovered hex is a valid placement target for a unit from barracks
-  const isValidUnitPlacement = useCallback(
-    (hex: Hex | null) => {
-      if (!hex || !selectedUnitTypeForPurchase) return false;
-      
-      // Check if the hex already has a unit or is a base
-      if (hex.unit || hex.isBase) return false;
-      
-      // Check if terrain is valid (not water or mountain)
-      if (hex.terrain === 'water' || hex.terrain === 'mountain') return false;
-      
-      // Check if it's in our valid moves list
-      return validMoves.some(
-        coords => coords.q === hex.coordinates.q && coords.r === hex.coordinates.r
-      );
-    },
-    [validMoves, selectedUnitTypeForPurchase]
-  );
-  
-  // Handle double click for confirming unit placement - defined first
-  const handleHexDoubleClick = useCallback(
-    (hex: Hex) => {
-      // Only proceed if assets are loaded and we're in planning phase
-      if (!assetsLoaded || gameState.currentPhase !== 'planning') {
-        console.log('Double click ignored - assets not loaded or not in planning phase');
-        return;
-      }
-      
-      console.log('Double click detected on hex:', hex.coordinates, 'Selected unit type:', selectedUnitTypeForPurchase);
-      
-      // Simplified condition: If we have a unit type selected and we're on a valid hex, try to purchase
-      if (selectedUnitTypeForPurchase && isValidUnitPlacement(hex)) {
-        console.log('Attempting to purchase unit:', selectedUnitTypeForPurchase);
-        
-        // Try to purchase the unit
-        const purchaseSuccess = onUnitPurchase(selectedUnitTypeForPurchase, hex);
-        
-        if (purchaseSuccess) {
-          console.log('Purchase successful');
-          
-          // Play confirmation sound
-          playSound('hex-select-sound', 0.5);
-          
-          // Clear the placed unit hex and reset UI state
-          setPlacedUnitHex(null);
-          
-          // Defensive code: force clear hoveredHex if it's the same as the one we just placed on
-          if (hoveredHex && 
-              hoveredHex.coordinates.q === hex.coordinates.q && 
-              hoveredHex.coordinates.r === hex.coordinates.r) {
-            setHoveredHex(null);
-          }
-        } else {
-          console.log('Purchase failed - insufficient resources or invalid placement');
-        }
-      } else {
-        console.log('Double click ignored - invalid hex for unit placement:', 
-          'selectedUnitTypeForPurchase:', selectedUnitTypeForPurchase,
-          'isValidPlacement:', isValidUnitPlacement(hex),
-          'placedUnitHex:', placedUnitHex?.coordinates
-        );
-      }
-    },
-    [
-      assetsLoaded, 
-      gameState.currentPhase, 
-      selectedUnitTypeForPurchase, 
-      placedUnitHex, 
-      onUnitPurchase,
-      isValidUnitPlacement,
-      hoveredHex
-    ]
-  );
-  
-  // Update the ref after the function is defined
-  useEffect(() => {
-    handleHexDoubleClickRef.current = handleHexDoubleClick;
-  }, [handleHexDoubleClick]);
-  
-  // Handle unit click
-  const handleUnitClick = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (unit: Unit, event: any) => {
-      if (!assetsLoaded) return;
-      event.stopPropagation();
-      
-      // Find the hex containing this unit
-      const unitHex = gameState.hexGrid.find(h => 
-        h.unit && h.unit.id === unit.id
-      );
-      
-      if (unitHex) {
-        // Set this as the original unit position
-        setOriginalUnitHex(unitHex);
-        
-        // Check if this unit already has a pending move
-        const pendingMove = gameState.pendingMoves.find(move => move.unitId === unit.id);
-        if (pendingMove) {
-          // Find the target hex from the pending move
-          const targetHex = gameState.hexGrid.find(h => 
-            h.coordinates.q === pendingMove.to.q && 
-            h.coordinates.r === pendingMove.to.r
-          );
-          
-          // If found, set it as the target move hex
-          if (targetHex) {
-            setTargetMoveHex(targetHex);
-          } else {
-            // Clear target move hex if no pending move is found
-            setTargetMoveHex(null);
-          }
-        } else {
-          // Clear target move hex if no pending move is found
-          setTargetMoveHex(null);
-        }
-      }
-      
-      onUnitClick(unit);
-    },
-    [onUnitClick, assetsLoaded, gameState.hexGrid, gameState.pendingMoves]
-  );
-  
-  // Handle mouse over for hexes
-  const handleHexPointerOver = useCallback(
-    (hex: Hex) => {
-      if (!assetsLoaded) return;
-      setHoveredHex(hex);
-    },
-    [assetsLoaded]
-  );
-  
-  // Handle mouse out for hexes
-  const handleHexPointerOut = useCallback(
-    (hex: Hex) => {
-      if (!assetsLoaded) return;
-      // Only clear if this hex is the currently hovered one
-      if (hoveredHex && 
-          hoveredHex.coordinates.q === hex.coordinates.q && 
-          hoveredHex.coordinates.r === hex.coordinates.r) {
-        setHoveredHex(null);
-      }
-    },
-    [hoveredHex, assetsLoaded]
-  );
-  
-  // Calculate if a hex is selected
-  const isHexSelected = useCallback(
-    (hex: Hex) => {
-      if (!selectedHex) return false;
-      return hex.coordinates.q === selectedHex.coordinates.q && 
-             hex.coordinates.r === selectedHex.coordinates.r;
-    },
-    [selectedHex]
-  );
-  
-  // Check if a hex is currently hovered
-  const isHexHovered = useCallback(
-    (hex: Hex) => {
-      if (!hoveredHex) return false;
-      return hex.coordinates.q === hoveredHex.coordinates.q && 
-             hex.coordinates.r === hoveredHex.coordinates.r;
-    },
-    [hoveredHex]
+  }, [selectedUnitTypeForPurchase, currentPhase]);
+
+  // Which hexes are highlighted and how
+  const validMoveKeys = useMemo(() => new Set(validMoves.map(coordKey)), [validMoves]);
+  const validBaseKeys = useMemo(
+    () => isSetupPhase ? new Set(getValidBaseLocations(gameState).map(h => coordKey(h.coordinates))) : new Set<string>(),
+    // Valid base locations only depend on the map during setup
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [isSetupPhase, hexGrid]
   );
 
-  // Handle hex click - using the ref to avoid circular dependency
-  const handleHexClick = useCallback(
-    (hex: Hex) => {
-      // Only proceed if assets are loaded
-      if (!assetsLoaded) return;
-      
-      // Check if we have a selected unit and this hex is a valid move target
-      if (selectedUnit && 
-          validMoves.some(coords => coords.q === hex.coordinates.q && coords.r === hex.coordinates.r)) {
-        // This is a valid move target, set it
-        setTargetMoveHex(hex);
-        
-        // Call the parent onClick handler to handle the actual move
-        onHexClick(hex);
-        return;
-      } else if (!hex.unit && (!selectedHex || !selectedHex.unit)) {
-        // Only clear target move hex if we're clicking on an empty hex and don't have a unit selected
-        // This prevents clearing the target when clicking elsewhere in the UI
-        setTargetMoveHex(null);
-      }
-      
-      // Check if placing a unit from barracks
-      if (selectedUnitTypeForPurchase && isValidUnitPlacement(hex)) {
-        console.log('Valid placement location for unit:', selectedUnitTypeForPurchase);
-        
-        // If clicking on the already placed unit hex, treat as confirmation (double-click alternative)
-        if (placedUnitHex && 
-            placedUnitHex.coordinates.q === hex.coordinates.q && 
-            placedUnitHex.coordinates.r === hex.coordinates.r) {
-          console.log('Click on already placed unit hex - treating as confirmation');
-          handleHexDoubleClickRef.current(hex);
-          return;
-        }
-        
-        // Otherwise, set the placedUnitHex for a new placement
-        setPlacedUnitHex(hex);
-        
-        // And explicitly set this hex as selected
-        // Call the parent onClick handler
-        onHexClick(hex);
-        return;
-      }
-        
-      // Handle other clicks (not unit placement)
-      onHexClick(hex);
-      
-      // Update the confirmation mode state based on the current state
-      if (isSetupPhase) {
-        // If clicking a valid hex, enter confirmation mode
-        const isHexValid = isValidSetupTile(hex);
-        
-        // If we already have a selected hex and we're clicking it again, 
-        // this will be a confirmation handled by the parent
-        if (selectedHex && 
-            selectedHex.coordinates.q === hex.coordinates.q && 
-            selectedHex.coordinates.r === hex.coordinates.r) {
-          // After confirmation, exit confirmation mode
-          setBaseSelectionConfirmMode(false);
-        } else {
-          // Initial selection - enter confirmation mode if it's a valid hex
-          setBaseSelectionConfirmMode(isHexValid);
-        }
-      }
-    },
-    [
-      onHexClick, 
-      isSetupPhase, 
-      selectedHex, 
-      isValidSetupTile, 
-      assetsLoaded, 
-      selectedUnitTypeForPurchase, 
-      isValidUnitPlacement, 
-      placedUnitHex,
-      validMoves,
-      selectedUnit
-    ]
-  );
-  
-  // Reset confirmation mode when exiting setup phase
-  useEffect(() => {
-    if (!isSetupPhase) {
-      setBaseSelectionConfirmMode(false);
+  const getHighlight = (key: string): HexHighlight => {
+    if (isSetupPhase) return validBaseKeys.has(key) ? 'base' : 'none';
+    if (!validMoveKeys.has(key)) return 'none';
+    return selectedUnitTypeForPurchase ? 'deploy' : 'move';
+  };
+
+  const selectedKey = selectedHex ? coordKey(selectedHex.coordinates) : null;
+
+  // --- Interaction -----------------------------------------------------------------------
+
+  const confirmPurchase = (hex: Hex) => {
+    if (!selectedUnitTypeForPurchase) return;
+    if (onUnitPurchase(selectedUnitTypeForPurchase, hex)) {
+      playSound('hex-select-sound', 0.5);
+      setPlacedUnitHex(null);
     }
-  }, [isSetupPhase]);
-  
-  // Determine if a hex is the target position for a unit move
-  const isTargetMovePosition = useCallback(
-    (hex: Hex) => {
-      // Check if we have a direct target move hex
-      if (targetMoveHex && 
-          hex.coordinates.q === targetMoveHex.coordinates.q && 
-          hex.coordinates.r === targetMoveHex.coordinates.r) {
-        return true;
+  };
+
+  const handleHexClick = (hex: Hex) => {
+    if (!assetsLoaded) return;
+    const key = coordKey(hex.coordinates);
+
+    // Placing a unit from the barracks: first click previews, second click confirms
+    if (selectedUnitTypeForPurchase && validMoveKeys.has(key)) {
+      if (placedUnitHex && coordKey(placedUnitHex.coordinates) === key) {
+        confirmPurchase(hex);
+        return;
+      }
+      setPlacedUnitHex(hex);
+    }
+
+    onHexClick(hex);
+  };
+
+  const handleHexDoubleClick = (hex: Hex) => {
+    if (!assetsLoaded || currentPhase !== 'planning') return;
+    if (selectedUnitTypeForPurchase && validMoveKeys.has(coordKey(hex.coordinates))) {
+      confirmPurchase(hex);
+    }
+  };
+
+  // Stable callbacks so memoised tiles and units don't re-render when unrelated state changes
+  const handlersRef = useRef({ handleHexClick, handleHexDoubleClick, onUnitClick, assetsLoaded });
+  handlersRef.current = { handleHexClick, handleHexDoubleClick, onUnitClick, assetsLoaded };
+
+  const stableHexClick = useCallback((hex: Hex) => handlersRef.current.handleHexClick(hex), []);
+  const stableHexDoubleClick = useCallback((hex: Hex) => handlersRef.current.handleHexDoubleClick(hex), []);
+  const stableUnitSelect = useCallback((unit: Unit) => {
+    if (handlersRef.current.assetsLoaded) handlersRef.current.onUnitClick(unit);
+  }, []);
+  const handleHexHover = useCallback((hex: Hex) => {
+    if (handlersRef.current.assetsLoaded) setHoveredKey(coordKey(hex.coordinates));
+  }, []);
+  const handleHexHoverEnd = useCallback((hex: Hex) => {
+    const key = coordKey(hex.coordinates);
+    setHoveredKey(current => current === key ? null : current);
+  }, []);
+
+  // --- Units -------------------------------------------------------------------------------
+
+  const hexGridRef = useRef(hexGrid);
+  hexGridRef.current = hexGrid;
+
+  // World route between two hexes for walking animations
+  const computeWalkPath = useCallback((from: HexCoordinates, to: HexCoordinates) => {
+    const grid = hexGridRef.current;
+    const byKey = new Map(grid.map(hex => [coordKey(hex.coordinates), hex]));
+    return findTerrainPath(grid, from, to)
+      .map(c => byKey.get(coordKey(c)))
+      .filter((hex): hex is Hex => !!hex)
+      .map(hex => toVector(surfacePosition(hex)));
+  }, []);
+
+  const allUnits = useMemo(() => [...players.player.units, ...players.ai.units], [players]);
+
+  // Per-unit render data, memoised so units only re-render when something about them changes
+  const unitRenderData = useMemo(() => {
+    const enemyBaseCenters: Record<PlayerType, [number, number] | null> = { player: null, ai: null };
+    for (const side of ['player', 'ai'] as const) {
+      const enemyBase = findBaseHex(gameState, side === 'player' ? 'ai' : 'player');
+      if (enemyBase) {
+        const [x, , z] = axialToWorld(enemyBase.coordinates);
+        enemyBaseCenters[side] = [x, z];
+      }
+    }
+
+    const roles = new Map<string, CombatRole>();
+    const combatFacing = new Map<string, HexCoordinates>();
+    if (currentPhase === 'combat') {
+      for (const combat of combats) {
+        if (combat.resolved) continue;
+        for (const defender of combat.defenders) {
+          roles.set(defender.id, 'defender');
+          if (combat.attackers[0]) combatFacing.set(defender.id, combat.attackers[0].position);
+        }
+        for (const attacker of combat.attackers) {
+          roles.set(attacker.id, 'attacker');
+          combatFacing.set(attacker.id, combat.hexCoordinates);
+        }
+      }
+    }
+
+    const plannedUnitIds = new Set(pendingMoves.map(m => m.unitId));
+
+    return allUnits.map(unit => {
+      const hex = hexByKey.get(coordKey(unit.position));
+      const enemies = unit.owner === 'player' ? players.ai.units : players.player.units;
+
+      // Face the unit we're fighting, else the nearest enemy close by, else the enemy castle
+      let faceCoordinates = combatFacing.get(unit.id) ?? null;
+      if (!faceCoordinates) {
+        let nearest: Unit | null = null;
+        let nearestDistance = 4;
+        for (const enemy of enemies) {
+          const distance = getHexDistance(unit.position, enemy.position);
+          if (distance < nearestDistance) {
+            nearest = enemy;
+            nearestDistance = distance;
+          }
+        }
+        faceCoordinates = nearest?.position ?? null;
       }
 
-      // Also check if this hex is a pending move destination for the selected unit
-      if (selectedUnit) {
-        return gameState.pendingMoves.some(
-          move => move.unitId === selectedUnit.id && 
-                 move.to.q === hex.coordinates.q && 
-                 move.to.r === hex.coordinates.r
-        );
+      let facingTarget = enemyBaseCenters[unit.owner];
+      if (faceCoordinates) {
+        const [x, , z] = axialToWorld(faceCoordinates);
+        facingTarget = [x, z];
       }
-      
-      return false;
-    },
-    [targetMoveHex, selectedUnit, gameState.pendingMoves]
-  );
+
+      return {
+        unit,
+        position: hex ? surfacePosition(hex) : axialToWorld(unit.position),
+        facingTarget,
+        combatRole: roles.get(unit.id) ?? null,
+        hasPlannedMove: plannedUnitIds.has(unit.id),
+        terrainBadges: getTerrainBadges(unit, hex)
+      };
+    });
+    // gameState is only used to find the bases
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allUnits, hexByKey, combats, currentPhase, pendingMoves, players]);
+
+  // Keep prop identities stable between renders so memoised units can skip re-rendering
+  const unitPropsCache = useRef(new Map<string, (typeof unitRenderData)[number]>());
+  const stableUnitRenderData = useMemo(() => {
+    const next = new Map<string, (typeof unitRenderData)[number]>();
+    const result = unitRenderData.map(data => {
+      const previous = unitPropsCache.current.get(data.unit.id);
+      const sameArray = (a: readonly unknown[] | null, b: readonly unknown[] | null) =>
+        a === b || (!!a && !!b && a.length === b.length && a.every((v, i) => v === b[i]));
+      const stable = previous ? {
+        ...data,
+        position: sameArray(previous.position, data.position) ? previous.position : data.position,
+        facingTarget: sameArray(previous.facingTarget, data.facingTarget) ? previous.facingTarget : data.facingTarget,
+        terrainBadges: sameArray(previous.terrainBadges, data.terrainBadges) ? previous.terrainBadges : data.terrainBadges
+      } : data;
+      next.set(data.unit.id, stable);
+      return stable;
+    });
+    unitPropsCache.current = next;
+    return result;
+  }, [unitRenderData]);
+
+  // --- Planned moves -----------------------------------------------------------------------
+
+  const plannedPaths = useMemo(() => pendingMoves.flatMap(move => {
+    const unit = allUnits.find(u => u.id === move.unitId);
+    if (!unit) return [];
+
+    const stateWithoutMove = { ...gameState, pendingMoves: pendingMoves.filter(m => m !== move) };
+    const route = getMovePath(stateWithoutMove, unit, move.to) ?? [unit.position, move.to];
+    const points = route
+      .map(c => hexByKey.get(coordKey(c)))
+      .filter((hex): hex is Hex => !!hex)
+      .map(hex => toVector(surfacePosition(hex)));
+
+    return [{ id: move.unitId, points, color: OWNER_COLORS[unit.owner] }];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [pendingMoves, allUnits, hexByKey]);
+
+  // Preview the route to the hovered hex while a unit is selected
+  const hoverPreviewPath = useMemo(() => {
+    if (!selectedUnit || selectedUnit.owner !== 'player' || !hoveredKey || !validMoveKeys.has(hoveredKey)) return null;
+    const target = hexByKey.get(hoveredKey);
+    if (!target) return null;
+
+    const stateWithoutMove = { ...gameState, pendingMoves: pendingMoves.filter(m => m.unitId !== selectedUnit.id) };
+    const route = getMovePath(stateWithoutMove, selectedUnit, target.coordinates);
+    if (!route) return null;
+
+    return route
+      .map(c => hexByKey.get(coordKey(c)))
+      .filter((hex): hex is Hex => !!hex)
+      .map(hex => toVector(surfacePosition(hex)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUnit, hoveredKey, validMoveKeys, hexByKey, pendingMoves]);
+
+  // --- Damage popups -----------------------------------------------------------------------
+
+  const previousUnitsRef = useRef(new Map<string, { lifespan: number; position: [number, number, number] }>());
+  const previousGameIdRef = useRef(players.player.id);
+  const popupIdRef = useRef(0);
+  const popupTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+  useEffect(() => () => popupTimeoutsRef.current.forEach(clearTimeout), []);
+
+  useEffect(() => {
+    // A new game started - forget the old units instead of reporting them all as destroyed
+    if (previousGameIdRef.current !== players.player.id) {
+      previousGameIdRef.current = players.player.id;
+      previousUnitsRef.current = new Map();
+    }
+
+    const previous = previousUnitsRef.current;
+    const next = new Map<string, { lifespan: number; position: [number, number, number] }>();
+    const created: DamagePopup[] = [];
+
+    for (const { unit, position } of unitRenderData) {
+      next.set(unit.id, { lifespan: unit.lifespan, position });
+      const before = previous.get(unit.id);
+      if (before && unit.lifespan < before.lifespan) {
+        created.push({ id: ++popupIdRef.current, position, text: `-${before.lifespan - unit.lifespan}`, color: '#f87171' });
+      }
+    }
+    for (const [id, before] of previous) {
+      if (!next.has(id)) {
+        created.push({ id: ++popupIdRef.current, position: before.position, text: '💀', color: '#ffffff' });
+      }
+    }
+    previousUnitsRef.current = next;
+
+    if (created.length === 0) return;
+    setPopups(current => [...current, ...created]);
+    const ids = new Set(created.map(p => p.id));
+    popupTimeoutsRef.current.push(
+      setTimeout(() => setPopups(current => current.filter(p => !ids.has(p.id))), 1600)
+    );
+  }, [unitRenderData, players.player.id]);
+
+  // --- Rendering ---------------------------------------------------------------------------
+
+  const unresolvedCombats = currentPhase === 'combat' ? combats.filter(c => !c.resolved) : [];
+  const activeCombat = unresolvedCombats[0];
+  const playerBase = findBaseHex(gameState, 'player');
+  const aiBase = findBaseHex(gameState, 'ai');
+  const playerCastlePosition = useMemo(() => playerBase ? surfacePosition(playerBase) : null, [playerBase]);
+  const aiCastlePosition = useMemo(() => aiBase ? surfacePosition(aiBase) : null, [aiBase]);
+
+  const showHoverPreview =
+    assetsLoaded &&
+    selectedUnitTypeForPurchase &&
+    hoveredHex &&
+    validMoveKeys.has(coordKey(hoveredHex.coordinates)) &&
+    (!placedUnitHex || coordKey(placedUnitHex.coordinates) !== coordKey(hoveredHex.coordinates));
 
   return (
     <>
-      {/* Environment elements */}
-      {gameStarted && assetsLoaded && <Clouds count={15} height={100} />}
-      {assetsLoaded && <Fog color="#e6f7ff" near={80} far={150} />}
-      
-      {/* Improved lighting */}
+      {assetsLoaded && <Fog color="#e6f7ff" near={90} far={170} />}
+
+      {/* Lighting */}
       {assetsLoaded && (
         <>
-          <ambientLight intensity={0.8} /> 
+          <ambientLight intensity={0.6} />
           <directionalLight
-            position={[20, 25, 10]}
+            position={[20, 30, 10]}
             intensity={1.3}
             castShadow
-            shadow-mapSize-width={2048}
-            shadow-mapSize-height={2048}
+            shadow-mapSize-width={1024}
+            shadow-mapSize-height={1024}
             shadow-camera-far={150}
-            shadow-camera-left={-50}
-            shadow-camera-right={50}
-            shadow-camera-top={50}
-            shadow-camera-bottom={-50}
+            shadow-camera-left={-30}
+            shadow-camera-right={30}
+            shadow-camera-top={30}
+            shadow-camera-bottom={-30}
             color="#fffaf0"
           />
-          <directionalLight
-            position={[-15, 10, -15]}
-            intensity={0.7}
-            color="#e6f7ff"
-          />
+          <directionalLight position={[-15, 10, -15]} intensity={0.5} color="#e6f7ff" />
         </>
       )}
-      
-      {/* Landscape terrain */}
+
       {/* Own Suspense boundary so loading scenery never hides the game board */}
       {gameStarted && assetsLoaded && (
         <Suspense fallback={null}>
           <LandscapeModels boardRadius={15} />
         </Suspense>
       )}
-      
-      {/* Hex grid and units */}
-      {gameState.hexGrid.map(hex => {
-        // Check if this hex is a destination for a pending move
-        const isPendingMoveDest = gameState.pendingMoves.some(
-          move => move.to.q === hex.coordinates.q && move.to.r === hex.coordinates.r
-        );
 
+      {/* Hex grid */}
+      {hexGrid.map(hex => {
+        const key = coordKey(hex.coordinates);
+        const isSelected = key === selectedKey;
         return (
           <HexTile
             key={hex.id}
             hex={hex}
-            isSelected={isHexSelected(hex)}
-            isHighlighted={isValidMoveTarget(hex)}
-            isHovered={isHexHovered(hex)}
-            isSetupPhase={isSetupPhase}
-            isValidSetupTile={isValidSetupTile(hex)}
-            isBaseSelectionConfirmMode={baseSelectionConfirmMode && isHexSelected(hex)}
-            isPendingMoveDestination={isPendingMoveDest}
-            isTargetMovePosition={isTargetMovePosition(hex)}
-            onClick={() => assetsLoaded && handleHexClick(hex)}
-            onDoubleClick={() => assetsLoaded && handleHexDoubleClick(hex)}
-            onPointerOver={() => assetsLoaded && handleHexPointerOver(hex)}
-            onPointerOut={() => assetsLoaded && handleHexPointerOut(hex)}
+            highlight={getHighlight(key)}
+            isSelected={isSelected}
+            isInvalidSelection={isSelected && isSetupPhase && !validBaseKeys.has(key)}
+            isHovered={key === hoveredKey}
+            onHexClick={stableHexClick}
+            onHexDoubleClick={stableHexDoubleClick}
+            onHexHover={handleHexHover}
+            onHexHoverEnd={handleHexHoverEnd}
           />
         );
       })}
-      
-      {/* Unit preview for barracks selection - only show when hovering over valid placement hex */}
-      {assetsLoaded && 
-       selectedUnitTypeForPurchase && 
-       hoveredHex && 
-       isValidUnitPlacement(hoveredHex) && 
-       (!placedUnitHex || 
-         (placedUnitHex.coordinates.q !== hoveredHex.coordinates.q || 
-          placedUnitHex.coordinates.r !== hoveredHex.coordinates.r)
-       ) && (
+
+      {/* Trees, peaks, dunes and gold that show each hex's terrain */}
+      <BoardDecorations hexGrid={hexGrid} />
+
+      {/* Castles */}
+      {playerCastlePosition && (
+        <Castle
+          owner="player"
+          position={playerCastlePosition}
+          health={players.player.baseHealth ?? BASE_MAX_HEALTH}
+          maxHealth={players.player.maxBaseHealth ?? BASE_MAX_HEALTH}
+        />
+      )}
+      {aiCastlePosition && (
+        <Castle
+          owner="ai"
+          position={aiCastlePosition}
+          health={players.ai.baseHealth ?? BASE_MAX_HEALTH}
+          maxHealth={players.ai.maxBaseHealth ?? BASE_MAX_HEALTH}
+        />
+      )}
+
+      {/* Units on the board */}
+      {assetsLoaded && stableUnitRenderData.map(data => (
+        <UnitMesh
+          key={data.unit.id}
+          unit={data.unit}
+          position={data.position}
+          facingTarget={data.facingTarget}
+          computeWalkPath={computeWalkPath}
+          onSelect={stableUnitSelect}
+          isSelected={selectedUnit?.id === data.unit.id}
+          hasPlannedMove={data.hasPlannedMove}
+          combatRole={data.combatRole}
+          terrainBadges={data.terrainBadges}
+        />
+      ))}
+
+      {/* Units queued in the barracks appear at their deployment hex */}
+      {assetsLoaded && pendingPurchases.map(purchase => {
+        const hex = hexByKey.get(coordKey(purchase.position));
+        const owner: PlayerType = purchase.playerId === players.player.id ? 'player' : 'ai';
+        if (!hex) return null;
+
+        const info = UNITS[purchase.unitType];
+        const tempUnit: Unit = {
+          ...info,
+          abilities: [...info.abilities],
+          id: `pending-${coordKey(purchase.position)}`,
+          owner,
+          position: purchase.position,
+          hasMoved: false,
+          isEngagedInCombat: false
+        };
+
+        return (
+          <UnitMesh
+            key={tempUnit.id}
+            unit={tempUnit}
+            position={surfacePosition(hex)}
+            facingTarget={null}
+            isPendingPurchase
+          />
+        );
+      })}
+
+      {/* Planned routes */}
+      {assetsLoaded && plannedPaths.map(path => (
+        <MovePath key={path.id} points={path.points} color={path.color} />
+      ))}
+      {assetsLoaded && hoverPreviewPath && (
+        <MovePath points={hoverPreviewPath} color="#ffffff" isPreview />
+      )}
+
+      {/* Barracks placement previews */}
+      {showHoverPreview && hoveredHex && selectedUnitTypeForPurchase && (
         <AnimatedUnitPreview
           unitType={selectedUnitTypeForPurchase}
           position={axialToWorld(hoveredHex.coordinates)}
@@ -547,164 +601,73 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           isPlaced={false}
         />
       )}
-      
-      {/* Placed unit with idle animation */}
-      {assetsLoaded && 
-       gameState.currentPhase === 'planning' && 
-       selectedUnitTypeForPurchase && 
-       placedUnitHex && (
-        <>
-          <AnimatedUnitPreview
-            unitType={selectedUnitTypeForPurchase}
-            position={axialToWorld(placedUnitHex.coordinates)}
-            hexHeight={getHexSurfaceHeight(placedUnitHex)}
-            isPlaced={true}
-            isConfirmed={false}
-          />
-        </>
+      {assetsLoaded && currentPhase === 'planning' && selectedUnitTypeForPurchase && placedUnitHex && (
+        <AnimatedUnitPreview
+          unitType={selectedUnitTypeForPurchase}
+          position={axialToWorld(placedUnitHex.coordinates)}
+          hexHeight={getHexSurfaceHeight(placedUnitHex)}
+          isPlaced
+        />
       )}
-      
-      {/* Check for pending unit purchases and display them */}
-      {assetsLoaded && gameState.pendingPurchases
-        .filter(purchase => purchase.playerId === gameState.players.player.id)
-        .map((purchase, index) => {
-          // Find the hex at this position
-          const hex = gameState.hexGrid.find(
-            h => h.coordinates.q === purchase.position.q && h.coordinates.r === purchase.position.r
-          );
-          
-          if (!hex) return null;
-          
-          // Create a temporary unit object for the purchase
-          const tempUnit: Unit = {
-            id: `pending-${purchase.unitType}-${index}`,
-            type: purchase.unitType,
-            owner: 'player',
-            position: purchase.position,
-            movementRange: UNITS[purchase.unitType]?.movementRange || 2,
-            attackPower: UNITS[purchase.unitType]?.attackPower || 1,
-            lifespan: UNITS[purchase.unitType]?.lifespan || 5,
-            maxLifespan: UNITS[purchase.unitType]?.maxLifespan || 5,
-            cost: UNITS[purchase.unitType]?.cost || 10,
-            abilities: UNITS[purchase.unitType]?.abilities || [],
-            hasMoved: false,
-            isEngagedInCombat: false
-          };
-          
-          return (
-            <UnitMesh
-              key={`pending-unit-${purchase.position.q}-${purchase.position.r}-${index}`}
-              unit={tempUnit}
-              position={axialToWorld(purchase.position)}
-              hexHeight={getHexSurfaceHeight(hex)}
-              isPendingPurchase={true}
-              // Clicking a queued unit is handled like clicking its hex (cancels the purchase)
-              onClick={() => handleHexClick(hex)}
-            />
-          );
-        })
-      }
-      
-      {/* Units on the board - only show when assets are loaded */}
-      {assetsLoaded && gameState.hexGrid
-        .filter((hex: Hex) => hex.unit)
-        .map((hex: Hex) => {
-          if (!hex.unit) return null;
-          
-          // Create a unique key by combining unit.id with position coordinates
-          const uniqueKey = `${hex.unit.id}-${hex.coordinates.q}-${hex.coordinates.r}`;
-          
-          // Get the position for this unit
-          const unitPosition = hex.coordinates;
-          
-          // Check if this unit is moving (has a pending move)
-          const isMoving = gameState.pendingMoves.some(move => 
-            move.unitId === hex.unit!.id
-          );
-          
-          return (
-            <UnitMesh
-              key={uniqueKey}
-              unit={hex.unit}
-              position={axialToWorld(unitPosition)}
-              hexHeight={getHexSurfaceHeight(hex)}
-              onClick={(e) => handleUnitClick(hex.unit!, e)}
-              isMoving={isMoving}
-            />
-          );
-        })
-      }
-      
-      {/* Planned move indicators - arrows pointing from unit current position to destination */}
-      {assetsLoaded && 
-       gameState.currentPhase === 'planning' && 
-       !isAITurn &&
-       gameState.pendingMoves
-         .filter(move => gameState.players.player.units.some(unit => unit.id === move.unitId))
-         .map(move => {
-           // Find the unit and its current hex
-           const unit = gameState.players.player.units.find(u => u.id === move.unitId);
-           if (!unit) return null;
-           
-           // Find the hex for the unit's current position
-           const fromHex = gameState.hexGrid.find(h => 
-             h.coordinates.q === unit.position.q && 
-             h.coordinates.r === unit.position.r
-           );
-           
-           // Find the destination hex
-           const toHex = gameState.hexGrid.find(h => 
-             h.coordinates.q === move.to.q && 
-             h.coordinates.r === move.to.r
-           );
-           
-           if (!fromHex || !toHex) return null;
-           
-           // Calculate positions for the destination
-           const [toX, , toZ] = axialToWorld(move.to);
-           
-           return (
-             <group key={`move-indicator-${move.unitId}`}>
-               {/* Arrow pointing to destination */}
-               <mesh 
-                 position={[toX, getHexHeight(toHex) + 1.2, toZ]}
-                 rotation={[Math.PI / 2, 0, 0]}
-               >
-                 <cylinderGeometry args={[0.2, 0.2, 0.1, 8]} />
-                 <meshStandardMaterial color="#FFD700" emissive="#FFA500" emissiveIntensity={0.7} />
-               </mesh>
-             </group>
-           );
-         })}
-      
-      {/* Hover info - only show when assets are loaded */}
-      {assetsLoaded && hoveredHex && (
-        <Html position={axialToWorld(hoveredHex.coordinates)} style={{ pointerEvents: 'none' }}>
-          <div
-            className="bg-black bg-opacity-70 text-white px-2 py-1 rounded text-xs pointer-events-none"
-            style={{
-              textAlign: 'center',
-            }}
-          >
-            <div>{hoveredHex.terrain.charAt(0).toUpperCase() + hoveredHex.terrain.slice(1)}</div>
-            {hoveredHex.unit && (
-              <div className="mt-1">
-                {hoveredHex.unit.type} ({hoveredHex.unit.owner})
-              </div>
-            )}
-            {isTargetMovePosition(hoveredHex) && originalUnitHex?.unit && (
-              <div className="mt-1 text-blue-300">
-                Next {originalUnitHex.unit.type} location
-              </div>
-            )}
-            {hoveredHex.isBase && (
-              <div className="mt-1">
-                Base ({hoveredHex.owner || 'Neutral'})
-              </div>
-            )}
+
+      {/* Battle markers */}
+      {unresolvedCombats.map(combat => {
+        const hex = hexByKey.get(coordKey(combat.hexCoordinates));
+        if (!hex) return null;
+        const [x, y, z] = surfacePosition(hex);
+        const isActive = combat === activeCombat;
+        return (
+          <Html key={coordKey(combat.hexCoordinates)} position={[x, y + 2.2, z]} center zIndexRange={[7, 0]} style={{ pointerEvents: 'none' }}>
+            <div className={`select-none ${isActive ? 'text-3xl animate-bounce' : 'text-xl opacity-70'}`}>⚔️</div>
+          </Html>
+        );
+      })}
+
+      {/* Damage numbers */}
+      {popups.map(popup => (
+        <Html
+          key={popup.id}
+          position={[popup.position[0], popup.position[1] + 1.8, popup.position[2]]}
+          center
+          zIndexRange={[8, 0]}
+          style={{ pointerEvents: 'none' }}
+        >
+          <div className="animate-float-up text-2xl font-black select-none" style={{ color: popup.color, textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
+            {popup.text}
           </div>
         </Html>
+      ))}
+
+      {/* Hover info */}
+      {assetsLoaded && hoveredHex && !isSetupPhase && (
+        <HoverTooltip hex={hoveredHex} />
       )}
     </>
   );
-}; 
+};
+
+// Compact description of the hovered hex: its terrain effect and what's standing on it
+const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
+  const effect = TERRAIN_EFFECTS[hex.terrain];
+  const [x, y, z] = surfacePosition(hex);
+
+  return (
+    <Html position={[x, y + 0.2, z]} zIndexRange={[9, 0]} style={{ pointerEvents: 'none' }}>
+      <div className="ml-6 -mt-6 w-44 rounded-lg bg-slate-900/90 px-2 py-1 text-[11px] text-slate-100 shadow-lg select-none">
+        <div className="font-bold text-xs">
+          {TERRAIN_ICONS[hex.terrain]} {effect.name}
+          {hex.isResourceHex && ` (+${hex.resourceValue ?? 0} gold/round)`}
+        </div>
+        <div className="text-slate-300 leading-snug">{effect.description}</div>
+        {hex.isBase && (
+          <div className="mt-1 font-semibold">👑 {hex.owner === 'player' ? 'Your castle' : 'Enemy castle'}</div>
+        )}
+        {hex.unit && (
+          <div className="mt-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>
+            {hex.unit.owner === 'player' ? 'Your' : 'Enemy'} {getUnitTypeName(hex.unit.type)} · ❤️ {hex.unit.lifespan}/{hex.unit.maxLifespan}
+          </div>
+        )}
+      </div>
+    </Html>
+  );
+};

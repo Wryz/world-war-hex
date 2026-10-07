@@ -377,6 +377,7 @@ export const useGameHandlers = () => {
     handleStartGame,
     handleContinueGame,
     handleRestart,
-    handleReturnToIntro
+    handleReturnToIntro,
+    handleCancelSelection: clearSelection
   };
 };

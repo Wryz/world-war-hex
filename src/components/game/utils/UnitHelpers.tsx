@@ -1,4 +1,5 @@
 import { UnitType } from '@/types/game';
+import { UNIT_NAMES } from '@/lib/game/gameState';
 
 // Helper function to get emoji for unit type
 export const getUnitTypeEmoji = (unitType: UnitType): string => {
@@ -13,13 +14,4 @@ export const getUnitTypeEmoji = (unitType: UnitType): string => {
 };
 
 // Helper function to get name for unit type
-export const getUnitTypeName = (unitType: UnitType): string => {
-  switch(unitType) {
-    case 'infantry': return 'Swordsmen';
-    case 'tank': return 'Pikemen';
-    case 'artillery': return 'Archers';
-    case 'helicopter': return 'Knights';
-    case 'medic': return 'Siege Engineers';
-    default: return 'Unknown';
-  }
-}; 
+export const getUnitTypeName = (unitType: UnitType): string => UNIT_NAMES[unitType] ?? 'Unknown';

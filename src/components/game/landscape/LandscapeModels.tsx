@@ -95,6 +95,11 @@ const MODEL_PATHS: Record<ModelType, string> = {
   goldRock: '/models/rock-gold-1.glb'
 };
 
+// Scenery only needs to cover what the fixed camera can see around the board
+const SCENERY_GRID_SIZE = 34;
+// Fraction of the possible scenery props that are placed (fewer props = smoother frame rate)
+const SCENERY_DENSITY = 0.6;
+
 interface LandscapeModelsProps {
   boardRadius?: number; // Distance from center to use for placement
 }
@@ -114,7 +119,7 @@ const LandscapeModels = React.memo(({ boardRadius = 15 }: LandscapeModelsProps) 
     const { HEX_SIZE } = getHexagonConstants();
     
     // Calculate how many rings we need for our grid
-    const gridSize = 40; // Same as in HexagonalTerrain
+    const gridSize = SCENERY_GRID_SIZE;
     const ringCount = Math.ceil(gridSize / 2);
     
     // Function to calculate terrain height based on distance from center
@@ -150,7 +155,7 @@ const LandscapeModels = React.memo(({ boardRadius = 15 }: LandscapeModelsProps) 
     ) => {
       // Skip if position is already used or by random chance
       const posKey = `${q},${r}`;
-      if (usedPositions.has(posKey) || Math.random() > chanceToPlace) {
+      if (usedPositions.has(posKey) || Math.random() > chanceToPlace * SCENERY_DENSITY) {
         return;
       }
       
@@ -277,7 +282,7 @@ const LandscapeModels = React.memo(({ boardRadius = 15 }: LandscapeModelsProps) 
     <>
       {/* Use our updated hexagonal terrain with proper props */}
       <HexagonalTerrain 
-        gridSize={40} 
+        gridSize={SCENERY_GRID_SIZE} 
         centerRadius={boardRadius * 1.1}
         maxHeight={5}
       />

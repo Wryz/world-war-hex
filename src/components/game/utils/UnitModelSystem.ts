@@ -39,7 +39,7 @@ const KNIGHT_ANIMATIONS: UnitAnimations = {
 export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
   'infantry': {
     animations: KNIGHT_ANIMATIONS,
-    scale: 0.7,
+    scale: 1.0,
     heightOffset: 0,
     rotationOffset: 0,
     indicatorColor: '#4682B4',
@@ -47,7 +47,7 @@ export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
   },
   'tank': {
     animations: KNIGHT_ANIMATIONS,
-    scale: 0.85,
+    scale: 1.15,
     heightOffset: 0,
     rotationOffset: 0,
     indicatorColor: '#8B0000',
@@ -55,7 +55,7 @@ export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
   },
   'helicopter': {
     animations: KNIGHT_ANIMATIONS,
-    scale: 0.75,
+    scale: 1.05,
     heightOffset: 0,
     rotationOffset: 0,
     indicatorColor: '#7B1FA2',
@@ -63,7 +63,7 @@ export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
   },
   'artillery': {
     animations: KNIGHT_ANIMATIONS,
-    scale: 0.6,
+    scale: 0.9,
     heightOffset: 0,
     rotationOffset: 0,
     indicatorColor: '#006400',
@@ -71,7 +71,7 @@ export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
   },
   'medic': {
     animations: KNIGHT_ANIMATIONS,
-    scale: 0.65,
+    scale: 0.95,
     heightOffset: 0,
     rotationOffset: 0,
     indicatorColor: '#FFFF00',

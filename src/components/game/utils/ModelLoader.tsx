@@ -114,6 +114,7 @@ interface ModelProps {
   position?: [number, number, number];
   rotation?: [number, number, number];
   scale?: number | [number, number, number];
+  castShadow?: boolean;
 }
 
 export const Model: React.FC<ModelProps> = ({ 
@@ -121,9 +122,17 @@ export const Model: React.FC<ModelProps> = ({
   fallback, 
   position = [0, 0, 0],
   rotation = [0, 0, 0],
-  scale = 1
+  scale = 1,
+  castShadow = false
 }) => {
   const { model, loading, error } = useGLTF(url);
+  
+  // Scenery doesn't need to cast shadows, which keeps the shadow pass cheap
+  useEffect(() => {
+    model?.traverse(child => {
+      if ((child as THREE.Mesh).isMesh) child.castShadow = castShadow;
+    });
+  }, [model, castShadow]);
   
   if (loading || error || !model) {
     return fallback ? <>{fallback}</> : null;

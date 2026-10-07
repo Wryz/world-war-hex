@@ -1,58 +1,44 @@
 import React from 'react';
+import { PANEL_CLASS } from '../hud/styles';
 
 interface SetupPhaseProps {
   isConfirmMode?: boolean;
   selectedHexValid?: boolean;
 }
 
-export const SetupPhase: React.FC<SetupPhaseProps> = ({ 
+// Instructions for choosing where to build the player's castle
+export const SetupPhase: React.FC<SetupPhaseProps> = ({
   isConfirmMode = false,
   selectedHexValid = false
 }) => {
   return (
-    <div className="fixed top-4 left-4 p-4 bg-[var(--background)] bg-opacity-80 text-[var(--parchment)] rounded-lg z-10 max-w-xs">
-      <h2 className="text-xl font-bold mb-2">Setup Phase</h2>
-      
-      {isConfirmMode ? (
-        <>
-          {selectedHexValid ? (
-            <div className="mb-3 text-[var(--success)] font-semibold border border-[var(--success)] p-2 rounded-md bg-[var(--success-muted)] bg-opacity-20">
-              <p className="mb-1">Confirm base placement?</p>
-              <p className="text-sm">
-                Click the highlighted hex again to confirm, or click elsewhere to cancel.
-              </p>
-            </div>
+    <div className="fixed top-3 inset-x-0 z-20 flex justify-center pointer-events-none">
+      <div className={`${PANEL_CLASS} pointer-events-auto max-w-md p-4 text-sm`}>
+        <h2 className="text-lg font-black">👑 Choose your castle location</h2>
+
+        {isConfirmMode ? (
+          selectedHexValid ? (
+            <p className="mt-2 rounded-lg bg-emerald-900/70 px-3 py-2 font-semibold text-emerald-100">
+              Click the same hex again to build your castle there, or pick another green hex.
+            </p>
           ) : (
-            <div className="mb-3 text-[var(--error)] border border-[var(--error)] p-2 rounded-md bg-[var(--error-muted)] bg-opacity-20">
-              <p className="mb-1 font-semibold">Invalid location!</p>
-              <p className="text-sm">
-                You cannot place your base here. Click elsewhere to select a valid edge tile.
-              </p>
-            </div>
-          )}
-        </>
-      ) : (
-        <p className="mb-2">Select a hex to place your base</p>
-      )}
-      
-      <div className="text-sm bg-[var(--foreground)] text-[var(--primary)] bg-opacity-20 p-2 rounded-md">
-        <h3 className="font-semibold mb-1">Placement Rules:</h3>
-        <ul className="list-disc pl-5 space-y-1">
-          <li>Must be placed on the edge of the battlefield</li>
-          <li>Cannot be placed on water</li>
-          <li>Cannot be placed on mountains or resource tiles</li>
+            <p className="mt-2 rounded-lg bg-red-900/70 px-3 py-2 font-semibold text-red-100">
+              You can&apos;t build there. Pick one of the green-outlined hexes.
+            </p>
+          )
+        ) : (
+          <p className="mt-2 text-slate-300">
+            Click a <span className="font-bold text-emerald-300">green-outlined</span> hex on the edge of the map,
+            then click it again to confirm. The enemy builds on the opposite side.
+          </p>
+        )}
+
+        <ul className="mt-3 list-disc pl-5 text-xs text-slate-400 space-y-0.5">
+          <li>Must be on the edge of the battlefield</li>
+          <li>Not on water, mountains or gold mines</li>
           <li>Needs open ground next to it to deploy troops</li>
         </ul>
       </div>
-      
-      <div className="text-sm mt-3 bg-[var(--foreground)] text-[var(--secondary)] bg-opacity-20 p-2 rounded-md">
-        <h3 className="font-semibold mb-1">How to place:</h3>
-        <ol className="list-decimal pl-5 space-y-1">
-          <li>Hover over hexes to see valid locations (green)</li>
-          <li>Click once to select a location</li>
-          <li>Click again to confirm placement</li>
-        </ol>
-      </div>
     </div>
   );
-}; 
+};

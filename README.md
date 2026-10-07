@@ -8,28 +8,38 @@ The game is organized into modular components for better maintainability:
 
 ### Core Components
 
-- `GameController`: Main game controller that manages game state and orchestrates the different phases
-- `GameBoard`: Renders the hexagonal game board
+- `GameController`: Main game controller that manages game state and lays out the HUD for each phase
+- `GameBoard`: Renders the 3D board, the fixed camera that swings to the active side's view each turn, planned routes and battle markers
 - `HexTile`: Individual hexagon tile component
+- `BoardDecorations`: Instanced trees, peaks, dunes and gold that show each hex's terrain
+- `UnitMesh`: Animated unit that walks along its route, faces its opponent and shows its health and terrain bonuses
+- `Castle`: Each side's castle, topped with a crown
+- `MovePath`: Dashed route with an arrow showing where a unit will walk
+
+### HUD
+
+- `src/components/game/hud/`
+  - `TopBar`: Round, whose turn it is, timer, both castles' health and your gold
+  - `ActionBar`: Recruit units and end your turn
+  - `SelectionCard`: Details about the selected unit and the terrain it stands on
+  - `EventFeed`: Battle log of recent events
+  - `TerrainLegend`: How each terrain type affects units
+  - `TurnBanner`: Announces turn changes and battles
 
 ### Game Phases
 
 - `src/components/game/phases/`
-  - `SetupPhase`: Initial game phase for placing the player's base
-  - `PlanningPhase`: Main game phase for purchasing units and planning moves
+  - `SetupPhase`: Instructions for placing the player's castle
 
 ### Combat System
 
 - `src/components/game/combat/`
-  - `CombatResolver`: Handles combat resolution between units
+  - `CombatResolver`: Shows the current battle with terrain modifiers and the expected outcome
 
 ### UI Components
 
-- `src/components/game/dashboard/`
-  - `GameDashboard`: Game information dashboard showing player and enemy units
 - `src/components/game/shared/`
   - `GameOverScreen`: End game screen showing the winner
-  - `SaveGameButton`: Button for saving the current game
 
 ### Game Intro
 
@@ -74,10 +84,11 @@ The game is organized into modular components for better maintainability:
 1. **Place your castle.** Click a highlighted hex on the edge of the map, then click it again to confirm. The enemy castle is placed on the far side of the map.
 2. **Take turns.** You and the enemy alternate turns. You have 60 seconds to plan, then press **End Turn** (or let the timer run out).
    - **Recruit:** pick a unit in the Barracks, click a highlighted hex next to your castle, then click it again to deploy. Units appear at the end of your turn and can move from your next turn. Click a queued unit to cancel it and get your gold back.
-   - **Move:** click one of your units, then a highlighted hex. Click the gold marker to cancel a move. Units can't cross water, mountains or enemy units.
+   - **Move:** click one of your units, then a highlighted hex - the route is drawn as you hover. Click a planned destination to cancel the move. Units walk there when the turn ends.
 3. **Combat.** After a side moves, each of its units attacks every adjacent enemy unit. When you're attacked you choose to **Stand & Fight** or **Retreat**.
-4. **Economy.** At the end of every round both sides earn 5 gold, plus the value of any gold mines (resource hexes) their units stand on.
-5. **Win** by moving a unit onto the enemy castle, or by wearing it down. At the end of every round each unit within 3 hexes of an enemy castle deals damage equal to its attack power.
+4. **Terrain matters.** Forests give cover (units there take 40% less damage, and Pikemen attack 50% harder from them), desert costs 2 movement to cross, gold mines pay out every round, and water and mountains are impassable. Hover any hex to see its effect.
+5. **Economy.** At the end of every round both sides earn 5 gold, plus the value of any gold mines (resource hexes) their units stand on.
+6. **Win** by moving a unit onto the enemy castle, or by wearing it down. At the end of every round each unit within 3 hexes of an enemy castle deals damage equal to its attack power.
 
 ## Getting Started
 

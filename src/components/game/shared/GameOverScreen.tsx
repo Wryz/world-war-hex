@@ -1,4 +1,5 @@
 import React from 'react';
+import { PANEL_CLASS } from '../hud/styles';
 
 interface GameOverScreenProps {
   winner: 'player' | 'ai';
@@ -6,34 +7,23 @@ interface GameOverScreenProps {
 }
 
 export const GameOverScreen: React.FC<GameOverScreenProps> = ({ winner, onRestart }) => (
-  <div className="absolute inset-0 flex items-center justify-center bg-[var(--background)] bg-opacity-80 z-10">
-    <div className="p-8 rounded-lg text-center border-4 shadow-2xl max-w-md"
-         style={{
-           backgroundColor: 'var(--parchment)',
-           borderColor: 'var(--accent)',
-           boxShadow: `0 4px 30px var(--foreground)`
-         }}>
-      <h1 className="text-4xl font-bold mb-6"
-          style={{ color: winner === 'player' ? 'var(--accent)' : 'var(--primary)' }}>
+  <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/60">
+    <div className={`${PANEL_CLASS} max-w-md p-8 text-center`}>
+      <div className="text-6xl">{winner === 'player' ? '👑' : '🏚️'}</div>
+      <h1 className={`mt-2 text-4xl font-black ${winner === 'player' ? 'text-amber-300' : 'text-red-400'}`}>
         {winner === 'player' ? 'Victory!' : 'Defeat!'}
       </h1>
-      <p className="text-xl mb-8" style={{ color: 'var(--secondary)' }}>
-        {winner === 'player' 
-          ? 'You have conquered the enemy and claimed their lands!' 
+      <p className="mt-3 text-lg text-slate-300">
+        {winner === 'player'
+          ? 'You have conquered the enemy and claimed their lands!'
           : 'Your castle has fallen. Your kingdom is lost!'}
       </p>
-      <button 
+      <button
         onClick={onRestart}
-        className="font-bold py-3 px-8 rounded-md border-2 transition duration-200 shadow-md text-lg"
-        style={{ 
-          backgroundColor: 'var(--accent)',
-          color: 'var(--parchment)',
-          borderColor: 'var(--secondary)',
-          boxShadow: `0 4px 8px var(--foreground)`
-        }}
+        className="mt-6 rounded-lg bg-amber-500 hover:bg-amber-400 px-8 py-3 text-lg font-bold text-slate-900 shadow"
       >
         Begin New Campaign
       </button>
     </div>
   </div>
-); 
+);

@@ -78,6 +78,15 @@ export interface GameState {
   combats: Combat[];
   settings?: GameSettings;
   selectedUnitTypeForPurchase?: UnitType | null;
+  // Recent game events shown to the player (newest last)
+  log?: GameLogEntry[];
+}
+
+export interface GameLogEntry {
+  id: number;
+  turn: number;
+  side: PlayerType | 'neutral';
+  text: string;
 }
 
 export type GamePhase = 
