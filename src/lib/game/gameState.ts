@@ -32,14 +32,14 @@ export const DEFAULT_SETTINGS: GameSettings = {
   planningPhaseTime: 30,
   aiDifficulty: 'medium',
   resourceHexCount: 3,
-  castleHealth: 30,
-  startingGold: 25,
+  castleHealth: 45,
+  startingGold: 30,
   aiIncomeBonus: 0,
   maxRounds: 10
 };
 
 // Default castle health (each battle's settings may change it)
-export const BASE_MAX_HEALTH = 30;
+export const BASE_MAX_HEALTH = 45;
 // Gold each side receives at the end of each of its turns (once per round)
 export const TURN_INCOME = 5;
 // Units within this many hexes of the enemy base damage it at the end of their side's turn
@@ -144,16 +144,16 @@ export const TERRAIN_EFFECTS: Record<TerrainType, TerrainEffect> = {
     moveCost: 1,
     elevation: 1,
     damageTakenMultiplier: 1,
-    healPerTurn: 2,
-    description: 'Healing waters: a unit here recovers 2 health at the end of each of its turns.'
+    healPerTurn: 4,
+    description: 'Healing waters: a unit here recovers 4 health at the end of each of its turns.'
   },
   lava: {
     name: 'Lava Field',
     moveCost: 2,
     elevation: 0,
     damageTakenMultiplier: 1,
-    damagePerTurn: 2,
-    description: 'Low, scorching ground: units here lose 2 health at the end of each of their turns (Fireborn troops are unharmed). Costs 2 movement.'
+    damagePerTurn: 4,
+    description: 'Low, scorching ground: units here lose 4 health at the end of each of their turns (Fireborn troops are unharmed). Costs 2 movement.'
   },
   ice: {
     name: 'Ice',
@@ -176,8 +176,8 @@ export const TERRAIN_EFFECTS: Record<TerrainType, TerrainEffect> = {
     moveCost: 1,
     elevation: 1,
     damageTakenMultiplier: 1,
-    damagePerTurn: 1,
-    description: 'Units here lose 1 health at the end of each of their turns. The undead are healed instead.'
+    damagePerTurn: 2,
+    description: 'Units here lose 2 health at the end of each of their turns. The undead are healed instead.'
   }
 };
 
@@ -196,11 +196,13 @@ export const RANGED_POINT_BLANK_MULTIPLIER = 0.5;
 // Fraction of a destroyed unit's cost paid to the side that destroyed it
 export const KILL_BOUNTY_FRACTION = 0.5;
 // Gold plundered per point of siege damage dealt to an enemy castle
-export const SIEGE_PLUNDER_PER_DAMAGE = 0.5;
+export const SIEGE_PLUNDER_PER_DAMAGE = 0.25;
 // Health a unit with the healing ability (Mages) restores to each adjacent ally at the end of its side's turn
-export const HEALER_HEAL_AMOUNT = 2;
+export const HEALER_HEAL_AMOUNT = 4;
 // Health regenerating troops recover at the end of their side's turn
-export const REGENERATE_AMOUNT = 1;
+export const REGENERATE_AMOUNT = 2;
+// Damage armored troops shrug off in every fight
+export const ARMOR_REDUCTION = 2;
 
 // Height: each level of ground an attacker stands above its target adds this much damage (and each
 // level below takes it away), counting at most two levels
@@ -212,8 +214,8 @@ export const HIGH_GROUND_ELEVATION = 2;
 // Economy: every side earns TURN_INCOME each turn, plus its gold mines and camps, but armies larger
 // than FREE_UPKEEP_UNITS cost upkeep - a bigger army isn't automatically a better one
 export const CAMP_INCOME = 2;
-export const FREE_UPKEEP_UNITS = 5;
-export const UPKEEP_PER_UNIT = 1;
+export const FREE_UPKEEP_UNITS = 4;
+export const UPKEEP_PER_UNIT = 2;
 
 // ---------------------------------------------------------------------------
 // Creating a battle
@@ -1198,7 +1200,7 @@ const distributeDamage = (shares: (number | null)[]): number[] => {
 
 // Armour soaks 1 damage from every fight, but a blow that lands always does at least 1
 const applyArmor = (unit: Unit, damage: number) =>
-  damage > 0 && hasAbility(unit, 'armored') ? Math.max(1, damage - 1) : damage;
+  damage > 0 && hasAbility(unit, 'armored') ? Math.max(1, damage - ARMOR_REDUCTION) : damage;
 
 const compareIds = (a: Unit, b: Unit) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
@@ -1540,7 +1542,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     if (cover.damageTakenMultiplier < 1) {
       modifiers.push(`${Math.round((1 - cover.damageTakenMultiplier) * 100)}% less damage (${cover.name.toLowerCase()} cover)`);
     }
-    if (hasAbility(unit, 'armored')) modifiers.push('armored: takes 1 less damage');
+    if (hasAbility(unit, 'armored')) modifiers.push(`armored: takes ${ARMOR_REDUCTION} less damage`);
     return modifiers;
   };
 

@@ -23,7 +23,7 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 3. **Move.** Tap one of your troops, then a highlighted hex. Rough ground costs more movement; water and mountains block the way (flyers pass over them).
 4. **End your turn.** Troops arrive and move, then every troop in range attacks one enemy it can reach automatically - preferring one it can finish off, then one it is strong against. A defender splits its strike-back between the attackers it can reach, so archers shooting from 2 hexes and sneak attacks take no damage. The battle card shows every modifier, and health bars count down blow by blow. Then the enemy takes its turn.
 5. **Win** by marching onto the enemy castle, or by wearing it down: at the end of your turn every troop within 3 hexes of it deals its attack as damage. When the last round ends, the castle in better shape wins.
-6. **Earn gold** each turn: 5, plus any gold mines your troops hold and 2 for each camp you hold. Armies larger than 5 troops cost 1 gold upkeep per extra troop, so holding mines and camps beats massing troops. Destroying an enemy pays a bounty of half its cost, and damaging the enemy castle plunders gold. Your income per turn is shown next to your gold.
+6. **Earn gold** each turn: 5, plus any gold mines your troops hold and 2 for each camp you hold. Troops are expensive and tough, so a battle is fought with a handful of them: armies larger than 4 troops cost 2 gold upkeep per extra troop, and holding mines and camps beats massing troops. Destroying an enemy pays a bounty of half its cost, and damaging the enemy castle plunders gold. Your income per turn is shown next to your gold.
 
 ### Counters
 
@@ -57,9 +57,9 @@ Each hex has a height level: water, swamp, ice and lava 0, most ground 1, hills 
 | Swamp | 0 | Low ground; costs 2 movement |
 | Snow | 2 | High ground; costs 3 movement |
 | Ice | 0 | Low ground; costs 2 movement |
-| Spring | 1 | Heals 2 health at the end of each of your turns |
-| Cursed Ground | 1 | Drains 1 health each turn - but heals the undead |
-| Lava Field | 0 | Burns 2 health each turn (Fireborn troops are unharmed); costs 2 movement |
+| Spring | 1 | Heals 4 health at the end of each of your turns |
+| Cursed Ground | 1 | Drains 2 health each turn - but heals the undead |
+| Lava Field | 0 | Burns 4 health each turn (Fireborn troops are unharmed); costs 2 movement |
 | Gold Mine | 1 | Pays its gold each turn while one of your units holds it |
 | Mountains | 3 | Impassable (flyers pass over); blocks line of sight |
 | Water | 0 | Impassable (flyers pass over) |
@@ -68,7 +68,7 @@ A unit can always step onto one neighbouring hex, however rough, even if that ta
 
 ### Abilities
 
-Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest fighter, Sneak attack (no strike-back), Flying, Regenerates, Armored (1 less damage per fight), Siege (double castle damage), Berserk (+50% attack at half health), Undead, Pathfinder (rough ground costs 1) and Fireborn. Every card shows its abilities; hover them for details.
+Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest fighter, Sneak attack (no strike-back), Flying, Regenerates, Armored (2 less damage per fight), Siege (double castle damage), Berserk (+50% attack at half health), Undead, Pathfinder (rough ground costs 1) and Fireborn. Every card shows its abilities; hover them for details.
 
 ## Project Structure
 

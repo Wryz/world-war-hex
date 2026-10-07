@@ -2,6 +2,7 @@ import type { GameSettings, Roster, TerrainType } from '@/types/game';
 import type { GuardSpec } from '../game/gameState';
 import { Faction, MOB_IDS, TROOPS, TroopId, cardPower, scaleTroop, statsPower } from '../game/troops';
 import { expectedProgression, recommendedPower, baseLevelReward } from '../meta/economy';
+import { LEVEL_TUNING } from './levelTuning';
 
 // The campaign: ten regions of ten levels each. Every region has its own map theme, enemy
 // faction and terrain; the tenth level of each is a boss battle. Enemies get stronger level by
@@ -122,11 +123,13 @@ const ENEMY_STRENGTH = 0.81;
 // Factions whose troops are cheaper or trickier than their power suggests (goblin swarms, undead
 // healed by cursed ground) are toned down; the simulator measured these
 const FACTION_STRENGTH: Partial<Record<Faction, number>> = {
-  goblins: 0.77, beasts: 1.08, swamp: 0.92, desert: 1.05, frost: 0.93, undead: 0.74, orcs: 0.98, infernal: 0.97, dragons: 1.02
+  bandits: 1.1, goblins: 0.86, beasts: 1.08, swamp: 0.8, desert: 0.7, frost: 0.7, undead: 0.68, orcs: 0.83, infernal: 0.68, dragons: 0.72
 };
 // Later levels in a region are a little harder than earlier ones; the first meets a new enemy, so it is gentler
 const IN_REGION_RAMP = 0.012;
 const FIRST_LEVEL_EASE = 0.92;
+// The tutorial battle is gentler still
+const TUTORIAL_EASE = 0.85;
 // Bosses and champions are far tougher than a regular troop, so their stats are scaled less
 const BOSS_STRENGTH = 0.42;
 // ...adjusted per boss, as some abilities (flying, healing) count for more than others
@@ -179,7 +182,8 @@ export const getLevel = (levelId: number): LevelDef => {
   // Scale the enemy's troops so their average power tracks the player's expected cards
   const enemyScale = Math.round(
     expectedCardPower(id) / baseRosterPower(enemyRoster) * ENEMY_STRENGTH * (FACTION_STRENGTH[region.faction] ?? 1) *
-    (1 + IN_REGION_RAMP * index) * (index === 0 ? FIRST_LEVEL_EASE : 1) * 100
+    (1 + IN_REGION_RAMP * index) * (index === 0 ? FIRST_LEVEL_EASE : 1) * (isTutorial ? TUTORIAL_EASE : 1) *
+    (LEVEL_TUNING[id - 1] ?? 1) * 100
   ) / 100;
   const enemyTier = Math.max(1, Math.round((enemyScale - 1) / 0.1) + 1);
   const gridSize = region.id < 2 ? 4 : 5;
@@ -200,8 +204,8 @@ export const getLevel = (levelId: number): LevelDef => {
     planningPhaseTime: 30,
     aiDifficulty: isTutorial || id <= 6 ? 'easy' : id <= 35 ? 'medium' : 'hard',
     resourceHexCount: gridSize === 4 ? 3 : 4,
-    castleHealth: gridSize === 4 ? 30 : 36,
-    startingGold: 25,
+    castleHealth: gridSize === 4 ? 45 : 54,
+    startingGold: 30,
     aiIncomeBonus: isTutorial ? -2 : Math.floor((id - 1) / 25),
     maxRounds,
     themeName: region.theme,

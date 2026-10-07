@@ -68,8 +68,8 @@ export type Ability =
   | 'rapidMovement'
   | 'stealth'      // the units it attacks can't strike back
   | 'flying'       // every passable hex costs 1 to enter, and it flies over water and mountains
-  | 'regenerate'   // heals 1 at the end of its side's turn
-  | 'armored'      // takes 1 less damage in every fight
+  | 'regenerate'   // heals 2 at the end of its side's turn
+  | 'armored'      // takes 2 less damage in every fight
   | 'siege'        // deals double damage to castles
   | 'berserk'      // attacks 50% harder at half health or less
   | 'undead'       // healed rather than hurt by cursed ground

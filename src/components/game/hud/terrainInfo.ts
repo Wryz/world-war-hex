@@ -11,11 +11,11 @@ export const TERRAIN_SHORT_EFFECTS: Record<TerrainType, string> = {
   hills: 'High ground, 2 move',
   swamp: 'Low ground, 2 move',
   snow: 'High ground, 3 move',
-  spring: 'Heals 2 per turn',
-  lava: 'Low, -2 HP per turn',
+  spring: 'Heals 4 per turn',
+  lava: 'Low, -4 HP per turn',
   ice: 'Low ground, 2 move',
   ruins: '-25% dmg, blocks arrows',
-  cursed: '-1 HP per turn (undead heal)'
+  cursed: '-2 HP per turn (undead heal)'
 };
 
 // Order terrain types are listed in the terrain guide

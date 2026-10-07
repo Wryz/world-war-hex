@@ -114,7 +114,7 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
     posture: 'advance',
     caution: 0.8,
     pushAfterRound: 25,
-    pushUnitAdvantage: 3,
+    pushUnitAdvantage: 2,
     minNetIncome: 3
   },
   archerHill: {
@@ -124,7 +124,7 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
     anchor: 'highGround',
     caution: 1,
     pushAfterRound: 30,
-    pushUnitAdvantage: 5,
+    pushUnitAdvantage: 3,
     minNetIncome: 2
   },
   knightRush: {
@@ -133,7 +133,7 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
     posture: 'raid',
     caution: 0.5,
     pushAfterRound: 15,
-    pushUnitAdvantage: 2,
+    pushUnitAdvantage: 1,
     minNetIncome: 1
   },
   pikeWall: {
@@ -143,7 +143,7 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
     anchor: 'choke',
     caution: 0.9,
     pushAfterRound: 25,
-    pushUnitAdvantage: 4,
+    pushUnitAdvantage: 2,
     minNetIncome: 2
   },
   rogueRaid: {
@@ -152,7 +152,7 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
     posture: 'raid',
     caution: 0.6,
     pushAfterRound: 20,
-    pushUnitAdvantage: 3,
+    pushUnitAdvantage: 2,
     minNetIncome: 2
   },
   mageSupport: {
@@ -161,7 +161,7 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
     posture: 'advance',
     caution: 0.8,
     pushAfterRound: 18,
-    pushUnitAdvantage: 3,
+    pushUnitAdvantage: 2,
     minNetIncome: 2
   }
 };
@@ -409,7 +409,7 @@ const assessThreats = (state: GameState): ThreatAssessment => {
 
   // Base is under threat if strong enemy units are nearby or one could storm or besiege it
   const baseUnderThreat =
-    enemyStrengthNearBase > 5 || // Arbitrary threshold
+    enemyStrengthNearBase > 10 || // Arbitrary threshold
     enemyUnitsNearBase.length >= 2 ||
     castleRaiders.length > 0;
 

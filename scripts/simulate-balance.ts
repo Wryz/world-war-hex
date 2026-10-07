@@ -33,6 +33,9 @@ const shuffle = <T>(items: T[]) => {
 };
 
 // `strength` scales the enemy's troops relative to the level's own setting
+// Largest army either side fielded in the last battle played
+let peakArmy = 0;
+
 const playBattle = (levelId: number, strength = 1): GameState => {
   const level = getLevel(levelId);
   const { deck, levels: cardLevels } = expectedProgression(levelId);
@@ -53,7 +56,9 @@ const playBattle = (levelId: number, strength = 1): GameState => {
     guards
   });
 
+  peakArmy = 0;
   for (let step = 0; step < 500 && state.currentPhase !== 'gameOver'; step++) {
+    peakArmy = Math.max(peakArmy, state.players.player.units.length, state.players.ai.units.length);
     if (state.currentPhase === 'planning') {
       const side = state.activePlayer ?? 'player';
       // The model player plays at medium skill
@@ -89,16 +94,20 @@ if (tune) {
   process.exit(0);
 }
 
-console.log('level  region                 power  scale  win%  avgRounds  storm/destroy/time');
+console.log('level  region                 power  scale  win%  avgRounds  recruits  peakArmy  storm/destroy/time');
 for (const levelId of levels) {
   const level = getLevel(levelId);
   let wins = 0;
   let rounds = 0;
+  let recruits = 0;
+  let peak = 0;
   const reasons = { stormed: 0, destroyed: 0, timeout: 0 };
   for (let i = 0; i < battlesPerLevel; i++) {
     const result = playBattle(levelId);
     if (result.winner === 'player') wins++;
     rounds += result.turnNumber;
+    recruits += ((result.battleStats?.player.recruited ?? 0) + (result.battleStats?.ai.recruited ?? 0)) / 2;
+    peak += peakArmy;
     if (result.winReason) reasons[result.winReason]++;
   }
   console.log(
@@ -108,6 +117,8 @@ for (const levelId of levels) {
     level.enemyScale.toFixed(2).padStart(6),
     String(Math.round(wins / battlesPerLevel * 100)).padStart(5),
     (rounds / battlesPerLevel).toFixed(1).padStart(10),
+    (recruits / battlesPerLevel).toFixed(1).padStart(9),
+    (peak / battlesPerLevel).toFixed(1).padStart(9),
     `   ${reasons.stormed}/${reasons.destroyed}/${reasons.timeout}`
   );
 }
