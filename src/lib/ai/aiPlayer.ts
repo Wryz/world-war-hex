@@ -1,6 +1,7 @@
 import {
   GameState,
   Player,
+  PlayerType,
   Unit,
   UnitType,
   Hex,
@@ -9,20 +10,27 @@ import {
 } from '@/types/game';
 import {
   getHexDistance,
-  findHexByCoordinates,
   getHexesInRange
 } from '../game/hexUtils';
 import {
   UNITS,
   BASE_ATTACK_RANGE,
   TERRAIN_EFFECTS,
+  CAMP_INCOME,
+  FREE_UPKEEP_UNITS,
+  UPKEEP_PER_UNIT,
+  HEALER_HEAL_AMOUNT,
   addPendingMove,
   addPendingPurchase,
   getAttackRange,
-  getUnitAttackRange,
   getDeploymentHexes,
   getValidMoveTargets,
   getTerrainDistanceMap,
+  getCounterMultiplier,
+  getStrikePowerOnTerrain,
+  getIncome,
+  getKillBounty,
+  hasLineOfSight,
   findBaseHex
 } from '../game/gameState';
 
@@ -30,11 +38,13 @@ import {
  * AI difficulty settings affecting various strategic parameters
  */
 interface AIDifficultySettings {
-  attackAggressiveness: number; // 0-1, how aggressively to pursue attacks
+  attackAggressiveness: number; // 0-1, how readily units take risky fights
   defensePreference: number;   // 0-1, how much to prioritize defending base
   resourceFocus: number;       // 0-1, how much to focus on capturing resources
-  unitDiversityDesire: number; // 0-1, how much to diversify unit types
+  unitDiversityDesire: number; // 0-1, how closely recruiting follows counters to the enemy army
   retreatThreshold: number;    // 0-1, health % at which to retreat
+  // Chance that a unit settles for a decent move instead of the best one
+  sloppiness: number;
 }
 
 const DIFFICULTY_SETTINGS: Record<'easy' | 'medium' | 'hard', AIDifficultySettings> = {
@@ -43,31 +53,121 @@ const DIFFICULTY_SETTINGS: Record<'easy' | 'medium' | 'hard', AIDifficultySettin
     defensePreference: 0.7,
     resourceFocus: 0.4,
     unitDiversityDesire: 0.3,
-    retreatThreshold: 0.7
+    retreatThreshold: 0.7,
+    sloppiness: 0.35
   },
   medium: {
     attackAggressiveness: 0.5,
     defensePreference: 0.5,
     resourceFocus: 0.6,
     unitDiversityDesire: 0.6,
-    retreatThreshold: 0.5
+    retreatThreshold: 0.5,
+    sloppiness: 0.1
   },
   hard: {
     attackAggressiveness: 0.8,
     defensePreference: 0.4,
     resourceFocus: 0.7,
     unitDiversityDesire: 0.8,
-    retreatThreshold: 0.3
+    retreatThreshold: 0.3,
+    sloppiness: 0
   }
 };
 
+/**
+ * Doctrines: the overall strategy an AI army follows. The game always plays 'balanced'; the
+ * others exist so AI-vs-AI simulations can check that no single strategy beats all the rest.
+ */
+export type AIDoctrine = 'balanced' | 'archerHill' | 'knightRush' | 'pikeWall' | 'rogueRaid' | 'mageSupport';
+
+export const AI_DOCTRINES: AIDoctrine[] = ['balanced', 'archerHill', 'knightRush', 'pikeWall', 'rogueRaid', 'mageSupport'];
+
+interface DoctrineProfile {
+  // Relative share of each unit type in the army
+  mix: Partial<Record<UnitType, number>>;
+  // How strongly recruiting shifts towards counters of the enemy army (0 keeps to the mix)
+  counterBias: number;
+  // What units do when nothing more urgent is going on:
+  // advance on the enemy, hold strong ground on their own half, or raid the enemy's soft targets
+  posture: 'advance' | 'hold' | 'raid';
+  // Which ground 'hold' armies dig in on
+  anchor?: 'highGround' | 'choke';
+  // How much a unit cares about the damage it could take next turn, relative to damage it deals
+  caution: number;
+  // All-out attack on the enemy castle from this round, or with this many more units than the enemy
+  pushAfterRound: number;
+  pushUnitAdvantage: number;
+  // Stop recruiting once upkeep would cut net income below this (unless losing)
+  minNetIncome: number;
+}
+
+const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
+  balanced: {
+    mix: { infantry: 2, tank: 2, artillery: 2, helicopter: 1.5, rogue: 1, medic: 1 },
+    counterBias: 1,
+    posture: 'advance',
+    caution: 0.8,
+    pushAfterRound: 25,
+    pushUnitAdvantage: 3,
+    minNetIncome: 3
+  },
+  archerHill: {
+    mix: { artillery: 4, tank: 1.5, infantry: 1.5, helicopter: 0.5, rogue: 0.5, medic: 0.5 },
+    counterBias: 0.8,
+    posture: 'hold',
+    anchor: 'highGround',
+    caution: 1,
+    pushAfterRound: 30,
+    pushUnitAdvantage: 5,
+    minNetIncome: 2
+  },
+  knightRush: {
+    mix: { helicopter: 4, infantry: 1.5, tank: 0.5, artillery: 0.5, rogue: 0.5, medic: 0.5 },
+    counterBias: 0.8,
+    posture: 'raid',
+    caution: 0.5,
+    pushAfterRound: 15,
+    pushUnitAdvantage: 2,
+    minNetIncome: 1
+  },
+  pikeWall: {
+    mix: { tank: 3, infantry: 2.5, artillery: 1, helicopter: 0.5, rogue: 0.5, medic: 0.5 },
+    counterBias: 0.8,
+    posture: 'hold',
+    anchor: 'choke',
+    caution: 0.9,
+    pushAfterRound: 25,
+    pushUnitAdvantage: 4,
+    minNetIncome: 2
+  },
+  rogueRaid: {
+    mix: { rogue: 4, helicopter: 1.5, infantry: 1, tank: 0.5, artillery: 0.5, medic: 0.5 },
+    counterBias: 0.8,
+    posture: 'raid',
+    caution: 0.6,
+    pushAfterRound: 20,
+    pushUnitAdvantage: 3,
+    minNetIncome: 2
+  },
+  mageSupport: {
+    mix: { medic: 3, infantry: 3, tank: 0.5, artillery: 0.5, helicopter: 0.5, rogue: 0.5 },
+    counterBias: 0.8,
+    posture: 'advance',
+    caution: 0.8,
+    pushAfterRound: 18,
+    pushUnitAdvantage: 3,
+    minNetIncome: 2
+  }
+};
+
+export interface AIPlanOptions {
+  // Which side to plan for (the game only ever plans for 'ai'; simulations may use either)
+  side?: PlayerType;
+  doctrine?: AIDoctrine;
+}
+
 // Unit types the AI recruits (the same ones offered to the player in the barracks)
 const RECRUITABLE_TYPES: UnitType[] = ['infantry', 'artillery', 'helicopter', 'tank', 'rogue', 'medic'];
-
-// The AI goes on the offensive once it has this many more units than the player...
-const PUSH_UNIT_ADVANTAGE = 3;
-// ...or once the game reaches this round
-const PUSH_AFTER_ROUND = 25;
 
 // Most units the AI recruits in a single turn
 const MAX_PURCHASES_PER_TURN = 3;
@@ -80,123 +180,205 @@ const MAX_SPRING_DETOUR_TURNS = 2;
 // While pushing, only badly wounded units (below this share of their health) stop to heal
 const PUSH_HEAL_THRESHOLD = 0.5;
 
+// Armies that dig in hold ground (and go for mines and camps) up to this many hexes of walking
+// past the middle of the map, ideally around this share of the way from the enemy castle to theirs
+const HOLD_REACH = 3;
+const HOLD_LINE = 0.5;
+
+// How much (in gold) a turn of progress towards a unit's goal is worth, by kind of goal
+const GOAL_WEIGHT = { urgent: 6, objective: 4, march: 3, station: 2.5 } as const;
+
 const getDifficultySettings = (state: GameState): AIDifficultySettings =>
   DIFFICULTY_SETTINGS[state.settings?.aiDifficulty ?? 'medium'] ?? DIFFICULTY_SETTINGS.medium;
 
-/**
- * Plan the AI's turn: queue a purchase and moves for its units.
- * Returns the game state with the AI's pending purchases and moves added.
- */
-export const planAITurn = (state: GameState): GameState => {
-  const settings = getDifficultySettings(state);
-  const playerBase = findBaseHex(state, 'player');
-  const aiBase = findBaseHex(state, 'ai');
+const key = (c: HexCoordinates) => `${c.q},${c.r}`;
+const coordsMatch = (a: HexCoordinates, b: HexCoordinates) => a.q === b.q && a.r === b.r;
 
-  if (!aiBase || !playerBase) return state;
+// ---------------------------------------------------------------------------
+// Planning for either side
+// ---------------------------------------------------------------------------
 
-  // Analyze the current game state
-  const threatAssessment = assessThreats(state, state.players.ai);
-  const resourceOpportunities = findResourceOpportunities(state);
-  const campAssignments = assignCampCapturers(state);
-  // Camps nobody is on the way to yet: worth recruiting a fast unit for
-  const campsWithoutCapturer = { count: findCampTargets(state).length - campAssignments.size };
+const flipSide = <T extends PlayerType | undefined>(side: T): T =>
+  (side === 'player' ? 'ai' : side === 'ai' ? 'player' : side) as T;
 
-  // Move existing units first: hexes next to the castle that they leave can then take recruits
-  let updatedState = state;
-  for (const unit of state.players.ai.units) {
-    if (unit.hasMoved) continue;
+// The same game seen from the other side: players, unit owners, castles and camps swap sides,
+// so the planner (which always plays 'ai') can plan for the player's side in simulations
+const mirrorSides = (state: GameState): GameState => {
+  const flipUnit = (unit: Unit): Unit => ({ ...unit, owner: flipSide(unit.owner) });
+  const flipPlayer = (player: Player): Player => ({
+    ...player,
+    type: flipSide(player.type),
+    units: player.units.map(flipUnit)
+  });
+  const players = { player: flipPlayer(state.players.ai), ai: flipPlayer(state.players.player) };
+  const unitsById = new Map([...players.player.units, ...players.ai.units].map(unit => [unit.id, unit]));
 
-    const target = decideUnitMove(
-      updatedState,
-      unit,
-      settings,
-      playerBase,
-      aiBase,
-      threatAssessment,
-      resourceOpportunities,
-      campAssignments.get(unit.id)
-    );
-
-    if (target) {
-      updatedState = addPendingMove(updatedState, unit.id, state.players.ai.id, target);
-    }
-  }
-
-  // Then spend gold on reinforcements - several per turn when the treasury allows
-  for (let i = 0; i < MAX_PURCHASES_PER_TURN; i++) {
-    const purchase = decidePurchase(
-      updatedState,
-      updatedState.players.ai,
-      settings,
-      threatAssessment,
-      resourceOpportunities,
-      campsWithoutCapturer
-    );
-    if (!purchase) break;
-    
-    const afterPurchase = addPendingPurchase(
-      updatedState,
-      state.players.ai.id,
-      purchase.unitType,
-      purchase.position
-    );
-    if (afterPurchase === updatedState) break;
-    updatedState = afterPurchase;
-  }
-  
-  return updatedState;
+  return {
+    ...state,
+    players,
+    activePlayer: flipSide(state.activePlayer),
+    winner: flipSide(state.winner),
+    hexGrid: state.hexGrid.map(hex => ({
+      ...hex,
+      owner: flipSide(hex.owner),
+      unit: hex.unit && unitsById.get(hex.unit.id)
+    }))
+  };
 };
 
 /**
- * Assess threats to the AI's units and base
+ * Plan the AI's turn: queue moves for its units, then purchases.
+ * Returns the game state with the side's pending purchases and moves added.
+ * The game calls this with no options (the 'ai' side, balanced doctrine).
+ */
+export const planAITurn = (state: GameState, options: AIPlanOptions = {}): GameState => {
+  const doctrine = options.doctrine ?? 'balanced';
+  if ((options.side ?? 'ai') === 'ai') return planTurn(state, doctrine);
+
+  // Plan the player's side by swapping sides, then carry its orders and spent gold back over
+  const planned = planTurn(mirrorSides(state), doctrine);
+  return {
+    ...state,
+    pendingMoves: planned.pendingMoves,
+    pendingPurchases: planned.pendingPurchases,
+    players: {
+      ...state.players,
+      player: { ...state.players.player, points: planned.players.ai.points }
+    }
+  };
+};
+
+// ---------------------------------------------------------------------------
+// The planner (always plays the 'ai' side)
+// ---------------------------------------------------------------------------
+
+interface Planner {
+  // The state with this turn's orders queued so far
+  state: GameState;
+  doctrine: AIDoctrine;
+  profile: DoctrineProfile;
+  settings: AIDifficultySettings;
+  hexes: Map<string, Hex>;
+  myBase: Hex;
+  enemyBase: Hex;
+  enemies: Unit[];
+  threat: ThreatAssessment;
+  isPushing: boolean;
+  // Expected damage on enemy units from the orders given so far this turn
+  plannedDamage: Map<string, number>;
+  // Where each of the AI's units will stand once its orders are carried out
+  destinations: Map<string, HexCoordinates>;
+  // Camps and gold mines units have been sent to take
+  objectives: Map<string, Hex>;
+  anchors: Map<string, HexCoordinates>;
+  // Units sent to stop enemies raiding the castle, and the raider each one is after
+  interceptors: Map<string, Unit>;
+}
+
+const planTurn = (state: GameState, doctrine: AIDoctrine): GameState => {
+  const enemyBase = findBaseHex(state, 'player');
+  const myBase = findBaseHex(state, 'ai');
+  if (!myBase || !enemyBase) return state;
+
+  const profile = DOCTRINES[doctrine];
+  const planner: Planner = {
+    state,
+    doctrine,
+    profile,
+    settings: getDifficultySettings(state),
+    hexes: new Map(state.hexGrid.map(hex => [key(hex.coordinates), hex])),
+    myBase,
+    enemyBase,
+    enemies: state.players.player.units,
+    threat: assessThreats(state),
+    isPushing: false,
+    plannedDamage: new Map(),
+    destinations: new Map(state.players.ai.units.map(unit => [unit.id, unit.position])),
+    objectives: new Map(),
+    anchors: new Map(),
+    interceptors: new Map()
+  };
+  planner.isPushing = isPushing(planner);
+  planner.interceptors = assignInterceptors(planner);
+  planner.objectives = assignObjectives(planner);
+  if (profile.posture === 'hold' && !planner.isPushing) planner.anchors = assignAnchors(planner);
+
+  // Camps nobody is on the way to yet: worth recruiting a fast unit for
+  const takenCamps = [...planner.objectives.values()].filter(hex => hex.isCamp).length;
+  const campsWithoutCapturer = { count: findCampTargets(state).length - takenCamps };
+
+  // Move existing units first (hexes next to the castle they leave can then take recruits).
+  // Archers and Rogues pick their shots first, Mages last so they know where their friends will be.
+  const moveOrder: UnitType[] = ['artillery', 'rogue', 'helicopter', 'tank', 'infantry', 'medic'];
+  const units = [...state.players.ai.units]
+    .filter(unit => !unit.hasMoved)
+    .sort((a, b) => moveOrder.indexOf(a.type) - moveOrder.indexOf(b.type));
+
+  // Fresh recruits can't move but still strike whatever is in reach
+  for (const unit of state.players.ai.units) {
+    if (unit.hasMoved) recordPlannedAttack(planner, unit, unit.position);
+  }
+  for (const unit of units) {
+    const target = decideUnitMove(planner, unit);
+    const next = target ? addPendingMove(planner.state, unit.id, state.players.ai.id, target) : planner.state;
+    if (target && next !== planner.state) {
+      planner.state = next;
+      planner.destinations.set(unit.id, target);
+    }
+    recordPlannedAttack(planner, unit, planner.destinations.get(unit.id)!);
+  }
+
+  // Then spend gold on reinforcements - several per turn when the treasury and upkeep allow
+  for (let i = 0; i < MAX_PURCHASES_PER_TURN; i++) {
+    const purchase = decidePurchase(planner, campsWithoutCapturer);
+    if (!purchase) break;
+
+    const afterPurchase = addPendingPurchase(planner.state, state.players.ai.id, purchase.unitType, purchase.position);
+    if (afterPurchase === planner.state) break;
+    planner.state = afterPurchase;
+  }
+
+  return planner.state;
+};
+
+// The AI goes all in on the enemy castle once the game drags on, or when it clearly has the bigger army
+const isPushing = (planner: Planner): boolean => {
+  const { state, profile } = planner;
+  const mine = state.players.ai.units;
+  const theirs = state.players.player.units;
+  return state.turnNumber >= profile.pushAfterRound ||
+    (mine.length >= theirs.length + profile.pushUnitAdvantage && armyValue(mine) >= armyValue(theirs) * 1.3);
+};
+
+// Gold value of an army, counting wounded units at their remaining health
+const armyValue = (units: Unit[]) =>
+  units.reduce((sum, unit) => sum + unit.cost * unit.lifespan / unit.maxLifespan, 0);
+
+// ---------------------------------------------------------------------------
+// Threats
+// ---------------------------------------------------------------------------
+
+/**
+ * Threats to the AI's base
  */
 interface ThreatAssessment {
   baseUnderThreat: boolean;
-  threatenedUnits: Array<{unit: Unit, threatLevel: number}>;
   enemyStrengthNearBase: number;
   // Enemy units that could walk onto the castle (and win) on their next turn,
   // or are already close enough to lay siege to it
   castleRaiders: Unit[];
 }
 
-const assessThreats = (state: GameState, aiPlayer: Player): ThreatAssessment => {
+const assessThreats = (state: GameState): ThreatAssessment => {
   const aiBase = findBaseHex(state, 'ai');
-  if (!aiBase) {
-    return {
-      baseUnderThreat: false,
-      threatenedUnits: [],
-      enemyStrengthNearBase: 0,
-      castleRaiders: []
-    };
-  }
+  if (!aiBase) return { baseUnderThreat: false, enemyStrengthNearBase: 0, castleRaiders: [] };
 
   // Check for enemies near the base
   const baseProximityRange = 3; // Consider threats within 3 hexes of base
-  const hexesNearBase = getHexesInRange(state.hexGrid, aiBase.coordinates, baseProximityRange);
-
-  const enemyUnitsNearBase = hexesNearBase
+  const enemyUnitsNearBase = getHexesInRange(state.hexGrid, aiBase.coordinates, baseProximityRange)
     .filter(hex => hex.unit && hex.unit.owner === 'player')
     .map(hex => hex.unit as Unit);
-
-  const enemyStrengthNearBase = enemyUnitsNearBase.reduce(
-    (sum, unit) => sum + unit.attackPower,
-    0
-  );
-
-  // Check for AI units under immediate threat: enemies that can already strike them,
-  // including archers shooting from a distance
-  const threatenedUnits: Array<{unit: Unit, threatLevel: number}> = [];
-
-  for (const aiUnit of aiPlayer.units) {
-    const enemyStrength = enemyStrengthAt(state, aiUnit.position);
-    if (enemyStrength > 0) {
-      // Threat level is the damage the unit could take (after cover) relative to its health
-      threatenedUnits.push({
-        unit: aiUnit,
-        threatLevel: enemyStrength * coverMultiplier(state, aiUnit.position) / aiUnit.lifespan
-      });
-    }
-  }
+  const enemyStrengthNearBase = enemyUnitsNearBase.reduce((sum, unit) => sum + unit.attackPower, 0);
 
   const castleRaiders = state.players.player.units.filter(enemy =>
     walkingDistance(state, enemy.position, aiBase.coordinates) <= enemy.movementRange ||
@@ -209,61 +391,91 @@ const assessThreats = (state: GameState, aiPlayer: Player): ThreatAssessment => 
     enemyUnitsNearBase.length >= 2 ||
     castleRaiders.length > 0;
 
-  return {
-    baseUnderThreat,
-    threatenedUnits,
-    enemyStrengthNearBase,
-    castleRaiders
-  };
+  return { baseUnderThreat, enemyStrengthNearBase, castleRaiders };
 };
 
-// Player units that could strike a hex without moving, given their reach where they stand
-// (archers on hills reach further)
-const enemiesInReachOf = (state: GameState, position: HexCoordinates): Unit[] =>
-  state.players.player.units.filter(enemy =>
-    getHexDistance(enemy.position, position) <= getUnitAttackRange(state, enemy)
-  );
-
-const enemyStrengthAt = (state: GameState, position: HexCoordinates): number =>
-  enemiesInReachOf(state, position).reduce((sum, enemy) => sum + enemy.attackPower, 0);
-
-// Damage multiplier for a unit standing on a hex (forest cover reduces damage)
-const coverMultiplier = (state: GameState, position: HexCoordinates): number => {
-  const hex = findHexByCoordinates(state.hexGrid, position);
-  return hex ? TERRAIN_EFFECTS[hex.terrain].damageTakenMultiplier : 1;
-};
+const terrainAt = (planner: Planner, position: HexCoordinates): TerrainType =>
+  planner.hexes.get(key(position))?.terrain ?? 'plain';
 
 const isRanged = (unit: Unit) => getAttackRange(unit) > 1;
 
-// Whether a hex is next to an enemy unit, where archers would be caught in melee
-const isAdjacentToEnemy = (state: GameState, position: HexCoordinates): boolean =>
-  state.players.player.units.some(enemy => getHexDistance(enemy.position, position) === 1);
-
-const terrainAt = (state: GameState, position: HexCoordinates): TerrainType =>
-  findHexByCoordinates(state.hexGrid, position)?.terrain ?? 'plain';
-
-// A swamp hex the enemy can already strike: units there take extra damage
-const isExposedSwamp = (state: GameState, position: HexCoordinates): boolean =>
-  TERRAIN_EFFECTS[terrainAt(state, position)].damageTakenMultiplier > 1 &&
-  enemiesInReachOf(state, position).length > 0;
-
-// How good a hex is to fight from for a unit (lower is better): high ground and forest cover
-// help (Pikemen doubly so in forest), being bogged down in a swamp within enemy reach hurts
-const terrainPenalty = (state: GameState, unit: Unit, position: HexCoordinates): number => {
-  const terrain = terrainAt(state, position);
-  const effect = TERRAIN_EFFECTS[terrain];
-  let penalty = ((effect.damageTakenMultiplier - 1) - ((effect.damageDealtMultiplier ?? 1) - 1)) * 4;
-  if (unit.abilities.includes('terrainBonus') && terrain === 'forest') penalty -= 1;
-  if (isExposedSwamp(state, position)) penalty += 3;
-  return penalty;
+// Whether `attacker` standing at `from` could strike a target standing at `at`
+const canStrikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, at: HexCoordinates): boolean => {
+  const distance = getHexDistance(from, at);
+  if (distance > getAttackRange(attacker, terrainAt(planner, from))) return false;
+  if (distance <= 1 || attacker.abilities.includes('magic')) return true;
+  return hasLineOfSight(planner.state.hexGrid, from, at);
 };
 
-// Whether any player unit could walk onto a hex on its next turn
-const enemyCanReach = (state: GameState, position: HexCoordinates): boolean =>
-  state.players.player.units.some(enemy =>
+const strikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, target: Unit, at: HexCoordinates) =>
+  getStrikePowerOnTerrain(attacker, terrainAt(planner, from), target, terrainAt(planner, at), getHexDistance(from, at));
+
+const remainingHealth = (planner: Planner, enemy: Unit) =>
+  enemy.lifespan - (planner.plannedDamage.get(enemy.id) ?? 0);
+
+// Enemy units still standing once this turn's planned attacks land
+const liveEnemies = (planner: Planner) => planner.enemies.filter(enemy => remainingHealth(planner, enemy) > 0);
+
+/**
+ * Damage a unit standing at `position` could take on the enemy's next turn: from enemies that can
+ * already strike that hex, and (a little less surely) from enemies that could walk into reach,
+ * who would then usually be fighting from ordinary ground
+ */
+const dangerAt = (planner: Planner, unit: Unit, position: HexCoordinates): number => {
+  const target = { ...unit, position };
+  let danger = 0;
+  for (const enemy of liveEnemies(planner)) {
+    const distance = getHexDistance(enemy.position, position);
+    if (canStrikeFrom(planner, enemy, enemy.position, position)) {
+      danger += strikeFrom(planner, enemy, enemy.position, target, position);
+    } else if (distance <= enemy.movementRange + getAttackRange(enemy)) {
+      danger += 0.75 * getStrikePowerOnTerrain(enemy, 'plain', target, terrainAt(planner, position), getAttackRange(enemy));
+    }
+  }
+  return danger;
+};
+
+// Gold value of `damage` points of health of a unit, counting the bounty when it dies
+const healthValue = (unit: Unit, damage: number, health = unit.lifespan) => {
+  const lost = Math.min(damage, health);
+  return lost / unit.maxLifespan * unit.cost + (damage >= health ? getKillBounty(unit) : 0);
+};
+
+// Whether any enemy unit could walk onto a hex on its next turn
+const enemyCanReach = (planner: Planner, position: HexCoordinates): boolean =>
+  planner.enemies.some(enemy =>
     getHexDistance(enemy.position, position) === 1 ||
-    walkingDistance(state, enemy.position, position) <= enemy.movementRange
+    walkingDistance(planner.state, enemy.position, position) <= enemy.movementRange
   );
+
+// ---------------------------------------------------------------------------
+// Objectives: camps, mines, springs, strong ground, raid targets
+// ---------------------------------------------------------------------------
+
+/**
+ * Meet each enemy that could storm or besiege the castle with the nearest units that can strike it,
+ * enough of them to take it down, while the rest of the army keeps to its own tasks
+ */
+const assignInterceptors = (planner: Planner): Map<string, Unit> => {
+  const { state, myBase, threat } = planner;
+  const interceptors = new Map<string, Unit>();
+  const raiders = [...threat.castleRaiders].sort((a, b) =>
+    getHexDistance(a.position, myBase.coordinates) - getHexDistance(b.position, myBase.coordinates));
+
+  for (const raider of raiders) {
+    const responders = state.players.ai.units
+      .filter(unit => !unit.hasMoved && !interceptors.has(unit.id) &&
+        getHexDistance(unit.position, raider.position) <= unit.movementRange + getAttackRange(unit) + 1)
+      .sort((a, b) => getHexDistance(a.position, raider.position) - getHexDistance(b.position, raider.position));
+    let expected = 0;
+    for (const unit of responders) {
+      if (expected >= raider.lifespan * 1.5) break;
+      interceptors.set(unit.id, raider);
+      expected += getStrikePowerOnTerrain(unit, 'plain', raider, terrainAt(planner, raider.position), getAttackRange(unit));
+    }
+  }
+  return interceptors;
+};
 
 /**
  * Camps the AI doesn't hold: neutral ones, and its own camps the player has seized
@@ -272,46 +484,64 @@ const findCampTargets = (state: GameState): Hex[] =>
   state.hexGrid.filter(hex => hex.isCamp && hex.owner !== 'ai');
 
 /**
- * Send the nearest free unit (in turns of walking) to each camp the AI doesn't hold.
- * Units guarding gold mines or camps stay where they are.
+ * Send units to take camps the AI doesn't hold and gold mines it doesn't hold (free ones, or ones
+ * an enemy unit stands on, which then has to be beaten off). Each objective gets the unit that can
+ * reach it soonest; armies that dig in only go after the ones on their side of the middle.
+ * Units already guarding a mine or camp, and Mages, stay where they are needed.
  */
-const assignCampCapturers = (state: GameState): Map<string, Hex> => {
-  const assignments = new Map<string, Hex>();
+const assignObjectives = (planner: Planner): Map<string, Hex> => {
+  const { state, profile, settings, myBase, enemyBase } = planner;
+  const onOurSide = (hex: Hex) =>
+    walkingDistance(state, hex.coordinates, myBase.coordinates) <= walkingDistance(state, hex.coordinates, enemyBase.coordinates) + HOLD_REACH;
 
-  for (const camp of findCampTargets(state)) {
-    let best: Unit | undefined;
-    let bestTurns = Infinity;
-    for (const unit of state.players.ai.units) {
-      if (unit.hasMoved || assignments.has(unit.id)) continue;
-      const hex = findHexByCoordinates(state.hexGrid, unit.position);
-      if (hex?.isResourceHex || hex?.isCamp) continue;
-
-      const turns = walkingDistance(state, unit.position, camp.coordinates) / unit.movementRange;
-      if (turns < bestTurns) {
-        bestTurns = turns;
-        best = unit;
-      }
-    }
-    if (best) assignments.set(best.id, camp);
+  const objectives: { hex: Hex; value: number }[] = [];
+  for (const hex of state.hexGrid) {
+    let value: number;
+    if (hex.isCamp && hex.owner !== 'ai') value = CAMP_INCOME * 3 + 4;
+    else if (hex.isResourceHex && hex.unit?.owner !== 'ai') value = (hex.resourceValue ?? 0) * 3 * (0.5 + settings.resourceFocus);
+    else continue;
+    if (profile.posture === 'hold' && !onOurSide(hex)) continue;
+    if (hex.unit?.owner === 'player') value *= 0.7;
+    objectives.push({ hex, value });
   }
 
+  const units = state.players.ai.units.filter(unit => {
+    const hex = planner.hexes.get(key(unit.position));
+    return !unit.hasMoved && !unit.abilities.includes('healing') && !planner.interceptors.has(unit.id) &&
+      !(hex?.isResourceHex) && !(hex?.isCamp && hex.owner === 'ai');
+  });
+
+  const pairs = objectives.flatMap(({ hex, value }) => units.map(unit => ({
+    hex,
+    unit,
+    score: value - 2 * walkingDistance(state, unit.position, hex.coordinates) / unit.movementRange
+  }))).filter(pair => pair.score > 0).sort((a, b) => b.score - a.score);
+
+  const assignments = new Map<string, Hex>();
+  const taken = new Set<string>();
+  for (const { hex, unit } of pairs) {
+    if (assignments.has(unit.id) || taken.has(key(hex.coordinates))) continue;
+    assignments.set(unit.id, hex);
+    taken.add(key(hex.coordinates));
+  }
   return assignments;
 };
 
 /**
  * A free healing spring within a short walk of the unit where it wouldn't be cut down, if any
  */
-const findNearbySpring = (state: GameState, unit: Unit): Hex | undefined => {
-  const reserved = state.pendingMoves.map(m => m.to);
+const findNearbySpring = (planner: Planner, unit: Unit): Hex | undefined => {
+  const reserved = planner.state.pendingMoves.map(m => m.to);
   let best: Hex | undefined;
   let bestTurns = MAX_SPRING_DETOUR_TURNS;
 
-  for (const hex of state.hexGrid) {
-    if (!TERRAIN_EFFECTS[hex.terrain].healPerTurn || hex.unit) continue;
+  for (const hex of planner.state.hexGrid) {
+    if (!TERRAIN_EFFECTS[hex.terrain].healPerTurn) continue;
+    if (hex.unit && hex.unit.id !== unit.id) continue;
     if (reserved.some(c => coordsMatch(c, hex.coordinates))) continue;
-    if (enemyStrengthAt(state, hex.coordinates) * coverMultiplier(state, hex.coordinates) >= unit.lifespan) continue;
+    if (dangerAt(planner, unit, hex.coordinates) >= unit.lifespan) continue;
 
-    const turns = walkingDistance(state, unit.position, hex.coordinates) / unit.movementRange;
+    const turns = walkingDistance(planner.state, unit.position, hex.coordinates) / unit.movementRange;
     if (turns <= bestTurns) {
       bestTurns = turns;
       best = hex;
@@ -322,98 +552,421 @@ const findNearbySpring = (state: GameState, unit: Unit): Hex | undefined => {
 };
 
 /**
- * Find resource hexes that the AI could capture
+ * Strong ground for armies that dig in around the middle of the map: high ground for archers, or
+ * forests and narrow passes on the road between the castles for pike walls, preferably next to the
+ * gold mines and camps it protects. Each unit gets its own spot, the best ones going to the units
+ * that use them best.
  */
-const findResourceOpportunities = (state: GameState): Hex[] =>
-  state.hexGrid.filter(hex => hex.isResourceHex && !hex.unit);
+const assignAnchors = (planner: Planner): Map<string, HexCoordinates> => {
+  const { state, profile, myBase, enemyBase } = planner;
+  const castleDistance = walkingDistance(state, myBase.coordinates, enemyBase.coordinates);
+  const onOurSide = (hex: Hex) =>
+    walkingDistance(state, hex.coordinates, myBase.coordinates) <= walkingDistance(state, hex.coordinates, enemyBase.coordinates) + HOLD_REACH;
+  // Gold mines and camps on our side: strong ground next to them protects the economy
+  const holdings = state.hexGrid.filter(hex => (hex.isResourceHex || hex.isCamp) && onOurSide(hex));
+
+  const scored = state.hexGrid
+    .filter(hex => TERRAIN_EFFECTS[hex.terrain].moveCost !== null && !hex.isBase && !hex.isResourceHex)
+    .map(hex => {
+      const toMine = walkingDistance(state, hex.coordinates, myBase.coordinates);
+      const toTheirs = walkingDistance(state, hex.coordinates, enemyBase.coordinates);
+      const elevation = TERRAIN_EFFECTS[hex.terrain].elevation;
+      const isForest = hex.terrain === 'forest';
+      const guards = holdings.filter(other => getHexDistance(other.coordinates, hex.coordinates) <= 2).length * 2.5;
+      let score: number;
+      if (profile.anchor === 'highGround') {
+        // High ground around the middle of the map
+        if (!onOurSide(hex) || toMine < 2) return null;
+        score = (elevation >= 2 ? 4 : 0) + (isForest ? 2 : 0) + (elevation < 1 ? -4 : 0) + guards -
+          0.6 * Math.abs(toTheirs - castleDistance * HOLD_LINE);
+      } else {
+        // On or near the road between the castles around the middle, in woods, on hills or
+        // where the way narrows
+        const offRoad = toMine + toTheirs - castleDistance;
+        if (offRoad > 3 || !onOurSide(hex) || toMine < 2) return null;
+        const openNeighbors = getHexesInRange(state.hexGrid, hex.coordinates, 1)
+          .filter(other => other !== hex && TERRAIN_EFFECTS[other.terrain].moveCost !== null).length;
+        score = (isForest ? 4 : 0) + (elevation >= 2 ? 3 : 0) + (elevation < 1 ? -4 : 0) + guards +
+          (6 - openNeighbors) * 0.6 - offRoad * 0.8 - 0.4 * Math.abs(toTheirs - castleDistance * HOLD_LINE);
+      }
+      return { hex, score };
+    })
+    .filter((entry): entry is { hex: Hex; score: number } => !!entry)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 24);
+
+  // Archers get first pick of the high ground, then everyone else
+  const units = [...state.players.ai.units]
+    .filter(unit => !unit.hasMoved && !planner.objectives.has(unit.id))
+    .sort((a, b) => Number(isRanged(b)) - Number(isRanged(a)));
+
+  const taken = new Set<string>();
+  const anchors = new Map<string, HexCoordinates>();
+  for (const unit of units) {
+    let best: Hex | undefined;
+    let bestValue = -Infinity;
+    for (const { hex, score } of scored) {
+      if (taken.has(key(hex.coordinates))) continue;
+      const fit = isRanged(unit) || profile.anchor === 'choke' ? score : score * 0.5;
+      const value = fit - walkingDistance(state, unit.position, hex.coordinates) / unit.movementRange;
+      if (value > bestValue) {
+        bestValue = value;
+        best = hex;
+      }
+    }
+    if (best) {
+      taken.add(key(best.coordinates));
+      anchors.set(unit.id, best.coordinates);
+    }
+  }
+  return anchors;
+};
 
 /**
- * Decide which unit to purchase based on the current game state
+ * Where a raider should strike next: soft enemy units it is strong against (Archers, Mages,
+ * anyone holding a gold mine) away from their escorts, or gold mines it can take from the enemy
  */
-const decidePurchase = (
-  state: GameState,
-  aiPlayer: Player,
-  settings: AIDifficultySettings,
-  threatAssessment: ThreatAssessment,
-  resourceOpportunities: Hex[],
-  campsWithoutCapturer: { count: number }
-): { unitType: UnitType, position: HexCoordinates } | null => {
-  const affordableTypes = RECRUITABLE_TYPES.filter(type => UNITS[type].cost <= aiPlayer.points);
-  if (affordableTypes.length === 0) return null;
+const chooseRaidTarget = (planner: Planner, unit: Unit): HexCoordinates | null => {
+  const { state } = planner;
+  let best: HexCoordinates | null = null;
+  let bestValue = 0;
 
-  const canAfford = (type: UnitType) => affordableTypes.includes(type);
-  const cheapest = affordableTypes.reduce((a, b) => UNITS[a].cost <= UNITS[b].cost ? a : b);
+  const turnsTo = (position: HexCoordinates) => walkingDistance(state, unit.position, position) / unit.movementRange;
 
-  // Decide what unit type to purchase based on the situation
-  let desiredUnitType: UnitType;
-
-  if (threatAssessment.baseUnderThreat) {
-    // Under threat, prefer defensive units
-    desiredUnitType = canAfford('tank') ? 'tank' : cheapest;
-  } else if (campsWithoutCapturer.count > 0 && canAfford('helicopter')) {
-    // A camp nobody is heading for: Knights get there first
-    desiredUnitType = 'helicopter';
-    campsWithoutCapturer.count--;
-  } else if (resourceOpportunities.length > 0 && Math.random() < settings.resourceFocus) {
-    // Focus on capturing resources with fast units
-    desiredUnitType = canAfford('helicopter') ? 'helicopter' : cheapest;
-  } else if (Math.random() < settings.attackAggressiveness) {
-    // Aggressive attack mode - buy the hardest hitter available
-    desiredUnitType = affordableTypes.reduce((a, b) =>
-      UNITS[a].attackPower >= UNITS[b].attackPower ? a : b
-    );
-  } else {
-    // Balance the army composition - pick the least common unit type the AI can afford
-    const unitCounts = aiPlayer.units.reduce((counts, unit) => {
-      counts[unit.type] = (counts[unit.type] || 0) + 1;
-      return counts;
-    }, {} as Partial<Record<UnitType, number>>);
-
-    const sortedTypes = [...affordableTypes].sort(
-      (a, b) => (unitCounts[a] || 0) - (unitCounts[b] || 0)
-    );
-
-    desiredUnitType = Math.random() < settings.unitDiversityDesire
-      ? sortedTypes[0]
-      : affordableTypes[Math.floor(Math.random() * affordableTypes.length)];
+  for (const enemy of liveEnemies(planner)) {
+    const counter = getCounterMultiplier(unit.type, enemy.type);
+    const onMine = !!planner.hexes.get(key(enemy.position))?.isResourceHex;
+    // Escorts that hit this unit hard make the raid costly
+    const escort = planner.enemies
+      .filter(other => other.id !== enemy.id && getHexDistance(other.position, enemy.position) <= 2)
+      .reduce((sum, other) => sum + other.attackPower * getCounterMultiplier(other.type, unit.type), 0);
+    const value = enemy.cost * counter * (onMine ? 1.5 : 1) / (1 + escort / 4) - turnsTo(enemy.position) * 2;
+    if (value > bestValue) {
+      bestValue = value;
+      best = enemy.position;
+    }
   }
 
-  const position = chooseDeploymentHex(state, desiredUnitType, threatAssessment);
-  return position ? { unitType: desiredUnitType, position } : null;
+  for (const hex of state.hexGrid) {
+    if (!hex.isResourceHex || (hex.unit && hex.unit.owner === 'ai')) continue;
+    const value = (hex.resourceValue ?? 0) * 3 - turnsTo(hex.coordinates) * 2;
+    if (value > bestValue) {
+      bestValue = value;
+      best = hex.coordinates;
+    }
+  }
+
+  return best;
+};
+
+// Where a Mage should stand: just behind the friendly fighter closest to the enemy
+const chooseSupportPosition = (planner: Planner, mage: Unit): HexCoordinates | null => {
+  const front = planner.state.players.ai.units
+    .filter(unit => unit.id !== mage.id && !unit.abilities.includes('healing'))
+    .map(unit => ({ unit, position: planner.destinations.get(unit.id) ?? unit.position }))
+    .sort((a, b) => walkingDistance(planner.state, a.position, planner.enemyBase.coordinates) -
+      walkingDistance(planner.state, b.position, planner.enemyBase.coordinates))[0];
+  return front?.position ?? null;
+};
+
+// ---------------------------------------------------------------------------
+// Moving a unit
+// ---------------------------------------------------------------------------
+
+interface UnitGoal {
+  position: HexCoordinates | null;
+  // Gold value of each turn of progress towards it
+  weight: number;
+  // Extra value for staying where the unit is (holding a mine, a camp, a spring)
+  holdValue: number;
+  // Multiplier on how much the unit fears damage this move
+  caution: number;
+}
+
+/**
+ * What a unit is trying to do this turn, most urgent first: stop a raid on the castle, fall back
+ * when it can't survive, heal, take camps, hold mines, then its doctrine's posture.
+ */
+const chooseGoal = (planner: Planner, unit: Unit): UnitGoal => {
+  const { profile, settings, myBase, enemyBase } = planner;
+  const healthRatio = unit.lifespan / unit.maxLifespan;
+  const standingOn = planner.hexes.get(key(unit.position));
+  const goal = (position: HexCoordinates | null, weight: number, holdValue = 0, caution = profile.caution): UnitGoal =>
+    ({ position, weight, holdValue, caution });
+
+  // An enemy that could storm or besiege the castle is met by enough units to stop it
+  const raider = planner.interceptors.get(unit.id);
+  if (raider) return goal(raider.position, GOAL_WEIGHT.urgent, 0, profile.caution * 0.5);
+
+  // Wounded units under threat fall back
+  if (!planner.isPushing && healthRatio < settings.retreatThreshold && dangerAt(planner, unit, unit.position) > 0) {
+    const spring = findNearbySpring(planner, unit);
+    return goal(spring?.coordinates ?? myBase.coordinates, GOAL_WEIGHT.objective, 0, profile.caution * 2);
+  }
+
+  // Wounded units rest on a healing spring until they're back to full health,
+  // and detour to one if it's close by
+  const wantsToHeal = planner.isPushing ? healthRatio < PUSH_HEAL_THRESHOLD : unit.lifespan < unit.maxLifespan;
+  if (wantsToHeal && standingOn && TERRAIN_EFFECTS[standingOn.terrain].healPerTurn) {
+    return goal(unit.position, GOAL_WEIGHT.objective, healthValue(unit, HEALER_HEAL_AMOUNT) * 2);
+  }
+  if (wantsToHeal && unit.maxLifespan - unit.lifespan >= (planner.isPushing ? 1 : 2)) {
+    const spring = findNearbySpring(planner, unit);
+    if (spring) return goal(spring.coordinates, GOAL_WEIGHT.objective);
+  }
+
+  // Take (or retake) the camp or gold mine this unit was sent to
+  const objective = planner.objectives.get(unit.id);
+  if (objective) return goal(objective.coordinates, GOAL_WEIGHT.objective);
+
+  // Hold a camp while the enemy could otherwise walk in and take it next turn
+  if (standingOn?.isCamp && standingOn.owner === 'ai' && enemyCanReach(planner, unit.position)) {
+    return goal(unit.position, GOAL_WEIGHT.objective, CAMP_INCOME * 3);
+  }
+
+  // Hold gold mines until the all-out push
+  if (standingOn?.isResourceHex && !planner.isPushing) {
+    return goal(unit.position, GOAL_WEIGHT.objective, (standingOn.resourceValue ?? 0) * 3);
+  }
+
+  // Mages keep close behind the front line so they can heal it
+  if (unit.abilities.includes('healing')) {
+    const support = chooseSupportPosition(planner, unit);
+    if (support) return goal(support, GOAL_WEIGHT.station);
+  }
+
+  if (planner.isPushing) return goal(enemyBase.coordinates, GOAL_WEIGHT.march, 0, profile.caution * 0.6);
+
+  if (profile.posture === 'hold') {
+    const anchor = planner.anchors.get(unit.id);
+    if (anchor) return goal(anchor, GOAL_WEIGHT.station, 1);
+  }
+
+  if (profile.posture === 'raid') {
+    const target = chooseRaidTarget(planner, unit);
+    if (target) return goal(target, GOAL_WEIGHT.march);
+  }
+
+  return goal(enemyBase.coordinates, GOAL_WEIGHT.march);
+};
+
+/**
+ * Value of striking from a hex: the damage the unit's attack would do to the best target in reach
+ * (in gold, with a bonus for finishing a unit off), less what the target would strike back with.
+ * Returns the target too so the planner can count the damage as dealt.
+ */
+const attackValueFrom = (planner: Planner, unit: Unit, position: HexCoordinates): { value: number; target?: Unit; damage: number } => {
+  let best: { value: number; target?: Unit; damage: number } = { value: 0, damage: 0 };
+  const self = { ...unit, position };
+
+  for (const enemy of planner.enemies) {
+    const health = remainingHealth(planner, enemy);
+    if (health <= 0 || !canStrikeFrom(planner, unit, position, enemy.position)) continue;
+
+    const damage = strikeFrom(planner, unit, position, enemy, enemy.position);
+    let value = healthValue(enemy, damage, health);
+    // Removing a unit also removes the damage it would have done next turn
+    if (damage >= health) value += enemy.attackPower;
+
+    const strikesBack = !unit.abilities.includes('stealth') && canStrikeFrom(planner, enemy, enemy.position, position);
+    if (strikesBack) value -= healthValue(unit, strikeFrom(planner, enemy, enemy.position, self, position) * 0.7);
+
+    if (value > best.value) best = { value, target: enemy, damage };
+  }
+
+  return best;
+};
+
+// Count this unit's expected strike against the enemy it will most likely hit, so other units
+// pick other targets (or help finish this one) and don't fear an enemy that is about to fall
+const recordPlannedAttack = (planner: Planner, unit: Unit, position: HexCoordinates) => {
+  const { target, damage } = attackValueFrom(planner, unit, position);
+  if (target) planner.plannedDamage.set(target.id, (planner.plannedDamage.get(target.id) ?? 0) + Math.max(1, Math.round(damage)));
+};
+
+/**
+ * Decide where a single unit should move this turn (or null to hold position). Every reachable hex
+ * is scored on the fight it offers, the damage the unit could take there next turn, the ground
+ * (height, cover, line of sight are part of both), progress towards the unit's goal, and extras such
+ * as Mages' healing.
+ */
+const decideUnitMove = (planner: Planner, unit: Unit): HexCoordinates | null => {
+  const { state, settings, myBase } = planner;
+  const goal = chooseGoal(planner, unit);
+  const enemiesNear = planner.enemies.some(enemy => getHexDistance(enemy.position, unit.position) <= 8);
+  const startDistance = goal.position ? walkingDistance(state, unit.position, goal.position) : 0;
+
+  const score = (position: HexCoordinates): number => {
+    const isStay = coordsMatch(position, unit.position);
+    const hex = planner.hexes.get(key(position));
+    let value = 0;
+
+    if (enemiesNear) {
+      value += attackValueFrom(planner, unit, position).value * (0.6 + settings.attackAggressiveness * 0.8);
+      const danger = dangerAt(planner, unit, position);
+      value -= healthValue(unit, danger) * goal.caution;
+    }
+
+    if (goal.position) {
+      const progress = (startDistance - walkingDistance(state, position, goal.position)) / unit.movementRange;
+      value += progress * goal.weight;
+      if (coordsMatch(position, goal.position)) value += goal.weight * 0.5;
+    }
+    if (isStay) value += goal.holdValue;
+
+    // Mages heal the wounded friends they end up next to
+    if (unit.abilities.includes('healing')) {
+      for (const friend of state.players.ai.units) {
+        if (friend.id === unit.id) continue;
+        const at = planner.destinations.get(friend.id) ?? friend.position;
+        if (getHexDistance(at, position) !== 1) continue;
+        value += healthValue(friend, Math.min(HEALER_HEAL_AMOUNT, friend.maxLifespan - friend.lifespan)) + 0.3;
+      }
+    }
+
+    // Standing on the enemy castle wins the game; standing near it lays siege to it
+    if (coordsMatch(position, planner.enemyBase.coordinates)) value += 1000;
+    else if (getHexDistance(position, planner.enemyBase.coordinates) <= BASE_ATTACK_RANGE) {
+      value += unit.attackPower * (planner.isPushing ? 2 : 1);
+    }
+
+    // Recruits appear next to the castle, so don't park there unless defending it
+    if (getHexDistance(position, myBase.coordinates) === 1 && !planner.threat.baseUnderThreat) value -= 1.5;
+    // Gold mines pay whoever stands on them
+    if (hex?.isResourceHex && !planner.isPushing) value += (hex.resourceValue ?? 0);
+
+    return value + Math.random() * 0.05;
+  };
+
+  const options = [unit.position, ...getValidMoveTargets(state, unit)]
+    .map(position => ({ position, value: score(position) }))
+    .sort((a, b) => b.value - a.value);
+
+  // Easier AIs sometimes settle for a decent move rather than the best one
+  const pick = Math.random() < settings.sloppiness
+    ? options[Math.floor(Math.random() * Math.min(3, options.length))]
+    : options[0];
+
+  return coordsMatch(pick.position, unit.position) ? null : pick.position;
+};
+
+// ---------------------------------------------------------------------------
+// Recruiting
+// ---------------------------------------------------------------------------
+
+/**
+ * How well a unit type would do against the enemy's army: the damage bonus it gets against them,
+ * less the bonus they get against it (weighted by what each enemy unit is worth)
+ */
+const counterScore = (type: UnitType, enemies: Unit[]): number => {
+  const total = enemies.reduce((sum, enemy) => sum + enemy.cost, 0);
+  if (total === 0) return 0;
+  return enemies.reduce((sum, enemy) =>
+    sum + enemy.cost * ((getCounterMultiplier(type, enemy.type) - 1) - (getCounterMultiplier(enemy.type, type) - 1)), 0) / total;
+};
+
+/**
+ * Pick the type of the next recruit. The doctrine's mix, shifted towards counters of the enemy army
+ * (or of the units raiding the castle), sets the army the AI wants; it then recruits whichever type
+ * it is furthest short of. Returns a type even if the AI can't afford it yet, so it saves up rather
+ * than filling the army with whatever is cheapest.
+ */
+const chooseRecruitType = (planner: Planner, campsWithoutCapturer: { count: number }): UnitType => {
+  const { state, profile, settings, threat, enemies } = planner;
+  const canAfford = (type: UnitType) => UNITS[type].cost <= state.players.ai.points;
+
+  // A camp nobody is heading for: the doctrine's fastest unit gets there first
+  if (campsWithoutCapturer.count > 0 && !threat.baseUnderThreat) {
+    const fast = (['helicopter', 'rogue'] as UnitType[]).find(type => (profile.mix[type] ?? 0) > 0);
+    if (fast && canAfford(fast)) {
+      campsWithoutCapturer.count--;
+      return fast;
+    }
+  }
+
+  const against = threat.baseUnderThreat && threat.castleRaiders.length > 0 ? threat.castleRaiders : enemies;
+  const bias = profile.counterBias * (0.5 + settings.unitDiversityDesire) * (threat.baseUnderThreat ? 2 : 1);
+  const weights = RECRUITABLE_TYPES.map(type => {
+    const base = (profile.mix[type] ?? 0) + (threat.baseUnderThreat ? 0.5 : 0);
+    return { type, weight: base * Math.exp(bias * counterScore(type, against)) };
+  });
+  const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
+
+  // How far short of its share of the army each type is, counting recruits already queued
+  const counts = new Map<UnitType, number>();
+  for (const unit of state.players.ai.units) counts.set(unit.type, (counts.get(unit.type) ?? 0) + 1);
+  for (const purchase of state.pendingPurchases) counts.set(purchase.unitType, (counts.get(purchase.unitType) ?? 0) + 1);
+  const armySize = [...counts.values()].reduce((sum, n) => sum + n, 0) + 1;
+
+  // Under attack there is no time to save up: only what can be bought now counts
+  const pool = threat.baseUnderThreat ? weights.filter(w => canAfford(w.type)) : weights;
+  let best: UnitType = pool[0]?.type ?? 'infantry';
+  let bestShortfall = -Infinity;
+  for (const { type, weight } of pool) {
+    if (weight <= 0) continue;
+    const shortfall = weight / totalWeight * armySize - (counts.get(type) ?? 0) + Math.random() * 0.5;
+    if (shortfall > bestShortfall) {
+      bestShortfall = shortfall;
+      best = type;
+    }
+  }
+  return best;
+};
+
+/**
+ * Decide what to recruit and where, or nothing: when the AI is saving up for the unit it wants,
+ * or when another unit's upkeep would eat too much of its income (unless it is losing the fight)
+ */
+const decidePurchase = (
+  planner: Planner,
+  campsWithoutCapturer: { count: number }
+): { unitType: UnitType, position: HexCoordinates } | null => {
+  const { state, profile, threat } = planner;
+  const me = state.players.ai;
+
+  const armySize = me.units.length + state.pendingPurchases.filter(p => p.playerId === me.id).length;
+  const income = getIncome(state, 'ai');
+  const upkeepAfter = Math.max(0, armySize + 1 - FREE_UPKEEP_UNITS) * UPKEEP_PER_UNIT;
+  const netAfter = income.base + income.mines + income.camps - upkeepAfter;
+  const isLosing = armyValue(planner.enemies) > armyValue(me.units) * 1.15;
+  if (netAfter < profile.minNetIncome && !isLosing && !threat.baseUnderThreat) return null;
+
+  const unitType = chooseRecruitType(planner, campsWithoutCapturer);
+  if (UNITS[unitType].cost > me.points) return null;
+
+  const position = chooseDeploymentHex(planner, unitType);
+  return position ? { unitType, position } : null;
 };
 
 /**
  * Where to deploy a recruit: next to the castle or at a camp the AI holds, whichever is closer
- * to the enemy castle. When the castle is threatened and unguarded, recruits appear at home.
- * Archers aren't dropped next to enemies, nobody is dropped into a swamp under fire, and a
+ * to where the army is headed. When the castle is threatened and unguarded, recruits appear at home.
+ * Archers aren't dropped next to enemies, nobody is dropped on low ground under fire, and a
  * recruit on the camp hex itself keeps the enemy from walking in to take it.
  */
-const chooseDeploymentHex = (
-  state: GameState,
-  unitType: UnitType,
-  threatAssessment: ThreatAssessment
-): HexCoordinates | null => {
-  const aiBase = findBaseHex(state, 'ai');
-  const playerBase = findBaseHex(state, 'player');
+const chooseDeploymentHex = (planner: Planner, unitType: UnitType): HexCoordinates | null => {
+  const { state, threat, myBase, enemyBase } = planner;
   const hexes = getDeploymentHexes(state, 'ai');
-  if (!aiBase || !playerBase || hexes.length === 0) return null;
+  if (hexes.length === 0) return null;
 
-  const isCastleSpot = (hex: Hex) => getHexDistance(hex.coordinates, aiBase.coordinates) === 1;
-  const nearestThreat = nearestTo(threatAssessment.castleRaiders, aiBase.coordinates) ?? state.players.player.units
-    .filter(enemy => getHexDistance(enemy.position, aiBase.coordinates) <= CASTLE_WATCH_RANGE)
-    .sort((a, b) => getHexDistance(a.position, aiBase.coordinates) - getHexDistance(b.position, aiBase.coordinates))[0];
-  const isGuarded = state.players.ai.units.some(unit => getHexDistance(unit.position, aiBase.coordinates) <= 2);
-  const defendHome = (threatAssessment.baseUnderThreat || (nearestThreat && !isGuarded)) && hexes.some(isCastleSpot);
+  const isCastleSpot = (hex: Hex) => getHexDistance(hex.coordinates, myBase.coordinates) === 1;
+  const nearestThreat = nearestTo(threat.castleRaiders, myBase.coordinates) ?? planner.enemies
+    .filter(enemy => getHexDistance(enemy.position, myBase.coordinates) <= CASTLE_WATCH_RANGE)
+    .sort((a, b) => getHexDistance(a.position, myBase.coordinates) - getHexDistance(b.position, myBase.coordinates))[0];
+  const isGuarded = state.players.ai.units.some(unit => getHexDistance(unit.position, myBase.coordinates) <= 2);
+  const defendHome = (threat.baseUnderThreat || (nearestThreat && !isGuarded)) && hexes.some(isCastleSpot);
 
+  // Armies that dig in send recruits towards their strong ground rather than the enemy castle
+  const rally = planner.profile.posture === 'hold' && !planner.isPushing ? [...planner.anchors.values()][0] : undefined;
   const candidates = defendHome ? hexes.filter(isCastleSpot) : hexes;
-  const goal = defendHome && nearestThreat ? nearestThreat.position : playerBase.coordinates;
-  const isArcher = UNITS[unitType].abilities.includes('rangedAttack');
+  const goal = defendHome && nearestThreat ? nearestThreat.position : rally ?? enemyBase.coordinates;
+  const recruit = { ...UNITS[unitType], id: 'recruit', owner: 'ai', position: myBase.coordinates, hasMoved: true, isEngagedInCombat: false } as Unit;
 
   const score = (hex: Hex) =>
     walkingDistance(state, hex.coordinates, goal) +
-    (isArcher && isAdjacentToEnemy(state, hex.coordinates) ? 6 : 0) +
-    (isExposedSwamp(state, hex.coordinates) ? 4 : 0) +
-    (hex.isCamp && enemyCanReach(state, hex.coordinates) ? -2 : 0);
+    (isRanged(recruit) && planner.enemies.some(enemy => getHexDistance(enemy.position, hex.coordinates) === 1) ? 6 : 0) +
+    healthValue(recruit, dangerAt(planner, recruit, hex.coordinates)) * 0.5 +
+    (hex.isCamp && enemyCanReach(planner, hex.coordinates) ? -2 : 0);
 
   let best: Hex | null = null;
   let bestScore = Infinity;
@@ -428,6 +981,10 @@ const chooseDeploymentHex = (
 
   return best?.coordinates ?? null;
 };
+
+// ---------------------------------------------------------------------------
+// Walking distances
+// ---------------------------------------------------------------------------
 
 // Walking distances to goals, cached per map so each goal is only searched once per game.
 // Terrain never changes during a game but the hexGrid array is replaced every turn, so the
@@ -463,255 +1020,14 @@ const getDistanceCache = (hexGrid: Hex[]): Map<string, Map<string, number>> => {
 
 const walkingDistance = (state: GameState, from: HexCoordinates, goal: HexCoordinates): number => {
   const cache = getDistanceCache(state.hexGrid);
-  const goalKey = `${goal.q},${goal.r}`;
+  const goalKey = key(goal);
   let distances = cache.get(goalKey);
   if (!distances) {
     distances = getTerrainDistanceMap(state.hexGrid, goal);
     cache.set(goalKey, distances);
   }
   // Fall back to straight-line distance for hexes the goal can't be walked to from
-  return distances.get(`${from.q},${from.r}`) ?? getHexDistance(from, goal) + 100;
-};
-
-/**
- * Pick the reachable hex that gets the unit closest to a goal by walking distance,
- * so units go around lakes and mountain ranges instead of getting stuck behind them.
- * Archers avoid ending their move next to an enemy, where they would be caught in melee,
- * nobody stops in a swamp the enemy can strike, and `avoid` can rule out further hexes.
- * Returns null if no reachable hex is closer to the goal than the unit already is.
- */
-const moveToward = (
-  state: GameState,
-  unit: Unit,
-  goal: HexCoordinates,
-  avoid?: (position: HexCoordinates) => boolean
-): HexCoordinates | null => {
-  let best: HexCoordinates | null = null;
-  let bestDistance = walkingDistance(state, unit.position, goal);
-  
-  for (const target of getValidMoveTargets(state, unit)) {
-    if (avoid?.(target)) continue;
-    if (!coordsMatch(target, goal)) {
-      if (isRanged(unit) && isAdjacentToEnemy(state, target)) continue;
-      if (isExposedSwamp(state, target)) continue;
-    }
-    const distance = walkingDistance(state, target, goal);
-    // Break ties randomly so units don't always take the same route
-    if (distance < bestDistance || (best && distance === bestDistance && Math.random() < 0.5)) {
-      bestDistance = distance;
-      best = target;
-    }
-  }
-  
-  return best;
-};
-
-const coordsMatch = (a: HexCoordinates, b: HexCoordinates) => a.q === b.q && a.r === b.r;
-
-/**
- * Move into position to strike an enemy unit. Melee units close in; archers aim for a hex within
- * their reach (3 from hills) but outside the target's, so it can't hit back. Among such hexes the
- * unit prefers ones few enemies can reach and good ground: hills and forest, never a swamp under fire.
- * Returns null if the unit is already as well placed as it can get this turn.
- */
-const moveToEngage = (state: GameState, unit: Unit, enemy: Unit): HexCoordinates | null => {
-  const enemyReach = getUnitAttackRange(state, enemy);
-  // Lower is better: being in reach comes first, then not being hit back, exposure and terrain
-  const score = (position: HexCoordinates) => {
-    const distance = getHexDistance(position, enemy.position);
-    const reach = getAttackRange(unit, terrainAt(state, position));
-    const outOfReach = Math.max(0, distance - reach);
-    const hitBack = isRanged(unit) && distance <= enemyReach ? 1 : 0;
-    return outOfReach * 10 + hitBack * 5 + enemiesInReachOf(state, position).length +
-      terrainPenalty(state, unit, position);
-  };
-
-  let best: HexCoordinates | null = null;
-  let bestScore = score(unit.position);
-  for (const target of getValidMoveTargets(state, unit)) {
-    const targetScore = score(target);
-    if (targetScore < bestScore) {
-      bestScore = targetScore;
-      best = target;
-    }
-  }
-
-  // Nothing better within reach (e.g. terrain in the way): walk around towards the enemy instead
-  if (!best && getHexDistance(unit.position, enemy.position) > getUnitAttackRange(state, unit)) {
-    return moveToward(state, unit, enemy.position);
-  }
-  return best;
-};
-
-/**
- * Pick the reachable hex furthest from all enemy units
- */
-const moveAwayFromEnemies = (state: GameState, unit: Unit): HexCoordinates | null => {
-  const enemies = state.players.player.units;
-  const targets = getValidMoveTargets(state, unit);
-
-  const nearestEnemyDistance = (coord: HexCoordinates) => enemies.reduce(
-    (min, enemy) => Math.min(min, getHexDistance(coord, enemy.position)),
-    Infinity
-  );
-
-  let best: HexCoordinates | null = null;
-  let bestScore = nearestEnemyDistance(unit.position);
-
-  for (const target of targets) {
-    const score = nearestEnemyDistance(target);
-    if (score > bestScore) {
-      bestScore = score;
-      best = target;
-    }
-  }
-
-  return best;
-};
-
-/**
- * Decide where a single unit should move this turn (or null to hold position)
- */
-const decideUnitMove = (
-  state: GameState,
-  unit: Unit,
-  settings: AIDifficultySettings,
-  playerBase: Hex,
-  aiBase: Hex,
-  threatAssessment: ThreatAssessment,
-  resourceOpportunities: Hex[],
-  campGoal?: Hex
-): HexCoordinates | null => {
-  // Press the attack when the AI clearly outnumbers the player, or once the game drags on,
-  // so armies don't trade units in the middle of the map forever
-  const isPushing =
-    state.players.ai.units.length >= state.players.player.units.length + PUSH_UNIT_ADVANTAGE ||
-    state.turnNumber >= PUSH_AFTER_ROUND;
-
-  // Hexes next to the castle are where recruits are deployed, so units shouldn't park there
-  const isNextToCastle = (position: HexCoordinates) => getHexDistance(position, aiBase.coordinates) === 1;
-
-  // Retreat badly threatened or badly wounded units towards the base (not while going all-in)
-  const unitThreat = threatAssessment.threatenedUnits.find(t => t.unit.id === unit.id);
-  const healthRatio = unit.lifespan / unit.maxLifespan;
-
-  const standingOn = findHexByCoordinates(state.hexGrid, unit.position);
-  const isWounded = unit.lifespan < unit.maxLifespan;
-  const wantsToHeal = isPushing ? healthRatio < PUSH_HEAL_THRESHOLD : isWounded;
-
-  if (!isPushing && unitThreat && (unitThreat.threatLevel > 1 || healthRatio < settings.retreatThreshold)) {
-    // Fall back to a nearby healing spring if there is a safe one, otherwise towards the castle
-    const spring = findNearbySpring(state, unit);
-    const retreat = (spring ? moveToward(state, unit, spring.coordinates) : null) ??
-      moveToward(state, unit, aiBase.coordinates, isNextToCastle) ??
-      (getHexDistance(unit.position, aiBase.coordinates) > 2 ? moveAwayFromEnemies(state, unit) : null);
-    if (retreat) return retreat;
-  }
-
-  // If base is under threat and this unit is nearby, defend the base. An enemy that could storm
-  // or besiege the castle is always met by every unit close enough to strike it.
-  const raider = nearestTo(threatAssessment.castleRaiders, unit.position);
-  if (raider && getHexDistance(unit.position, raider.position) <= unit.movementRange + getAttackRange(unit)) {
-    const interceptMove = moveToEngage(state, unit, raider);
-    if (interceptMove) return interceptMove;
-    if (getHexDistance(unit.position, raider.position) <= getUnitAttackRange(state, unit)) return null;
-  }
-
-  if (
-    threatAssessment.baseUnderThreat &&
-    getHexDistance(unit.position, aiBase.coordinates) < 5 &&
-    Math.random() < settings.defensePreference
-  ) {
-    const nearestThreat = state.players.player.units
-      .filter(enemy => getHexDistance(enemy.position, aiBase.coordinates) <= 3)
-      .sort((a, b) =>
-        getHexDistance(unit.position, a.position) - getHexDistance(unit.position, b.position)
-      )[0];
-
-    const defenseMove = nearestThreat
-      ? moveToEngage(state, unit, nearestThreat)
-      : moveToward(state, unit, aiBase.coordinates);
-    if (defenseMove) return defenseMove;
-  }
-
-  // Wounded units rest on a healing spring until they're back to full health,
-  // and detour to one if it's close by
-  if (wantsToHeal && standingOn && TERRAIN_EFFECTS[standingOn.terrain].healPerTurn) return null;
-  if (wantsToHeal && unit.maxLifespan - unit.lifespan >= (isPushing ? 1 : 2)) {
-    const spring = findNearbySpring(state, unit);
-    const springMove = spring && moveToward(state, unit, spring.coordinates);
-    if (springMove) return springMove;
-  }
-
-  // Take (or retake) the camp this unit was sent to: walk onto it, or attack whoever holds it
-  if (campGoal) {
-    const occupant = findHexByCoordinates(state.hexGrid, campGoal.coordinates)?.unit;
-    const campMove = occupant && occupant.owner === 'player'
-      ? moveToEngage(state, unit, occupant)
-      : moveToward(state, unit, campGoal.coordinates);
-    if (campMove) return campMove;
-  }
-
-  // Hold a camp while the enemy could otherwise walk in and take it next turn
-  if (standingOn?.isCamp && standingOn.owner === 'ai' && enemyCanReach(state, unit.position)) return null;
-
-  // Hold gold mines: a unit standing on one stays put (it still fights any enemy in its reach)
-  // unless it has to retreat or defend the castle, or the AI is making its late-game all-out push
-  const isOnMine = !!standingOn?.isResourceHex;
-  if (isOnMine && state.turnNumber < PUSH_AFTER_ROUND) return null;
-
-  if (isPushing) {
-    const pushMove = moveToward(state, unit, playerBase.coordinates);
-    if (pushMove) return pushMove;
-
-    // The way forward is blocked: fight through whatever stands closest
-    const blocker = nearestEnemy(state, unit);
-    if (blocker) {
-      const engageMove = moveToEngage(state, unit, blocker);
-      if (engageMove) return engageMove;
-    }
-  }
-  
-  // Fast units grab unclaimed resource hexes
-  if (
-    resourceOpportunities.length > 0 &&
-    Math.random() < settings.resourceFocus &&
-    (unit.type === 'infantry' || unit.type === 'helicopter')
-  ) {
-    const reservedTargets = state.pendingMoves.map(m => m.to);
-    const nearestResource = resourceOpportunities
-      .filter(hex => !reservedTargets.some(t => t.q === hex.coordinates.q && t.r === hex.coordinates.r))
-      .sort((a, b) =>
-        getHexDistance(unit.position, a.coordinates) - getHexDistance(unit.position, b.coordinates)
-      )[0];
-
-    if (nearestResource) {
-      const resourceMove = moveToward(state, unit, nearestResource.coordinates);
-      if (resourceMove) return resourceMove;
-    }
-  }
-
-  // Aggressive units hunt nearby enemy units or march on the enemy base
-  if (Math.random() < settings.attackAggressiveness) {
-    const nearbyEnemy = state.players.player.units
-      .filter(enemy => getHexDistance(unit.position, enemy.position) <= unit.movementRange + getAttackRange(unit))
-      .sort((a, b) => a.lifespan - b.lifespan)[0];
-
-    if (nearbyEnemy && healthRatio >= settings.retreatThreshold) {
-      const huntMove = moveToEngage(state, unit, nearbyEnemy);
-      if (huntMove) return huntMove;
-    }
-
-    const attackMove = moveToward(state, unit, playerBase.coordinates);
-    if (attackMove) return attackMove;
-  }
-
-  // Otherwise make a random move for variety, keeping clear of the deployment hexes
-  const targets = getValidMoveTargets(state, unit).filter(target => !isNextToCastle(target));
-  if (targets.length > 0 && (isNextToCastle(unit.position) || Math.random() >= 0.3)) {
-    return targets[Math.floor(Math.random() * targets.length)];
-  }
-  return null;
+  return distances.get(key(from)) ?? getHexDistance(from, goal) + 100;
 };
 
 const nearestTo = (units: Unit[], position: HexCoordinates): Unit | undefined =>
@@ -720,6 +1036,3 @@ const nearestTo = (units: Unit[], position: HexCoordinates): Unit | undefined =>
       ? other
       : nearest,
   undefined);
-
-const nearestEnemy = (state: GameState, unit: Unit): Unit | undefined =>
-  nearestTo(state.players.player.units, unit.position);

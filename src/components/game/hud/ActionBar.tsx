@@ -5,6 +5,7 @@ import { getUnitTypeName } from '../utils/UnitHelpers';
 import { ArrowIcon, AttackIcon, GoldIcon, HealthIcon, MoveIcon, UnitIcon } from '../icons';
 import { PANEL_CLASS } from './styles';
 import { RECRUITABLE, UNIT_ROLES } from './unitInfo';
+import { CounterLine } from './SelectionCard';
 
 interface ActionBarProps {
   gold: number;
@@ -69,7 +70,7 @@ export const ActionBar: React.FC<ActionBarProps> = ({
               </button>
 
               {/* Stats on hover */}
-              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden w-40 -translate-x-1/2 rounded-lg bg-slate-900/95 p-2 text-xs text-slate-100 shadow-xl group-hover:block group-focus-within:block">
+              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden w-48 -translate-x-1/2 rounded-lg bg-slate-900/95 p-2 text-xs text-slate-100 shadow-xl group-hover:block group-focus-within:block">
                 <div className="font-bold">{getUnitTypeName(type)}</div>
                 <div className="text-slate-400">{UNIT_ROLES[type]}</div>
                 <div className="mt-1 flex justify-between">
@@ -77,6 +78,7 @@ export const ActionBar: React.FC<ActionBarProps> = ({
                   <span className="flex items-center gap-1"><HealthIcon />{info.maxLifespan}</span>
                   <span className="flex items-center gap-1"><MoveIcon />{info.movementRange}</span>
                 </div>
+                <CounterLine type={type} />
               </div>
             </div>
           );

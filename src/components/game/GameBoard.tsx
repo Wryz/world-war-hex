@@ -18,9 +18,11 @@ import {
   findBaseHex,
   findTerrainPath,
   getActivePlayer,
-  getUnitAttackRange,
+  canStrike,
+  getCombatPreview,
   getMovePath,
-  getValidBaseLocations
+  getValidBaseLocations,
+  HIGH_GROUND_ELEVATION
 } from '@/lib/game/gameState';
 import { getHexDistance } from '@/lib/game/hexUtils';
 import { HEX_SIZE, axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
@@ -28,6 +30,7 @@ import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
 import { playSound } from './utils/SoundPlayer';
 import { playBattleSound } from './utils/battleSounds';
+import { getImpactTimes } from './utils/battleTiming';
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
 import { AttackIcon, CampIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon } from './icons';
@@ -341,8 +344,10 @@ const getTerrainBadges = (unit: Unit, hex: Hex | undefined): UnitBadge[] => {
 
   const effect = TERRAIN_EFFECTS[hex.terrain];
   if (effect.damageTakenMultiplier < 1) badges.push('cover');
-  if (effect.damageTakenMultiplier > 1) badges.push('exposed');
-  if ((hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) || (effect.damageDealtMultiplier ?? 1) > 1) {
+  // Low ground: anyone attacking from above hits harder
+  if (effect.elevation < 1) badges.push('exposed');
+  // High ground, or Pikemen fighting from a forest
+  if ((hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) || effect.elevation >= HIGH_GROUND_ELEVATION) {
     badges.push('attack');
   }
   if (effect.healPerTurn) badges.push('heal');
@@ -504,18 +509,34 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         const liveAttackers = combat.attackers
           .map(a => players[a.owner].units.find(u => u.id === a.id))
           .filter((u): u is Unit => !!u);
+        // The same outcome the battle will resolve to, so health drops blow by blow to the final result
+        const preview = getCombatPreview(gameState, combat);
+        const damageTo = new Map(
+          [...preview.attackers, ...preview.defenders].map(entry => [entry.unit.id, entry.damageTaken])
+        );
+        const sortedTimes = (units: Unit[]) => units.flatMap(getImpactTimes).sort((a, b) => a - b);
+        const liveDefenders = combat.defenders
+          .map(d => players[d.owner].units.find(u => u.id === d.id))
+          .filter((u): u is Unit => !!u);
 
         for (const attacker of liveAttackers) {
-          battles.set(attacker.id, { key, target: worldOf(combat.hexCoordinates) });
+          const isHitBack = preview.attackers.find(a => a.unit.id === attacker.id)?.canBeHitBack ?? false;
+          battles.set(attacker.id, {
+            key,
+            target: worldOf(combat.hexCoordinates),
+            incoming: { times: isHitBack ? sortedTimes(liveDefenders) : [], damage: damageTo.get(attacker.id) ?? 0 }
+          });
         }
-        for (const defender of combat.defenders) {
-          const live = players[defender.owner].units.find(u => u.id === defender.id);
-          if (!live) continue;
+        for (const live of liveDefenders) {
           // Defenders strike back at the nearest attacker they can reach
           const reachable = liveAttackers
-            .filter(a => getHexDistance(a.position, live.position) <= getUnitAttackRange(gameState, live))
+            .filter(a => canStrike(gameState, live, a))
             .sort((a, b) => getHexDistance(a.position, live.position) - getHexDistance(b.position, live.position));
-          battles.set(defender.id, { key, target: reachable[0] ? worldOf(reachable[0].position) : null });
+          battles.set(live.id, {
+            key,
+            target: reachable[0] ? worldOf(reachable[0].position) : null,
+            incoming: { times: sortedTimes(liveAttackers), damage: damageTo.get(live.id) ?? 0 }
+          });
         }
       });
     }
@@ -676,10 +697,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
     for (const { unit, position } of unitRenderData) {
       next.set(unit.id, { unit, position });
-      const before = previous.get(unit.id);
-      if (before && unit.lifespan < before.unit.lifespan) {
-        created.push({ id: ++popupIdRef.current, position, text: `-${before.unit.lifespan - unit.lifespan}`, color: '#f87171' });
-      }
     }
     for (const [id, before] of previous) {
       if (!next.has(id)) {
@@ -921,6 +938,7 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
         <span className="font-bold">
           {hex.isCamp ? <><CampIcon /> Camp</> : <><TerrainIcon terrain={hex.terrain} /> {TERRAIN_EFFECTS[hex.terrain].name}</>}
         </span>
+        <span className="text-slate-400"> · height {TERRAIN_EFFECTS[hex.terrain].elevation}</span>
         <span className="text-slate-400"> · {effect}</span>
         {hex.unit && (
           <span className="ml-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>

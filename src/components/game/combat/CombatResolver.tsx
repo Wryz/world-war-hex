@@ -9,24 +9,32 @@ interface CombatResolverProps {
   gameState: GameState;
 }
 
-// One unit in the battle: health now and the damage it is about to take
+// Bonuses read green and penalties red, so it's clear why a fight went the way it did
+const modifierTone = (modifier: string) =>
+  /^-|uphill/.test(modifier) ? 'text-rose-300' : /^\+|^x|less damage|ignore|no damage/.test(modifier) ? 'text-emerald-300' : 'text-slate-400';
+
+// One unit in the battle: health now, the damage it is about to take, and what is helping or hurting it
 const Combatant: React.FC<{ entry: CombatantPreview }> = ({ entry }) => (
-  <div
-    className="flex items-center gap-1.5 rounded-md bg-slate-800 px-2 py-1"
-    title={[getUnitTypeName(entry.unit.type), ...entry.modifiers].join(' · ')}
-  >
-    <UnitIcon type={entry.unit.type} className="text-base" color={SIDE_COLORS[entry.unit.owner]} />
-    <span className="flex items-center gap-0.5 tabular-nums"><HealthIcon />{entry.unit.lifespan}</span>
-    {entry.modifiers.length > 0 && <TerrainIcon terrain={entry.terrain} />}
-    <span className={`ml-auto flex items-center gap-1 font-bold tabular-nums ${entry.destroyed ? 'text-red-400' : 'text-amber-300'}`}>
-      {entry.destroyed ? (
-        <>
-          <SkullIcon />
-          <span className="text-amber-300">+{getKillBounty(entry.unit)}</span>
-          <GoldIcon />
-        </>
-      ) : entry.damageTaken > 0 ? `-${entry.damageTaken}` : <span className="text-slate-400">safe</span>}
-    </span>
+  <div className="rounded-md bg-slate-800 px-2 py-1" title={[getUnitTypeName(entry.unit.type), ...entry.modifiers].join(' · ')}>
+    <div className="flex items-center gap-1.5">
+      <UnitIcon type={entry.unit.type} className="text-base" color={SIDE_COLORS[entry.unit.owner]} />
+      <span className="flex items-center gap-0.5 tabular-nums"><HealthIcon />{entry.unit.lifespan}</span>
+      {entry.modifiers.length > 0 && <TerrainIcon terrain={entry.terrain} />}
+      <span className={`ml-auto flex items-center gap-1 font-bold tabular-nums ${entry.destroyed ? 'text-red-400' : 'text-amber-300'}`}>
+        {entry.destroyed ? (
+          <>
+            <SkullIcon />
+            <span className="text-amber-300">+{getKillBounty(entry.unit)}</span>
+            <GoldIcon />
+          </>
+        ) : entry.damageTaken > 0 ? `-${entry.damageTaken}` : <span className="text-slate-400">safe</span>}
+      </span>
+    </div>
+    {entry.modifiers.length > 0 && (
+      <div className="mt-0.5 flex flex-col text-[10px] leading-tight">
+        {entry.modifiers.map(modifier => <span key={modifier} className={modifierTone(modifier)}>{modifier}</span>)}
+      </div>
+    )}
   </div>
 );
 
@@ -57,7 +65,7 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({ gameState }) => 
   const isPlayerDefending = combat.defenders.some(unit => unit.owner === 'player');
 
   return (
-    <div className={`${PANEL_CLASS} fixed right-3 bottom-3 z-30 w-72 p-3 text-xs`}>
+    <div className={`${PANEL_CLASS} fixed right-3 bottom-3 z-30 w-80 max-w-[calc(100vw-1.5rem)] p-3 text-xs`}>
       <div className="mb-2 flex items-center justify-between">
         <span className="font-display flex items-center gap-1.5 text-base"><AttackIcon /> Battle</span>
         <span className="text-slate-400">{unresolvedCombatIndex + 1} / {gameState.combats.length}</span>

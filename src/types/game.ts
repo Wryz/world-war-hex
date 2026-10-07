@@ -60,7 +60,8 @@ export type Ability =
   | 'healing' 
   | 'terrainBonus' 
   | 'rapidMovement' 
-  | 'stealth';
+  | 'stealth'
+  | 'magic';
 
 export interface Player {
   id: string;

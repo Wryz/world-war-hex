@@ -1,6 +1,8 @@
 import React from 'react';
-import { GameState, Hex, Unit } from '@/types/game';
-import { BASE_MAX_HEALTH, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS } from '@/lib/game/gameState';
+import { GameState, Hex, Unit, UnitType } from '@/types/game';
+import {
+  BASE_MAX_HEALTH, COUNTER_MULTIPLIERS, HIGH_GROUND_ELEVATION, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS, UNIT_NAMES
+} from '@/lib/game/gameState';
 import { getUnitTypeName } from '../utils/UnitHelpers';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
 import { TERRAIN_SHORT_EFFECTS } from './terrainInfo';
@@ -25,6 +27,28 @@ const HealthBar: React.FC<{ value: number; max: number }> = ({ value, max }) => 
   );
 };
 
+// Which troops a unit type is strong and weak against
+export const CounterLine: React.FC<{ type: UnitType }> = ({ type }) => {
+  const strongAgainst = Object.keys(COUNTER_MULTIPLIERS[type] ?? {}) as UnitType[];
+  const weakAgainst = (Object.keys(COUNTER_MULTIPLIERS) as UnitType[])
+    .filter(other => COUNTER_MULTIPLIERS[other]?.[type]);
+  if (strongAgainst.length === 0 && weakAgainst.length === 0) return null;
+  return (
+    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+      {strongAgainst.length > 0 && (
+        <span className="flex items-center gap-1 text-emerald-300">
+          Strong vs {strongAgainst.map(t => <UnitIcon key={t} type={t} title={UNIT_NAMES[t]} />)}
+        </span>
+      )}
+      {weakAgainst.length > 0 && (
+        <span className="flex items-center gap-1 text-rose-300">
+          Weak vs {weakAgainst.map(t => <UnitIcon key={t} type={t} title={UNIT_NAMES[t]} />)}
+        </span>
+      )}
+    </div>
+  );
+};
+
 // Compact details for the selected unit or castle
 export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selectedHex, selectedUnit }) => {
   if (!selectedHex) return null;
@@ -43,15 +67,11 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
   if (unit && effect.damageTakenMultiplier < 1) {
     terrainBonuses.push(`-${Math.round((1 - effect.damageTakenMultiplier) * 100)}% dmg`);
   }
-  if (unit && effect.damageTakenMultiplier > 1) {
-    terrainBonuses.push(`+${Math.round((effect.damageTakenMultiplier - 1) * 100)}% dmg taken`);
-  }
   if (unit && hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) {
     terrainBonuses.push(`+${Math.round((TERRAIN_BONUS_ATTACK_MULTIPLIER - 1) * 100)}% atk`);
   }
-  if (unit && (effect.damageDealtMultiplier ?? 1) > 1) {
-    terrainBonuses.push(`+${Math.round(((effect.damageDealtMultiplier ?? 1) - 1) * 100)}% atk`);
-  }
+  if (unit && effect.elevation >= HIGH_GROUND_ELEVATION) terrainBonuses.push('high ground');
+  if (unit && effect.elevation < 1) terrainBonuses.push('low ground');
   if (unit && effect.healPerTurn) terrainBonuses.push(`+${effect.healPerTurn} HP/turn`);
   if (hex.isResourceHex) terrainBonuses.push(`+${hex.resourceValue ?? 0} gold`);
 
@@ -76,6 +96,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
               <TerrainIcon terrain={hex.terrain} /> {terrainBonuses.length > 0 ? terrainBonuses.join(' · ') : effect.name}
             </span>
           </div>
+          <CounterLine type={unit.type} />
           {unit.owner === 'player' && unit.hasMoved && gameState.currentPhase === 'planning' && (
             <div className="mt-2 text-slate-400">Just deployed · moves next turn</div>
           )}

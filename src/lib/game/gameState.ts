@@ -63,24 +63,24 @@ export const UNITS: Record<UnitType, Omit<Unit, 'id' | 'owner' | 'position' | 'h
     attackPower: 3,
     lifespan: 4,
     maxLifespan: 4,
-    cost: 15,
+    cost: 13,
     abilities: ['rapidMovement']
   },
   medic: {
     type: 'medic',
     movementRange: 2,
-    attackPower: 2,
+    attackPower: 3,
     lifespan: 4,
     maxLifespan: 4,
-    cost: 12,
-    abilities: ['rangedAttack', 'healing']
+    cost: 10,
+    abilities: ['rangedAttack', 'healing', 'magic']
   },
   rogue: {
     type: 'rogue',
     movementRange: 4,
     attackPower: 3,
-    lifespan: 4,
-    maxLifespan: 4,
+    lifespan: 3,
+    maxLifespan: 3,
     cost: 9,
     abilities: ['stealth']
   }
@@ -107,12 +107,13 @@ export interface TerrainEffect {
   name: string;
   // Movement points needed to enter the hex, or null if units can't enter it
   moveCost: number | null;
+  // Height level: water and swamps are low (0), most ground is 1, hills and snowfields are high (2),
+  // mountains tower (3). Attacking down onto lower ground hits harder; attacking uphill is weaker.
+  elevation: number;
+  // How high the hex blocks line of sight, if more than its elevation (forest canopies stand 1 higher)
+  sightHeight?: number;
   // Multiplier applied to damage taken by a unit standing on this terrain
   damageTakenMultiplier: number;
-  // Multiplier applied to damage dealt by a unit standing on this terrain
-  damageDealtMultiplier?: number;
-  // Extra reach for ranged units standing on this terrain
-  rangedRangeBonus?: number;
   // Health restored to a unit standing here at the end of its side's turn
   healPerTurn?: number;
   description: string;
@@ -123,62 +124,71 @@ export const TERRAIN_EFFECTS: Record<TerrainType, TerrainEffect> = {
   plain: {
     name: 'Plains',
     moveCost: 1,
+    elevation: 1,
     damageTakenMultiplier: 1,
     description: 'Open ground. No bonuses or penalties.'
   },
   forest: {
     name: 'Forest',
     moveCost: 1,
+    elevation: 1,
+    sightHeight: 2,
     damageTakenMultiplier: 0.6,
-    description: 'Cover: units here take 40% less damage. Pikemen also attack 50% harder.'
+    description: 'Cover: units here take 40% less damage, and the trees block arrows unless shot from higher ground. Pikemen attack 50% harder from here.'
   },
   desert: {
     name: 'Desert',
     moveCost: 2,
+    elevation: 1,
     damageTakenMultiplier: 1,
     description: 'Deep sand: costs 2 movement to enter.'
   },
   resource: {
     name: 'Gold Mine',
     moveCost: 1,
+    elevation: 1,
     damageTakenMultiplier: 1,
     description: 'Hold it with a unit to earn its gold at the end of each of your turns.'
   },
   mountain: {
     name: 'Mountains',
     moveCost: null,
+    elevation: 3,
     damageTakenMultiplier: 1,
-    description: 'Impassable.'
+    description: 'Impassable, and blocks line of sight.'
   },
   water: {
     name: 'Water',
     moveCost: null,
+    elevation: 0,
     damageTakenMultiplier: 1,
     description: 'Impassable.'
   },
   hills: {
     name: 'Hills',
     moveCost: 2,
+    elevation: 2,
     damageTakenMultiplier: 1,
-    damageDealtMultiplier: 1.25,
-    rangedRangeBonus: 1,
-    description: 'High ground: units here deal 25% more damage and Archers reach 3 hexes. Costs 2 movement to enter.'
+    description: 'High ground: hit 25% harder against lower ground, Archers reach 3 hexes, and ridges block shots from below. Costs 2 movement to enter.'
   },
   swamp: {
     name: 'Swamp',
     moveCost: 2,
-    damageTakenMultiplier: 1.25,
-    description: 'Bogged down: units here take 25% more damage. Costs 2 movement to enter.'
+    elevation: 0,
+    damageTakenMultiplier: 1,
+    description: 'Low, boggy ground: attackers on higher ground hit 25% harder, and it costs 2 movement to enter.'
   },
   snow: {
     name: 'Snow',
     moveCost: 3,
+    elevation: 2,
     damageTakenMultiplier: 1,
-    description: 'Deep snow: costs 3 movement to enter.'
+    description: 'High, deep snow: high ground like hills, but costs 3 movement to enter.'
   },
   spring: {
     name: 'Spring',
     moveCost: 1,
+    elevation: 1,
     damageTakenMultiplier: 1,
     healPerTurn: 2,
     description: 'Healing waters: a unit here recovers 2 health at the end of each of its turns.'
@@ -190,12 +200,39 @@ export const TERRAIN_BONUS_ATTACK_MULTIPLIER = 1.5;
 
 // How many hexes away archers (rangedAttack) can strike from
 export const RANGED_ATTACK_RANGE = 2;
+// Ranged units caught in close combat (striking or struck back at from the next hex) fight at this
+// fraction of their power, so cavalry and Rogues that reach the back line can actually win there
+export const RANGED_POINT_BLANK_MULTIPLIER = 0.5;
 // Fraction of a destroyed unit's cost paid to the side that destroyed it
 export const KILL_BOUNTY_FRACTION = 0.5;
 // Gold plundered per point of siege damage dealt to an enemy castle
 export const SIEGE_PLUNDER_PER_DAMAGE = 0.5;
 // Health a unit with the healing ability (Mages) restores to each adjacent ally at the end of its side's turn
 export const HEALER_HEAL_AMOUNT = 2;
+
+// Height: each level of ground an attacker stands above its target adds this much damage (and each
+// level below takes it away), counting at most two levels
+export const ELEVATION_DAMAGE_STEP = 0.25;
+const MAX_ELEVATION_STEPS = 2;
+// Ranged units standing at least this high (hills, snow) reach one hex further
+export const HIGH_GROUND_ELEVATION = 2;
+
+// Counters: damage multiplier when a unit type fights one of the types it is strong against.
+// The cycle Pikemen > Knights > Archers > Pikemen, with Swordsmen and Rogues hunting their own prey,
+// means no single army beats every other one.
+export const COUNTER_MULTIPLIERS: Partial<Record<UnitType, Partial<Record<UnitType, number>>>> = {
+  tank: { helicopter: 2 },                      // Pikemen brace against cavalry charges
+  helicopter: { artillery: 1.5, medic: 1.5 },   // Knights ride down Archers and Mages
+  artillery: { tank: 1.5 },                     // Archers pick off slow, heavy Pikemen
+  infantry: { tank: 1.5, rogue: 1.5 },          // Swordsmen get inside pikes and catch Rogues
+  rogue: { artillery: 1.5, medic: 1.5 }         // Rogues assassinate the back line
+};
+
+// Economy: every side earns TURN_INCOME each turn, plus its gold mines and camps, but armies larger
+// than FREE_UPKEEP_UNITS cost upkeep - a bigger army isn't automatically a better one
+export const CAMP_INCOME = 2;
+export const FREE_UPKEEP_UNITS = 5;
+export const UPKEEP_PER_UNIT = 1;
 
 // Initialize a new game state
 export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS): GameState => {
@@ -849,47 +886,137 @@ export const executeMoves = (state: GameState): GameState => {
   return finishTurn(newState);
 };
 
-// How far a unit can strike from the terrain it stands on: archers (ranged attack) reach 2 hexes,
-// or 3 from high ground; everyone else 1
-export const getAttackRange = (unit: Unit, terrain: TerrainType = 'plain'): number =>
-  unit.abilities.includes('rangedAttack')
-    ? RANGED_ATTACK_RANGE + (TERRAIN_EFFECTS[terrain].rangedRangeBonus ?? 0)
-    : 1;
-
 const terrainUnder = (state: GameState, unit: Unit): TerrainType =>
   findHexByCoordinates(state.hexGrid, unit.position)?.terrain ?? 'plain';
+
+export const getElevation = (terrain: TerrainType) => TERRAIN_EFFECTS[terrain].elevation;
+
+// How far a unit can strike from the terrain it stands on: archers and mages (ranged attack) reach
+// 2 hexes, or 3 from high ground; everyone else 1
+export const getAttackRange = (unit: Unit, terrain: TerrainType = 'plain'): number =>
+  unit.abilities.includes('rangedAttack')
+    ? RANGED_ATTACK_RANGE + (getElevation(terrain) >= HIGH_GROUND_ELEVATION ? 1 : 0)
+    : 1;
 
 // A unit's reach where it stands right now
 export const getUnitAttackRange = (state: GameState, unit: Unit): number =>
   getAttackRange(unit, terrainUnder(state, unit));
 
-const isInAttackRange = (state: GameState, attacker: Unit, target: Unit) =>
-  getHexDistance(attacker.position, target.position) <= getUnitAttackRange(state, attacker);
-
-// Attack power after terrain bonuses: pikemen (terrainBonus) strike harder from a forest,
-// and everyone hits harder from high ground
-const getEffectivePower = (unit: Unit, terrain: TerrainType): number => {
-  const forestBonus = unit.abilities.includes('terrainBonus') && terrain === 'forest' ? TERRAIN_BONUS_ATTACK_MULTIPLIER : 1;
-  return unit.attackPower * forestBonus * (TERRAIN_EFFECTS[terrain].damageDealtMultiplier ?? 1);
+// Hexes a straight line between two hexes passes through, excluding both ends. The line is nudged
+// slightly to one side; checking both nudges lets a shot squeeze between two hexes it grazes.
+// The nudge differs on all three cube axes so it never lands exactly on a hex edge (no rounding ties).
+const hexesBetween = (from: HexCoordinates, to: HexCoordinates, nudge: number): HexCoordinates[] => {
+  const distance = getHexDistance(from, to);
+  const a = { x: from.q + nudge, y: -from.q - from.r + 2 * nudge, z: from.r - 3 * nudge };
+  const b = { x: to.q + nudge, y: -to.q - to.r + 2 * nudge, z: to.r - 3 * nudge };
+  const hexes: HexCoordinates[] = [];
+  for (let step = 1; step < distance; step++) {
+    const t = step / distance;
+    const x = a.x + (b.x - a.x) * t;
+    const y = a.y + (b.y - a.y) * t;
+    const z = a.z + (b.z - a.z) * t;
+    let rx = Math.round(x);
+    const ry = Math.round(y);
+    let rz = Math.round(z);
+    const dx = Math.abs(rx - x);
+    const dy = Math.abs(ry - y);
+    const dz = Math.abs(rz - z);
+    if (dx > dy && dx > dz) rx = -ry - rz;
+    else if (dz > dy) rz = -rx - ry;
+    hexes.push({ q: rx, r: rz });
+  }
+  return hexes;
 };
 
-// Damage that `power` worth of attacks deals to one unit standing on `terrain`.
-// Cover reduces it, but an attack that connects always deals at least 1.
-const getStrikeDamage = (power: number, terrain: TerrainType): number =>
-  power > 0 ? Math.max(1, Math.round(power * TERRAIN_EFFECTS[terrain].damageTakenMultiplier)) : 0;
+// Whether a ranged unit can see its target: a hex in between blocks the shot if it stands higher than
+// both ends (forest canopies count one level higher). So ridges and forests hide units from archers on
+// lower ground, mountains block every shot, and archers on high ground shoot over the trees.
+export const hasLineOfSight = (hexGrid: Hex[], from: HexCoordinates, to: HexCoordinates): boolean => {
+  const heightAt = (c: HexCoordinates) => {
+    const hex = findHexByCoordinates(hexGrid, c);
+    if (!hex) return 0;
+    const effect = TERRAIN_EFFECTS[hex.terrain];
+    return effect.sightHeight ?? effect.elevation;
+  };
+  const endHeight = (c: HexCoordinates) => {
+    const hex = findHexByCoordinates(hexGrid, c);
+    return hex ? getElevation(hex.terrain) : 0;
+  };
+  const eyeLevel = Math.max(endHeight(from), endHeight(to));
+  const isClear = (line: HexCoordinates[]) => line.every(c => heightAt(c) <= eyeLevel);
+  return isClear(hexesBetween(from, to, 1e-6)) || isClear(hexesBetween(from, to, -1e-6));
+};
 
-// Split one side's attack power evenly between the enemy units it can reach, reduce each share
-// by that unit's cover, then round the total and hand it out so the shares add up to it
+// Whether an attacker can strike a target from where both stand: within reach and, for shots beyond
+// the next hex, with a clear line of sight (Mages' spells arc over anything)
+export const canStrike = (state: GameState, attacker: Unit, target: Unit): boolean => {
+  const distance = getHexDistance(attacker.position, target.position);
+  if (distance > getUnitAttackRange(state, attacker)) return false;
+  if (distance <= 1 || attacker.abilities.includes('magic')) return true;
+  return hasLineOfSight(state.hexGrid, attacker.position, target.position);
+};
+
+const isInAttackRange = canStrike;
+
+// Pikemen (terrainBonus) strike harder from a forest
+const getBasePower = (unit: Unit, terrain: TerrainType): number =>
+  unit.abilities.includes('terrainBonus') && terrain === 'forest'
+    ? unit.attackPower * TERRAIN_BONUS_ATTACK_MULTIPLIER
+    : unit.attackPower;
+
+// Damage multiplier from standing higher (or lower) than the target
+export const getHeightMultiplier = (attackerTerrain: TerrainType, targetTerrain: TerrainType): number => {
+  const difference = getElevation(attackerTerrain) - getElevation(targetTerrain);
+  const steps = Math.max(-MAX_ELEVATION_STEPS, Math.min(MAX_ELEVATION_STEPS, difference));
+  return 1 + steps * ELEVATION_DAMAGE_STEP;
+};
+
+export const getCounterMultiplier = (attacker: UnitType, target: UnitType): number =>
+  COUNTER_MULTIPLIERS[attacker]?.[target] ?? 1;
+
+// Cover protects against everything except spells
+const getCoverMultiplier = (attacker: Unit, targetTerrain: TerrainType): number =>
+  attacker.abilities.includes('magic') ? 1 : TERRAIN_EFFECTS[targetTerrain].damageTakenMultiplier;
+
+// Damage one unit's attacks would deal to a particular target when the two stand on the given
+// terrain, before rounding: base power, height difference, counters and the target's cover.
+// Exported so the AI can weigh up fights from hexes the units haven't moved to yet.
+export const getStrikePowerOnTerrain = (
+  attacker: Unit,
+  attackerTerrain: TerrainType,
+  target: Unit,
+  targetTerrain: TerrainType,
+  distance: number
+): number =>
+  getBasePower(attacker, attackerTerrain) *
+  getHeightMultiplier(attackerTerrain, targetTerrain) *
+  getCounterMultiplier(attacker.type, target.type) *
+  getCoverMultiplier(attacker, targetTerrain) *
+  getPointBlankMultiplier(attacker, distance);
+
+// Ranged units fight poorly at arm's length
+export const getPointBlankMultiplier = (attacker: Unit, distance: number): number =>
+  attacker.abilities.includes('rangedAttack') && distance <= 1 ? RANGED_POINT_BLANK_MULTIPLIER : 1;
+
+const getStrikePower = (state: GameState, attacker: Unit, target: Unit): number =>
+  getStrikePowerOnTerrain(
+    attacker, terrainUnder(state, attacker), target, terrainUnder(state, target),
+    getHexDistance(attacker.position, target.position)
+  );
+
+// Split one unit's attack between the enemy units it can reach (each share already scaled for that
+// enemy's height, counters and cover), then round the total and hand it out so the shares add up to it
 // (leftover points go to the largest fractions, earliest unit first). Units out of reach take 0.
-const distributeDamage = (power: number, targets: { multiplier: number; reachable: boolean }[]): number[] => {
-  const reachable = targets.map((target, index) => target.reachable ? index : -1).filter(index => index !== -1);
-  if (power <= 0 || reachable.length === 0) return targets.map(() => 0);
+// An attack that connects always deals at least 1 in total.
+const distributeDamage = (shares: (number | null)[]): number[] => {
+  const reachable = shares.map((share, index) => share !== null ? index : -1).filter(index => index !== -1);
+  if (reachable.length === 0) return shares.map(() => 0);
 
-  const shares = targets.map(target => target.reachable ? power / reachable.length * target.multiplier : 0);
-  const total = Math.max(1, Math.round(shares.reduce((sum, share) => sum + share, 0)));
-  const damage = shares.map(share => Math.floor(share));
+  const split = shares.map(share => share !== null ? share / reachable.length : 0);
+  const total = Math.max(1, Math.round(split.reduce((sum, share) => sum + share, 0)));
+  const damage = split.map(share => Math.floor(share));
 
-  const order = [...reachable].sort((a, b) => (shares[b] - damage[b]) - (shares[a] - damage[a]) || a - b);
+  const order = [...reachable].sort((a, b) => (split[b] - damage[b]) - (split[a] - damage[a]) || a - b);
   let remainder = total - damage.reduce((sum, d) => sum + d, 0);
   for (let k = 0; remainder > 0; k = (k + 1) % order.length, remainder--) {
     damage[order[k]]++;
@@ -914,19 +1041,21 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
     // Units with fewer options pick first, leaving the flexible ones to cover the rest
     .sort((a, b) => a.targets.length - b.targets.length || compareIds(a.unit, b.unit));
 
-  const assignedPower = new Map<string, number>();
+  // Damage already heading for each enemy from the attackers that picked it
+  const assignedDamage = new Map<string, number>();
   const targetOf = new Map<string, string>();
+  const dealt = (damage: number) => damage > 0 ? Math.max(1, Math.round(damage)) : 0;
 
   for (const { unit, targets } of choices) {
-    const power = getEffectivePower(unit, terrainUnder(state, unit));
     const options = targets.map(target => {
-      const terrain = terrainUnder(state, target);
-      const assigned = assignedPower.get(target.id) ?? 0;
-      const healthLeft = target.lifespan - getStrikeDamage(assigned, terrain);
+      const assigned = assignedDamage.get(target.id) ?? 0;
+      const strike = getStrikePower(state, unit, target);
+      const healthLeft = target.lifespan - dealt(assigned);
       return {
         target,
+        strike,
         healthLeft,
-        kills: healthLeft > 0 && target.lifespan - getStrikeDamage(assigned + power, terrain) <= 0,
+        kills: healthLeft > 0 && target.lifespan - dealt(assigned + strike) <= 0,
         distance: getHexDistance(unit.position, target.position)
       };
     });
@@ -935,14 +1064,16 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
       Number(b.kills) - Number(a.kills) ||
       // Don't waste attacks on units that are already going down
       Number(b.healthLeft > 0) - Number(a.healthLeft > 0) ||
+      // Prefer targets this unit is strong against (counters, height, no cover)
+      b.strike - a.strike ||
       a.healthLeft - b.healthLeft ||
       a.distance - b.distance ||
       compareIds(a.target, b.target)
     );
 
-    const { target } = options[0];
+    const { target, strike } = options[0];
     targetOf.set(unit.id, target.id);
-    assignedPower.set(target.id, (assignedPower.get(target.id) ?? 0) + power);
+    assignedDamage.set(target.id, (assignedDamage.get(target.id) ?? 0) + strike);
   }
 
   const combats: Combat[] = [];
@@ -1035,16 +1166,17 @@ const finishTurn = (state: GameState): GameState => {
   }
 
   processDamageToBase(newState, activePlayer);
-  const mineIncome = collectResources(newState, activePlayer);
-  newState.players[activePlayer].points += TURN_INCOME;
+  const income = getIncome(newState, activePlayer);
+  newState.players[activePlayer].points = Math.max(0, newState.players[activePlayer].points + income.total);
   if (activePlayer === 'player') {
-    addLog(
-      newState,
-      'player',
-      `You earn ${TURN_INCOME + mineIncome} gold` + (mineIncome > 0 ? ` (${mineIncome} from gold mines).` : '.')
-    );
-  } else if (mineIncome > 0) {
-    addLog(newState, 'ai', `The enemy earns ${mineIncome} gold from gold mines.`);
+    const parts = [
+      income.mines > 0 && `+${income.mines} mines`,
+      income.camps > 0 && `+${income.camps} camps`,
+      income.upkeep > 0 && `-${income.upkeep} upkeep`
+    ].filter(Boolean);
+    addLog(newState, 'player', `You earn ${income.total} gold` + (parts.length > 0 ? ` (${parts.join(', ')}).` : '.'));
+  } else if (income.mines + income.camps > 0) {
+    addLog(newState, 'ai', `The enemy earns ${income.mines + income.camps} gold from mines and camps.`);
   }
 
   const winner = checkBaseDestroyed(newState);
@@ -1092,18 +1224,25 @@ const processDamageToBase = (state: GameState, besieger: PlayerType): void => {
   );
 };
 
-// Pay out gold from the resource hexes held by one side's units. Returns the amount earned.
-const collectResources = (state: GameState, side: PlayerType): number => {
-  let earned = 0;
+export interface IncomeBreakdown {
+  base: number;
+  // Gold mines held by this side's units
+  mines: number;
+  // Camps this side holds
+  camps: number;
+  // Cost of keeping an army larger than FREE_UPKEEP_UNITS
+  upkeep: number;
+  total: number;
+}
 
-  for (const hex of state.hexGrid) {
-    if (hex.isResourceHex && hex.unit?.owner === side) {
-      earned += hex.resourceValue || 0;
-    }
-  }
-
-  state.players[side].points += earned;
-  return earned;
+// What a side earns at the end of each of its turns
+export const getIncome = (state: GameState, side: PlayerType): IncomeBreakdown => {
+  const mines = state.hexGrid
+    .filter(hex => hex.isResourceHex && hex.unit?.owner === side)
+    .reduce((sum, hex) => sum + (hex.resourceValue ?? 0), 0);
+  const camps = getOwnedCamps(state, side).length * CAMP_INCOME;
+  const upkeep = Math.max(0, state.players[side].units.length - FREE_UPKEEP_UNITS) * UPKEEP_PER_UNIT;
+  return { base: TURN_INCOME, mines, camps, upkeep, total: TURN_INCOME + mines + camps - upkeep };
 };
 
 // ---------------------------------------------------------------------------
@@ -1135,75 +1274,89 @@ export interface CombatPreview {
 export const getKillBounty = (unit: Unit) => Math.max(2, Math.round(unit.cost * KILL_BOUNTY_FRACTION));
 
 // Work out what a combat will do, using the units' current stats, terrain and reach.
-// Each side's total attack power (after bonuses) is split between the enemy units it can reach,
-// reduced by their cover and rounded so the whole side deals at least 1 damage.
+// Every attacker strikes the defender; the defender strikes back, splitting its attack between the
+// attackers it can reach. Each strike is scaled by height, counters and the target's cover.
 export const getCombatPreview = (state: GameState, combat: Combat): CombatPreview => {
   const getLiveUnit = (unit: Unit) =>
     state.players[unit.owner].units.find(u => u.id === unit.id);
+  const percent = (multiplier: number) => `${multiplier > 1 ? '+' : '-'}${Math.round(Math.abs(multiplier - 1) * 100)}%`;
 
-  const describe = (units: Unit[]) => units.map(unit => {
+  // Modifiers that apply when `unit` strikes `target`, in words
+  const describeStrike = (unit: Unit, target: Unit): string[] => {
     const terrain = terrainUnder(state, unit);
+    const targetTerrain = terrainUnder(state, target);
     const modifiers: string[] = [];
-    const power = getEffectivePower(unit, terrain);
-
-    const effect = TERRAIN_EFFECTS[terrain];
-    if (unit.abilities.includes('terrainBonus') && terrain === 'forest') {
+    if (getBasePower(unit, terrain) > unit.attackPower) {
       modifiers.push(`+${Math.round((TERRAIN_BONUS_ATTACK_MULTIPLIER - 1) * 100)}% attack (fighting from forest)`);
     }
-    if ((effect.damageDealtMultiplier ?? 1) > 1) {
-      modifiers.push(`+${Math.round(((effect.damageDealtMultiplier ?? 1) - 1) * 100)}% attack (high ground)`);
+    const height = getHeightMultiplier(terrain, targetTerrain);
+    if (height !== 1) modifiers.push(`${percent(height)} attack (${height > 1 ? 'high ground' : 'attacking uphill'})`);
+    const counter = getCounterMultiplier(unit.type, target.type);
+    if (counter !== 1) modifiers.push(`x${counter} vs ${UNIT_NAMES[target.type]}`);
+    if (getPointBlankMultiplier(unit, getHexDistance(unit.position, target.position)) < 1) {
+      modifiers.push(`${percent(RANGED_POINT_BLANK_MULTIPLIER)} attack (caught in close combat)`);
     }
-
-    const damageMultiplier = effect.damageTakenMultiplier;
-    if (damageMultiplier < 1) {
-      modifiers.push(`${Math.round((1 - damageMultiplier) * 100)}% less damage (${effect.name.toLowerCase()} cover)`);
-    } else if (damageMultiplier > 1) {
-      modifiers.push(`${Math.round((damageMultiplier - 1) * 100)}% more damage (bogged down in ${effect.name.toLowerCase()})`);
+    if (unit.abilities.includes('magic') && TERRAIN_EFFECTS[targetTerrain].damageTakenMultiplier < 1) {
+      modifiers.push('spells ignore cover');
     }
+    return modifiers;
+  };
 
-    return { unit, terrain, power, damageMultiplier, modifiers };
-  });
+  const defenderUnits = combat.defenders.map(getLiveUnit).filter((u): u is Unit => !!u);
+  const attackerUnits = combat.attackers.map(getLiveUnit).filter((u): u is Unit => !!u);
 
-  const defenders = describe(combat.defenders.map(getLiveUnit).filter((u): u is Unit => !!u));
-  const attackers = describe(combat.attackers.map(getLiveUnit).filter((u): u is Unit => !!u)).map(entry => {
+  const attackers = attackerUnits.map(unit => {
     // Defenders can only strike back at attackers within their own reach, and never at a sneak attack
-    const isSneakAttack = entry.unit.abilities.includes('stealth');
-    const canBeHitBack = !isSneakAttack && defenders.some(d => isInAttackRange(state, d.unit, entry.unit));
-    if (isSneakAttack) entry.modifiers.push('sneak attack - takes no damage');
-    else if (!canBeHitBack) entry.modifiers.push('out of reach - takes no damage');
-    return { ...entry, canBeHitBack };
+    const isSneakAttack = unit.abilities.includes('stealth');
+    const canBeHitBack = !isSneakAttack && defenderUnits.some(defender => canStrike(state, defender, unit));
+    const modifiers = defenderUnits[0] ? describeStrike(unit, defenderUnits[0]) : [];
+    const cover = TERRAIN_EFFECTS[terrainUnder(state, unit)];
+    if (canBeHitBack && cover.damageTakenMultiplier < 1) {
+      modifiers.push(`${Math.round((1 - cover.damageTakenMultiplier) * 100)}% less damage (${cover.name.toLowerCase()} cover)`);
+    }
+    if (isSneakAttack) modifiers.push('sneak attack - takes no damage');
+    else if (!canBeHitBack) modifiers.push('out of reach - takes no damage');
+    return { unit, terrain: terrainUnder(state, unit), power: getBasePower(unit, terrainUnder(state, unit)), canBeHitBack, modifiers };
   });
-  const attackerPower = attackers.reduce((sum, a) => sum + a.power, 0);
-  const defenderPower = defenders.reduce((sum, d) => sum + d.power, 0);
 
-  const attackerDamage = distributeDamage(
-    defenderPower,
-    attackers.map(a => ({ multiplier: a.damageMultiplier, reachable: a.canBeHitBack }))
+  const defenders = defenderUnits.map(unit => {
+    const terrain = terrainUnder(state, unit);
+    const modifiers: string[] = [];
+    const cover = TERRAIN_EFFECTS[terrain];
+    if (cover.damageTakenMultiplier < 1) {
+      modifiers.push(`${Math.round((1 - cover.damageTakenMultiplier) * 100)}% less damage (${cover.name.toLowerCase()} cover)`);
+    }
+    // How this defender fares striking back at the first attacker it can reach
+    const firstTarget = attackers.find(a => a.canBeHitBack)?.unit;
+    if (firstTarget) modifiers.push(...describeStrike(unit, firstTarget));
+    return { unit, terrain, power: getBasePower(unit, terrain), modifiers };
+  });
+
+  // Each defender takes the attackers' combined strikes (one defender per combat)
+  const defenderDamage = defenders.map(defender =>
+    distributeDamage([attackers.reduce((sum, a) => sum + getStrikePower(state, a.unit, defender.unit), 0)])[0]
   );
-  const defenderDamage = distributeDamage(
-    attackerPower,
-    defenders.map(d => ({ multiplier: d.damageMultiplier, reachable: true }))
-  );
+  // The defender's strike-back is split between the attackers it can reach
+  const attackerDamage = defenders.length > 0
+    ? distributeDamage(attackers.map(a => a.canBeHitBack ? getStrikePower(state, defenders[0].unit, a.unit) : null))
+    : attackers.map(() => 0);
 
   const withDamage = (
-    { unit, terrain, power, modifiers }: (typeof defenders)[number],
+    entry: { unit: Unit; terrain: TerrainType; power: number; modifiers: string[] },
     damageTaken: number,
     canBeHitBack: boolean
   ): CombatantPreview => ({
-    unit,
-    terrain,
-    power,
-    modifiers,
+    ...entry,
     canBeHitBack,
     damageTaken,
-    destroyed: damageTaken >= unit.lifespan
+    destroyed: damageTaken >= entry.unit.lifespan
   });
 
   return {
     attackers: attackers.map((a, index) => withDamage(a, attackerDamage[index], a.canBeHitBack)),
     defenders: defenders.map((d, index) => withDamage(d, defenderDamage[index], true)),
-    attackerPower,
-    defenderPower
+    attackerPower: attackers.reduce((sum, a) => sum + a.power, 0),
+    defenderPower: defenders.reduce((sum, d) => sum + d.power, 0)
   };
 };
 

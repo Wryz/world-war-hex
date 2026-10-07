@@ -11,6 +11,7 @@ import {
 } from './utils/UnitModelSystem';
 import { playBattleSound, BattleSound } from './utils/battleSounds';
 import { DRAG_CLICK_TOLERANCE } from './HexTile';
+import { MELEE_IMPACT_POINT, PROJECTILE_FLIGHT_TIME, RANGED_RELEASE_POINT, strikeOffset } from './utils/battleTiming';
 import { instantiateUnitModel, findAnimationClip, disposeUnitModel } from './utils/unitModelCache';
 import { ArrowIcon, AttackIcon, GoldIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
 
@@ -23,16 +24,10 @@ const TURN_SPEED = 8; // how quickly units rotate to face their target
 const ANIMATION_FADE_DURATION = 0.3;
 // How far melee units step towards their target on each strike
 const LUNGE_DISTANCE = 0.4;
-// Seconds a bolt or spell takes to reach its target, and the height it is shot from
-const ARROW_FLIGHT_TIME = 0.35;
+// Height a bolt or spell is shot from
 const PROJECTILE_HEIGHT = 0.6;
-
-// Small per-unit delay so units in the same battle don't strike in lockstep
-const strikeOffset = (id: string) => {
-  let hash = 0;
-  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
-  return (Math.abs(hash) % 1000) / 1000 * 0.35;
-};
+// How long a floating damage number stays up (ms)
+const HIT_NUMBER_DURATION = 1200;
 
 export const OWNER_COLORS = {
   player: '#3b82f6',
@@ -45,6 +40,9 @@ export interface UnitBattle {
   key: string;
   // World position (on the tile surface) of the enemy this unit strikes at, or null if it can't reach any
   target: [number, number, number] | null;
+  // Blows this unit takes during the battle: when each lands (seconds after the battle starts) and the
+  // total damage they add up to, so its health bar can drop hit by hit
+  incoming?: { times: number[]; damage: number };
 }
 
 // Terrain effects shown on a unit's label: cover, an attack bonus (Pikemen in forest, high ground),
@@ -102,6 +100,34 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   const clipsRef = useRef<THREE.AnimationClip[]>([]);
   const actionRef = useRef<THREE.AnimationAction | null>(null);
   const [modelLoaded, setModelLoaded] = useState(false);
+
+  // Damage shown so far in the current battle, and floating numbers for recent hits
+  const [shownDamage, setShownDamage] = useState(0);
+  const [hitNumbers, setHitNumbers] = useState<{ id: number; amount: number }[]>([]);
+  const battleProgressRef = useRef<{ key: string; start: number; landed: number; shown: number } | null>(null);
+  const hitTimeoutsRef = useRef(new Set<ReturnType<typeof setTimeout>>());
+  useEffect(() => {
+    const timeouts = hitTimeoutsRef.current;
+    return () => timeouts.forEach(clearTimeout);
+  }, []);
+
+  // A new battle (or the end of one) starts the health bar from the unit's real health again
+  const battleKey = battle?.key ?? null;
+  useEffect(() => {
+    setShownDamage(0);
+    setHitNumbers([]);
+    battleProgressRef.current = null;
+  }, [battleKey]);
+
+  const showHit = (amount: number) => {
+    const id = Date.now() + Math.random();
+    setHitNumbers(current => [...current, { id, amount }]);
+    const timeout = setTimeout(() => {
+      hitTimeoutsRef.current.delete(timeout);
+      setHitNumbers(current => current.filter(hit => hit.id !== id));
+    }, HIT_NUMBER_DURATION);
+    hitTimeoutsRef.current.add(timeout);
+  };
 
   // Walking animation along a path of world positions
   const walkRef = useRef<{ points: THREE.Vector3[]; segment: number; progress: number } | null>(null);
@@ -261,6 +287,26 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     const arrow = arrowRef.current;
     if (arrow) arrow.visible = false;
 
+    // Blows landing on this unit: drop its health bar a step at a time as they hit
+    if (battle?.incoming && battle.incoming.damage > 0) {
+      const now = frameState.clock.getElapsedTime();
+      if (battleProgressRef.current?.key !== battle.key) {
+        battleProgressRef.current = { key: battle.key, start: now, landed: 0, shown: 0 };
+      }
+      const tally = battleProgressRef.current;
+      const { times, damage } = battle.incoming;
+      const landed = times.filter(time => time <= now - tally.start).length;
+      if (landed > tally.landed) {
+        tally.landed = landed;
+        const shown = Math.round(damage * landed / times.length);
+        if (shown > tally.shown) {
+          showHit(shown - tally.shown);
+          tally.shown = shown;
+          setShownDamage(shown);
+        }
+      }
+    }
+
     if (battle && !walkRef.current) {
       const now = frameState.clock.getElapsedTime();
       if (battleClockRef.current?.key !== battle.key) {
@@ -286,9 +332,9 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
 
         if (isRanged) {
           // The bolt (or spell) flies from the shooter to the target in an arc, once the shot is released
-          const flightStart = attackInterval * 0.3;
-          if (sinceStrike >= flightStart && sinceStrike < flightStart + ARROW_FLIGHT_TIME && arrow) {
-            const flight = (sinceStrike - flightStart) / ARROW_FLIGHT_TIME;
+          const flightStart = attackInterval * RANGED_RELEASE_POINT;
+          if (sinceStrike >= flightStart && sinceStrike < flightStart + PROJECTILE_FLIGHT_TIME && arrow) {
+            const flight = (sinceStrike - flightStart) / PROJECTILE_FLIGHT_TIME;
             const arc = projectile === 'magic' ? 0.3 : 0.6;
             const local = arrowOffset.current.copy(targetVector.current).sub(root.position);
             arrow.visible = true;
@@ -299,7 +345,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
               root.position.y + PROJECTILE_HEIGHT + local.y * ahead + Math.sin(ahead * Math.PI) * arc,
               root.position.z + local.z * ahead
             );
-          } else if (sinceStrike >= flightStart + ARROW_FLIGHT_TIME && strikeNumber !== clock.lastImpact) {
+          } else if (sinceStrike >= flightStart + PROJECTILE_FLIGHT_TIME && strikeNumber !== clock.lastImpact) {
             clock.lastImpact = strikeNumber;
             playSfx(projectile === 'magic' ? 'spellHit' : 'arrowHit', 0.7);
           }
@@ -307,10 +353,10 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
         } else {
           // Step in, strike, step back
           isStriking = progress < 0.6;
-          lunge = progress < 0.25
-            ? Math.sin((progress / 0.25) * Math.PI / 2)
-            : progress < 0.6 ? Math.cos(((progress - 0.25) / 0.35) * Math.PI / 2) : 0;
-          if (progress >= 0.25 && strikeNumber !== clock.lastImpact) {
+          lunge = progress < MELEE_IMPACT_POINT
+            ? Math.sin((progress / MELEE_IMPACT_POINT) * Math.PI / 2)
+            : progress < 0.6 ? Math.cos(((progress - MELEE_IMPACT_POINT) / (0.6 - MELEE_IMPACT_POINT)) * Math.PI / 2) : 0;
+          if (progress >= MELEE_IMPACT_POINT && strikeNumber !== clock.lastImpact) {
             clock.lastImpact = strikeNumber;
             playSfx('swordClash', 0.7);
             playSfx('swordHit', 0.5);
@@ -372,7 +418,9 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     onSelect(unit);
   };
 
-  const healthRatio = unit.maxLifespan > 0 ? unit.lifespan / unit.maxLifespan : 1;
+  // During a battle the bar shows the blows landed so far
+  const shownHealth = Math.max(0, unit.lifespan - shownDamage);
+  const healthRatio = unit.maxLifespan > 0 ? shownHealth / unit.maxLifespan : 1;
   const healthColor = healthRatio > 0.6 ? '#22c55e' : healthRatio > 0.3 ? '#eab308' : '#ef4444';
 
   return (
@@ -460,9 +508,14 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
               <WaitIcon title="Arrives at the end of the turn" />
             ) : (
               <>
-                <span className="w-6 h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block">
-                  <span className="block h-full" style={{ width: `${healthRatio * 100}%`, background: healthColor }} />
+                <span className={`${battle ? 'w-9' : 'w-6'} h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block`}>
+                  <span
+                    className="block h-full transition-[width] duration-200 ease-out"
+                    style={{ width: `${healthRatio * 100}%`, background: healthColor }}
+                  />
                 </span>
+                {/* Health as a number while fighting, so each blow is easy to follow */}
+                {battle && <span className="tabular-nums">{shownHealth}</span>}
                 {/* Terrain bonuses as icons only - details are in the selection card */}
                 {terrainBadges.map(badge =>
                   badge === 'cover' ? <TerrainIcon key={badge} terrain="forest" />
@@ -474,6 +527,23 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
                 {hasPlannedMove && <ArrowIcon />}
               </>
             )}
+          </div>
+        </Html>
+      )}
+
+      {/* A number pops up for every blow that lands during a battle */}
+      {!decorative && hitNumbers.length > 0 && (
+        <Html position={[0, look.labelHeight + 0.35, 0]} center zIndexRange={[8, 0]} style={{ pointerEvents: 'none' }}>
+          <div className="relative h-0 w-0">
+            {hitNumbers.map((hit, index) => (
+              <span
+                key={hit.id}
+                className="animate-float-up font-display absolute -translate-x-1/2 whitespace-nowrap text-base font-bold text-red-400 select-none"
+                style={{ left: `${(index % 3 - 1) * 10}px`, textShadow: '0 1px 2px rgba(0,0,0,0.7)' }}
+              >
+                -{hit.amount}
+              </span>
+            ))}
           </div>
         </Html>
       )}

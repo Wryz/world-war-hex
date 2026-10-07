@@ -1,6 +1,6 @@
 import React from 'react';
 import { GameState } from '@/types/game';
-import { BASE_MAX_HEALTH, TURN_INCOME } from '@/lib/game/gameState';
+import { BASE_MAX_HEALTH, getIncome } from '@/lib/game/gameState';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
 import { CrownIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon } from '../icons';
 
@@ -41,9 +41,13 @@ const CastleHealth: React.FC<{ title: string; health: number; max: number; color
 // Compact status bar: whose turn it is, both castles' health, and the player's gold
 export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit }) => {
   const { players, turnNumber } = gameState;
-  const mineIncome = gameState.hexGrid
-    .filter(hex => hex.isResourceHex && hex.unit?.owner === 'player')
-    .reduce((sum, hex) => sum + (hex.resourceValue ?? 0), 0);
+  const income = getIncome(gameState, 'player');
+  const incomeDetails = [
+    `+${income.base} income`,
+    income.mines > 0 && `+${income.mines} gold mines`,
+    income.camps > 0 && `+${income.camps} camps`,
+    income.upkeep > 0 && `-${income.upkeep} upkeep`
+  ].filter(Boolean).join(', ');
 
   return (
     <div className="fixed top-3 inset-x-3 z-20 flex items-start justify-between gap-3 pointer-events-none">
@@ -83,8 +87,11 @@ export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, show
 
       {/* Treasury */}
       <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-2 px-3 py-1.5`}>
-        <span className="font-display flex items-center gap-1 text-base text-amber-300" title={`+${TURN_INCOME + mineIncome} gold per round`}>
+        <span className="font-display flex items-center gap-1 text-base text-amber-300" title={`${income.total >= 0 ? '+' : ''}${income.total} gold per turn (${incomeDetails})`}>
           <GoldIcon className="text-lg" /> {players.player.points}
+          <span className={`text-xs ${income.upkeep > 0 ? 'text-rose-300' : 'text-amber-200/70'}`}>
+            {income.total >= 0 ? '+' : ''}{income.total}
+          </span>
         </span>
         <span className="mx-0.5 h-5 w-px bg-slate-700" />
         {onSave && (

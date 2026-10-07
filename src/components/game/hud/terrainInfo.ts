@@ -3,14 +3,14 @@ import { TerrainType } from '@/types/game';
 // One-line summary of what each terrain does
 export const TERRAIN_SHORT_EFFECTS: Record<TerrainType, string> = {
   plain: 'No effect',
-  forest: '-40% damage taken',
+  forest: '-40% dmg, blocks arrows',
   desert: 'Costs 2 movement',
   resource: 'Gold every turn',
-  mountain: 'Impassable',
+  mountain: 'Impassable, blocks sight',
   water: 'Impassable',
-  hills: '+25% attack, 2 move',
-  swamp: '+25% dmg taken, 2 move',
-  snow: 'Costs 3 movement',
+  hills: 'High ground, 2 move',
+  swamp: 'Low ground, 2 move',
+  snow: 'High ground, 3 move',
   spring: 'Heals 2 per turn'
 };
 
