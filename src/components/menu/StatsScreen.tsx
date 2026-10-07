@@ -1,0 +1,198 @@
+import React, { useRef, useState } from 'react';
+import { TroopId, MOB_IDS, TROOPS } from '@/lib/game/troops';
+import { LEVEL_COUNT } from '@/lib/campaign/levels';
+import {
+  exportSave, highestCleared, parseSave, profilePower, replaceProfile, resetProfile, totalStars, useHasHydrated, useProfile
+} from '@/lib/meta/profile';
+import { setMusicVolume, useMusic, useMusicVolume } from '@/lib/audio/music';
+import { setMuted, useMuted } from '../game/utils/SoundPlayer';
+import { clearSavedGame, readRawSave, writeRawSave } from '../game/storage/GameStorage';
+import { setGameSpeed, useGameSpeed } from '../game/effects/effects';
+import { TroopCard } from '../game/cards/TroopCard';
+import { MenuShell, CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
+import {
+  DownloadIcon, MusicIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, StatsIcon, TrashIcon, UploadIcon
+} from '../game/icons';
+
+const formatTime = (seconds: number) => {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  return hours > 0 ? `${hours}h ${minutes}m` : `${minutes}m ${seconds % 60}s`;
+};
+
+const Stat: React.FC<{ label: string; value: React.ReactNode; accent?: string }> = ({ label, value, accent = '#f1f5f9' }) => (
+  <div className="rounded-xl bg-slate-800/80 px-3 py-2">
+    <div className="font-display text-2xl" style={{ color: accent }}>{value}</div>
+    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</div>
+  </div>
+);
+
+// Lifetime statistics, settings, and saving progress to (or loading it from) a file
+export const StatsScreen: React.FC = () => {
+  const profile = useProfile();
+  const hydrated = useHasHydrated();
+  const musicVolume = useMusicVolume();
+  const isMuted = useMuted();
+  const speed = useGameSpeed();
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [message, setMessage] = useState<{ text: string; isError?: boolean } | null>(null);
+  useMusic('menu');
+
+  const s = profile.stats;
+  const winRate = s.battles > 0 ? Math.round(s.wins / s.battles * 100) : 0;
+  const favourites = (Object.entries(s.cardsPlayed) as [TroopId, number][]).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const mostPlayed = favourites[0]?.[1] ?? 1;
+  const discovered = MOB_IDS.filter(id => (profile.bestiary[id]?.seen ?? 0) > 0).length;
+
+  const handleExport = () => {
+    const blob = new Blob([exportSave(readRawSave())], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `world-war-hex-save-${new Date().toISOString().slice(0, 10)}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+    setMessage({ text: 'Save file downloaded. Keep it somewhere safe!' });
+  };
+
+  const handleImport = async (file: File) => {
+    const parsed = parseSave(await file.text());
+    if (!parsed) {
+      setMessage({ text: 'That file isn\'t a World War Hex save.', isError: true });
+      return;
+    }
+    if (!window.confirm('Load this save? Your current progress on this computer will be replaced.')) return;
+    replaceProfile(parsed.profile);
+    writeRawSave(parsed.battle);
+    setMessage({ text: 'Save loaded. Welcome back, commander!' });
+  };
+
+  const handleReset = () => {
+    if (!window.confirm('Erase all progress (coins, cards, stars and stats)? This cannot be undone.')) return;
+    resetProfile();
+    clearSavedGame();
+    setMessage({ text: 'Progress erased. A fresh campaign awaits.' });
+  };
+
+  return (
+    <MenuShell title="Stats" icon={<StatsIcon />} wide>
+      {hydrated && (
+        <>
+          <section className={`${CARD_CLASS} p-4`}>
+            <h2 className="font-display mb-3 text-2xl">Campaign</h2>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Stat label="Levels cleared" value={`${highestCleared(profile)}/${LEVEL_COUNT}`} accent="#fcd34d" />
+              <Stat label="Stars" value={`${totalStars(profile)}/${LEVEL_COUNT * 3}`} accent="#facc15" />
+              <Stat label="Army power" value={profilePower(profile)} accent="#fdba74" />
+              <Stat label="Bestiary" value={`${discovered}/${MOB_IDS.length}`} accent="#86efac" />
+            </div>
+          </section>
+
+          <section className={`${CARD_CLASS} mt-4 p-4`}>
+            <h2 className="font-display mb-3 text-2xl">Battles</h2>
+            <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <Stat label="Fought" value={s.battles} />
+              <Stat label="Won" value={s.wins} accent="#86efac" />
+              <Stat label="Win rate" value={`${winRate}%`} />
+              <Stat label="Best streak" value={s.bestStreak} accent="#fcd34d" />
+              <Stat label="Fastest win" value={s.fastestWinRounds ? `${s.fastestWinRounds} rounds` : '-'} />
+              <Stat label="Enemies slain" value={s.enemiesSlain} accent="#fca5a5" />
+              <Stat label="Troops lost" value={s.unitsLost} />
+              <Stat label="Cards played" value={s.unitsDeployed} />
+              <Stat label="Bosses defeated" value={s.bossesDefeated} accent="#f87171" />
+              <Stat label="Castles stormed" value={s.castlesStormed} />
+              <Stat label="Castles razed" value={s.castlesDestroyed} />
+              <Stat label="Camps captured" value={s.campsCaptured} />
+              <Stat label="Siege damage" value={s.siegeDamage} />
+              <Stat label="Coins earned" value={s.coinsEarned} accent="#fde047" />
+              <Stat label="Coins spent" value={s.coinsSpent} />
+              <Stat label="Time in battle" value={formatTime(s.playSeconds)} />
+            </div>
+          </section>
+
+          {favourites.length > 0 && (
+            <section className={`${CARD_CLASS} mt-4 p-4`}>
+              <h2 className="font-display mb-3 text-2xl">Favourite cards</h2>
+              <div className="flex flex-col gap-2">
+                {favourites.map(([id, count]) => (
+                  <div key={id} className="flex items-center gap-3">
+                    <TroopCard type={id} level={profile.cards[id] ?? 1} size="xs" hideLevel />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-bold">{TROOPS[id].name}</div>
+                      <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-slate-700">
+                        <div className="h-full rounded-full bg-sky-400" style={{ width: `${count / mostPlayed * 100}%` }} />
+                      </div>
+                    </div>
+                    <span className="font-display w-12 text-right text-lg">{count}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </>
+      )}
+
+      {/* Settings */}
+      <section className={`${CARD_CLASS} mt-4 p-4`}>
+        <h2 className="font-display mb-3 text-2xl">Settings</h2>
+        <div className="flex flex-col gap-3">
+          <label className="flex items-center gap-3 text-sm font-bold">
+            <MusicIcon className="text-lg" /> Music
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={musicVolume}
+              onChange={event => setMusicVolume(Number(event.target.value))}
+              className="flex-1 accent-amber-400"
+              aria-label="Music volume"
+            />
+            <span className="w-10 text-right tabular-nums">{Math.round(musicVolume * 100)}%</span>
+          </label>
+          <div className="flex flex-wrap gap-2">
+            <button onClick={() => setMuted(!isMuted)} className={`${SECONDARY_BUTTON} flex items-center gap-1.5 text-sm`} aria-pressed={isMuted}>
+              {isMuted ? <SoundOffIcon /> : <SoundOnIcon />} {isMuted ? 'Sound off' : 'Sound on'}
+            </button>
+            <button onClick={() => setGameSpeed(speed === 1 ? 2 : 1)} className={`${SECONDARY_BUTTON} flex items-center gap-1.5 text-sm`} aria-pressed={speed === 2}>
+              <SpeedIcon /> Battle speed {speed}x
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* Saves */}
+      <section className={`${CARD_CLASS} mt-4 p-4`}>
+        <h2 className="font-display text-2xl">Your save</h2>
+        <p className="mt-1 text-xs text-slate-400">
+          Progress saves automatically in this browser. Download a save file to keep a backup on your computer or carry your campaign to another one.
+        </p>
+        <div className="mt-3 flex flex-wrap gap-2">
+          <button onClick={handleExport} className={`${SECONDARY_BUTTON} flex items-center gap-1.5 text-sm`}>
+            <DownloadIcon /> Download save
+          </button>
+          <button onClick={() => fileInputRef.current?.click()} className={`${SECONDARY_BUTTON} flex items-center gap-1.5 text-sm`}>
+            <UploadIcon /> Load save file
+          </button>
+          <button onClick={handleReset} className={`${SECONDARY_BUTTON} flex items-center gap-1.5 bg-red-900 text-sm hover:bg-red-800`}>
+            <TrashIcon /> Erase progress
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json,.json"
+            className="hidden"
+            onChange={event => {
+              const file = event.target.files?.[0];
+              if (file) handleImport(file);
+              event.target.value = '';
+            }}
+          />
+        </div>
+        {message && (
+          <p className={`mt-3 text-sm font-semibold ${message.isError ? 'text-red-400' : 'text-emerald-300'}`} role="status">{message.text}</p>
+        )}
+      </section>
+    </MenuShell>
+  );
+};

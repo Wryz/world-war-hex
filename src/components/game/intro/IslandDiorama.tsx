@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { Hex, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
-import { DEFAULT_SETTINGS, UNITS, isImpassable } from '@/lib/game/gameState';
-import { createHexagonalGrid, MAP_THEMES } from '@/lib/game/mapGenerator';
+import { DEFAULT_SETTINGS, isImpassable } from '@/lib/game/gameState';
+import { cardStats } from '@/lib/game/troops';
+import { createHexagonalGrid, REGION_THEMES as MAP_THEMES } from '@/lib/game/mapGenerator';
 import { HexTile } from '../HexTile';
 import { BoardDecorations } from '../BoardDecorations';
 import { Castle } from '../Castle';
@@ -20,15 +21,16 @@ const SPIN_SPEED = 0.12;
 
 const CASTLES: [HexCoordinates, PlayerType][] = [[{ q: 0, r: 3 }, 'player'], [{ q: 0, r: -3 }, 'ai']];
 const CAMPS: [HexCoordinates, PlayerType | null][] = [[{ q: -2, r: 1 }, 'player'], [{ q: 2, r: -1 }, null]];
+// Your Kingdom's cards face a few of the campaign's monsters
 const TROOPS: [UnitType, PlayerType, HexCoordinates][] = [
   ['infantry', 'player', { q: 0, r: 1 }],
   ['artillery', 'player', { q: 1, r: 1 }],
-  ['helicopter', 'player', { q: -2, r: 1 }],
+  ['pegasus', 'player', { q: -2, r: 1 }],
   ['medic', 'player', { q: -1, r: 2 }],
-  ['tank', 'ai', { q: 0, r: 0 }],
-  ['rogue', 'ai', { q: 1, r: 0 }],
-  ['artillery', 'ai', { q: -1, r: -1 }],
-  ['helicopter', 'ai', { q: 2, r: -2 }]
+  ['orc_grunt', 'ai', { q: 0, r: 0 }],
+  ['grey_wolf', 'ai', { q: 1, r: 0 }],
+  ['skeleton_archer', 'ai', { q: -1, r: -1 }],
+  ['wyvern', 'ai', { q: 2, r: -2 }]
 ];
 // Skirmishes that play on a loop: [attacker index, target index] into TROOPS
 const SKIRMISHES: [number, number][] = [[0, 4], [4, 0], [1, 4], [5, 1], [3, 0]];
@@ -41,24 +43,20 @@ const noop = () => {};
 // A small map in the given theme, with the castle, camp and troop hexes cleared
 const buildIsland = (themeIndex: number): Hex[] => {
   const settings = { ...DEFAULT_SETTINGS, gridSize: ISLAND_RADIUS, resourceHexCount: 1 };
-  // Seeds pick their theme deterministically, so search for one that rolls the theme we want
-  for (let seed = themeIndex * 1000 + 1; ; seed++) {
-    const { hexGrid, theme } = createHexagonalGrid(settings, seed);
-    if (theme.name !== MAP_THEMES[themeIndex].name) continue;
+  const { hexGrid } = createHexagonalGrid(settings, themeIndex * 1000 + 1, MAP_THEMES[themeIndex].name);
 
-    const open = new Set(OPEN_HEXES.map(key));
-    return hexGrid.map(hex => {
-      const coordinates = key(hex.coordinates);
-      const castle = CASTLES.find(([c]) => key(c) === coordinates);
-      const camp = CAMPS.find(([c]) => key(c) === coordinates);
-      if (castle) return { ...hex, terrain: 'plain', isResourceHex: false, isBase: true, owner: castle[1] };
-      if (camp) return { ...hex, terrain: 'plain', isResourceHex: false, isCamp: true, owner: camp[1] ?? undefined };
-      if (open.has(coordinates) && (isImpassable(hex) || hex.isResourceHex)) {
-        return { ...hex, terrain: 'plain', isResourceHex: false };
-      }
-      return hex;
-    });
-  }
+  const open = new Set(OPEN_HEXES.map(key));
+  return hexGrid.map(hex => {
+    const coordinates = key(hex.coordinates);
+    const castle = CASTLES.find(([c]) => key(c) === coordinates);
+    const camp = CAMPS.find(([c]) => key(c) === coordinates);
+    if (castle) return { ...hex, terrain: 'plain', isResourceHex: false, isBase: true, owner: castle[1] };
+    if (camp) return { ...hex, terrain: 'plain', isResourceHex: false, isCamp: true, owner: camp[1] ?? undefined };
+    if (open.has(coordinates) && (isImpassable(hex) || hex.isResourceHex)) {
+      return { ...hex, terrain: 'plain', isResourceHex: false };
+    }
+    return hex;
+  });
 };
 
 const surface = (hexGrid: Hex[], c: HexCoordinates): [number, number, number] => {
@@ -73,8 +71,9 @@ const Island: React.FC<{ themeIndex: number }> = ({ themeIndex }) => {
 
   // Troops never change, so their unit objects (and models) are created once
   const troops = useMemo(() => TROOPS.map(([type, owner, position], index): Unit => ({
-    ...UNITS[type],
-    abilities: [...UNITS[type].abilities],
+    ...cardStats(type, 1),
+    type,
+    lifespan: cardStats(type, 1).maxLifespan,
     id: `intro-${index}`,
     owner,
     position,

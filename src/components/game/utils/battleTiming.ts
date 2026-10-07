@@ -1,5 +1,5 @@
 import { Unit } from '@/types/game';
-import { ATTACK_INTERVALS } from './UnitModelSystem';
+import { getAttackInterval } from './UnitModelSystem';
 
 // Timing of the battle animation, shared by the units fighting it and the board that shows its damage
 
@@ -23,7 +23,7 @@ export const strikeOffset = (id: string) => {
 
 // Seconds after a battle starts at which each of a unit's blows lands on its target
 export const getImpactTimes = (unit: Unit): number[] => {
-  const interval = ATTACK_INTERVALS[unit.type];
+  const interval = getAttackInterval(unit.type);
   const impactDelay = unit.abilities.includes('rangedAttack')
     ? interval * RANGED_RELEASE_POINT + PROJECTILE_FLIGHT_TIME
     : interval * MELEE_IMPACT_POINT;

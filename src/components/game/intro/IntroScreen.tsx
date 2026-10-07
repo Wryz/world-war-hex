@@ -1,39 +1,35 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { UNITS } from '@/lib/game/gameState';
-import { getUnitTypeName } from '../utils/UnitHelpers';
-import { RECRUITABLE, UNIT_ROLES } from '../hud/unitInfo';
+import { getLevel, LEVEL_COUNT } from '@/lib/campaign/levels';
+import { MOB_IDS, FACTIONS } from '@/lib/game/troops';
+import { highestCleared, highestUnlocked, useHasHydrated, useProfile } from '@/lib/meta/profile';
+import { useMusic } from '@/lib/audio/music';
+import { setMuted, useMuted } from '../utils/SoundPlayer';
+import { CARD_CLASS, PRIMARY_BUTTON, ResourceBadges, SKY_BACKGROUND } from '@/components/menu/MenuShell';
+import { TroopCard } from '../cards/TroopCard';
 import {
-  AttackIcon, CampIcon, CrownIcon, GoldIcon, HealthIcon, MoveIcon, ResumeIcon, ShieldIcon, SkullIcon, TerrainIcon, UnitIcon
+  AttackIcon, BookIcon, BossIcon, CardsIcon, MapIcon, ResumeIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon,
+  StarIcon, StatsIcon
 } from '../icons';
-import { Difficulty } from '../storage/GameStorage';
+import { BattleConfig, Difficulty } from '../storage/GameStorage';
 
 // The 3D island needs WebGL, so it only renders in the browser
 const IslandDiorama = dynamic(() => import('./IslandDiorama'), { ssr: false });
 
 export interface IntroScreenProps {
-  onStartGame: (difficulty: Difficulty) => void;
-  onContinueGame?: () => void;
-  hasSavedGame?: boolean;
+  onStartQuickBattle: (difficulty: Difficulty) => void;
+  // The battle in progress, if there is one
+  savedBattle?: BattleConfig | null;
+  onContinueBattle?: () => void;
 }
 
-const DIFFICULTY_OPTIONS: { level: Difficulty; label: string; description: string; Icon: typeof ShieldIcon }[] = [
-  { level: 'easy', label: 'Easy', description: 'A cautious foe', Icon: ShieldIcon },
-  { level: 'medium', label: 'Medium', description: 'A fair fight', Icon: AttackIcon },
-  { level: 'hard', label: 'Hard', description: 'A ruthless warlord', Icon: SkullIcon }
+const DIFFICULTY_OPTIONS: { level: Difficulty; label: string; Icon: typeof ShieldIcon }[] = [
+  { level: 'easy', label: 'Easy', Icon: ShieldIcon },
+  { level: 'medium', label: 'Medium', Icon: AttackIcon },
+  { level: 'hard', label: 'Hard', Icon: SkullIcon }
 ];
-
-// The game in four beats, shown under the menu
-const HOW_TO_WIN: { icon: React.ReactNode; text: string }[] = [
-  { icon: <GoldIcon />, text: 'Recruit troops' },
-  { icon: <TerrainIcon terrain="hills" />, text: 'Use the terrain' },
-  { icon: <CampIcon />, text: 'Capture camps' },
-  { icon: <CrownIcon />, text: 'Storm the castle' }
-];
-
-// Chunky dark panel with a solid drop shadow, like a game card
-const CARD_CLASS = 'rounded-2xl bg-slate-900/90 text-slate-100 ring-1 ring-white/10 shadow-[0_6px_0_rgba(15,23,42,0.45)] backdrop-blur-sm';
 
 const Cloud: React.FC<{ className: string; delay: string; duration: string }> = ({ className, delay, duration }) => (
   <div
@@ -48,37 +44,63 @@ const Cloud: React.FC<{ className: string; delay: string; duration: string }> = 
   </div>
 );
 
-const IntroScreen: React.FC<IntroScreenProps> = ({
-  onStartGame,
-  onContinueGame,
-  hasSavedGame = false
-}) => {
-  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('easy');
+const MenuTile: React.FC<{ href: string; icon: React.ReactNode; title: string; detail: string }> = ({ href, icon, title, detail }) => (
+  <Link href={href} className={`${CARD_CLASS} group flex items-center gap-3 px-3 py-3 transition-transform hover:-translate-y-1`}>
+    <span className="text-3xl transition-transform group-hover:scale-110">{icon}</span>
+    <span className="min-w-0">
+      <span className="font-display block text-lg leading-tight">{title}</span>
+      <span className="block truncate text-[11px] text-slate-400">{detail}</span>
+    </span>
+  </Link>
+);
+
+const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBattle, onContinueBattle }) => {
+  const profile = useProfile();
+  const hydrated = useHasHydrated();
+  const isMuted = useMuted();
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [themeName, setThemeName] = useState<string | null>(null);
+  useMusic('menu');
+
+  const nextLevel = getLevel(hydrated ? highestUnlocked(profile) : 1);
+  const cleared = hydrated ? highestCleared(profile) : 0;
+  const campaignDone = cleared >= LEVEL_COUNT;
+  const discovered = MOB_IDS.filter(id => (profile.bestiary[id]?.seen ?? 0) > 0).length;
+  const savedLevel = savedBattle?.mode === 'campaign' ? getLevel(savedBattle.levelId) : null;
 
   return (
-    <div
-      className="relative flex min-h-screen w-full flex-col overflow-x-hidden lg:block"
-      style={{ background: 'radial-gradient(ellipse at 65% 45%, #e0f4ff 0%, #b3e1ff 55%, #8ccfff 100%)' }}
-    >
+    <div className="relative flex min-h-screen w-full flex-col overflow-x-hidden lg:block" style={{ background: SKY_BACKGROUND }}>
       <Cloud className="top-[8%]" delay="-8s" duration="70s" />
       <Cloud className="top-[22%] scale-75 opacity-80" delay="-40s" duration="90s" />
       <Cloud className="top-[70%] scale-90 opacity-70" delay="-22s" duration="80s" />
 
       {/* A living battlefield made of the game's own pieces */}
-      <div className="relative order-2 h-[44vh] min-h-[280px] lg:absolute lg:inset-y-0 lg:left-[32%] lg:right-0 lg:h-auto">
+      <div className="relative order-2 h-[40vh] min-h-[260px] lg:absolute lg:inset-y-0 lg:left-[36%] lg:right-0 lg:h-auto">
         <IslandDiorama onThemeChange={setThemeName} />
         {themeName && (
           <div className="pointer-events-none absolute bottom-4 right-4 lg:bottom-8 lg:right-8">
             <div key={themeName} className={`${CARD_CLASS} animate-fadeIn px-4 py-2 text-right`}>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Every map is different</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">100 battles across</div>
               <div className="font-display text-lg text-amber-300">{themeName}</div>
             </div>
           </div>
         )}
       </div>
 
-      <main className="relative z-10 order-1 flex flex-col justify-center px-4 pt-8 pb-4 sm:px-8 lg:min-h-screen lg:max-w-[42rem] lg:px-14 lg:py-10 pointer-events-none">
+      {/* Resources and sound */}
+      <div className="absolute right-3 top-3 z-20 flex items-center gap-2 sm:right-6">
+        <ResourceBadges />
+        <button
+          onClick={() => setMuted(!isMuted)}
+          className={`${CARD_CLASS} p-2.5`}
+          aria-label={isMuted ? 'Turn sound on' : 'Mute sound'}
+          aria-pressed={isMuted}
+        >
+          {isMuted ? <SoundOffIcon /> : <SoundOnIcon />}
+        </button>
+      </div>
+
+      <main className="relative z-10 order-1 flex flex-col justify-center px-4 pt-16 pb-4 sm:px-8 lg:min-h-screen lg:max-w-[40rem] lg:px-14 lg:py-10 pointer-events-none">
         <div className="pointer-events-auto">
           {/* Wordmark */}
           <div className="flex items-center gap-4">
@@ -100,45 +122,38 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
               </span>
             </h1>
           </div>
-          <p className="mt-4 max-w-lg text-lg font-semibold text-slate-700">
-            Raise an army, read the land and seize the enemy crown.
+          <p className="mt-3 max-w-lg text-lg font-semibold text-slate-700">
+            Play your troop cards, read the land and topple the enemy castle - in under five minutes.
           </p>
 
-          {/* Menu */}
-          <div className={`${CARD_CLASS} mt-6 max-w-lg p-4 sm:p-5`}>
-            <div className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-400">Choose your challenge</div>
-            <div className="grid grid-cols-3 gap-2" role="group" aria-label="Difficulty">
-              {DIFFICULTY_OPTIONS.map(({ level, label, description, Icon }) => {
-                const isSelected = selectedDifficulty === level;
-                return (
-                  <button
-                    key={level}
-                    onClick={() => setSelectedDifficulty(level)}
-                    aria-pressed={isSelected}
-                    className={`flex flex-col items-center rounded-xl px-2 py-2.5 transition-transform active:translate-y-0.5 ${
-                      isSelected
-                        ? 'bg-amber-400 text-slate-900 shadow-[0_4px_0_#b45309]'
-                        : 'bg-slate-800 text-slate-100 shadow-[0_4px_0_#020617] hover:bg-slate-700'
-                    }`}
-                  >
-                    <span className="font-display flex items-center gap-1.5 text-lg"><Icon color="currentColor" /> {label}</span>
-                    <span className={`text-[11px] leading-tight ${isSelected ? 'text-slate-800' : 'text-slate-400'}`}>{description}</span>
-                  </button>
-                );
-              })}
+          {/* Campaign */}
+          <div className={`${CARD_CLASS} mt-5 max-w-lg p-4 sm:p-5`}>
+            <div className="flex items-start gap-3">
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                  {campaignDone ? 'Campaign complete!' : `Campaign · ${nextLevel.region.name}`}
+                </div>
+                <div className="font-display mt-0.5 flex items-center gap-1.5 text-2xl">
+                  {nextLevel.isBoss && <BossIcon />}Level {nextLevel.id}: {nextLevel.name}
+                </div>
+                <div className="mt-1 flex items-center gap-1 text-xs text-slate-400">
+                  <StarIcon /> {cleared}/{LEVEL_COUNT} levels cleared · vs {FACTIONS[nextLevel.region.faction].title}
+                </div>
+              </div>
+              <div className="hidden shrink-0 sm:block">
+                <TroopCard type={nextLevel.isBoss ? nextLevel.region.boss : nextLevel.enemyRoster[0]} size="xs" hideLevel hidden={!nextLevel.isBoss && hydrated && !(profile.bestiary[nextLevel.enemyRoster[0]]?.seen)} />
+              </div>
             </div>
 
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <button
-                onClick={() => onStartGame(selectedDifficulty)}
-                className="font-display flex-1 rounded-xl bg-amber-500 px-6 py-3 text-xl text-slate-900 shadow-[0_5px_0_#b45309] transition-transform hover:-translate-y-0.5 hover:bg-amber-400 active:translate-y-1 active:shadow-[0_1px_0_#b45309] focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
-              >
-                <span className="inline-flex items-center gap-2"><AttackIcon color="currentColor" /> Begin Conquest</span>
-              </button>
-              {hasSavedGame && onContinueGame && (
+              <Link href={`/campaign?level=${nextLevel.id}`} className={`${PRIMARY_BUTTON} flex-1 text-center`}>
+                <span className="inline-flex items-center gap-2"><AttackIcon color="currentColor" /> {cleared === 0 ? 'Start Campaign' : 'Battle!'}</span>
+              </Link>
+              {savedBattle && onContinueBattle && (
                 <button
-                  onClick={onContinueGame}
-                  className="font-display rounded-xl bg-slate-700 px-5 py-3 text-lg text-slate-100 shadow-[0_5px_0_#020617] transition-transform hover:-translate-y-0.5 hover:bg-slate-600 active:translate-y-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
+                  onClick={onContinueBattle}
+                  className="font-display rounded-xl bg-slate-700 px-5 py-3 text-lg text-slate-100 shadow-[0_5px_0_#020617] transition-transform hover:-translate-y-0.5 hover:bg-slate-600 active:translate-y-1"
+                  title={savedLevel ? `Continue level ${savedLevel.id}: ${savedLevel.name}` : 'Continue your skirmish'}
                 >
                   <span className="inline-flex items-center gap-2"><ResumeIcon /> Continue</span>
                 </button>
@@ -146,37 +161,38 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
             </div>
           </div>
 
-          {/* The army you command */}
-          <div className="mt-5 max-w-lg">
-            <div className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-600">Your army</div>
-            <div className="grid grid-cols-3 gap-2">
-              {RECRUITABLE.map(type => {
-                const info = UNITS[type];
-                return (
-                  <div key={type} className={`${CARD_CLASS} group flex flex-col items-center px-1 py-2 text-center transition-transform hover:-translate-y-1`}>
-                    <UnitIcon type={type} className="text-2xl transition-transform group-hover:scale-110" />
-                    <div className="mt-1 text-[11px] font-bold leading-tight">{getUnitTypeName(type)}</div>
-                    <div className="text-[10px] leading-tight text-slate-400">{UNIT_ROLES[type]}</div>
-                    <div className="mt-1 flex gap-1.5 text-[10px] font-bold tabular-nums text-slate-300">
-                      <span className="flex items-center gap-0.5" title="Attack"><AttackIcon />{info.attackPower}</span>
-                      <span className="flex items-center gap-0.5" title="Health"><HealthIcon />{info.maxLifespan}</span>
-                      <span className="flex items-center gap-0.5" title="Movement"><MoveIcon />{info.movementRange}</span>
-                    </div>
-                    <div className="mt-0.5 flex items-center gap-0.5 text-[11px] font-bold text-amber-300"><GoldIcon />{info.cost}</div>
-                  </div>
-                );
-              })}
-            </div>
+          {/* Everything else */}
+          <div className="mt-4 grid max-w-lg grid-cols-2 gap-2">
+            <MenuTile href="/campaign" icon={<MapIcon />} title="World Map" detail="10 regions · 100 battles" />
+            <MenuTile href="/army" icon={<CardsIcon />} title="Army" detail="Build your deck, upgrade cards" />
+            <MenuTile href="/bestiary" icon={<BookIcon />} title="Bestiary" detail={`${hydrated ? discovered : 0}/${MOB_IDS.length} monsters discovered`} />
+            <MenuTile href="/stats" icon={<StatsIcon />} title="Stats & Save" detail="Records, settings, save file" />
           </div>
 
-          {/* How to win */}
-          <ol className="mt-4 flex max-w-lg flex-wrap gap-2">
-            {HOW_TO_WIN.map(({ icon, text }, index) => (
-              <li key={text} className="flex items-center gap-1.5 rounded-full bg-white/70 px-3 py-1 text-xs font-bold text-slate-800 shadow-sm">
-                <span className="text-slate-400">{index + 1}</span> {icon} {text}
-              </li>
-            ))}
-          </ol>
+          {/* Quick battle */}
+          <div className={`${CARD_CLASS} mt-4 flex max-w-lg flex-wrap items-center gap-2 p-3`}>
+            <span className="font-display mr-auto text-lg">Quick battle</span>
+            <div className="flex gap-1" role="group" aria-label="Difficulty">
+              {DIFFICULTY_OPTIONS.map(({ level, label, Icon }) => (
+                <button
+                  key={level}
+                  onClick={() => setDifficulty(level)}
+                  aria-pressed={difficulty === level}
+                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-bold ${
+                    difficulty === level ? 'bg-amber-400 text-slate-900' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+                  }`}
+                >
+                  <Icon color="currentColor" /> {label}
+                </button>
+              ))}
+            </div>
+            <button
+              onClick={() => onStartQuickBattle(difficulty)}
+              className="font-display rounded-lg bg-sky-500 px-4 py-1.5 text-slate-900 shadow-[0_3px_0_#0369a1] hover:bg-sky-400"
+            >
+              Play
+            </button>
+          </div>
         </div>
       </main>
     </div>

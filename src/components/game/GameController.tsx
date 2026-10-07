@@ -1,26 +1,37 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { GameBoard } from './GameBoard';
-import { SetupPhase } from './phases/SetupPhase';
 import { CombatResolver } from './combat/CombatResolver';
-import { GameOverScreen } from './shared/GameOverScreen';
+import { ResultsScreen } from './shared/ResultsScreen';
+import { TutorialCoach } from './shared/TutorialCoach';
+import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
 import { LoadingManagerProvider } from './utils/LoadingManager';
 import LoadingScreen from './utils/LoadingScreen';
 import { setMuted, useMuted } from './utils/SoundPlayer';
-import { Difficulty } from './storage/GameStorage';
+import { BattleConfig } from './storage/GameStorage';
 import { TopBar } from './hud/TopBar';
-import { ActionBar } from './hud/ActionBar';
+import { CardHand } from './hud/CardHand';
 import { SelectionCard } from './hud/SelectionCard';
 import { EventFeed } from './hud/EventFeed';
 import { HelpPanel } from './hud/HelpPanel';
 import { TurnBanner } from './hud/TurnBanner';
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { WarningIcon } from './icons';
+import { EffectsLayer } from './effects/EffectsLayer';
+import { resetEffects } from './effects/effects';
+import { useBattleMoments } from './effects/useBattleMoments';
+import { castleHealthRatio, getMaxRounds } from '@/lib/game/gameState';
+import { getLevel, starsForWin, LEVEL_COUNT } from '@/lib/campaign/levels';
+import { battleTroopTypes } from '@/lib/campaign/battleSetup';
+import {
+  BattleRecordResult, completeTutorial, getProfile, profilePower, recordBattle
+} from '@/lib/meta/profile';
+import { setMusicIntensity, useMusic } from '@/lib/audio/music';
 
 interface GameControllerProps {
-  initialDifficulty?: Difficulty;
-  // Continue the saved game if there is one
+  battle: BattleConfig;
+  // Continue the saved battle if there is one
   shouldContinueGame?: boolean;
 }
 
@@ -32,16 +43,25 @@ const useStableCallback = <T extends (...args: any[]) => any>(fn: T): T => {
   return useCallback(((...args: Parameters<T>) => ref.current(...args)) as T, []);
 };
 
+// How long the castle takes to fall before the results appear
+const RESULTS_DELAY = 2600;
+
+interface FinishedBattle {
+  won: boolean;
+  stars: number;
+  record: BattleRecordResult;
+}
+
 // The inner game component that uses the preloaded assets
 const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> = ({
-  initialDifficulty = 'medium',
+  battle,
   shouldContinueGame = false,
   isReady
 }) => {
   const router = useRouter();
   const isMuted = useMuted();
+  const level = battle.mode === 'campaign' ? getLevel(battle.levelId) : undefined;
 
-  // Use our custom hook to handle all game logic
   const {
     gameState,
     selectedHex,
@@ -50,6 +70,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     selectedUnitTypeForPurchase,
     isAITurn,
     timer,
+    elapsedRef,
     handleHexClick,
     handleUnitSelect,
     handleUnitPurchase,
@@ -59,9 +80,27 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     handleUnitTypeSelect,
     handleCancelSelection,
     notice
-  } = useGameHandlers({ initialDifficulty, resume: shouldContinueGame, isReady });
+  } = useGameHandlers({ battle, resume: shouldContinueGame, isReady });
+
+  useMusic(level?.isBoss ? 'boss' : 'battle');
+  useEffect(() => {
+    setMusicIntensity(1);
+    return () => resetEffects();
+  }, []);
+  useBattleMoments(gameState, isReady);
+
+  // Expose the battle in development so automated browser tests can aim clicks precisely
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      (window as unknown as { __wwhGame?: object }).__wwhGame = { gameState, validMoves };
+    }
+  }, [gameState, validMoves]);
 
   const [toast, setToast] = useState<{ id: number; text: string; isWarning?: boolean } | null>(null);
+  const [finished, setFinished] = useState<FinishedBattle | null>(null);
+  const [showResults, setShowResults] = useState(false);
+  const [showBossIntro, setShowBossIntro] = useState(() => !!level?.isBoss && gameState.turnNumber <= 1);
+  const [showTutorial, setShowTutorial] = useState(() => battle.mode === 'campaign' && battle.levelId === 1 && !getProfile().tutorialDone);
 
   // Stable handlers so the memoised 3D board doesn't re-render on every timer tick
   const onBoardHexClick = useStableCallback(handleHexClick);
@@ -88,29 +127,67 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     return () => clearTimeout(timeout);
   }, [toast]);
 
+  // The battle is over: record it once, then show the results after the castle has fallen
+  const { currentPhase } = gameState;
+  useEffect(() => {
+    if (currentPhase !== 'gameOver' || finished) return;
+    const won = gameState.winner === 'player';
+    const stars = won && level ? starsForWin(level, castleHealthRatio(gameState, 'player'), gameState.turnNumber) : 0;
+    const playerStats = gameState.battleStats!.player;
+    const record = recordBattle({
+      mode: battle.mode,
+      levelId: level?.id,
+      won,
+      stars,
+      rounds: gameState.turnNumber,
+      reason: gameState.winReason,
+      enemyCastleDamage: 1 - castleHealthRatio(gameState, 'ai'),
+      playerStats,
+      durationSeconds: elapsedRef.current
+    });
+    if (level?.id === 1) completeTutorial();
+    setShowTutorial(false);
+    setFinished({ won, stars, record });
+    const timeout = setTimeout(() => setShowResults(true), RESULTS_DELAY);
+    return () => clearTimeout(timeout);
+    // Runs once when the battle ends
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPhase]);
+
   const handleSave = () => {
     const saved = saveGame();
     setToast({ id: Date.now(), text: saved ? 'Game saved' : 'Could not save the game' });
   };
 
-  // Leave for the main menu; the game is saved so it can be continued from there
+  const exitPath = battle.mode === 'campaign' ? '/campaign' : '/';
+
+  // Leave the battle; it is saved so it can be continued later
   const handleQuit = () => {
     saveGame();
-    router.push('/');
+    router.push(exitPath);
   };
 
-  const { currentPhase } = gameState;
+  const handleRetry = () => {
+    setFinished(null);
+    setShowResults(false);
+    resetEffects();
+    setMusicIntensity(1);
+    setShowBossIntro(!!level?.isBoss);
+    handleRestart();
+  };
+
+  const nextLevel = level && level.id < LEVEL_COUNT ? level.id + 1 : null;
+
   const activePlayer = gameState.activePlayer ?? 'player';
   const isPlayerPlanning = currentPhase === 'planning' && !isAITurn;
+  const deckTypes = useMemo(() => gameState.deck ?? [], [gameState.deck]);
 
   // Short instruction while the player is in the middle of an action
   const hint = selectedUnitTypeForPurchase
-    ? validMoves.length > 0
-      ? `Click a blue hex twice to deploy ${getUnitTypeName(selectedUnitTypeForPurchase)} · Esc to cancel`
-      : 'No free hex next to your castle · Esc to cancel'
+    ? `Tap a glowing hex to deploy ${getUnitTypeName(selectedUnitTypeForPurchase)} · Esc to cancel`
     : selectedUnit?.owner === 'player' && isPlayerPlanning
       ? validMoves.length > 0
-        ? 'Click a highlighted hex to move there · Esc to cancel'
+        ? 'Tap a highlighted hex to move there · Esc to cancel'
         : "This unit can't move this turn"
       : null;
 
@@ -127,16 +204,6 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         onUnitPurchase={onBoardUnitPurchase}
       />
 
-      {currentPhase === 'setup' && (
-        <SetupPhase
-          mapName={gameState.mapName}
-          isConfirmMode={!!selectedHex}
-          selectedHexValid={!!selectedHex && validMoves.some(
-            coords => coords.q === selectedHex.coordinates.q && coords.r === selectedHex.coordinates.r
-          )}
-        />
-      )}
-
       {(currentPhase === 'planning' || currentPhase === 'combat') && (
         <>
           <TopBar
@@ -152,32 +219,62 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           <div className="fixed left-3 top-16 z-20 pointer-events-none">
             <SelectionCard gameState={gameState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
           </div>
-          {/* Capped above the battle card and action bar so panels never run under them */}
-          <div className="fixed right-3 top-16 z-20 hidden max-h-[calc(100vh-15rem)] w-64 flex-col gap-2 overflow-y-auto pointer-events-none sm:flex">
+          {/* Capped above the battle card and the hand so panels never run under them */}
+          <div className="fixed right-3 top-16 z-20 hidden max-h-[calc(100vh-17rem)] w-64 flex-col gap-2 overflow-y-auto pointer-events-none sm:flex">
             <EventFeed log={gameState.log ?? []} />
-            <HelpPanel hexGrid={gameState.hexGrid} mapName={gameState.mapName} />
+            <HelpPanel hexGrid={gameState.hexGrid} mapName={level ? `${level.id}. ${level.name}` : gameState.mapName} />
           </div>
-          <TurnBanner phase={currentPhase} activePlayer={activePlayer} turnNumber={gameState.turnNumber} />
+          <TurnBanner phase={currentPhase} activePlayer={activePlayer} turnNumber={gameState.turnNumber} maxRounds={getMaxRounds(gameState)} />
         </>
       )}
 
-      {currentPhase === 'planning' && (
-        <ActionBar
-          gold={gameState.players.player.points}
+      {currentPhase === 'planning' && deckTypes && (
+        <CardHand
+          gameState={gameState}
           isAITurn={isAITurn}
           selectedUnitType={selectedUnitTypeForPurchase}
           hint={hint}
-          onUnitTypeSelect={handleUnitTypeSelect}
+          onCardSelect={handleUnitTypeSelect}
           onEndTurn={handleEndTurn}
         />
       )}
 
-      {currentPhase === 'combat' && (
-        <CombatResolver gameState={gameState} />
+      {currentPhase === 'combat' && <CombatResolver gameState={gameState} />}
+
+      {showTutorial && isReady && currentPhase !== 'gameOver' && (
+        <TutorialCoach
+          gameState={gameState}
+          selectedUnitType={selectedUnitTypeForPurchase}
+          onDone={() => {
+            completeTutorial();
+            setShowTutorial(false);
+          }}
+        />
       )}
 
-      {currentPhase === 'gameOver' && (
-        <GameOverScreen winner={gameState.winner as 'player' | 'ai'} onRestart={handleRestart} onMainMenu={() => router.push('/')} />
+      {showBossIntro && isReady && level && (
+        <BossIntro boss={level.region.boss} level={level.enemyTier} onDone={() => setShowBossIntro(false)} />
+      )}
+
+      <EffectsLayer />
+
+      {finished && showResults && (
+        <ResultsScreen
+          won={finished.won}
+          reason={gameState.winReason}
+          level={level}
+          stars={finished.stars}
+          record={finished.record}
+          rounds={gameState.turnNumber}
+          stats={gameState.battleStats!.player}
+          durationSeconds={elapsedRef.current}
+          coinsTotal={getProfile().coins}
+          power={profilePower(getProfile())}
+          onNext={nextLevel ? () => router.push(`/play?level=${nextLevel}`) : undefined}
+          onRetry={handleRetry}
+          onMap={() => router.push(exitPath)}
+          onArmy={() => router.push('/army')}
+        />
       )}
 
       {toast && (
@@ -202,9 +299,10 @@ export const GameController: React.FC<GameControllerProps> = (props) => {
   // The board renders behind the loading screen; turns don't start until it has faded away
   const [loadingComplete, setLoadingComplete] = useState(false);
   const handleLoadingComplete = useCallback(() => setLoadingComplete(true), []);
+  const [types] = useState(() => battleTroopTypes(props.battle, getProfile()));
 
   return (
-    <LoadingManagerProvider>
+    <LoadingManagerProvider types={types}>
       <div className="relative w-full h-full">
         <GameControllerInner {...props} isReady={loadingComplete} />
         {!loadingComplete && <LoadingScreen onLoadingComplete={handleLoadingComplete} />}

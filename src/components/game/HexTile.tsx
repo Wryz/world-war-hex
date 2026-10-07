@@ -22,7 +22,11 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   hills: '#c3d97a',
   swamp: '#7fa36b',
   snow: '#eef6fc',
-  spring: '#8ee8c8'
+  spring: '#8ee8c8',
+  lava: '#4a2b26',
+  ice: '#bfe9f7',
+  ruins: '#c9bb98',
+  cursed: '#6e5f80'
 };
 
 // Tiles are drawn slightly smaller than their cell so thin gaps outline every hex
@@ -191,8 +195,10 @@ const HexTileComponent: React.FC<HexTileProps> = ({
           <meshStandardMaterial
             attach="material-0"
             color={color}
-            roughness={isWater ? 0.4 : 1}
+            roughness={isWater || hex.terrain === 'ice' ? 0.35 : 1}
             metalness={0}
+            emissive={hex.terrain === 'lava' ? '#c2410c' : '#000000'}
+            emissiveIntensity={hex.terrain === 'lava' ? 0.25 : 0}
             flatShading
           />
           {/* Side faces */}

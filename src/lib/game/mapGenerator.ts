@@ -8,6 +8,8 @@ import { getHexDistance, getNeighbors, getSpiral } from './hexUtils';
 const coordKey = (c: HexCoordinates) => `${c.q},${c.r}`;
 
 const isPassableTerrain = (terrain: TerrainType) => terrain !== 'water' && terrain !== 'mountain';
+// Lava and cursed ground hurt units, so passes and feature hexes are never carved through them
+const isHarmfulTerrain = (terrain: TerrainType) => terrain === 'lava' || terrain === 'cursed';
 
 // Small, fast seeded random number generator
 const createRandom = (seed: number) => {
@@ -136,6 +138,92 @@ export const MAP_THEMES: MapTheme[] = [
     springs: 2
   }
 ];
+
+// Themes used by the campaign's regions, including the terrain only found there
+export const REGION_THEMES: MapTheme[] = [
+  {
+    name: 'Greenvale Meadows',
+    lowlands: [['water', 0.08]],
+    highlands: [['hills', 0.06]],
+    wet: [['forest', 0.18]],
+    dry: [],
+    springs: 1
+  },
+  {
+    name: 'Goblin Woods',
+    lowlands: [['water', 0.06]],
+    highlands: [['mountain', 0.06], ['hills', 0.1]],
+    wet: [['forest', 0.32]],
+    dry: [],
+    springs: 1
+  },
+  {
+    name: 'Howling Hills',
+    lowlands: [['water', 0.06]],
+    highlands: [['mountain', 0.1], ['hills', 0.24]],
+    wet: [['forest', 0.12]],
+    dry: [],
+    springs: 2
+  },
+  {
+    name: 'Mirefen Marsh',
+    lowlands: [['water', 0.1], ['swamp', 0.24]],
+    highlands: [['hills', 0.05]],
+    wet: [['forest', 0.14]],
+    dry: [],
+    springs: 1
+  },
+  {
+    name: 'Sunscorch Desert',
+    lowlands: [['water', 0.03]],
+    highlands: [['mountain', 0.08], ['hills', 0.06]],
+    wet: [['ruins', 0.08]],
+    dry: [['desert', 0.32]],
+    springs: 2
+  },
+  {
+    name: 'Frostpeak Pass',
+    lowlands: [['ice', 0.12]],
+    highlands: [['mountain', 0.12], ['snow', 0.2]],
+    wet: [['forest', 0.1]],
+    dry: [],
+    springs: 0
+  },
+  {
+    name: 'Gravemoor',
+    lowlands: [['water', 0.05], ['swamp', 0.08]],
+    highlands: [['hills', 0.06]],
+    wet: [['cursed', 0.16], ['forest', 0.08]],
+    dry: [['ruins', 0.1]],
+    springs: 1
+  },
+  {
+    name: 'Ironfang Badlands',
+    lowlands: [['water', 0.03]],
+    highlands: [['mountain', 0.12], ['hills', 0.18]],
+    wet: [['ruins', 0.08]],
+    dry: [['desert', 0.16]],
+    springs: 1
+  },
+  {
+    name: 'Emberforge Wastes',
+    lowlands: [['lava', 0.14]],
+    highlands: [['mountain', 0.14], ['hills', 0.08]],
+    wet: [['ruins', 0.1]],
+    dry: [['desert', 0.1]],
+    springs: 1
+  },
+  {
+    name: 'Dragonspire Peaks',
+    lowlands: [['lava', 0.08], ['ice', 0.06]],
+    highlands: [['mountain', 0.12], ['snow', 0.1], ['hills', 0.1]],
+    wet: [['forest', 0.08], ['cursed', 0.05]],
+    dry: [['ruins', 0.08]],
+    springs: 1
+  }
+];
+
+export const ALL_THEMES = [...MAP_THEMES, ...REGION_THEMES];
 
 // Assign terrain types by rank so the map starts out with the theme's terrain mix.
 // Speckle removal and pass carving change a few hexes afterwards, so the final mix is close but not exact.
@@ -304,7 +392,8 @@ const chooseFeatureHexes = (
   const candidates = shuffle(
     coordinates.filter(c => {
       const distance = getHexDistance(c, center);
-      return distance >= 2 && distance <= gridSize - 2 && isPassableTerrain(terrain.get(coordKey(c))!) &&
+      const type = terrain.get(coordKey(c))!;
+      return distance >= 2 && distance <= gridSize - 2 && isPassableTerrain(type) && !isHarmfulTerrain(type) &&
         !taken.some(other => getHexDistance(other, c) < 2);
     }),
     random
@@ -321,14 +410,17 @@ const chooseFeatureHexes = (
   return chosen;
 };
 
-// Create a hexagonal battlefield with the configured radius, using a random theme's terrain
+// Create a hexagonal battlefield with the configured radius, using the named theme's terrain
+// (or a random classic theme). The same seed always builds the same map.
 export const createHexagonalGrid = (
   settings: GameSettings,
-  seed = Math.floor(Math.random() * 2 ** 31)
+  seed = Math.floor(Math.random() * 2 ** 31),
+  themeName?: string
 ): { hexGrid: Hex[]; theme: MapTheme } => {
   const random = createRandom(seed);
   const coordinates = getSpiral({ q: 0, r: 0 }, settings.gridSize);
-  const theme = MAP_THEMES[Math.floor(random() * MAP_THEMES.length)];
+  const randomTheme = MAP_THEMES[Math.floor(random() * MAP_THEMES.length)];
+  const theme = ALL_THEMES.find(t => t.name === themeName) ?? randomTheme;
 
   const terrain = assignTerrain(coordinates, theme, random);
   removeSpeckles(coordinates, terrain);

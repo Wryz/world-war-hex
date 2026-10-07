@@ -73,6 +73,48 @@ const PARTS = {
     geometry: new THREE.DodecahedronGeometry(1),
     material: new THREE.MeshStandardMaterial({ color: '#b8c4cc', flatShading: true }),
     castShadow: false
+  },
+  magma: {
+    // Glowing pools and cracks in the lava fields
+    geometry: new THREE.CylinderGeometry(1, 1, 0.03, 7),
+    material: new THREE.MeshStandardMaterial({ color: '#ff8a1f', emissive: '#ff5a00', emissiveIntensity: 1.4, roughness: 0.4 }),
+    castShadow: false
+  },
+  basalt: {
+    geometry: new THREE.DodecahedronGeometry(1),
+    material: new THREE.MeshStandardMaterial({ color: '#2b211f', flatShading: true }),
+    castShadow: true
+  },
+  iceShard: {
+    geometry: new THREE.ConeGeometry(0.08, 1, 4).translate(0, 0.5, 0),
+    material: new THREE.MeshStandardMaterial({ color: '#e0f7ff', emissive: '#7dd3fc', emissiveIntensity: 0.25, roughness: 0.15, flatShading: true }),
+    castShadow: true
+  },
+  pillar: {
+    // Broken column, scaled per instance
+    geometry: new THREE.CylinderGeometry(0.08, 0.09, 1, 6).translate(0, 0.5, 0),
+    material: new THREE.MeshStandardMaterial({ color: '#e8dcc0', flatShading: true }),
+    castShadow: true
+  },
+  block: {
+    geometry: new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0),
+    material: new THREE.MeshStandardMaterial({ color: '#d4c6a2', flatShading: true }),
+    castShadow: true
+  },
+  tombstone: {
+    geometry: new THREE.BoxGeometry(0.14, 0.2, 0.05).translate(0, 0.1, 0),
+    material: new THREE.MeshStandardMaterial({ color: '#8a8299', flatShading: true }),
+    castShadow: true
+  },
+  wisp: {
+    geometry: new THREE.OctahedronGeometry(1),
+    material: new THREE.MeshStandardMaterial({ color: '#e9d5ff', emissive: '#a855f7', emissiveIntensity: 1.3 }),
+    castShadow: false
+  },
+  deadTree: {
+    geometry: new THREE.ConeGeometry(0.05, 0.5, 4).translate(0, 0.25, 0),
+    material: new THREE.MeshStandardMaterial({ color: '#3f3540', flatShading: true }),
+    castShadow: true
   }
 };
 
@@ -95,7 +137,8 @@ const rimSpots = (hex: Hex, count: number) =>
 const buildMatrices = (hexes: Hex[]): Record<PartName, THREE.Matrix4[]> => {
   const result: Record<PartName, THREE.Matrix4[]> = {
     treeTrunk: [], treeTop: [], peak: [], snow: [], dune: [], nugget: [],
-    hill: [], reed: [], puddle: [], snowTree: [], drift: [], pool: [], rock: []
+    hill: [], reed: [], puddle: [], snowTree: [], drift: [], pool: [], rock: [],
+    magma: [], basalt: [], iceShard: [], pillar: [], block: [], tombstone: [], wisp: [], deadTree: []
   };
   const position = new THREE.Vector3();
   const rotation = new THREE.Euler();
@@ -168,6 +211,31 @@ const buildMatrices = (hexes: Hex[]): Record<PartName, THREE.Matrix4[]> => {
           const s = 0.05 + r * 0.04;
           add('rock', cx + x * 0.72, y + s * 0.4, cz + z * 0.72, s, s * 0.8, s, r, r * 2);
         }
+        break;
+      case 'lava':
+        add('magma', cx, y + 0.005, cz, 0.42, 1, 0.3, 0, seededRandom(hex, 1) * 3);
+        for (const { x, z, r } of rimSpots(hex, 3)) {
+          const s = 0.1 + r * 0.07;
+          add('basalt', cx + x, y + s * 0.4, cz + z, s, s * 1.3, s, r, r * 2);
+        }
+        break;
+      case 'ice':
+        for (const { x, z, r } of rimSpots(hex, 4)) {
+          add('iceShard', cx + x, y, cz + z, 1, 0.18 + r * 0.22, 1, (r - 0.5) * 0.5, r * 3);
+        }
+        break;
+      case 'ruins':
+        for (const { x, z, r } of rimSpots(hex, 3)) {
+          if (r > 0.45) add('pillar', cx + x, y, cz + z, 1, 0.25 + r * 0.4, 1, (r - 0.5) * 0.2);
+          else add('block', cx + x, y, cz + z, 0.18, 0.1 + r * 0.1, 0.14, 0, r * 4);
+        }
+        break;
+      case 'cursed':
+        for (const { x, z, r } of rimSpots(hex, 3)) {
+          if (r > 0.6) add('deadTree', cx + x, y, cz + z, 1, 1 + r * 0.4, 1, (r - 0.5) * 0.4);
+          else add('tombstone', cx + x, y, cz + z, 1, 1, 1, (r - 0.5) * 0.3, r * 3);
+        }
+        add('wisp', cx + 0.15, y + 0.45, cz - 0.1, 0.05, 0.08, 0.05);
         break;
     }
   }

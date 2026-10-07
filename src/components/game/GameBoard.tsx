@@ -4,17 +4,17 @@ import { Html, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import { GameState, Hex, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
 import { HexTile, HexHighlight } from './HexTile';
-import { UnitMesh, UnitBattle, OWNER_COLORS } from './UnitMesh';
+import { UnitMesh, UnitBattle, OWNER_COLORS, DEATH_DURATION } from './UnitMesh';
 import { Castle } from './Castle';
 import { Camp } from './Camp';
 import { BoardDecorations } from './BoardDecorations';
 import { MovePath } from './MovePath';
 import {
-  UNITS,
   DEFAULT_SETTINGS,
   BASE_MAX_HEALTH,
   TERRAIN_EFFECTS,
   getKillBounty,
+  getRosterStats,
   findBaseHex,
   findTerrainPath,
   getActivePlayer,
@@ -32,6 +32,7 @@ import { playSound } from './utils/SoundPlayer';
 import { playBattleSound } from './utils/battleSounds';
 import { getImpactTimes } from './utils/battleTiming';
 import { getUnitTypeName } from './utils/UnitHelpers';
+import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
 import { AttackIcon, CampIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon } from './icons';
 import type { UnitBadge } from './UnitMesh';
@@ -44,9 +45,9 @@ const CAMERA_FOV = 45;
 // How much of the board's radius the camera frames, beyond the outermost hexes, at zoom 1
 const BOARD_VIEW_MARGIN = 1.11;
 // In the default view the near edge of the board (behind the viewing side's castle) sits this many
-// pixels above the bottom of the screen: just clear of the action bar once the battle has started
+// pixels above the bottom of the screen: just clear of the card hand once the battle has started
 const BOARD_NEAR_EDGE_MARGIN_SETUP = 28;
-const BOARD_NEAR_EDGE_MARGIN_BATTLE = 125;
+const BOARD_NEAR_EDGE_MARGIN_BATTLE = 170;
 // Room left above the board's far edge for the top HUD when the whole board fits on screen
 const BOARD_FAR_EDGE_MARGIN = 90;
 const CAMERA_TURN_SPEED = 2.2;
@@ -123,6 +124,18 @@ const angleDelta = (from: number, to: number) => {
 // swinging smoothly around the board when the turn changes. Players can drag to orbit/tilt and scroll to zoom.
 const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   const { camera, size, gl } = useThree();
+
+  // Let the HUD place things (flying coins) over points on the board
+  useEffect(() => {
+    const vector = new THREE.Vector3();
+    setProjector(([x, y, z]) => {
+      vector.set(x, y, z).project(camera);
+      if (vector.z > 1) return null;
+      const rect = gl.domElement.getBoundingClientRect();
+      return { x: rect.left + (vector.x + 1) / 2 * rect.width, y: rect.top + (1 - vector.y) / 2 * rect.height };
+    });
+    return () => setProjector(null);
+  }, [camera, gl]);
   const azimuthRef = useRef<number | null>(null);
 
   // Where the camera looks and how far it is pulled back (1 = whole board fits); smoothed every frame
@@ -194,6 +207,22 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
     azimuthOffsetRef.current = 0;
     desiredElevationRef.current = CAMERA_ELEVATION;
   }, [defaultLookAt]);
+
+  // The battle is won: swoop down on the losing castle as it falls
+  const loser = gameState.currentPhase === 'gameOver' && gameState.winner
+    ? (gameState.winner === 'player' ? 'ai' : 'player')
+    : null;
+  useEffect(() => {
+    if (!loser) return;
+    const base = findBaseHex(gameState, loser);
+    if (!base) return;
+    const [x, , z] = axialToWorld(base.coordinates);
+    desiredLookAtRef.current = new THREE.Vector3(x, 0, z);
+    desiredZoomRef.current = CAMERA_MIN_ZOOM;
+    desiredElevationRef.current = THREE.MathUtils.degToRad(52);
+    // Only reacts to the battle ending
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loser]);
 
   // Orbit around the centre of the map, carrying the current view along with the camera
   const rotateBy = useCallback((radians: number) => {
@@ -291,9 +320,10 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
     }
   }, [camera]);
 
-  useFrame((_, rawDelta) => {
+  useFrame((frame, rawDelta) => {
     const delta = Math.min(rawDelta, 0.1);
     const ease = Math.min(1, delta * CAMERA_TURN_SPEED);
+    const [shakeX, shakeY, shakeZ] = takeShake(delta, frame.clock.getElapsedTime());
     const desiredAzimuth = targetAzimuth + azimuthOffsetRef.current;
     const current = azimuthRef.current ?? desiredAzimuth;
     const azimuth = current + angleDelta(current, desiredAzimuth) * ease;
@@ -315,11 +345,11 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
     const lookAt = lookAtRef.current;
     const horizontal = distance * Math.cos(elevation);
     camera.position.set(
-      lookAt.x + Math.sin(azimuth) * horizontal,
-      distance * Math.sin(elevation),
-      lookAt.z + Math.cos(azimuth) * horizontal
+      lookAt.x + Math.sin(azimuth) * horizontal + shakeX,
+      distance * Math.sin(elevation) + shakeY,
+      lookAt.z + Math.cos(azimuth) * horizontal + shakeZ
     );
-    camera.lookAt(lookAt);
+    camera.lookAt(lookAt.x + shakeX * 0.5, lookAt.y, lookAt.z + shakeZ * 0.5);
   });
 
   return null;
@@ -376,8 +406,9 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   selectedUnitTypeForPurchase = null
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
-  const [placedUnitHex, setPlacedUnitHex] = useState<Hex | null>(null);
   const [popups, setPopups] = useState<DamagePopup[]>([]);
+  // Units destroyed a moment ago, still falling on the battlefield
+  const [dyingUnits, setDyingUnits] = useState<{ unit: Unit; position: [number, number, number] }[]>([]);
 
   const { hexGrid, currentPhase, pendingMoves, pendingPurchases, combats, players, turnNumber } = gameState;
   const activePlayerSide = getActivePlayer(gameState);
@@ -385,13 +416,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   const hexByKey = useMemo(() => new Map(hexGrid.map(hex => [coordKey(hex.coordinates), hex])), [hexGrid]);
   const hoveredHex = hoveredKey ? hexByKey.get(hoveredKey) ?? null : null;
-
-  // Clear the placement preview when leaving placement mode
-  useEffect(() => {
-    if (!selectedUnitTypeForPurchase || currentPhase !== 'planning') {
-      setPlacedUnitHex(null);
-    }
-  }, [selectedUnitTypeForPurchase, currentPhase]);
 
   // Which hexes are highlighted and how
   const validMoveKeys = useMemo(() => new Set(validMoves.map(coordKey)), [validMoves]);
@@ -412,43 +436,22 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   // --- Interaction -----------------------------------------------------------------------
 
-  const confirmPurchase = (hex: Hex) => {
-    if (!selectedUnitTypeForPurchase) return;
-    if (onUnitPurchase(selectedUnitTypeForPurchase, hex)) {
-      playSound('hex-select-sound', 0.5);
-      setPlacedUnitHex(null);
-    }
-  };
-
   const handleHexClick = (hex: Hex) => {
     if (!assetsLoaded) return;
-    const key = coordKey(hex.coordinates);
-
-    // Placing a unit from the barracks: first click previews, second click confirms
-    if (selectedUnitTypeForPurchase && validMoveKeys.has(key)) {
-      if (placedUnitHex && coordKey(placedUnitHex.coordinates) === key) {
-        confirmPurchase(hex);
-        return;
-      }
-      setPlacedUnitHex(hex);
+    // Playing a card onto a highlighted hex deploys it straight away
+    if (selectedUnitTypeForPurchase && validMoveKeys.has(coordKey(hex.coordinates))) {
+      if (onUnitPurchase(selectedUnitTypeForPurchase, hex)) playSound('hex-select-sound', 0.5);
+      return;
     }
-
     onHexClick(hex);
   };
 
-  const handleHexDoubleClick = (hex: Hex) => {
-    if (!assetsLoaded || currentPhase !== 'planning') return;
-    if (selectedUnitTypeForPurchase && validMoveKeys.has(coordKey(hex.coordinates))) {
-      confirmPurchase(hex);
-    }
-  };
 
   // Stable callbacks so memoised tiles and units don't re-render when unrelated state changes
-  const handlersRef = useRef({ handleHexClick, handleHexDoubleClick, onUnitClick, assetsLoaded });
-  handlersRef.current = { handleHexClick, handleHexDoubleClick, onUnitClick, assetsLoaded };
+  const handlersRef = useRef({ handleHexClick, onUnitClick, assetsLoaded });
+  handlersRef.current = { handleHexClick, onUnitClick, assetsLoaded };
 
   const stableHexClick = useCallback((hex: Hex) => handlersRef.current.handleHexClick(hex), []);
-  const stableHexDoubleClick = useCallback((hex: Hex) => handlersRef.current.handleHexDoubleClick(hex), []);
   const stableUnitSelect = useCallback((unit: Unit) => {
     if (handlersRef.current.assetsLoaded) handlersRef.current.onUnitClick(unit);
   }, []);
@@ -466,10 +469,10 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   hexGridRef.current = hexGrid;
 
   // World route between two hexes for walking animations
-  const computeWalkPath = useCallback((from: HexCoordinates, to: HexCoordinates) => {
+  const computeWalkPath = useCallback((from: HexCoordinates, to: HexCoordinates, flying = false) => {
     const grid = hexGridRef.current;
     const byKey = new Map(grid.map(hex => [coordKey(hex.coordinates), hex]));
-    return findTerrainPath(grid, from, to)
+    return findTerrainPath(grid, from, to, flying)
       .map(c => byKey.get(coordKey(c)))
       .filter((hex): hex is Hex => !!hex)
       .map(hex => toVector(surfacePosition(hex)));
@@ -492,14 +495,13 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     const combatFacing = new Map<string, HexCoordinates>();
     const battles = new Map<string, UnitBattle>();
     if (currentPhase === 'combat') {
-      const activeIndex = combats.findIndex(c => !c.resolved);
+      // Every battle of the turn is fought at the same time
       combats.forEach((combat, index) => {
         if (combat.resolved) return;
         for (const defender of combat.defenders) {
           if (combat.attackers[0]) combatFacing.set(defender.id, combat.attackers[0].position);
         }
         for (const attacker of combat.attackers) combatFacing.set(attacker.id, combat.hexCoordinates);
-        if (index !== activeIndex) return;
 
         const key = `${turnNumber}-${activePlayerSide}-${index}`;
         const worldOf = (coordinates: HexCoordinates): [number, number, number] => {
@@ -619,13 +621,20 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         continue;
       }
 
-      const info = UNITS[purchase.unitType];
+      const info = getRosterStats(gameState, owner, purchase.unitType);
+      if (!info) continue;
       // Face the enemy castle, like units already on the board
       const enemyBase = hexGrid.find(h => h.isBase && h.owner === (owner === 'player' ? 'ai' : 'player'));
       const enemyCenter = enemyBase ? axialToWorld(enemyBase.coordinates) : null;
       next.set(id, {
         unit: {
-          ...info,
+          type: purchase.unitType,
+          attackPower: info.attackPower,
+          lifespan: info.maxLifespan,
+          maxLifespan: info.maxLifespan,
+          movementRange: info.movementRange,
+          cost: info.cost,
+          level: info.level,
           abilities: [...info.abilities],
           id,
           owner,
@@ -639,6 +648,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     }
     pendingUnitCache.current = next;
     return [...next.values()];
+    // Rosters never change during a battle
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pendingPurchases, hexByKey, hexGrid, players.player.id]);
 
   // --- Planned moves -----------------------------------------------------------------------
@@ -689,6 +700,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     if (previousGameIdRef.current !== players.player.id) {
       previousGameIdRef.current = players.player.id;
       previousUnitsRef.current = new Map();
+      setDyingUnits([]);
     }
 
     const previous = previousUnitsRef.current;
@@ -698,19 +710,35 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     for (const { unit, position } of unitRenderData) {
       next.set(unit.id, { unit, position });
     }
+    const fallen: { unit: Unit; position: [number, number, number] }[] = [];
     for (const [id, before] of previous) {
       if (!next.has(id)) {
+        const bounty = getKillBounty(before.unit);
         created.push({
           id: ++popupIdRef.current,
           position: before.position,
           text: '',
           color: '#ffffff',
-          bounty: getKillBounty(before.unit)
+          bounty
         });
+        fallen.push(before);
         playBattleSound('unitFalls', 0.8);
-        // Coin chime when the player earns the bounty
-        if (before.unit.owner === 'ai') playBattleSound('bounty', 0.6);
+        // Coins fly from the fallen enemy to the player's treasury
+        if (before.unit.owner === 'ai') {
+          playBattleSound('bounty', 0.6);
+          const screen = projectToScreen([before.position[0], before.position[1] + 1, before.position[2]]);
+          if (screen) emitCoins(screen, Math.min(8, Math.ceil(bounty / 2)));
+        }
       }
+    }
+    if (fallen.length > 0) {
+      const ids = new Set(fallen.map(f => f.unit.id));
+      setDyingUnits(current => [...current, ...fallen]);
+      const timeout = setTimeout(() => {
+        popupTimeoutsRef.current.delete(timeout);
+        setDyingUnits(current => current.filter(d => !ids.has(d.unit.id)));
+      }, DEATH_DURATION * 1000 / getTimeScale() + 200);
+      popupTimeoutsRef.current.add(timeout);
     }
     previousUnitsRef.current = next;
 
@@ -732,7 +760,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const shadowFar = SHADOW_LIGHT_DISTANCE + boardRadius + 10;
 
   const unresolvedCombats = currentPhase === 'combat' ? combats.filter(c => !c.resolved) : [];
-  const activeCombat = unresolvedCombats[0];
   const playerBase = findBaseHex(gameState, 'player');
   const aiBase = findBaseHex(gameState, 'ai');
   const playerCastlePosition = useMemo(() => playerBase ? surfacePosition(playerBase) : null, [playerBase]);
@@ -754,8 +781,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     assetsLoaded &&
     selectedUnitTypeForPurchase &&
     hoveredHex &&
-    validMoveKeys.has(coordKey(hoveredHex.coordinates)) &&
-    (!placedUnitHex || coordKey(placedUnitHex.coordinates) !== coordKey(hoveredHex.coordinates));
+    validMoveKeys.has(coordKey(hoveredHex.coordinates));
 
   return (
     <>
@@ -788,7 +814,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             isInvalidSelection={isSelected && isSetupPhase && !validBaseKeys.has(key)}
             isHovered={key === hoveredKey}
             onHexClick={stableHexClick}
-            onHexDoubleClick={stableHexDoubleClick}
             onHexHover={handleHexHover}
             onHexHoverEnd={handleHexHoverEnd}
           />
@@ -805,6 +830,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           position={playerCastlePosition}
           health={players.player.baseHealth ?? BASE_MAX_HEALTH}
           maxHealth={players.player.maxBaseHealth ?? BASE_MAX_HEALTH}
+          fallen={currentPhase === 'gameOver' && gameState.winner === 'ai'}
         />
       )}
       {aiCastlePosition && (
@@ -813,6 +839,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           position={aiCastlePosition}
           health={players.ai.baseHealth ?? BASE_MAX_HEALTH}
           maxHealth={players.ai.maxBaseHealth ?? BASE_MAX_HEALTH}
+          fallen={currentPhase === 'gameOver' && gameState.winner === 'player'}
         />
       )}
 
@@ -837,7 +864,12 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         />
       ))}
 
-      {/* Units queued in the barracks appear at their deployment hex */}
+      {/* Units that just fell, playing out their death */}
+      {assetsLoaded && dyingUnits.map(data => (
+        <UnitMesh key={`dying-${data.unit.id}`} unit={data.unit} position={data.position} dying decorative />
+      ))}
+
+      {/* Cards played this turn appear at their deployment hex */}
       {assetsLoaded && pendingUnitRenderData.map(data => (
         <UnitMesh
           key={data.unit.id}
@@ -865,26 +897,15 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           isPlaced={false}
         />
       )}
-      {assetsLoaded && currentPhase === 'planning' && selectedUnitTypeForPurchase && placedUnitHex && (
-        <AnimatedUnitPreview
-          unitType={selectedUnitTypeForPurchase}
-          position={axialToWorld(placedUnitHex.coordinates)}
-          hexHeight={getHexSurfaceHeight(placedUnitHex)}
-          isPlaced
-        />
-      )}
 
       {/* Battle markers */}
       {unresolvedCombats.map(combat => {
         const hex = hexByKey.get(coordKey(combat.hexCoordinates));
         if (!hex) return null;
         const [x, y, z] = surfacePosition(hex);
-        const isActive = combat === activeCombat;
         return (
           <Html key={coordKey(combat.hexCoordinates)} position={[x, y + 2.2, z]} center zIndexRange={[7, 0]} style={{ pointerEvents: 'none' }}>
-            <div
-              className={`select-none rounded-full bg-slate-900/80 p-1 ${isActive ? 'text-3xl animate-bounce' : 'text-xl opacity-70'}`}
-            >
+            <div className="select-none rounded-full bg-slate-900/80 p-1 text-2xl animate-bounce">
               <AttackIcon />
             </div>
           </Html>

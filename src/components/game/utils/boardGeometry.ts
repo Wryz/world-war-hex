@@ -18,7 +18,11 @@ const TERRAIN_HEIGHTS: Record<TerrainType, number> = {
   hills: 1.8,
   swamp: 0.45,
   snow: 2.0,
-  spring: 1.0
+  spring: 1.0,
+  lava: 0.35,
+  ice: 0.3,
+  ruins: 1.1,
+  cursed: 0.8
 };
 
 // Random per-hex height variation on top of the terrain height

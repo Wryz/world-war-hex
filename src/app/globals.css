@@ -77,3 +77,131 @@ body {
     animation: none;
   }
 }
+
+/* Coins popping out of a source and streaming to a counter */
+@keyframes coinFlight {
+  0% { transform: translate(var(--from-x), var(--from-y)) scale(0.4); opacity: 0; }
+  12% { opacity: 1; }
+  35% { transform: translate(var(--mid-x), var(--mid-y)) scale(1.15); }
+  100% { transform: translate(var(--to-x), var(--to-y)) scale(0.6); opacity: 0.9; }
+}
+
+.coin-flight {
+  opacity: 0;
+  animation: coinFlight 1.05s cubic-bezier(0.45, 0, 0.55, 1) forwards;
+}
+
+/* Big battle callouts punching onto the screen */
+@keyframes momentPop {
+  0% { opacity: 0; transform: scale(2.2) rotate(-4deg); }
+  12% { opacity: 1; transform: scale(0.92) rotate(1deg); }
+  20% { transform: scale(1.04) rotate(0deg); }
+  80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(1.08) translateY(-12px); }
+}
+
+.moment-pop {
+  animation: momentPop 1.8s ease-out forwards;
+}
+
+.moment-big {
+  animation-duration: 2.5s;
+}
+
+/* Confetti falling and spinning */
+@keyframes confettiFall {
+  0% { transform: translate(0, -20px) rotate(0deg); opacity: 1; }
+  100% { transform: translate(var(--drift), 105vh) rotate(var(--spin)); opacity: 0.9; }
+}
+
+.confetti-piece {
+  border-radius: 2px;
+  animation: confettiFall 2.4s cubic-bezier(0.25, 0.6, 0.5, 1) forwards;
+}
+
+/* Red flash at the screen edges when your castle is hit */
+@keyframes damageFlash {
+  0% { opacity: 0; }
+  20% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
+.damage-flash {
+  box-shadow: inset 0 0 120px 30px rgba(239, 68, 68, 0.65);
+  animation: damageFlash 0.45s ease-out forwards;
+}
+
+/* Cards: drawn into the hand, and played onto the board */
+@keyframes cardDraw {
+  0% { opacity: 0; transform: translateY(60px) rotate(8deg) scale(0.85); }
+  100% { opacity: 1; transform: translateY(0) rotate(0deg) scale(1); }
+}
+
+.card-draw {
+  animation: cardDraw 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2) both;
+}
+
+@keyframes cardPlayed {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-160px) scale(0.7) rotate(-6deg); }
+}
+
+.card-played {
+  animation: cardPlayed 0.45s ease-in forwards;
+}
+
+/* Shiny sweep across legendary cards */
+@keyframes cardShine {
+  0%, 70% { transform: translateX(-130%) skewX(-20deg); }
+  100% { transform: translateX(230%) skewX(-20deg); }
+}
+
+.card-shine::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.35), transparent);
+  animation: cardShine 3.2s ease-in-out infinite;
+  pointer-events: none;
+}
+
+/* Stars stamping in on the results screen */
+@keyframes starStamp {
+  0% { opacity: 0; transform: scale(3) rotate(-30deg); }
+  60% { opacity: 1; transform: scale(0.9) rotate(5deg); }
+  100% { opacity: 1; transform: scale(1) rotate(0deg); }
+}
+
+.star-stamp {
+  opacity: 0;
+  animation: starStamp 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.3) forwards;
+}
+
+/* Gentle pulse for the next level on the campaign map */
+@keyframes nodePulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251, 191, 36, 0.7); }
+  50% { box-shadow: 0 0 0 12px rgba(251, 191, 36, 0); }
+}
+
+.node-pulse {
+  animation: nodePulse 1.6s ease-out infinite;
+}
+
+/* Tutorial pointer bobbing towards what to click */
+@keyframes pointerBob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(8px); }
+}
+
+.pointer-bob {
+  animation: pointerBob 0.9s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card-shine::after,
+  .node-pulse,
+  .pointer-bob {
+    animation: none;
+  }
+}

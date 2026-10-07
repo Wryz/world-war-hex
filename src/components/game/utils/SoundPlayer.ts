@@ -35,7 +35,7 @@ export const setMuted = (value: boolean) => {
   muteListeners.forEach(listener => listener());
 };
 
-const subscribeToMute = (listener: () => void) => {
+export const subscribeToMute = (listener: () => void) => {
   muteListeners.add(listener);
   return () => muteListeners.delete(listener);
 };

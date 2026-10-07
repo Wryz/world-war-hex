@@ -1,0 +1,431 @@
+import { useSyncExternalStore } from 'react';
+import type { SideStats } from '@/types/game';
+import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId, isTroopId } from '../game/troops';
+import {
+  BattleReward,
+  CARD_UNLOCK_LEVEL,
+  MAX_DECK_SIZE,
+  STARTER_CARDS,
+  cardPrice,
+  deckPower,
+  levelLossReward,
+  levelWinReward,
+  quickBattleReward,
+  upgradeCost
+} from './economy';
+
+// The player's saved progress: coins, cards, campaign stars, the bestiary and lifetime stats.
+// Kept in localStorage and exportable to a file.
+
+const PROFILE_KEY = 'wwhProfile';
+const PROFILE_VERSION = 1;
+
+export interface LevelRecord {
+  stars: number;
+  wins: number;
+  losses: number;
+  // Fewest rounds the level was won in
+  bestRounds?: number;
+}
+
+export interface BestiaryEntry {
+  seen: number;
+  slain: number;
+}
+
+export interface ProfileStats {
+  battles: number;
+  wins: number;
+  losses: number;
+  quickBattles: number;
+  coinsEarned: number;
+  coinsSpent: number;
+  unitsDeployed: number;
+  enemiesSlain: number;
+  unitsLost: number;
+  castlesStormed: number;
+  castlesDestroyed: number;
+  winsOnTime: number;
+  bossesDefeated: number;
+  campsCaptured: number;
+  siegeDamage: number;
+  roundsPlayed: number;
+  playSeconds: number;
+  fastestWinRounds?: number;
+  currentStreak: number;
+  bestStreak: number;
+  cardsPlayed: Partial<Record<TroopId, number>>;
+  cardsBought: number;
+  upgradesBought: number;
+}
+
+export interface Profile {
+  version: number;
+  coins: number;
+  // Owned cards and their levels
+  cards: Partial<Record<TroopId, number>>;
+  deck: TroopId[];
+  levels: Record<number, LevelRecord>;
+  bestiary: Partial<Record<TroopId, BestiaryEntry>>;
+  stats: ProfileStats;
+  tutorialDone: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+const emptyStats = (): ProfileStats => ({
+  battles: 0, wins: 0, losses: 0, quickBattles: 0, coinsEarned: 0, coinsSpent: 0, unitsDeployed: 0,
+  enemiesSlain: 0, unitsLost: 0, castlesStormed: 0, castlesDestroyed: 0, winsOnTime: 0, bossesDefeated: 0,
+  campsCaptured: 0, siegeDamage: 0, roundsPlayed: 0, playSeconds: 0, currentStreak: 0, bestStreak: 0,
+  cardsPlayed: {}, cardsBought: 0, upgradesBought: 0
+});
+
+export const createProfile = (): Profile => {
+  const now = new Date().toISOString();
+  return {
+    version: PROFILE_VERSION,
+    coins: 0,
+    cards: Object.fromEntries(STARTER_CARDS.map(id => [id, 1])),
+    deck: [...STARTER_CARDS],
+    levels: {},
+    bestiary: {},
+    stats: emptyStats(),
+    tutorialDone: false,
+    createdAt: now,
+    updatedAt: now
+  };
+};
+
+// --- Validation (saves can come from an imported file) --------------------------------------
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const toCount = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0);
+
+// Turn whatever was stored into a valid profile, dropping anything unknown
+export const sanitizeProfile = (raw: unknown): Profile | null => {
+  if (!isRecord(raw) || typeof raw.version !== 'number' || raw.version > PROFILE_VERSION) return null;
+  const base = createProfile();
+
+  const cards: Profile['cards'] = {};
+  if (isRecord(raw.cards)) {
+    for (const [id, level] of Object.entries(raw.cards)) {
+      if (isTroopId(id) && PLAYER_CARD_IDS.includes(id)) {
+        cards[id] = Math.min(MAX_CARD_LEVEL, Math.max(1, toCount(level)));
+      }
+    }
+  }
+  for (const id of STARTER_CARDS) cards[id] ??= 1;
+
+  const deck = (Array.isArray(raw.deck) ? raw.deck : [])
+    .filter((id): id is TroopId => typeof id === 'string' && isTroopId(id) && cards[id] !== undefined)
+    .filter((id, index, all) => all.indexOf(id) === index)
+    .slice(0, MAX_DECK_SIZE);
+
+  const levels: Profile['levels'] = {};
+  if (isRecord(raw.levels)) {
+    for (const [key, record] of Object.entries(raw.levels)) {
+      const id = Number(key);
+      if (!Number.isInteger(id) || id < 1 || id > 100 || !isRecord(record)) continue;
+      levels[id] = {
+        stars: Math.min(3, toCount(record.stars)),
+        wins: toCount(record.wins),
+        losses: toCount(record.losses),
+        bestRounds: record.bestRounds === undefined ? undefined : toCount(record.bestRounds)
+      };
+    }
+  }
+
+  const bestiary: Profile['bestiary'] = {};
+  if (isRecord(raw.bestiary)) {
+    for (const [id, entry] of Object.entries(raw.bestiary)) {
+      if (isTroopId(id) && isRecord(entry)) bestiary[id] = { seen: toCount(entry.seen), slain: toCount(entry.slain) };
+    }
+  }
+
+  const stats = emptyStats();
+  if (isRecord(raw.stats)) {
+    for (const key of Object.keys(stats) as (keyof ProfileStats)[]) {
+      const value = raw.stats[key];
+      if (key === 'cardsPlayed') {
+        if (isRecord(value)) {
+          for (const [id, count] of Object.entries(value)) if (isTroopId(id)) stats.cardsPlayed[id] = toCount(count);
+        }
+      } else if (key === 'fastestWinRounds') {
+        stats.fastestWinRounds = value === undefined ? undefined : toCount(value);
+      } else {
+        stats[key] = toCount(value);
+      }
+    }
+  }
+
+  return {
+    ...base,
+    coins: toCount(raw.coins),
+    cards,
+    deck: deck.length > 0 ? deck : [...STARTER_CARDS],
+    levels,
+    bestiary,
+    stats,
+    tutorialDone: raw.tutorialDone === true,
+    createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : base.createdAt,
+    updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : base.updatedAt
+  };
+};
+
+// --- Store ---------------------------------------------------------------------------------
+
+let current: Profile | null = null;
+const listeners = new Set<() => void>();
+
+const readStoredProfile = (): Profile => {
+  try {
+    const raw = localStorage.getItem(PROFILE_KEY);
+    if (raw) return sanitizeProfile(JSON.parse(raw)) ?? createProfile();
+  } catch {
+    // Unreadable storage: start fresh (and keep playing in memory)
+  }
+  return createProfile();
+};
+
+export const getProfile = (): Profile => {
+  if (!current) current = typeof window === 'undefined' ? createProfile() : readStoredProfile();
+  return current;
+};
+
+const setProfile = (profile: Profile) => {
+  current = { ...profile, updatedAt: new Date().toISOString() };
+  try {
+    localStorage.setItem(PROFILE_KEY, JSON.stringify(current));
+  } catch (error) {
+    console.error('Could not save progress:', error);
+  }
+  listeners.forEach(listener => listener());
+};
+
+const subscribe = (listener: () => void) => {
+  listeners.add(listener);
+  return () => listeners.delete(listener);
+};
+
+// Server render (and the first client render) use a fresh profile, so hydration always matches
+const serverProfile = createProfile();
+
+// The current profile for React components
+export const useProfile = (): Profile => useSyncExternalStore(subscribe, getProfile, () => serverProfile);
+
+// Whether the client has read the stored profile yet (false during server render and hydration)
+export const useHasHydrated = () => useSyncExternalStore(subscribe, () => true, () => false);
+
+// --- Derived values ------------------------------------------------------------------------
+
+// Highest campaign level won
+export const highestCleared = (profile: Profile): number =>
+  Object.entries(profile.levels).reduce((max, [id, record]) => (record.wins > 0 ? Math.max(max, Number(id)) : max), 0);
+
+// The furthest level the player may play
+export const highestUnlocked = (profile: Profile): number => Math.min(100, highestCleared(profile) + 1);
+
+export const isLevelUnlocked = (profile: Profile, levelId: number) => levelId <= highestUnlocked(profile);
+
+export const totalStars = (profile: Profile) =>
+  Object.values(profile.levels).reduce((sum, record) => sum + record.stars, 0);
+
+export const profilePower = (profile: Profile) => deckPower(profile.deck, profile.cards);
+
+// Whether a card can be bought in the shop yet
+export const isCardAvailable = (profile: Profile, id: TroopId) => {
+  const unlockAt = CARD_UNLOCK_LEVEL[id];
+  return unlockAt !== undefined && highestCleared(profile) >= unlockAt;
+};
+
+// --- Shop and deck -------------------------------------------------------------------------
+
+export const buyCard = (id: TroopId): boolean => {
+  const profile = getProfile();
+  if (profile.cards[id] !== undefined || !isCardAvailable(profile, id)) return false;
+  const price = cardPrice(id);
+  if (profile.coins < price) return false;
+  setProfile({
+    ...profile,
+    coins: profile.coins - price,
+    cards: { ...profile.cards, [id]: 1 },
+    // New cards join the deck if there is room
+    deck: profile.deck.length < MAX_DECK_SIZE ? [...profile.deck, id] : profile.deck,
+    stats: { ...profile.stats, coinsSpent: profile.stats.coinsSpent + price, cardsBought: profile.stats.cardsBought + 1 }
+  });
+  return true;
+};
+
+export const upgradeCard = (id: TroopId): boolean => {
+  const profile = getProfile();
+  const level = profile.cards[id];
+  if (level === undefined) return false;
+  const cost = upgradeCost(id, level);
+  if (cost === null || profile.coins < cost) return false;
+  setProfile({
+    ...profile,
+    coins: profile.coins - cost,
+    cards: { ...profile.cards, [id]: level + 1 },
+    stats: { ...profile.stats, coinsSpent: profile.stats.coinsSpent + cost, upgradesBought: profile.stats.upgradesBought + 1 }
+  });
+  return true;
+};
+
+// Add a card to the deck, or take it out (a deck always keeps at least one card)
+export const toggleDeckCard = (id: TroopId): boolean => {
+  const profile = getProfile();
+  if (profile.cards[id] === undefined) return false;
+  if (profile.deck.includes(id)) {
+    if (profile.deck.length <= 1) return false;
+    setProfile({ ...profile, deck: profile.deck.filter(card => card !== id) });
+    return true;
+  }
+  if (profile.deck.length >= MAX_DECK_SIZE) return false;
+  setProfile({ ...profile, deck: [...profile.deck, id] });
+  return true;
+};
+
+// Replace the battle loadout (owned cards only, at most MAX_DECK_SIZE, at least one)
+export const setDeck = (deck: TroopId[]): boolean => {
+  const profile = getProfile();
+  const next = deck.filter((id, index) => profile.cards[id] !== undefined && deck.indexOf(id) === index).slice(0, MAX_DECK_SIZE);
+  if (next.length === 0) return false;
+  setProfile({ ...profile, deck: next });
+  return true;
+};
+
+export const completeTutorial = () => {
+  const profile = getProfile();
+  if (!profile.tutorialDone) setProfile({ ...profile, tutorialDone: true });
+};
+
+// --- Battle results ------------------------------------------------------------------------
+
+export interface BattleOutcome {
+  mode: 'campaign' | 'quick';
+  levelId?: number;
+  won: boolean;
+  stars: number;
+  rounds: number;
+  reason?: 'stormed' | 'destroyed' | 'timeout';
+  // Share of the enemy castle's health destroyed (0..1)
+  enemyCastleDamage: number;
+  playerStats: SideStats;
+  durationSeconds: number;
+}
+
+export interface BattleRecordResult {
+  reward: BattleReward;
+  previousStars: number;
+  // Monsters seen for the first time
+  discovered: TroopId[];
+  // Cards that just became available in the shop
+  newCards: TroopId[];
+  isNewBest: boolean;
+}
+
+export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
+  const profile = getProfile();
+  const clearedBefore = highestCleared(profile);
+  const previous = outcome.levelId ? profile.levels[outcome.levelId] : undefined;
+  const previousStars = previous?.stars ?? 0;
+
+  const reward = outcome.mode === 'quick'
+    ? quickBattleReward(outcome.won, clearedBefore)
+    : outcome.won
+      ? levelWinReward(outcome.levelId!, outcome.stars, previousStars)
+      : levelLossReward(outcome.levelId!, outcome.enemyCastleDamage);
+
+  const levels = { ...profile.levels };
+  let isNewBest = false;
+  if (outcome.mode === 'campaign' && outcome.levelId) {
+    const record = { stars: 0, wins: 0, losses: 0, ...previous };
+    if (outcome.won) {
+      record.wins++;
+      record.stars = Math.max(record.stars, outcome.stars);
+      isNewBest = record.bestRounds === undefined || outcome.rounds < record.bestRounds;
+      record.bestRounds = Math.min(record.bestRounds ?? Infinity, outcome.rounds);
+    } else {
+      record.losses++;
+    }
+    levels[outcome.levelId] = record;
+  }
+
+  // Bestiary: every enemy type met, and how many of each were slain
+  const bestiary = { ...profile.bestiary };
+  const discovered: TroopId[] = [];
+  for (const id of outcome.playerStats.seen) {
+    const entry = bestiary[id] ?? { seen: 0, slain: 0 };
+    if (entry.seen === 0) discovered.push(id);
+    bestiary[id] = { ...entry, seen: entry.seen + 1 };
+  }
+  for (const [id, count] of Object.entries(outcome.playerStats.slain) as [TroopId, number][]) {
+    const entry = bestiary[id] ?? { seen: 1, slain: 0 };
+    bestiary[id] = { ...entry, slain: entry.slain + count };
+  }
+
+  const s = profile.stats;
+  const cardsPlayed = { ...s.cardsPlayed };
+  for (const [id, count] of Object.entries(outcome.playerStats.played) as [TroopId, number][]) {
+    cardsPlayed[id] = (cardsPlayed[id] ?? 0) + count;
+  }
+  const streak = outcome.won ? s.currentStreak + 1 : 0;
+  const stats: ProfileStats = {
+    ...s,
+    battles: s.battles + 1,
+    wins: s.wins + (outcome.won ? 1 : 0),
+    losses: s.losses + (outcome.won ? 0 : 1),
+    quickBattles: s.quickBattles + (outcome.mode === 'quick' ? 1 : 0),
+    coinsEarned: s.coinsEarned + reward.coins,
+    unitsDeployed: s.unitsDeployed + outcome.playerStats.recruited,
+    enemiesSlain: s.enemiesSlain + outcome.playerStats.kills,
+    unitsLost: s.unitsLost + outcome.playerStats.lost,
+    castlesStormed: s.castlesStormed + (outcome.won && outcome.reason === 'stormed' ? 1 : 0),
+    castlesDestroyed: s.castlesDestroyed + (outcome.won && outcome.reason === 'destroyed' ? 1 : 0),
+    winsOnTime: s.winsOnTime + (outcome.won && outcome.reason === 'timeout' ? 1 : 0),
+    bossesDefeated: s.bossesDefeated + outcome.playerStats.bossesSlain,
+    campsCaptured: s.campsCaptured + outcome.playerStats.campsCaptured,
+    siegeDamage: s.siegeDamage + outcome.playerStats.siegeDamage,
+    roundsPlayed: s.roundsPlayed + outcome.rounds,
+    playSeconds: s.playSeconds + Math.round(outcome.durationSeconds),
+    fastestWinRounds: outcome.won ? Math.min(s.fastestWinRounds ?? Infinity, outcome.rounds) : s.fastestWinRounds,
+    currentStreak: streak,
+    bestStreak: Math.max(s.bestStreak, streak),
+    cardsPlayed
+  };
+
+  const next: Profile = { ...profile, coins: profile.coins + reward.coins, levels, bestiary, stats };
+  const clearedAfter = highestCleared(next);
+  const newCards = PLAYER_CARD_IDS.filter(id => {
+    const unlockAt = CARD_UNLOCK_LEVEL[id];
+    return unlockAt !== undefined && unlockAt > clearedBefore && unlockAt <= clearedAfter;
+  });
+
+  setProfile(next);
+  return { reward, previousStars, discovered, newCards, isNewBest };
+};
+
+// --- Export / import -----------------------------------------------------------------------
+
+const SAVE_FORMAT = 'world-war-hex-save';
+
+// Everything needed to restore progress on another computer: the profile and any battle in progress
+export const exportSave = (battle: unknown): string =>
+  JSON.stringify({ format: SAVE_FORMAT, exportedAt: new Date().toISOString(), profile: getProfile(), battle: battle ?? null }, null, 2);
+
+export const parseSave = (text: string): { profile: Profile; battle: unknown } | null => {
+  try {
+    const data: unknown = JSON.parse(text);
+    if (!isRecord(data) || data.format !== SAVE_FORMAT) return null;
+    const profile = sanitizeProfile(data.profile);
+    return profile ? { profile, battle: data.battle ?? null } : null;
+  } catch {
+    return null;
+  }
+};
+
+export const replaceProfile = (profile: Profile) => setProfile(profile);
+
+export const resetProfile = () => setProfile(createProfile());

@@ -1,3 +1,5 @@
+import type { TroopId } from '@/lib/game/troops';
+
 export type TerrainType =
   | 'plain'
   | 'mountain'
@@ -8,7 +10,11 @@ export type TerrainType =
   | 'hills'
   | 'swamp'
   | 'snow'
-  | 'spring';
+  | 'spring'
+  | 'lava'
+  | 'ice'
+  | 'ruins'
+  | 'cursed';
 
 export type PlayerType = 'player' | 'ai';
 
@@ -45,23 +51,43 @@ export interface Unit {
   abilities: Ability[];
   hasMoved: boolean;
   isEngagedInCombat: boolean;
+  // Card level the unit was recruited at (player cards) or the level's enemy tier
+  level?: number;
+  // A boss guarding the enemy castle
+  isBoss?: boolean;
 }
 
-export type UnitType = 
-  | 'infantry' 
-  | 'tank' 
-  | 'artillery' 
-  | 'helicopter' 
-  | 'medic'
-  | 'rogue';
+// Every troop - the player's cards and the campaign's monsters - is identified by its troop id
+export type UnitType = TroopId;
 
-export type Ability = 
-  | 'rangedAttack' 
-  | 'healing' 
-  | 'terrainBonus' 
-  | 'rapidMovement' 
-  | 'stealth'
-  | 'magic';
+export type Ability =
+  | 'rangedAttack' // strikes from 2 hexes (3 from hills)
+  | 'longRange'    // ranged units with this reach one hex further
+  | 'healing'      // heals adjacent allies at the end of its side's turn
+  | 'terrainBonus' // attacks 50% harder from a forest
+  | 'rapidMovement'
+  | 'stealth'      // the units it attacks can't strike back
+  | 'flying'       // every passable hex costs 1 to enter, and it flies over water and mountains
+  | 'regenerate'   // heals 1 at the end of its side's turn
+  | 'armored'      // takes 1 less damage in every fight
+  | 'siege'        // deals double damage to castles
+  | 'berserk'      // attacks 50% harder at half health or less
+  | 'undead'       // healed rather than hurt by cursed ground
+  | 'pathfinder'   // rough ground (desert, swamp, snow, ice) costs 1 to enter
+  | 'fireborn'     // unharmed by lava
+  | 'magic';       // spells ignore line of sight and cover
+
+// The stats a side recruits a troop type with this battle (cards are levelled, monsters scaled)
+export interface TroopStats {
+  cost: number;
+  attackPower: number;
+  maxLifespan: number;
+  movementRange: number;
+  abilities: Ability[];
+  level: number;
+}
+
+export type Roster = Partial<Record<UnitType, TroopStats>>;
 
 export interface Player {
   id: string;
@@ -73,6 +99,25 @@ export interface Player {
   units: Unit[];
 }
 
+// Running tally of what each side has done in this battle, for callouts and rewards
+export interface SideStats {
+  recruited: number;
+  kills: number;
+  lost: number;
+  siegeDamage: number;
+  goldEarned: number;
+  campsCaptured: number;
+  bossesSlain: number;
+  // Enemy troop types this side has met on the battlefield
+  seen: UnitType[];
+  // Enemy troop types this side has destroyed, with counts
+  slain: Partial<Record<UnitType, number>>;
+  // Recruits by troop type
+  played: Partial<Record<UnitType, number>>;
+}
+
+export type WinReason = 'stormed' | 'destroyed' | 'timeout';
+
 export interface GameState {
   hexGrid: Hex[];
   players: Record<PlayerType, Player>;
@@ -82,6 +127,7 @@ export interface GameState {
   turnNumber: number;
   planningTimeRemaining: number;
   winner?: PlayerType;
+  winReason?: WinReason;
   pendingMoves: Move[];
   pendingPurchases: Purchase[];
   combats: Combat[];
@@ -91,6 +137,13 @@ export interface GameState {
   log?: GameLogEntry[];
   // Name of the map's theme, e.g. "Frozen Pass"
   mapName?: string;
+  // Troop types each side can recruit and the stats they arrive with
+  rosters?: Record<PlayerType, Roster>;
+  // The player's cards in draw order: the first few are the hand
+  deck?: UnitType[];
+  battleStats?: Record<PlayerType, SideStats>;
+  // Campaign level being played, if any
+  levelId?: number;
 }
 
 export interface GameLogEntry {
@@ -100,11 +153,11 @@ export interface GameLogEntry {
   text: string;
 }
 
-export type GamePhase = 
-  | 'setup' 
-  | 'planning' 
-  | 'execution' 
-  | 'combat' 
+export type GamePhase =
+  | 'setup'
+  | 'planning'
+  | 'execution'
+  | 'combat'
   | 'gameOver';
 
 export interface Move {
@@ -133,4 +186,15 @@ export interface GameSettings {
   planningPhaseTime: number;
   aiDifficulty: 'easy' | 'medium' | 'hard';
   resourceHexCount: number;
-} 
+  // Castle health for both sides
+  castleHealth?: number;
+  // Gold each side starts with
+  startingGold?: number;
+  // Extra gold the enemy earns every turn
+  aiIncomeBonus?: number;
+  // The battle ends after this many rounds; the side whose castle is in better shape wins
+  maxRounds?: number;
+  // Map theme to use instead of a random one, and a fixed seed for the map
+  themeName?: string;
+  seed?: number;
+}

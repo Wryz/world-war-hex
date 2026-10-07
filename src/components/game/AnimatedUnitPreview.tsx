@@ -3,7 +3,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { UnitType } from '@/types/game';
 import { getUnitLook, getAnimationName } from './utils/UnitModelSystem';
-import { instantiateUnitModel, findAnimationClip, disposeUnitModel } from './utils/unitModelCache';
+import { instantiateUnitModel, findAnimationClip, disposeUnitModel, UnitModelInstance } from './utils/unitModelCache';
+import { FACTIONS, TROOPS } from '@/lib/game/troops';
 
 // How far a hovering (not yet placed) preview floats above the tile
 const HOVER_ELEVATION = 0.4;
@@ -23,7 +24,10 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
   hexHeight,
   isPlaced = false
 }) => {
-  const unitModelAttributes = getUnitLook(unitType);
+  const look = getUnitLook(unitType);
+  const modelScale = look.kind === 'humanoid' ? look.scale : 1;
+  // Disc under the preview in the troop's faction colour
+  const indicatorColor = FACTIONS[TROOPS[unitType].faction].color;
   const animationState = isPlaced ? 'holdShield' : 'idle';
 
   const [x, y, z] = position;
@@ -35,6 +39,7 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
   const hoverRef = useRef<THREE.Group>(null);
   const indicatorRef = useRef<THREE.Mesh>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const rigRef = useRef<UnitModelInstance['rig'] | null>(null);
   const mountMixerRef = useRef<THREE.AnimationMixer | null>(null);
   const clipsRef = useRef<THREE.AnimationClip[]>([]);
   const actionRef = useRef<THREE.AnimationAction | null>(null);
@@ -46,17 +51,19 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
     if (!container) return;
 
     let cancelled = false;
-    let loadedScene: THREE.Group | null = null;
+    let loaded: UnitModelInstance | null = null;
 
     instantiateUnitModel(unitType, 'player')
-      .then(({ scene, animations, mount }) => {
+      .then(instance => {
         if (cancelled) {
-          disposeUnitModel(scene);
+          disposeUnitModel(instance);
           return;
         }
-        loadedScene = scene;
+        loaded = instance;
+        const { scene, animations, mount, rig } = instance;
+        rigRef.current = rig ?? null;
 
-        scene.scale.setScalar(unitModelAttributes.scale);
+        scene.scale.setScalar(modelScale);
         container.add(scene);
         if (mount) {
           // The horse stands still in the barracks
@@ -64,7 +71,7 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
           mountMixerRef.current = mount.mixer;
         }
 
-        mixerRef.current = new THREE.AnimationMixer(scene);
+        mixerRef.current = rig ? null : new THREE.AnimationMixer(scene);
         clipsRef.current = animations;
         setModelLoaded(true);
       })
@@ -74,7 +81,8 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
 
     return () => {
       cancelled = true;
-      if (loadedScene) disposeUnitModel(loadedScene, mixerRef.current);
+      if (loaded) disposeUnitModel(loaded, mixerRef.current);
+      rigRef.current = null;
       mountMixerRef.current?.stopAllAction();
       mountMixerRef.current = null;
       mixerRef.current = null;
@@ -83,10 +91,11 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
       container.clear();
       setModelLoaded(false);
     };
-  }, [unitType, unitModelAttributes.scale]);
+  }, [unitType, modelScale]);
 
   // Cross-fade to the animation for the current state
   useEffect(() => {
+    rigRef.current?.setState(isPlaced ? 'hold' : 'idle');
     const mixer = mixerRef.current;
     if (!modelLoaded || !mixer) return;
 
@@ -99,11 +108,12 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
     actionRef.current?.fadeOut(0.3);
     nextAction.reset().fadeIn(0.3).play();
     actionRef.current = nextAction;
-  }, [modelLoaded, animationState, unitType]);
+  }, [modelLoaded, animationState, unitType, isPlaced]);
 
   // Animate indicator effects
   useFrame((state, delta) => {
     mixerRef.current?.update(delta);
+    rigRef.current?.update(delta);
     mountMixerRef.current?.update(delta);
     const time = state.clock.getElapsedTime();
 
@@ -151,10 +161,10 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
         position={[0, 0.02 - elevation, 0]}
         rotation={[-Math.PI / 2, 0, 0]}
       >
-        <circleGeometry args={[unitModelAttributes.indicatorScale, 32]} />
+        <circleGeometry args={[0.5, 32]} />
         <meshStandardMaterial
-          color={unitModelAttributes.indicatorColor}
-          emissive={unitModelAttributes.indicatorColor}
+          color={indicatorColor}
+          emissive={indicatorColor}
           emissiveIntensity={isPlaced ? 0.5 : 0.3}
           transparent={true}
           opacity={0.7}

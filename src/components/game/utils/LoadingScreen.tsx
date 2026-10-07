@@ -18,7 +18,12 @@ const LOADING_TIPS = [
   'Archers hit from 2 hexes away, where melee units can\'t strike back.',
   'Destroying an enemy unit pays a bounty of half its cost.',
   'Rogues strike from the shadows: enemies can\'t hit back at them.',
-  'Keep Mages next to your front line - they heal adjacent allies every turn.'
+  'Keep Mages next to your front line - they heal adjacent allies every turn.',
+  'You bring four cards into each battle. Pick ones that counter the enemy before you fight.',
+  'A battle ends after its last round: the castle in better shape wins.',
+  'Lost a battle? You still earn coins - spend them on upgrades in the Army.',
+  'Check the recommended power before a battle. Below it? Upgrade your cards.',
+  'Lava burns and cursed ground drains your troops - but the undead love it.'
 ];
 
 const TIP_INTERVAL = 5000;

@@ -1,142 +1,125 @@
 # World War Hex
 
-A turn-based strategy game on a 3D hexagonal battlefield, built with Next.js, React, TypeScript, Tailwind CSS and three.js (via React Three Fiber and drei).
+A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.js, React, TypeScript, Tailwind CSS and three.js (via React Three Fiber and drei).
 
-## Project Structure
+## The game in a nutshell
 
-The game is organized into modular components for better maintainability:
-
-### Core Components
-
-- `GameController`: Main game controller that manages game state and lays out the HUD for each phase
-- `GameBoard`: Renders the 3D board, the camera (swings to the active side's view each turn; drag to orbit, scroll to zoom), planned routes and battle markers
-- `HexTile`: Individual hexagon tile component
-- `BoardDecorations`: Instanced trees, peaks, dunes and gold that show each hex's terrain
-- `UnitMesh`: Animated unit that walks along its route, faces its opponent and shows its health and terrain bonuses
-- `Castle`: Each side's castle, topped with a crown
-- `Camp`: Neutral camp with a banner in the colour of whoever holds it
-- `MovePath`: Dashed route with an arrow showing where a unit will walk
-
-### HUD
-
-- `src/components/game/hud/`
-  - `TopBar`: Round, whose turn it is, timer, both castles' health, your gold, and save / mute / main menu buttons
-  - `ActionBar`: Recruit units and end your turn
-  - `SelectionCard`: Details about the selected unit and the terrain it stands on
-  - `EventFeed`: Battle log of recent events
-  - `HelpPanel`: Collapsible guide to terrain effects and how to win
-  - `CollapsiblePanel`: Shared collapsible HUD panel
-  - `TurnBanner`: Announces turn changes and battles
-
-### Game Phases
-
-- `src/components/game/phases/`
-  - `SetupPhase`: Instructions for placing the player's castle
-
-### Combat System
-
-- `src/components/game/combat/`
-  - `CombatResolver`: Shows the battle being fought, with each unit's damage and any kill bounty
-
-### UI Components
-
-- `src/components/game/shared/`
-  - `GameOverScreen`: End game screen showing the winner
-
-### Game Intro
-
-- `src/components/game/intro/`
-  - `IntroScreen`: Main menu: pick a difficulty, start or continue a game, and meet your army
-  - `IslandDiorama`: A small 3D island built from the game's own tiles, castles, camps and troops, skirmishing on a loop and cycling through the map themes
-
-### Storage Utilities
-
-- `src/components/game/storage/`
-  - `GameStorage`: Versioned save/load of the game in localStorage (the game also autosaves at the start of each of your turns)
-
-### Helper Utilities
-
-- `src/components/game/utils/`
-  - `LoadingManager` / `LoadingScreen`: Download the unit models and sounds before the board is shown
-  - `unitModelCache`: Loads each animated model once and clones it per unit
-  - `UnitModelSystem`: Model, animation and attack-speed settings for each unit type
-  - `SoundPlayer` / `battleSounds`: UI sounds, synthesised battle sounds and the global mute
-  - `boardGeometry`: Hex heights and hex-to-world positions
-
-### Game Logic
-
-- `src/lib/game/`
-  - `gameState.ts`: Rules engine: setup, purchases, movement, combat, economy and win conditions (pure functions)
-  - `mapGenerator.ts`: Seeded natural map generation: a random theme (Green Valley, Frozen Pass, Marshlands, Desert Frontier, Highlands, Riverlands) picks which terrain appears, then noise shapes it into lakes, ranges and forests, keeps every walkable hex connected and scatters gold mines and springs
-  - `hexUtils.ts`: Hex grid maths (neighbours, distances)
-
-### AI Player
-
-- `src/lib/ai/`
-  - `aiPlayer.ts`: AI decision making for moves and combat
-
-## Game Features
-
-- Hexagonal grid-based strategy game
-- Save and load game functionality
-- Multiple unit types with different abilities
-- Resource management
-- Turn-based combat system
-- AI opponent with three difficulty levels
-- Animated battles: each troop type strikes at its own pace, archers fire bolts and mages hurl spells, with clash, bow, spell and impact sounds; health bars count down as blows land
-- Strategy over numbers: counters, height, line of sight and upkeep let a smaller, smarter army beat a bigger one
-- Six troop types, each with its own low-poly model in its side's colours
-
-## Credits
-
-- Unit models: [KayKit Character Pack: Adventurers](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0) by Kay Lousberg ([CC0](http://creativecommons.org/publicdomain/zero/1.0/)), trimmed and meshopt-compressed for the web
-- Knights' horse: from the [three.js examples](https://github.com/mrdoob/three.js) (MIT), model by [mirada](https://mirada.com/) for ROME
-- Battle sounds synthesised in the browser with [ZzFX](https://github.com/KilledByAPixel/ZzFX) (MIT)
-- Icons from [Game Icons](https://game-icons.net) and [Lucide](https://lucide.dev) via [react-icons](https://react-icons.github.io/react-icons/)
+- **Cards.** Your troops are playing cards. You start with four and bring four into every battle, picked before each fight (the pre-battle screen marks the cards that counter that enemy, and Auto-pick chooses a strong set). In battle, tap a card, then a glowing hex next to your castle (or a camp you hold) to deploy it.
+- **Campaign.** 100 battles across 10 regions - Greenvale Meadows, Goblin Woods, Howling Hills, Mirefen Marsh, Sunscorch Desert, Frostpeak Pass, Gravemoor, Ironfang Badlands, Emberforge Wastes and Dragonspire Peaks. Each region has its own map theme, terrain and enemy faction, an elite battle (a champion guards the castle) and a boss battle. Win to unlock the next level, and earn up to three stars per level.
+- **50 monsters.** Ten factions of five - bandits, goblins, beasts, swamp folk, the sand court, the frostborn, the undead, orcs, the infernal legion and the dragonkin - each with four troops the enemy recruits and a boss.
+- **Bestiary.** Every monster you meet is added to the Bestiary on the main menu, with its lore, abilities, kill count and a 3D model to inspect.
+- **Power.** Each card has a power rating from its stats and abilities, and your army's power is the sum of the four cards you bring. Every campaign level shows its recommended power, so you know when to upgrade first.
+- **Coins.** Battles pay coins - more for wins and stars, a little for a loss - which buy new cards (the shop gains cards as you advance) and upgrade cards up to level 10.
+- **Stats and saves.** Lifetime stats, settings and your progress live in the browser; download a save file to back it up or move it to another computer.
+- **Short battles.** Small maps, castles placed automatically, 30-second turns, a round limit (the stronger castle wins when time runs out), all of a turn's battles fought at once and a 2x speed button keep a battle to a few minutes.
+- **Big moments.** First blood, double and triple kills, rampages, camp captures, crushing blows, last stands, the final round and boss kills get callouts, screen shake, slow motion, confetti and coins flying into your treasury. Castles shudder when hit and crumble when they fall, and fallen troops play out their deaths.
+- **Music.** Original menu, map, battle and boss themes plus victory, defeat and unlock jingles, synthesised in the browser. Battle music builds up in the final round and when your castle is in danger. Drop your own MP3s into `public/music/` to replace any of them (see its README).
+- **Tutorial.** The first battle walks new players through playing a card, deploying, ending the turn and moving troops.
 
 ## How to Play
 
-1. **Place your castle.** Click a highlighted hex on the edge of the map, then click it again to confirm. A castle needs at least two open hexes next to it (not water, mountains or a gold mine). The enemy castle is placed on the far side of the map.
-2. **Take turns.** You and the enemy alternate turns. You have 60 seconds to plan, then press **End Turn** (or let the timer run out).
-   - **Recruit:** pick a unit in the Barracks, click a highlighted hex next to your castle, then click it again to deploy. Units appear at the end of your turn and can move from your next turn. You can also deploy on a hex whose unit you've ordered to move away (cancelling that move also cancels the recruit). Click a queued unit to cancel it and get your gold back.
-   - **Move:** click one of your units, then a highlighted hex - the route is drawn as you hover. If a hex is out of reach or impassable you get a short warning and the unit stays selected. Click a planned destination to cancel the move. Units walk there when the turn ends.
-   - **Camera:** click and drag to rotate the view around the map (drag up/down to tilt), and scroll or pinch to zoom in on any part of it. The view swings to whoever's turn it is.
-   - **Menu:** the buttons next to your gold save the game, mute the sound and return to the main menu. The game also saves itself at the start of each of your turns, and the turn timer pauses while the tab is in the background.
-3. **Your army.** Every troop counters another, so no single army beats them all.
+1. **Pick a battle.** Open the campaign map, pick the next level, choose the four cards to bring, compare your power with the recommended power, then press **Fight!**
+2. **Play cards.** Tap a card in your hand, then a glowing hex next to your castle or a camp you hold. Its gold cost comes out of your treasury. Tap a troop you queued this turn to take it back.
+3. **Move.** Tap one of your troops, then a highlighted hex. Rough ground costs more movement; water and mountains block the way (flyers pass over them).
+4. **End your turn.** Troops arrive and move, then every troop in range attacks one enemy it can reach automatically - preferring one it can finish off, then one it is strong against. A defender splits its strike-back between the attackers it can reach, so archers shooting from 2 hexes and sneak attacks take no damage. The battle card shows every modifier, and health bars count down blow by blow. Then the enemy takes its turn.
+5. **Win** by marching onto the enemy castle, or by wearing it down: at the end of your turn every troop within 3 hexes of it deals its attack as damage. When the last round ends, the castle in better shape wins.
+6. **Earn gold** each turn: 5, plus any gold mines your troops hold and 2 for each camp you hold. Armies larger than 5 troops cost 1 gold upkeep per extra troop, so holding mines and camps beats massing troops. Destroying an enemy pays a bounty of half its cost, and damaging the enemy castle plunders gold. Your income per turn is shown next to your gold.
 
-   | Unit | Cost | Attack | Health | Move | Strong against | Special |
-   |---|---|---|---|---|---|---|
-   | Swordsmen | 5 | 2 | 5 | 2 | Pikemen, Rogues | Cheap all-rounders |
-   | Archers | 10 | 5 | 3 | 1 | Pikemen | Shoot from 2 hexes away (3 from high ground) |
-   | Knights | 13 | 3 | 4 | 5 | Archers, Mages | Fast mounted cavalry |
-   | Pikemen | 12 | 4 | 8 | 3 | Knights (double damage) | Tough; attack 50% harder from a forest |
-   | Rogues | 9 | 3 | 3 | 4 | Archers, Mages | Sneak attacks: enemies can't strike back at them |
-   | Mages | 10 | 3 | 4 | 2 | - | Spells reach 2 hexes and ignore cover and line of sight; heal adjacent allies 2 health each turn |
+### Counters
 
-   Counters deal 50% more damage (Pikemen double against Knights). Archers and Mages caught in close combat fight at half strength.
+Every troop belongs to a class, and each class hits some others 50% harder (spears hit cavalry twice as hard), so no single army beats them all:
 
-4. **Combat.** When a side ends its turn, each of its units automatically attacks one enemy it can reach, preferring one it can finish off, then one it is strong against. A unit attacked by several enemies splits its strike-back between the attackers it can reach, so Archers shooting from 2 hexes take no damage, and Rogues' sneak attacks are never struck back. The battle card shows every modifier, and health bars count down blow by blow as the battle plays out.
-5. **Terrain and height matter.** Every map has its own theme and only some of the terrain types below; the Guide panel lists the ones on the current map. Hover any hex to see its effect and height.
-   - **Height:** each hex has a height level - water and swamp 0, most ground 1, hills and snow 2, mountains 3. Attacking down onto lower ground deals 25% more damage per level (up to two levels); attacking uphill deals 25% less. Archers and Mages on high ground reach one hex further.
-   - **Line of sight:** shots at range are blocked by any hex in between that stands higher than both the shooter and the target. Mountains block everything, ridges hide units from archers below, and forest canopies count one level higher - so forests screen an advance unless the archers stand on high ground. Mages' spells arc over anything.
+| Class | Strong against |
+|---|---|
+| Spear (Pikemen, lizardmen, scorpions) | Cavalry (x2), Brutes |
+| Cavalry (Knights, wolves, wyverns) | Ranged, Casters |
+| Ranged (Archers, Longbowmen) | Spears, Brutes |
+| Infantry (Swordsmen, skeletons, orc grunts) | Spears, Skirmishers |
+| Skirmisher (Rogues, spiders, imps, ghosts) | Ranged, Casters |
+| Brute (Berserkers, bears, golems, ogres, giants) | Infantry |
+| Caster (Mages, shamans, witches) | - but their spells ignore cover and line of sight |
 
-   | Terrain | Height | Effect |
-   |---|---|---|
-   | Plains | 1 | No effect |
-   | Forest | 1 (trees 2) | Units take 40% less damage (except from spells); Pikemen attack 50% harder; blocks shots from below |
-   | Hills | 2 | High ground; costs 2 movement |
-   | Desert | 1 | Costs 2 movement |
-   | Swamp | 0 | Low ground; costs 2 movement |
-   | Snow | 2 | High ground; costs 3 movement |
-   | Spring | 1 | Units here heal 2 health at the end of each of their turns |
-   | Gold Mine | 1 | Pays its gold at the end of each of your turns while one of your units holds it |
-   | Mountains | 3 | Impassable; blocks line of sight |
-   | Water | 0 | Impassable |
+Ranged troops caught in close combat fight at half strength. Every card and unit shows its class and what it is strong and weak against.
 
-   A unit can always step onto one neighbouring hex, however rough, even if that takes all of its movement.
-6. **Camps.** Two neutral camps sit between the castles, the same distance from each. Move a unit onto a camp to capture it: from then on you can deploy recruits on and around it as well as next to your castle. The enemy can take it back the same way.
-7. **Economy.** At the end of each of its turns a side earns 5 gold, plus the value of any gold mines its units stand on and 2 gold for each camp it holds. Armies larger than 5 units cost 1 gold upkeep per extra unit each turn, so a bigger army isn't automatically a better one - holding mines and camps pays more. Destroying an enemy unit pays a bounty of half its cost, and damaging the enemy castle plunders gold (1 per 2 damage). Your income per turn is shown next to your gold.
-8. **Win** by moving a unit onto the enemy castle, or by wearing it down. At the end of each of your turns, each of your units within 3 hexes of the enemy castle deals damage equal to its attack power (and the enemy does the same at the end of theirs).
+### Height and line of sight
+
+Each hex has a height level: water, swamp, ice and lava 0, most ground 1, hills and snow 2, mountains 3. Attacking down onto lower ground deals 25% more damage per level (up to two levels); attacking uphill deals 25% less. Ranged troops on high ground reach one hex further. Shots at range are blocked by any hex in between that stands higher than both the shooter and the target: mountains block everything, ridges hide units from archers below, and forest canopies and ruined walls count one level higher. Spells arc over anything.
+
+### Terrain
+
+| Terrain | Height | Effect |
+|---|---|---|
+| Plains | 1 | No effect |
+| Forest | 1 (trees 2) | Units take 40% less damage (except from spells); Pikemen attack 50% harder; blocks shots from below |
+| Hills | 2 | High ground; costs 2 movement |
+| Ruins | 1 (walls 2) | Units take 25% less damage (except from spells); blocks shots from below |
+| Desert | 1 | Costs 2 movement |
+| Swamp | 0 | Low ground; costs 2 movement |
+| Snow | 2 | High ground; costs 3 movement |
+| Ice | 0 | Low ground; costs 2 movement |
+| Spring | 1 | Heals 2 health at the end of each of your turns |
+| Cursed Ground | 1 | Drains 1 health each turn - but heals the undead |
+| Lava Field | 0 | Burns 2 health each turn (Fireborn troops are unharmed); costs 2 movement |
+| Gold Mine | 1 | Pays its gold each turn while one of your units holds it |
+| Mountains | 3 | Impassable (flyers pass over); blocks line of sight |
+| Water | 0 | Impassable (flyers pass over) |
+
+A unit can always step onto one neighbouring hex, however rough, even if that takes all of its movement.
+
+### Abilities
+
+Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest fighter, Sneak attack (no strike-back), Flying, Regenerates, Armored (1 less damage per fight), Siege (double castle damage), Berserk (+50% attack at half health), Undead, Pathfinder (rough ground costs 1) and Fireborn. Every card shows its abilities; hover them for details.
+
+## Project Structure
+
+### Game logic (`src/lib`)
+
+- `game/troops.ts`: Every troop - the Kingdom's 13 cards and the 50 monsters - with stats, abilities, rarity and lore; card levels and power
+- `game/gameState.ts`: Rules engine (pure functions): battle setup, the card hand, purchases, movement, combat (height, line of sight, counters, abilities), terrain, economy and upkeep, round limit and win conditions
+- `game/mapGenerator.ts`: Seeded, themed map generation, including the campaign's region themes
+- `game/hexUtils.ts`: Hex grid maths
+- `ai/aiPlayer.ts`: The AI: scores every move on the fight it offers, the danger it walks into, the ground and its goal; recruits counters from whatever roster it has; plays either side, with selectable doctrines for simulations
+- `campaign/levels.ts`: The 10 regions and 100 levels: enemy rosters and scaling, bosses, star goals and rewards
+- `campaign/battleSetup.ts`: Builds a battle from a campaign level (or a quick battle) and the player's deck
+- `meta/economy.ts`: Rewards, card prices, upgrade costs and the progression model behind recommended power
+- `meta/profile.ts`: The player's saved progress, the shop, battle results, stats, and save export and import
+- `audio/`: The music engine: instruments, a lookahead scheduler, the score notation and the tracks
+
+### Screens (`src/app`)
+
+- `page.tsx`: Main menu (`components/game/intro/IntroScreen`, with a 3D island of troops and monsters)
+- `campaign`: The campaign map and the pre-battle sheet: recommended power and picking your four cards (`components/menu/CampaignScreen`, `PreBattleSheet`; suggestions in `lib/meta/loadout.ts`)
+- `army`: Your cards, the card shop and upgrades (`components/menu/ArmyScreen`)
+- `bestiary`: The bestiary and its 3D model viewer (`components/menu/BestiaryScreen`, `TroopModelViewer`)
+- `stats`: Stats, settings and save files (`components/menu/StatsScreen`)
+- `play`: A battle (`/play?level=7`, or `/play?mode=quick&difficulty=hard`)
+
+### Battle (`src/components/game`)
+
+- `GameController`: Runs a battle and lays out its HUD, records the result and shows the results screen
+- `GameBoard`: The 3D board and camera (framed so the board sits just above the hand; drag to orbit, scroll to zoom), routes, battle markers, deaths and damage numbers
+- `UnitMesh`: An animated troop - KayKit character or procedural creature - walking, fighting blow by blow (see `utils/battleTiming`) and falling
+- `Castle`, `Camp`, `HexTile`, `BoardDecorations`, `MovePath`: The rest of the board
+- `cards/TroopCard`: A troop as a playing card, used everywhere
+- `hud/`: `TopBar` (round, castles, gold, speed and menu buttons), `CardHand`, `SelectionCard`, `EventFeed`, `HelpPanel`, `TurnBanner`
+- `shared/`: `ResultsScreen`, `TutorialCoach`, `BossIntro`
+- `effects/`: Callouts, screen shake, slow motion, flying coins and confetti, and `useBattleMoments`, which spots the big moments
+- `utils/UnitModelSystem`: How every troop looks: character, weapons, colour palette and animations, or creature body
+- `utils/unitModelCache`: Loads models once, repaints their colour atlas per faction and clones them per unit
+- `utils/creatures`: Procedural low-poly monsters (wolves, spiders, slimes, golems, wisps, dragons...)
+- `storage/GameStorage`: Save and resume the battle in progress
+
+### Balance
+
+`npm run simulate` plays AI-vs-AI battles in which one side uses the deck the progression model expects at each level, and reports win rates and battle lengths. `npm run simulate -- --tune 20 1 2 3` searches for the enemy strength at which that deck wins 65% of the time. The constants in `src/lib/campaign/levels.ts` were tuned with it.
+
+## Credits
+
+- Character models: [KayKit Character Pack: Adventurers](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0) and [KayKit Character Pack: Skeletons](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0) by Kay Lousberg ([CC0](http://creativecommons.org/publicdomain/zero/1.0/)), with the characters and weapons split from one shared animation pack and meshopt-compressed for the web
+- Knights' horse: from the [three.js examples](https://github.com/mrdoob/three.js) (MIT), model by [mirada](https://mirada.com/) for ROME
+- Monsters without a character model are procedural low-poly creatures built in code
+- Music is original and synthesised in the browser; battle sounds are synthesised with [ZzFX](https://github.com/KilledByAPixel/ZzFX) (MIT)
+- Icons from [Game Icons](https://game-icons.net) and [Lucide](https://lucide.dev) via [react-icons](https://react-icons.github.io/react-icons/)
 
 ## Getting Started
 

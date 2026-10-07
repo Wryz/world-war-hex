@@ -7,21 +7,23 @@ interface TurnBannerProps {
   phase: GamePhase;
   activePlayer: PlayerType;
   turnNumber: number;
+  maxRounds: number;
 }
 
 const BANNER_DURATION = 1800;
 
 // Big announcement whenever the turn changes or a battle starts
-export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, turnNumber }) => {
+export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, turnNumber, maxRounds }) => {
   const [banner, setBanner] = useState<{ key: string; title: string; subtitle: string; color: string; isBattle?: boolean } | null>(null);
 
   useEffect(() => {
     let next: typeof banner = null;
 
     if (phase === 'planning') {
+      const round = turnNumber >= maxRounds ? 'Final round!' : `Round ${turnNumber} of ${maxRounds}`;
       next = activePlayer === 'player'
-        ? { key: `p-${turnNumber}`, title: 'Your Turn', subtitle: `Round ${turnNumber}`, color: SIDE_COLORS.player }
-        : { key: `a-${turnNumber}`, title: 'Enemy Turn', subtitle: `Round ${turnNumber}`, color: SIDE_COLORS.ai };
+        ? { key: `p-${turnNumber}`, title: 'Your Turn', subtitle: round, color: SIDE_COLORS.player }
+        : { key: `a-${turnNumber}`, title: 'Enemy Turn', subtitle: round, color: SIDE_COLORS.ai };
     } else if (phase === 'combat') {
       next = {
         key: `c-${turnNumber}-${activePlayer}`,
@@ -36,7 +38,7 @@ export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, tur
     setBanner(next);
     const timeout = setTimeout(() => setBanner(null), BANNER_DURATION);
     return () => clearTimeout(timeout);
-  }, [phase, activePlayer, turnNumber]);
+  }, [phase, activePlayer, turnNumber, maxRounds]);
 
   return (
     <div className="fixed inset-x-0 top-1/3 z-30 flex justify-center pointer-events-none" role="status" aria-live="polite">

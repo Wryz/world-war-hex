@@ -6,14 +6,14 @@ import {
   UnitType,
   Hex,
   HexCoordinates,
-  TerrainType
+  TerrainType,
+  TroopStats
 } from '@/types/game';
 import {
   getHexDistance,
   getHexesInRange
 } from '../game/hexUtils';
 import {
-  UNITS,
   BASE_ATTACK_RANGE,
   TERRAIN_EFFECTS,
   CAMP_INCOME,
@@ -31,8 +31,13 @@ import {
   getIncome,
   getKillBounty,
   hasLineOfSight,
+  getHand,
+  getMaxRounds,
+  getRosterStats,
+  getRosterTypes,
   findBaseHex
 } from '../game/gameState';
+import { TroopClass, getTroopClass } from '../game/troops';
 
 /**
  * AI difficulty settings affecting various strategic parameters
@@ -83,8 +88,9 @@ export type AIDoctrine = 'balanced' | 'archerHill' | 'knightRush' | 'pikeWall' |
 export const AI_DOCTRINES: AIDoctrine[] = ['balanced', 'archerHill', 'knightRush', 'pikeWall', 'rogueRaid', 'mageSupport'];
 
 interface DoctrineProfile {
-  // Relative share of each unit type in the army
-  mix: Partial<Record<UnitType, number>>;
+  // Relative share of each class of troop in the army (classes left out get a small share, so
+  // a roster without the doctrine's favourites still fields an army)
+  mix: Partial<Record<TroopClass, number>>;
   // How strongly recruiting shifts towards counters of the enemy army (0 keeps to the mix)
   counterBias: number;
   // What units do when nothing more urgent is going on:
@@ -103,7 +109,7 @@ interface DoctrineProfile {
 
 const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
   balanced: {
-    mix: { infantry: 2, tank: 2, artillery: 2, helicopter: 1.5, rogue: 1, medic: 1 },
+    mix: { infantry: 2, spear: 2, ranged: 2, cavalry: 1.5, skirmisher: 1, magic: 1, brute: 1.5 },
     counterBias: 1,
     posture: 'advance',
     caution: 0.8,
@@ -112,7 +118,7 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
     minNetIncome: 3
   },
   archerHill: {
-    mix: { artillery: 4, tank: 1.5, infantry: 1.5, helicopter: 0.5, rogue: 0.5, medic: 0.5 },
+    mix: { ranged: 4, spear: 1.5, infantry: 1.5, cavalry: 0.5, skirmisher: 0.5, magic: 0.5, brute: 1 },
     counterBias: 0.8,
     posture: 'hold',
     anchor: 'highGround',
@@ -122,7 +128,7 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
     minNetIncome: 2
   },
   knightRush: {
-    mix: { helicopter: 4, infantry: 1.5, tank: 0.5, artillery: 0.5, rogue: 0.5, medic: 0.5 },
+    mix: { cavalry: 4, infantry: 1.5, spear: 0.5, ranged: 0.5, skirmisher: 0.5, magic: 0.5, brute: 0.5 },
     counterBias: 0.8,
     posture: 'raid',
     caution: 0.5,
@@ -131,7 +137,7 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
     minNetIncome: 1
   },
   pikeWall: {
-    mix: { tank: 3, infantry: 2.5, artillery: 1, helicopter: 0.5, rogue: 0.5, medic: 0.5 },
+    mix: { spear: 3, infantry: 2.5, ranged: 1, cavalry: 0.5, skirmisher: 0.5, magic: 0.5, brute: 1.5 },
     counterBias: 0.8,
     posture: 'hold',
     anchor: 'choke',
@@ -141,7 +147,7 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
     minNetIncome: 2
   },
   rogueRaid: {
-    mix: { rogue: 4, helicopter: 1.5, infantry: 1, tank: 0.5, artillery: 0.5, medic: 0.5 },
+    mix: { skirmisher: 4, cavalry: 1.5, infantry: 1, spear: 0.5, ranged: 0.5, magic: 0.5, brute: 0.5 },
     counterBias: 0.8,
     posture: 'raid',
     caution: 0.6,
@@ -150,7 +156,7 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
     minNetIncome: 2
   },
   mageSupport: {
-    mix: { medic: 3, infantry: 3, tank: 0.5, artillery: 0.5, helicopter: 0.5, rogue: 0.5 },
+    mix: { magic: 3, infantry: 3, spear: 0.5, ranged: 0.5, cavalry: 0.5, skirmisher: 0.5, brute: 0.5 },
     counterBias: 0.8,
     posture: 'advance',
     caution: 0.8,
@@ -164,10 +170,17 @@ export interface AIPlanOptions {
   // Which side to plan for (the game only ever plans for 'ai'; simulations may use either)
   side?: PlayerType;
   doctrine?: AIDoctrine;
+  // Skill to play at instead of the battle's own setting (simulations play the player's side with it)
+  difficulty?: 'easy' | 'medium' | 'hard';
 }
 
-// Unit types the AI recruits (the same ones offered to the player in the barracks)
-const RECRUITABLE_TYPES: UnitType[] = ['infantry', 'artillery', 'helicopter', 'tank', 'rogue', 'medic'];
+// Share of the army given to a class of troop the doctrine doesn't mention
+const UNLISTED_CLASS_SHARE = 0.75;
+// Order units move in: ranged troops and skirmishers pick their shots first, healers last so they
+// know where their friends will be
+const MOVE_ORDER: TroopClass[] = ['ranged', 'skirmisher', 'cavalry', 'spear', 'brute', 'infantry', 'magic'];
+// Bosses guard the castle and only join the final push from this round on, relative to the round limit
+const PUSH_ROUND_SHARE = 0.55;
 
 // Most units the AI recruits in a single turn
 const MAX_PURCHASES_PER_TURN = 3;
@@ -188,8 +201,8 @@ const HOLD_LINE = 0.5;
 // How much (in gold) a turn of progress towards a unit's goal is worth, by kind of goal
 const GOAL_WEIGHT = { urgent: 6, objective: 4, march: 3, station: 2.5 } as const;
 
-const getDifficultySettings = (state: GameState): AIDifficultySettings =>
-  DIFFICULTY_SETTINGS[state.settings?.aiDifficulty ?? 'medium'] ?? DIFFICULTY_SETTINGS.medium;
+const getDifficultySettings = (state: GameState, difficulty = state.settings?.aiDifficulty): AIDifficultySettings =>
+  DIFFICULTY_SETTINGS[difficulty ?? 'medium'] ?? DIFFICULTY_SETTINGS.medium;
 
 const key = (c: HexCoordinates) => `${c.q},${c.r}`;
 const coordsMatch = (a: HexCoordinates, b: HexCoordinates) => a.q === b.q && a.r === b.r;
@@ -218,6 +231,12 @@ const mirrorSides = (state: GameState): GameState => {
     players,
     activePlayer: flipSide(state.activePlayer),
     winner: flipSide(state.winner),
+    rosters: state.rosters && { player: state.rosters.ai, ai: state.rosters.player },
+    battleStats: state.battleStats && { player: state.battleStats.ai, ai: state.battleStats.player },
+    // The deck only limits the real player's recruits; the planner is told which cards it holds instead
+    deck: undefined,
+    // A campaign enemy's income bonus doesn't belong to the side being planned for
+    settings: state.settings && { ...state.settings, aiIncomeBonus: 0 },
     hexGrid: state.hexGrid.map(hex => ({
       ...hex,
       owner: flipSide(hex.owner),
@@ -233,19 +252,19 @@ const mirrorSides = (state: GameState): GameState => {
  */
 export const planAITurn = (state: GameState, options: AIPlanOptions = {}): GameState => {
   const doctrine = options.doctrine ?? 'balanced';
-  if ((options.side ?? 'ai') === 'ai') return planTurn(state, doctrine);
+  if ((options.side ?? 'ai') === 'ai') return planTurn(state, doctrine, getRosterTypes(state, 'ai'), options.difficulty);
 
-  // Plan the player's side by swapping sides, then carry its orders and spent gold back over
-  const planned = planTurn(mirrorSides(state), doctrine);
-  return {
-    ...state,
-    pendingMoves: planned.pendingMoves,
-    pendingPurchases: planned.pendingPurchases,
-    players: {
-      ...state.players,
-      player: { ...state.players.player, points: planned.players.ai.points }
-    }
-  };
+  // Plan the player's side by swapping sides (a player with a deck may only play the cards in hand),
+  // then give the same orders on the real board so gold, the deck and every rule apply as normal
+  const planned = planTurn(mirrorSides(state), doctrine, getHand(state), options.difficulty);
+  let result = state;
+  for (const move of planned.pendingMoves) {
+    result = addPendingMove(result, move.unitId, state.players.player.id, move.to);
+  }
+  for (const purchase of planned.pendingPurchases) {
+    result = addPendingPurchase(result, state.players.player.id, purchase.unitType, purchase.position);
+  }
+  return result;
 };
 
 // ---------------------------------------------------------------------------
@@ -255,6 +274,8 @@ export const planAITurn = (state: GameState, options: AIPlanOptions = {}): GameS
 interface Planner {
   // The state with this turn's orders queued so far
   state: GameState;
+  // Troop types this side may recruit this turn
+  recruitTypes: UnitType[];
   doctrine: AIDoctrine;
   profile: DoctrineProfile;
   settings: AIDifficultySettings;
@@ -275,7 +296,7 @@ interface Planner {
   interceptors: Map<string, Unit>;
 }
 
-const planTurn = (state: GameState, doctrine: AIDoctrine): GameState => {
+const planTurn = (state: GameState, doctrine: AIDoctrine, recruitTypes: UnitType[], difficulty?: AIPlanOptions['difficulty']): GameState => {
   const enemyBase = findBaseHex(state, 'player');
   const myBase = findBaseHex(state, 'ai');
   if (!myBase || !enemyBase) return state;
@@ -283,9 +304,10 @@ const planTurn = (state: GameState, doctrine: AIDoctrine): GameState => {
   const profile = DOCTRINES[doctrine];
   const planner: Planner = {
     state,
+    recruitTypes,
     doctrine,
     profile,
-    settings: getDifficultySettings(state),
+    settings: getDifficultySettings(state, difficulty),
     hexes: new Map(state.hexGrid.map(hex => [key(hex.coordinates), hex])),
     myBase,
     enemyBase,
@@ -307,12 +329,10 @@ const planTurn = (state: GameState, doctrine: AIDoctrine): GameState => {
   const takenCamps = [...planner.objectives.values()].filter(hex => hex.isCamp).length;
   const campsWithoutCapturer = { count: findCampTargets(state).length - takenCamps };
 
-  // Move existing units first (hexes next to the castle they leave can then take recruits).
-  // Archers and Rogues pick their shots first, Mages last so they know where their friends will be.
-  const moveOrder: UnitType[] = ['artillery', 'rogue', 'helicopter', 'tank', 'infantry', 'medic'];
+  // Move existing units first (hexes next to the castle they leave can then take recruits)
   const units = [...state.players.ai.units]
     .filter(unit => !unit.hasMoved)
-    .sort((a, b) => moveOrder.indexOf(a.type) - moveOrder.indexOf(b.type));
+    .sort((a, b) => MOVE_ORDER.indexOf(getTroopClass(a.type)) - MOVE_ORDER.indexOf(getTroopClass(b.type)));
 
   // Fresh recruits can't move but still strike whatever is in reach
   for (const unit of state.players.ai.units) {
@@ -341,12 +361,14 @@ const planTurn = (state: GameState, doctrine: AIDoctrine): GameState => {
   return planner.state;
 };
 
-// The AI goes all in on the enemy castle once the game drags on, or when it clearly has the bigger army
+// The AI goes all in on the enemy castle once the battle nears its round limit (or the doctrine's
+// own push round), or when it clearly has the bigger army
 const isPushing = (planner: Planner): boolean => {
   const { state, profile } = planner;
   const mine = state.players.ai.units;
   const theirs = state.players.player.units;
-  return state.turnNumber >= profile.pushAfterRound ||
+  const pushRound = Math.min(profile.pushAfterRound, Math.ceil(getMaxRounds(state) * PUSH_ROUND_SHARE));
+  return state.turnNumber >= pushRound ||
     (mine.length >= theirs.length + profile.pushUnitAdvantage && armyValue(mine) >= armyValue(theirs) * 1.3);
 };
 
@@ -698,6 +720,9 @@ const chooseGoal = (planner: Planner, unit: Unit): UnitGoal => {
   const raider = planner.interceptors.get(unit.id);
   if (raider) return goal(raider.position, GOAL_WEIGHT.urgent, 0, profile.caution * 0.5);
 
+  // Bosses guard the castle (fighting whatever comes close) until the final push
+  if (unit.isBoss && !planner.isPushing) return goal(unit.position, GOAL_WEIGHT.station, 2, profile.caution * 0.5);
+
   // Wounded units under threat fall back
   if (!planner.isPushing && healthRatio < settings.retreatThreshold && dangerAt(planner, unit, unit.position) > 0) {
     const spring = findNearbySpring(planner, unit);
@@ -871,23 +896,30 @@ const counterScore = (type: UnitType, enemies: Unit[]): number => {
  * it is furthest short of. Returns a type even if the AI can't afford it yet, so it saves up rather
  * than filling the army with whatever is cheapest.
  */
-const chooseRecruitType = (planner: Planner, campsWithoutCapturer: { count: number }): UnitType => {
-  const { state, profile, settings, threat, enemies } = planner;
-  const canAfford = (type: UnitType) => UNITS[type].cost <= state.players.ai.points;
+const chooseRecruitType = (planner: Planner, campsWithoutCapturer: { count: number }): UnitType | null => {
+  const { state, profile, settings, threat, enemies, recruitTypes } = planner;
+  if (recruitTypes.length === 0) return null;
+  const canAfford = (type: UnitType) => recruitStats(planner, type).cost <= state.players.ai.points;
 
-  // A camp nobody is heading for: the doctrine's fastest unit gets there first
+  // A camp nobody is heading for: the fastest troop on hand gets there first
   if (campsWithoutCapturer.count > 0 && !threat.baseUnderThreat) {
-    const fast = (['helicopter', 'rogue'] as UnitType[]).find(type => (profile.mix[type] ?? 0) > 0);
-    if (fast && canAfford(fast)) {
+    const fast = [...recruitTypes].sort((a, b) => recruitStats(planner, b).movementRange - recruitStats(planner, a).movementRange)[0];
+    if (recruitStats(planner, fast).movementRange >= 4 && canAfford(fast)) {
       campsWithoutCapturer.count--;
       return fast;
     }
   }
 
+  // Each class's share of the army is split between the types of that class on hand
+  const perClass = new Map<TroopClass, number>();
+  for (const type of recruitTypes) perClass.set(getTroopClass(type), (perClass.get(getTroopClass(type)) ?? 0) + 1);
+
   const against = threat.baseUnderThreat && threat.castleRaiders.length > 0 ? threat.castleRaiders : enemies;
   const bias = profile.counterBias * (0.5 + settings.unitDiversityDesire) * (threat.baseUnderThreat ? 2 : 1);
-  const weights = RECRUITABLE_TYPES.map(type => {
-    const base = (profile.mix[type] ?? 0) + (threat.baseUnderThreat ? 0.5 : 0);
+  const weights = recruitTypes.map(type => {
+    const troopClass = getTroopClass(type);
+    const share = (profile.mix[troopClass] ?? UNLISTED_CLASS_SHARE) / perClass.get(troopClass)!;
+    const base = share + (threat.baseUnderThreat ? 0.5 : 0);
     return { type, weight: base * Math.exp(bias * counterScore(type, against)) };
   });
   const totalWeight = weights.reduce((sum, w) => sum + w.weight, 0);
@@ -900,7 +932,7 @@ const chooseRecruitType = (planner: Planner, campsWithoutCapturer: { count: numb
 
   // Under attack there is no time to save up: only what can be bought now counts
   const pool = threat.baseUnderThreat ? weights.filter(w => canAfford(w.type)) : weights;
-  let best: UnitType = pool[0]?.type ?? 'infantry';
+  let best: UnitType | null = pool[0]?.type ?? null;
   let bestShortfall = -Infinity;
   for (const { type, weight } of pool) {
     if (weight <= 0) continue;
@@ -912,6 +944,10 @@ const chooseRecruitType = (planner: Planner, campsWithoutCapturer: { count: numb
   }
   return best;
 };
+
+// The stats this side recruits a troop type with
+const recruitStats = (planner: Planner, type: UnitType): TroopStats =>
+  getRosterStats(planner.state, 'ai', type)!;
 
 /**
  * Decide what to recruit and where, or nothing: when the AI is saving up for the unit it wants,
@@ -932,7 +968,7 @@ const decidePurchase = (
   if (netAfter < profile.minNetIncome && !isLosing && !threat.baseUnderThreat) return null;
 
   const unitType = chooseRecruitType(planner, campsWithoutCapturer);
-  if (UNITS[unitType].cost > me.points) return null;
+  if (!unitType || recruitStats(planner, unitType).cost > me.points) return null;
 
   const position = chooseDeploymentHex(planner, unitType);
   return position ? { unitType, position } : null;
@@ -960,7 +996,12 @@ const chooseDeploymentHex = (planner: Planner, unitType: UnitType): HexCoordinat
   const rally = planner.profile.posture === 'hold' && !planner.isPushing ? [...planner.anchors.values()][0] : undefined;
   const candidates = defendHome ? hexes.filter(isCastleSpot) : hexes;
   const goal = defendHome && nearestThreat ? nearestThreat.position : rally ?? enemyBase.coordinates;
-  const recruit = { ...UNITS[unitType], id: 'recruit', owner: 'ai', position: myBase.coordinates, hasMoved: true, isEngagedInCombat: false } as Unit;
+  const stats = recruitStats(planner, unitType);
+  const recruit: Unit = {
+    id: 'recruit', type: unitType, owner: 'ai', position: myBase.coordinates, movementRange: stats.movementRange,
+    attackPower: stats.attackPower, lifespan: stats.maxLifespan, maxLifespan: stats.maxLifespan, cost: stats.cost,
+    abilities: stats.abilities, hasMoved: true, isEngagedInCombat: false
+  };
 
   const score = (hex: Hex) =>
     walkingDistance(state, hex.coordinates, goal) +

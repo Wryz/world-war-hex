@@ -11,7 +11,7 @@ interface CombatResolverProps {
 
 // Bonuses read green and penalties red, so it's clear why a fight went the way it did
 const modifierTone = (modifier: string) =>
-  /^-|uphill/.test(modifier) ? 'text-rose-300' : /^\+|^x|less damage|ignore|no damage/.test(modifier) ? 'text-emerald-300' : 'text-slate-400';
+  /^-|uphill/.test(modifier) ? 'text-rose-300' : /^\+|^x|less damage|ignore|no damage|armored/.test(modifier) ? 'text-emerald-300' : 'text-slate-400';
 
 // One unit in the battle: health now, the damage it is about to take, and what is helping or hurting it
 const Combatant: React.FC<{ entry: CombatantPreview }> = ({ entry }) => (
@@ -54,37 +54,40 @@ const Side: React.FC<{ label: string; color: string; power: number; entries: Com
   </div>
 );
 
-// The battle being fought right now: who is fighting and what each unit will take.
+// The turn's battles, all fought at once: who is fighting and what each unit will take.
 // Battles resolve automatically - this card just shows what is happening.
 export const CombatResolver: React.FC<CombatResolverProps> = ({ gameState }) => {
-  const unresolvedCombatIndex = gameState.combats.findIndex(c => !c.resolved);
-  if (unresolvedCombatIndex === -1) return null;
-
-  const combat = gameState.combats[unresolvedCombatIndex];
-  const preview = getCombatPreview(gameState, combat);
-  const isPlayerDefending = combat.defenders.some(unit => unit.owner === 'player');
+  const combats = gameState.combats.filter(c => !c.resolved);
+  if (combats.length === 0) return null;
 
   return (
-    <div className={`${PANEL_CLASS} fixed right-3 bottom-3 z-30 w-80 max-w-[calc(100vw-1.5rem)] p-3 text-xs`}>
+    <div className={`${PANEL_CLASS} fixed right-3 bottom-3 z-30 hidden max-h-[50vh] w-80 max-w-[calc(100vw-1.5rem)] overflow-y-auto p-3 text-xs sm:block`}>
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-display flex items-center gap-1.5 text-base"><AttackIcon /> Battle</span>
-        <span className="text-slate-400">{unresolvedCombatIndex + 1} / {gameState.combats.length}</span>
+        <span className="font-display flex items-center gap-1.5 text-base"><AttackIcon /> {combats.length === 1 ? 'Battle' : `${combats.length} Battles`}</span>
       </div>
 
-      <div className="flex gap-2">
-        <Side
-          label={isPlayerDefending ? 'Enemy' : 'You'}
-          color={SIDE_COLORS[isPlayerDefending ? 'ai' : 'player']}
-          power={preview.attackerPower}
-          entries={preview.attackers}
-        />
-        <div className="self-center font-bold text-slate-500">vs</div>
-        <Side
-          label={isPlayerDefending ? 'You' : 'Enemy'}
-          color={SIDE_COLORS[isPlayerDefending ? 'player' : 'ai']}
-          power={preview.defenderPower}
-          entries={preview.defenders}
-        />
+      <div className="flex flex-col gap-2">
+        {combats.map(combat => {
+          const preview = getCombatPreview(gameState, combat);
+          const isPlayerDefending = combat.defenders.some(unit => unit.owner === 'player');
+          return (
+            <div key={`${combat.hexCoordinates.q},${combat.hexCoordinates.r}`} className="flex gap-2 border-t border-white/5 pt-2 first:border-0 first:pt-0">
+              <Side
+                label={isPlayerDefending ? 'Enemy' : 'You'}
+                color={SIDE_COLORS[isPlayerDefending ? 'ai' : 'player']}
+                power={preview.attackerPower}
+                entries={preview.attackers}
+              />
+              <div className="self-center font-bold text-slate-500">vs</div>
+              <Side
+                label={isPlayerDefending ? 'You' : 'Enemy'}
+                color={SIDE_COLORS[isPlayerDefending ? 'player' : 'ai']}
+                power={preview.defenderPower}
+                entries={preview.defenders}
+              />
+            </div>
+          );
+        })}
       </div>
     </div>
   );
