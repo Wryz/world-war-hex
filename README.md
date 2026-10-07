@@ -86,16 +86,16 @@ The game is organized into modular components for better maintainability:
 
 ## How to Play
 
-1. **Place your castle.** Click a highlighted hex on the edge of the map, then click it again to confirm. The enemy castle is placed on the far side of the map.
+1. **Place your castle.** Click a highlighted hex on the edge of the map, then click it again to confirm. A castle needs at least two open hexes next to it (not water, mountains or a gold mine). The enemy castle is placed on the far side of the map.
 2. **Take turns.** You and the enemy alternate turns. You have 60 seconds to plan, then press **End Turn** (or let the timer run out).
-   - **Recruit:** pick a unit in the Barracks, click a highlighted hex next to your castle, then click it again to deploy. Units appear at the end of your turn and can move from your next turn. Click a queued unit to cancel it and get your gold back.
+   - **Recruit:** pick a unit in the Barracks, click a highlighted hex next to your castle, then click it again to deploy. Units appear at the end of your turn and can move from your next turn. You can also deploy on a hex whose unit you've ordered to move away (cancelling that move also cancels the recruit). Click a queued unit to cancel it and get your gold back.
    - **Move:** click one of your units, then a highlighted hex - the route is drawn as you hover. If a hex is out of reach or impassable you get a short warning and the unit stays selected. Click a planned destination to cancel the move. Units walk there when the turn ends.
    - **Camera:** click and drag to rotate the view around the map (drag up/down to tilt), and scroll or pinch to zoom in on any part of it. The view swings to whoever's turn it is.
    - **Menu:** the buttons next to your gold save the game, mute the sound and return to the main menu. The game also saves itself at the start of each of your turns, and the turn timer pauses while the tab is in the background.
-3. **Combat.** When a side ends its turn, its units automatically attack every enemy in range - adjacent for most units, up to 2 hexes for Archers. Defenders strike back only at attackers they can reach, so Archers firing from 2 hexes take no damage.
+3. **Combat.** When a side ends its turn, each of its units automatically attacks one enemy in range - adjacent for most units, up to 2 hexes for Archers - preferring one it can finish off, otherwise the weakest. A unit attacked by several enemies splits its strike-back between the attackers it can reach, so Archers firing from 2 hexes take no damage.
 4. **Terrain matters.** Forests give cover (units there take 40% less damage, and Pikemen attack 50% harder from them), desert costs 2 movement to cross, gold mines pay out every round, and water and mountains are impassable. Hover any hex to see its effect.
-5. **Economy.** At the end of every round both sides earn 5 gold, plus the value of any gold mines (resource hexes) their units stand on. Destroying an enemy unit pays a bounty of half its cost, and damaging the enemy castle plunders gold (1 per 2 damage).
-6. **Win** by moving a unit onto the enemy castle, or by wearing it down. At the end of every round each unit within 3 hexes of an enemy castle deals damage equal to its attack power.
+5. **Economy.** At the end of each of its turns a side earns 5 gold, plus the value of any gold mines (resource hexes) its units stand on. Destroying an enemy unit pays a bounty of half its cost, and damaging the enemy castle plunders gold (1 per 2 damage).
+6. **Win** by moving a unit onto the enemy castle, or by wearing it down. At the end of each of your turns, each of your units within 3 hexes of the enemy castle deals damage equal to its attack power (and the enemy does the same at the end of theirs).
 
 ## Getting Started
 

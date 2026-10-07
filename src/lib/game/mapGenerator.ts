@@ -21,15 +21,20 @@ const createRandom = (seed: number) => {
   };
 };
 
+// Unbiased in-place Fisher-Yates shuffle driven by the seeded generator
+const shuffle = <T>(items: T[], random: () => number): T[] => {
+  for (let i = items.length - 1; i > 0; i--) {
+    const j = Math.floor(random() * (i + 1));
+    [items[i], items[j]] = [items[j], items[i]];
+  }
+  return items;
+};
+
 // 2D value noise: random values on a lattice, smoothly interpolated between lattice points
 const createValueNoise = (random: () => number) => {
   const size = 256;
   const values = Array.from({ length: size }, () => random());
-  const permutation = Array.from({ length: size }, (_, i) => i);
-  for (let i = size - 1; i > 0; i--) {
-    const j = Math.floor(random() * (i + 1));
-    [permutation[i], permutation[j]] = [permutation[j], permutation[i]];
-  }
+  const permutation = shuffle(Array.from({ length: size }, (_, i) => i), random);
 
   const lattice = (x: number, y: number) =>
     values[permutation[(permutation[((x % size) + size) % size] + y) & (size - 1)]];
@@ -64,7 +69,8 @@ const fractalNoise = (noise: (x: number, y: number) => number, x: number, y: num
 // Hex centre in world-like units so noise isn't skewed by the axial coordinate system
 const toPlane = (c: HexCoordinates) => [Math.sqrt(3) * (c.q + c.r / 2), 1.5 * c.r];
 
-// Assign terrain types by rank so the map matches the requested terrain mix exactly
+// Assign terrain types by rank so the map starts out with the requested terrain mix.
+// Speckle removal and pass carving change a few hexes afterwards, so the final mix is close but not exact.
 const assignTerrain = (
   coordinates: HexCoordinates[],
   settings: GameSettings,
@@ -220,12 +226,13 @@ const chooseResourceHexes = (
   random: () => number
 ): HexCoordinates[] => {
   const center = { q: 0, r: 0 };
-  const candidates = coordinates
-    .filter(c => {
+  const candidates = shuffle(
+    coordinates.filter(c => {
       const distance = getHexDistance(c, center);
       return distance >= 2 && distance <= gridSize - 2 && isPassableTerrain(terrain.get(coordKey(c))!);
-    })
-    .sort(() => random() - 0.5);
+    }),
+    random
+  );
 
   const chosen: HexCoordinates[] = [];
   for (const minimumSpacing of [4, 3, 2]) {
