@@ -2,6 +2,8 @@ import React from 'react';
 import { TroopStats, UnitType } from '@/types/game';
 import { ABILITIES, FACTIONS, Rarity, TROOPS, TROOP_CLASSES, cardStats } from '@/lib/game/troops';
 import { AbilityIcon, AttackIcon, GoldIcon, HealthIcon, LockIcon, MoveIcon, UnitIcon } from '../icons';
+import { CardSkinId, getCardSkin } from '@/lib/meta/cosmetics';
+import { useProfile } from '@/lib/meta/profile';
 
 // A troop as a playing card: cost gem, level badge, art, name banner, stats and abilities.
 // Used for the hand in battle, the army and shop, and the bestiary.
@@ -39,6 +41,8 @@ interface TroopCardProps {
   hidden?: boolean;
   // Hide the level badge
   hideLevel?: boolean;
+  // Card frame to show; your cards default to the one you have equipped
+  skin?: CardSkinId;
   onClick?: () => void;
   className?: string;
   children?: React.ReactNode;
@@ -57,12 +61,16 @@ export const TroopCard: React.FC<TroopCardProps> = ({
   locked = false,
   hidden = false,
   hideLevel = false,
+  skin,
   onClick,
   className = '',
   children,
   title
 }) => {
   const troop = TROOPS[type];
+  const equipped = useProfile().cosmetics.cardSkin;
+  // Card frames dress your own cards; monsters keep the classic look
+  const face = getCardSkin(skin ?? (troop.faction === 'kingdom' ? equipped : undefined));
   const shown = stats ?? cardStats(type, level);
   const faction = FACTIONS[troop.faction];
   const rarity = RARITY_STYLES[troop.rarity];
@@ -91,7 +99,10 @@ export const TroopCard: React.FC<TroopCardProps> = ({
         filter: disabled ? 'grayscale(0.85) brightness(0.7)' : undefined
       }}
     >
-      <div className={`relative flex h-full flex-col overflow-hidden rounded-[9px] bg-slate-900 ${dims.pad}`}>
+      <div
+        className={`relative flex h-full flex-col overflow-hidden rounded-[9px] ${dims.pad}`}
+        style={{ background: hidden ? '#0f172a' : face.face, boxShadow: hidden ? undefined : `inset 0 0 0 1px ${face.trim}` }}
+      >
         {/* Art */}
         <div
           className="relative flex flex-1 items-center justify-center overflow-hidden rounded-md"
@@ -103,8 +114,8 @@ export const TroopCard: React.FC<TroopCardProps> = ({
         >
           {/* Faint diagonal pattern so the art area reads as a printed card */}
           <div
-            className="absolute inset-0 opacity-15"
-            style={{ backgroundImage: 'repeating-linear-gradient(45deg, #fff 0 2px, transparent 2px 9px)' }}
+            className={`absolute inset-0 ${face.animated && !hidden ? 'card-holo' : ''}`}
+            style={{ background: hidden ? getCardSkin('classic').pattern : face.pattern, opacity: hidden ? 0.15 : face.patternOpacity }}
           />
           {hidden ? (
             <span className={`font-display ${dims.icon} text-slate-500`}>?</span>

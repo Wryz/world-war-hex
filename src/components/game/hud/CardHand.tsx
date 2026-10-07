@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { GameState, UnitType } from '@/types/game';
 import { getHand, getNextCard, getRosterStats, getTroopName } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
-import { ArrowIcon, GoldIcon } from '../icons';
+import { ArrowIcon, BondIcon, GoldIcon } from '../icons';
+import { describeBond, getBond } from '@/lib/game/bonds';
 import { PANEL_CLASS } from './styles';
 
 // Phones get smaller cards so a full hand and the End Turn button fit across the screen
@@ -31,6 +32,7 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
   const nextCard = getNextCard(gameState);
   const gold = gameState.players.player.points;
   const isNarrow = useIsNarrow();
+  const bonds = (gameState.bonds ?? []).map(getBond);
 
   // Cards that just arrived in the hand animate in; keyed by slot so each slot redraws when its card changes
   const previousHandRef = useRef<UnitType[]>(hand);
@@ -60,6 +62,20 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
 
   return (
     <div className="fixed bottom-2 inset-x-2 z-20 flex flex-col items-center gap-2 pointer-events-none" data-tutorial="hand">
+      {/* Bonds the player's cards complete this battle */}
+      {bonds.length > 0 && !hint && (
+        <div className="pointer-events-auto flex flex-wrap justify-center gap-1.5" aria-label="Active bonds">
+          {bonds.map(bond => (
+            <span
+              key={bond.id}
+              className="flex items-center gap-1 rounded-full bg-slate-900/85 px-2.5 py-1 text-[11px] font-bold text-amber-200 shadow ring-1 ring-amber-300/50"
+              title={`${bond.name}: ${describeBond(bond)}`}
+            >
+              <BondIcon /> {bond.name}
+            </span>
+          ))}
+        </div>
+      )}
       {hint && (
         <div className="rounded-full bg-slate-900/85 px-4 py-1.5 text-center text-xs font-semibold text-slate-100 shadow">
           {hint}

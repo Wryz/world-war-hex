@@ -13,7 +13,7 @@ import {
   GiFountain, GiLava, GiIceCube, GiBrokenWall, GiTombstone, GiCrownCoin, GiSwordsPower, GiPadlock, GiPokerHand,
   GiTreasureMap, GiFastForwardButton, GiUpgrade, GiTrophy, GiPodium, GiOpenBook, GiTargetArrows, GiHeartPlus,
   GiAngelWings, GiRegeneration, GiChestArmor, GiSiegeRam, GiAngryEyes, GiRaiseSkeleton, GiWingfoot, GiFireRing,
-  GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook
+  GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuChevronDown, LuRotateCcw, LuTriangleAlert,
@@ -161,6 +161,10 @@ export const ShieldIcon = icon(GiCheckedShield, '#4ade80');
 export const CampIcon = icon(GiCampingTent, '#facc15');
 export const LockIcon = icon(GiPadlock, '#94a3b8');
 export const CardsIcon = icon(GiPokerHand, '#93c5fd');
+// Bonds between cards
+export const BondIcon = icon(GiLinkedRings, '#fbbf24');
+// Cosmetics: card frames and castle styles
+export const StyleIcon = icon(GiPaintBrush, '#f0abfc');
 export const MapIcon = icon(GiTreasureMap, '#fcd34d');
 export const SpeedIcon = icon(GiFastForwardButton);
 export const UpgradeIcon = icon(GiUpgrade, '#4ade80');

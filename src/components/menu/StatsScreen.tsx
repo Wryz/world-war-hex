@@ -1,4 +1,6 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { isAnalyticsAvailable, isAnalyticsEnabled, setAnalyticsEnabled, trackEvent } from '@/lib/analytics';
+import { isStoragePersisted } from '@/lib/offline';
 import { TroopId, MOB_IDS, TROOPS } from '@/lib/game/troops';
 import { LEVEL_COUNT } from '@/lib/campaign/levels';
 import {
@@ -36,6 +38,13 @@ export const StatsScreen: React.FC = () => {
   const speed = useGameSpeed();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<{ text: string; isError?: boolean } | null>(null);
+  // Read in the browser only, so the server render matches
+  const [analyticsOn, setAnalyticsOn] = useState(false);
+  const [savesProtected, setSavesProtected] = useState<boolean | null>(null);
+  useEffect(() => {
+    setAnalyticsOn(isAnalyticsEnabled());
+    void isStoragePersisted().then(setSavesProtected);
+  }, []);
   useMusic('menu');
 
   const s = profile.stats;
@@ -52,6 +61,7 @@ export const StatsScreen: React.FC = () => {
     link.download = `world-war-hex-save-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
+    trackEvent('save_exported');
     setMessage({ text: 'Save file downloaded. Keep it somewhere safe!' });
   };
 
@@ -64,6 +74,7 @@ export const StatsScreen: React.FC = () => {
     if (!window.confirm('Load this save? Your current progress on this computer will be replaced.')) return;
     replaceProfile(parsed.profile);
     writeRawSave(parsed.battle);
+    trackEvent('save_imported');
     setMessage({ text: 'Save loaded. Welcome back, commander!' });
   };
 
@@ -158,6 +169,23 @@ export const StatsScreen: React.FC = () => {
               <SpeedIcon /> Battle speed {speed}x
             </button>
           </div>
+          {isAnalyticsAvailable() && (
+            <label className="flex items-start gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={analyticsOn}
+                onChange={event => {
+                  setAnalyticsEnabled(event.target.checked);
+                  setAnalyticsOn(event.target.checked);
+                }}
+                className="mt-1 accent-amber-400"
+              />
+              <span>
+                <b>Share anonymous gameplay stats</b>
+                <span className="block text-xs text-slate-400">Which levels are hard, which cards get played. No personal details, no recordings.</span>
+              </span>
+            </label>
+          )}
         </div>
       </section>
 
@@ -165,8 +193,15 @@ export const StatsScreen: React.FC = () => {
       <section className={`${CARD_CLASS} mt-4 p-4`}>
         <h2 className="font-display text-2xl">Your save</h2>
         <p className="mt-1 text-xs text-slate-400">
-          Progress saves automatically in this browser. Download a save file to keep a backup on your computer or carry your campaign to another one.
+          Progress saves automatically in this browser, and the game keeps working offline once it has loaded. Download a save file to keep a backup on your computer or carry your campaign to another one.
         </p>
+        {savesProtected !== null && (
+          <p className={`mt-1 text-xs ${savesProtected ? 'text-emerald-300' : 'text-slate-400'}`}>
+            {savesProtected
+              ? 'Your browser keeps this save safe from automatic clean-up.'
+              : 'Your browser may clear this save if space runs low - download a backup now and then.'}
+          </p>
+        )}
         <div className="mt-3 flex flex-wrap gap-2">
           <button onClick={handleExport} className={`${SECONDARY_BUTTON} flex items-center gap-1.5 text-sm`}>
             <DownloadIcon /> Download save
@@ -192,6 +227,17 @@ export const StatsScreen: React.FC = () => {
         {message && (
           <p className={`mt-3 text-sm font-semibold ${message.isError ? 'text-red-400' : 'text-emerald-300'}`} role="status">{message.text}</p>
         )}
+      </section>
+
+      {/* Credits */}
+      <section className={`${CARD_CLASS} mt-4 p-4 text-xs text-slate-300`}>
+        <h2 className="font-display mb-2 text-2xl text-slate-100">Credits</h2>
+        <ul className="flex flex-col gap-1">
+          <li><b>Music:</b> &ldquo;Medieval: Exploration&rdquo;, &ldquo;Harvest Season&rdquo;, &ldquo;Battle&rdquo;, &ldquo;Victory Theme&rdquo; and &ldquo;Defeat Theme&rdquo; by RandomMind; &ldquo;Epic Boss Battle&rdquo; by Juhani Junkala (CC0, OpenGameArt)</li>
+          <li><b>Characters:</b> KayKit Adventurers and Skeletons by Kay Lousberg (CC0); horse from the three.js examples (MIT)</li>
+          <li><b>Icons:</b> Game Icons (game-icons.net, CC BY 3.0) and Lucide</li>
+          <li><b>Sound effects:</b> synthesised with ZzFX</li>
+        </ul>
       </section>
     </MenuShell>
   );

@@ -1,9 +1,28 @@
-# Music overrides
+# Music
 
-The game synthesises all of its music in the browser (see `src/lib/audio/`). Any file dropped
-into this folder with one of the names below replaces the synthesised version, with no code
-changes needed: add the file, then list its name in `manifest.json`, e.g.
+The game ships with recorded music (below) and synthesises the rest in the browser (see
+`src/lib/audio/`). Any file in this folder with one of the names below replaces the synthesised
+version, with no code changes needed: add the file, then list its name in `manifest.json`, e.g.
 `{ "files": ["battle.mp3", "victory.mp3"] }`. Anything not listed uses the synthesised music.
+
+## Tracks included
+
+All are CC0 (public domain), from OpenGameArt; no attribution is required, but they're credited
+in the game (Stats & Save) anyway.
+
+| File          | Track                                   | Composer                         |
+| ------------- | --------------------------------------- | -------------------------------- |
+| `menu.mp3`    | Medieval: Exploration                   | RandomMind                       |
+| `map.mp3`     | Medieval: Harvest Season                | RandomMind                       |
+| `battle.mp3`  | Medieval: Battle                        | RandomMind                       |
+| `boss.mp3`    | Epic Boss Battle [Seamlessly Looping]   | Juhani Junkala (SubspaceAudio)   |
+| `victory.mp3` | Medieval: Victory Theme (opening, 7 s)  | RandomMind                       |
+| `defeat.mp3`  | Medieval: Defeat Theme (opening, 7 s)   | RandomMind                       |
+
+Sources: opengameart.org/content/medieval-exploration, /medieval-harvest-season,
+/medieval-battle, /boss-battle-music, /medieval-victory-theme and /medieval-defeat-theme.
+The files were trimmed of leading and trailing silence, levelled to similar loudness and
+re-encoded at 128 kbps; the victory and defeat themes are cut to their opening phrase.
 
 ## Looping tracks
 
@@ -32,20 +51,10 @@ synthesised battle music; a `battle.mp3` override just gets slightly quieter or 
 
 Keep stingers short (about 1.5–4 seconds); the music ducks underneath them for their length.
 
-## Suggested free tracks
+## Finding more
 
-[OpenGameArt](https://opengameart.org) has plenty of CC0 (public domain) orchestral and fantasy
-music that fits. Some to try (search for them by name, or search for CC0 "orchestral",
-"fantasy battle" or "medieval"):
-
-- "Swordfight" by Kistol: `battle.mp3`
-- "Heartfelt Battle": `battle.mp3` or `boss.mp3`
-- "Orcs Victorious" by Bobjt: `boss.mp3`
-- "Laments of the War" by Cethiel: `defeat.mp3` or a slow alternative for `map.mp3`
-- "A Legend Will Rise" by CodeManu: `menu.mp3`
-- RandomMind's medieval tracks: `map.mp3` and `menu.mp3`
-
-Licences on OpenGameArt are set per submission and are sometimes changed or mis-labelled, so
+[OpenGameArt](https://opengameart.org) has plenty of CC0 orchestral and fantasy music.
+Licences there are set per submission and are sometimes changed or mis-labelled, so
 double-check the licence on each track's own page before shipping it. Prefer CC0; CC-BY is fine
 too if the author is credited in the game.
 

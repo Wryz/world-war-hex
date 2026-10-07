@@ -1,4 +1,5 @@
-import { TroopId, cardPower, getClassCounter, getTroopClass } from '../game/troops';
+import { TroopId, cardStats, getClassCounter, getTroopClass, statsPower } from '../game/troops';
+import { activeBonds, applyBonds } from '../game/bonds';
 import { MAX_DECK_SIZE } from './economy';
 
 // Choosing which cards to bring into a battle
@@ -14,18 +15,36 @@ export const matchupScore = (card: TroopId, enemies: TroopId[]): number => {
   }, 0) / enemies.length;
 };
 
-// A good loadout against these enemies: strong cards that counter them, without doubling up on one
-// class of troop when another would do nearly as well
+// How good a loadout is against these enemies: its cards' power after bonds, weighted by how well
+// each counters them, with a little less for doubling up on one class of troop
+export const loadoutScore = (deck: readonly TroopId[], cards: Partial<Record<TroopId, number>>, enemies: TroopId[]): number => {
+  const roster = applyBonds(Object.fromEntries(deck.map(id => [id, cardStats(id, cards[id] ?? 1)])), activeBonds(deck));
+  const seen = new Set<string>();
+  return deck.reduce((sum, id) => {
+    const troopClass = getTroopClass(id);
+    const repeat = seen.has(troopClass);
+    seen.add(troopClass);
+    return sum + statsPower(roster[id]!) * (1 + 0.6 * matchupScore(id, enemies)) * (repeat ? 0.8 : 1);
+  }, 0);
+};
+
+// The best loadout against these enemies, trying every combination of the cards owned
 export const suggestLoadout = (cards: Partial<Record<TroopId, number>>, enemies: TroopId[]): TroopId[] => {
   const owned = Object.keys(cards) as TroopId[];
-  const value = (id: TroopId) => cardPower(id, cards[id] ?? 1) * (1 + 0.6 * matchupScore(id, enemies));
-  const chosen: TroopId[] = [];
-  const remaining = [...owned];
-  while (chosen.length < MAX_DECK_SIZE && remaining.length > 0) {
-    const classes = new Set(chosen.map(getTroopClass));
-    remaining.sort((a, b) =>
-      value(b) * (classes.has(getTroopClass(b)) ? 0.8 : 1) - value(a) * (classes.has(getTroopClass(a)) ? 0.8 : 1));
-    chosen.push(remaining.shift()!);
-  }
-  return chosen;
+  const size = Math.min(MAX_DECK_SIZE, owned.length);
+  let best: TroopId[] = owned.slice(0, size);
+  let bestScore = -Infinity;
+  const pick = (start: number, chosen: TroopId[]) => {
+    if (chosen.length === size) {
+      const score = loadoutScore(chosen, cards, enemies);
+      if (score > bestScore) {
+        bestScore = score;
+        best = [...chosen];
+      }
+      return;
+    }
+    for (let i = start; i <= owned.length - (size - chosen.length); i++) pick(i + 1, [...chosen, owned[i]]);
+  };
+  pick(0, []);
+  return best;
 };

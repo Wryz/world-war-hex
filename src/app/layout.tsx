@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Nunito, DynaPuff } from "next/font/google";
 import "./globals.css";
+import { AppBoot } from "@/components/shared/AppBoot";
 
 // Readable body font
 const nunito = Nunito({
@@ -29,6 +30,7 @@ export default function RootLayout({
       <body
         className={`${nunito.variable} ${dynaPuff.variable} antialiased`}
       >
+        <AppBoot />
         {children}
       </body>
     </html>

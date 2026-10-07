@@ -8,6 +8,8 @@ import { createHexagonalGrid, REGION_THEMES as MAP_THEMES } from '@/lib/game/map
 import { HexTile } from '../HexTile';
 import { BoardDecorations } from '../BoardDecorations';
 import { Castle } from '../Castle';
+import { getCastleStyle } from '@/lib/meta/cosmetics';
+import { useProfile } from '@/lib/meta/profile';
 import { Camp } from '../Camp';
 import { UnitMesh } from '../UnitMesh';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
@@ -66,6 +68,7 @@ const surface = (hexGrid: Hex[], c: HexCoordinates): [number, number, number] =>
 };
 
 const Island: React.FC<{ themeIndex: number }> = ({ themeIndex }) => {
+  const playerCastleStyle = getCastleStyle(useProfile().cosmetics.castleStyle);
   const spinRef = useRef<THREE.Group>(null);
   const hexGrid = useMemo(() => buildIsland(themeIndex), [themeIndex]);
 
@@ -98,7 +101,7 @@ const Island: React.FC<{ themeIndex: number }> = ({ themeIndex }) => {
       ))}
       <BoardDecorations hexGrid={hexGrid} />
       {CASTLES.map(([c, owner]) => (
-        <Castle key={owner} owner={owner} position={surface(hexGrid, c)} health={50} maxHealth={50} hideLabel />
+        <Castle key={owner} owner={owner} look={owner === 'player' ? playerCastleStyle : undefined} position={surface(hexGrid, c)} health={50} maxHealth={50} hideLabel />
       ))}
       {CAMPS.map(([c, owner]) => (
         <Camp key={key(c)} owner={owner} position={surface(hexGrid, c)} hideLabel />

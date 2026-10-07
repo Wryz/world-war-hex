@@ -119,7 +119,7 @@ export interface LevelDef {
 // How strong the enemy's troops are compared with the player's expected cards: the enemy's
 // average troop power is this share of the model player's average card power. Tuned with the
 // battle simulator (scripts/simulate-balance.ts) so a deck at recommended power usually, but not always, wins.
-const ENEMY_STRENGTH = 0.81;
+const ENEMY_STRENGTH = 0.835;
 // Factions whose troops are cheaper or trickier than their power suggests (goblin swarms, undead
 // healed by cursed ground) are toned down; the simulator measured these
 const FACTION_STRENGTH: Partial<Record<Faction, number>> = {

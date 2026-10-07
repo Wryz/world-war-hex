@@ -12,6 +12,7 @@ import { createBattle, executeMoves, resolveAllCombats } from '@/lib/game/gameSt
 import { planAITurn } from '@/lib/ai/aiPlayer';
 import { getLevel, enemyRosterStats, LEVEL_COUNT } from '@/lib/campaign/levels';
 import { expectedProgression } from '@/lib/meta/economy';
+import { deckRoster } from '@/lib/campaign/battleSetup';
 import { TROOPS, cardStats, scaleTroop } from '@/lib/game/troops';
 
 const args = process.argv.slice(2);
@@ -48,7 +49,7 @@ const playBattle = (levelId: number, strength = 1): GameState => {
   }));
   let state = createBattle({ ...level.settings, seed: Math.floor(Math.random() * 1e9) }, {
     rosters: {
-      player: Object.fromEntries(deck.map(id => [id, cardStats(id, cardLevels[id] ?? 1)])),
+      player: deckRoster(deck, cardLevels),
       ai: enemy
     },
     deck: shuffle(deck),

@@ -8,7 +8,9 @@ import { playStinger, useMusic } from '@/lib/audio/music';
 import { getLevel } from '@/lib/campaign/levels';
 import { TroopCard, RARITY_STYLES } from '../game/cards/TroopCard';
 import { MenuShell, CARD_CLASS } from './MenuShell';
-import { AttackIcon, CardsIcon, CoinIcon, HealthIcon, LockIcon, PowerIcon, UpgradeIcon } from '../game/icons';
+import { AttackIcon, BondIcon, CardsIcon, CoinIcon, HealthIcon, LockIcon, PowerIcon, UnitIcon, UpgradeIcon } from '../game/icons';
+import { BondList } from '../game/cards/BondList';
+import { BONDS, describeBond } from '@/lib/game/bonds';
 
 // Stat gains from the next upgrade, e.g. "+0.2 atk +1 hp"
 const upgradeGains = (id: TroopId, level: number) => {
@@ -64,7 +66,7 @@ export const ArmyScreen: React.FC = () => {
           You bring four cards into each battle - change them here or before any fight. Tap a card below to bring it or leave it
           behind. Mix your troops: spears beat cavalry,
           cavalry beats ranged and casters, ranged beats spears and brutes, infantry beats spears and skirmishers, skirmishers hunt
-          the back line, and brutes smash infantry.
+          the back line, and brutes smash infantry. Bring bonded cards together and they fight better.
         </p>
         <div className="mt-3 flex flex-wrap gap-3">
           {Array.from({ length: MAX_DECK_SIZE }, (_, i) => {
@@ -77,6 +79,9 @@ export const ArmyScreen: React.FC = () => {
               </div>
             );
           })}
+        </div>
+        <div className="mt-3">
+          <BondList deck={profile.deck} owned={owned} />
         </div>
       </section>
 
@@ -125,6 +130,32 @@ export const ArmyScreen: React.FC = () => {
             );
           })}
         </div>
+      </section>
+
+      {/* Every bond, so players know what to work towards */}
+      <section className="mt-8">
+        <h2 className="font-display mb-1 flex items-center gap-2 text-2xl text-slate-800"><BondIcon /> Bonds</h2>
+        <p className="mb-3 text-sm font-semibold text-slate-700">Bring both cards of a bond into a battle and they fight better together.</p>
+        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {BONDS.map(bond => {
+            const ready = bond.cards.every(card => profile.cards[card] !== undefined);
+            const active = bond.cards.every(card => profile.deck.includes(card));
+            return (
+              <li key={bond.id} className={`${CARD_CLASS} flex items-start gap-2 p-3 text-xs ${active ? 'ring-2 ring-amber-300' : ''}`} title={bond.flavor}>
+                <span className={`mt-0.5 flex shrink-0 items-center gap-0.5 text-base ${ready ? '' : 'opacity-50'}`}>
+                  <UnitIcon type={bond.cards[0]} /><BondIcon /><UnitIcon type={bond.cards[1]} />
+                </span>
+                <span className="min-w-0">
+                  <b className={active ? 'text-amber-200' : 'text-slate-100'}>{bond.name}</b>
+                  {active && <span className="ml-1.5 rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-slate-900">Active</span>}
+                  {!ready && <span className="ml-1.5 rounded-full bg-slate-700 px-1.5 text-[10px] font-bold text-slate-300">Need both cards</span>}
+                  <span className="block text-slate-300">{bond.cards.map(card => TROOPS[card].name).join(' + ')}: {describeBond(bond)}</span>
+                  <span className="mt-0.5 block italic text-slate-400">{bond.flavor}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
       </section>
 
       {/* Shop */}

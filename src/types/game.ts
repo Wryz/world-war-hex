@@ -1,4 +1,5 @@
 import type { TroopId } from '@/lib/game/troops';
+import type { BondId } from '@/lib/game/bonds';
 
 export type TerrainType =
   | 'plain'
@@ -141,6 +142,8 @@ export interface GameState {
   rosters?: Record<PlayerType, Roster>;
   // The player's cards in draw order: the first few are the hand
   deck?: UnitType[];
+  // Bonds the player's cards complete this battle (already applied to their roster)
+  bonds?: BondId[];
   battleStats?: Record<PlayerType, SideStats>;
   // Campaign level being played, if any
   levelId?: number;

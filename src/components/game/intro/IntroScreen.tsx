@@ -11,7 +11,7 @@ import { CARD_CLASS, PRIMARY_BUTTON, ResourceBadges, SKY_BACKGROUND } from '@/co
 import { TroopCard } from '../cards/TroopCard';
 import {
   AttackIcon, BookIcon, BossIcon, CardsIcon, MapIcon, ResumeIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon,
-  StarIcon, StatsIcon
+  StarIcon, StatsIcon, StyleIcon
 } from '../icons';
 import { BattleConfig, Difficulty } from '../storage/GameStorage';
 
@@ -166,6 +166,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
             <MenuTile href="/campaign" icon={<MapIcon />} title="World Map" detail="10 regions · 100 battles" />
             <MenuTile href="/army" icon={<CardsIcon />} title="Army" detail="Build your deck, upgrade cards" />
             <MenuTile href="/bestiary" icon={<BookIcon />} title="Bestiary" detail={`${hydrated ? discovered : 0}/${MOB_IDS.length} monsters discovered`} />
+            <MenuTile href="/style" icon={<StyleIcon />} title="Style" detail="Card frames, castle styles" />
             <MenuTile href="/stats" icon={<StatsIcon />} title="Stats & Save" detail="Records, settings, save file" />
           </div>
 

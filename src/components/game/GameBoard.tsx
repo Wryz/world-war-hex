@@ -30,6 +30,8 @@ import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
 import { playSound } from './utils/SoundPlayer';
 import { playBattleSound } from './utils/battleSounds';
+import { getCastleStyle } from '@/lib/meta/cosmetics';
+import { useProfile } from '@/lib/meta/profile';
 import { getBattleStartDelay, getDeathTime, getImpactTimesUntil } from './utils/battleTiming';
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale } from './effects/effects';
@@ -407,6 +409,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const [popups, setPopups] = useState<DamagePopup[]>([]);
+  // Your castle wears the style you picked
+  const playerCastleStyle = getCastleStyle(useProfile().cosmetics.castleStyle);
   // Units destroyed a moment ago, still falling on the battlefield
   const [dyingUnits, setDyingUnits] = useState<{ unit: Unit; position: [number, number, number]; fallen: boolean }[]>([]);
 
@@ -849,6 +853,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {playerCastlePosition && (
         <Castle
           owner="player"
+          look={playerCastleStyle}
           position={playerCastlePosition}
           health={players.player.baseHealth ?? BASE_MAX_HEALTH}
           maxHealth={players.player.maxBaseHealth ?? BASE_MAX_HEALTH}

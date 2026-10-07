@@ -1,6 +1,7 @@
 import type { GameState, Roster } from '@/types/game';
 import { DEFAULT_SETTINGS, createBattle } from '../game/gameState';
 import { PLAYER_CARD_IDS, TroopId, cardStats } from '../game/troops';
+import { activeBonds, applyBonds } from '../game/bonds';
 import type { Profile } from '../meta/profile';
 import { enemyRosterStats, getLevel, levelEnemies } from './levels';
 
@@ -20,9 +21,12 @@ const shuffle = <T,>(items: T[]): T[] => {
   return copy;
 };
 
-// The player's deck as a roster, at the levels of their cards
-const playerRoster = (profile: Profile): Roster =>
-  Object.fromEntries(profile.deck.map(id => [id, cardStats(id, profile.cards[id] ?? 1)]));
+// The player's deck as a roster, at the levels of their cards, with the bonds it completes
+export const deckRoster = (deck: readonly TroopId[], cardLevels: Partial<Record<TroopId, number>>): Roster =>
+  applyBonds(Object.fromEntries(deck.map(id => [id, cardStats(id, cardLevels[id] ?? 1)])), activeBonds(deck));
+
+const playerRoster = (profile: Profile): Roster => deckRoster(profile.deck, profile.cards);
+const playerBonds = (profile: Profile) => activeBonds(profile.deck).map(bond => bond.id);
 
 // Quick battles are against a rival kingdom whose troops match the player's average card level
 const QUICK_RIVAL_CARDS: TroopId[] = ['infantry', 'artillery', 'tank', 'rogue', 'helicopter', 'medic'];
@@ -34,6 +38,7 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
     return createBattle(level.settings, {
       rosters: { player: playerRoster(profile), ai: enemyRosterStats(level) },
       deck,
+      bonds: playerBonds(profile),
       levelId: level.id,
       guards: level.guards
     });
@@ -46,7 +51,8 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
       player: playerRoster(profile),
       ai: Object.fromEntries(QUICK_RIVAL_CARDS.map(id => [id, cardStats(id, averageLevel)]))
     },
-    deck
+    deck,
+    bonds: playerBonds(profile)
   });
 };
 

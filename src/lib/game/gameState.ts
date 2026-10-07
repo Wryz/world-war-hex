@@ -18,6 +18,7 @@ import {
   GameSettings,
   WinReason
 } from '@/types/game';
+import type { BondId } from './bonds';
 import {
   getHexDistance,
   findHexByCoordinates,
@@ -235,6 +236,8 @@ export interface BattleSetup {
   rosters: Record<PlayerType, Roster>;
   // The player's cards in draw order
   deck?: UnitType[];
+  // Bonds active for the player (their bonuses are already in the roster)
+  bonds?: BondId[];
   levelId?: number;
   // Units the enemy starts with next to its castle
   guards?: GuardSpec[];
@@ -286,6 +289,7 @@ export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS, s
     mapName: theme.name,
     rosters: setup?.rosters ?? { player: defaultRoster(), ai: defaultRoster() },
     deck: setup?.deck,
+    bonds: setup?.bonds,
     levelId: setup?.levelId,
     battleStats: { player: emptySideStats(), ai: emptySideStats() }
   };

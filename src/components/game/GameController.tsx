@@ -1,4 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { trackEvent } from '@/lib/analytics';
+import { requestPersistentStorage } from '@/lib/offline';
 import { useRouter } from 'next/navigation';
 import { GameBoard } from './GameBoard';
 import { CombatResolver } from './combat/CombatResolver';
@@ -89,6 +91,28 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   }, []);
   useBattleMoments(gameState, isReady);
 
+  // Analytics: a battle begins once the board is ready (not again when a saved one is continued)
+  const startedRef = useRef(false);
+  useEffect(() => {
+    if (!isReady || startedRef.current) return;
+    startedRef.current = true;
+    if (shouldContinueGame && gameState.turnNumber > 1) return;
+    const profile = getProfile();
+    trackEvent('battle_started', {
+      mode: battle.mode,
+      level: level?.id,
+      region: level?.region.name,
+      boss: level?.isBoss ?? false,
+      difficulty: battle.mode === 'quick' ? battle.difficulty : level?.settings.aiDifficulty,
+      power: profilePower(profile),
+      recommended_power: level?.recommendedPower,
+      deck: profile.deck,
+      bonds: gameState.bonds ?? []
+    });
+    // Runs once per battle
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady]);
+
   // Expose the battle in development so automated browser tests can aim clicks precisely
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') {
@@ -145,6 +169,21 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       playerStats,
       durationSeconds: elapsedRef.current
     });
+    trackEvent('battle_ended', {
+      mode: battle.mode,
+      level: level?.id,
+      region: level?.region.name,
+      won,
+      reason: gameState.winReason,
+      stars,
+      rounds: gameState.turnNumber,
+      duration_seconds: Math.round(elapsedRef.current),
+      kills: playerStats.kills,
+      lost: playerStats.lost,
+      coins_earned: record.reward.coins
+    });
+    // Now there's progress worth keeping, ask the browser not to clear it
+    void requestPersistentStorage();
     if (level?.id === 1) completeTutorial();
     setShowTutorial(false);
     setFinished({ won, stars, record });
@@ -163,6 +202,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   // Leave the battle; it is saved so it can be continued later
   const handleQuit = () => {
+    if (currentPhase !== 'gameOver') {
+      trackEvent('battle_abandoned', { mode: battle.mode, level: level?.id, round: gameState.turnNumber });
+    }
     saveGame();
     router.push(exitPath);
   };

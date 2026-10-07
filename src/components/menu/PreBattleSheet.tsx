@@ -7,11 +7,14 @@ import { TERRAIN_EFFECTS } from '@/lib/game/gameState';
 import { MAX_DECK_SIZE, levelWinReward } from '@/lib/meta/economy';
 import { profilePower, setDeck, toggleDeckCard, useProfile } from '@/lib/meta/profile';
 import { matchupScore, suggestLoadout } from '@/lib/meta/loadout';
+import { trackEvent } from '@/lib/analytics';
 import { PLAYER_CARD_IDS, TroopId } from '@/lib/game/troops';
 import { TroopCard } from '../game/cards/TroopCard';
+import { BondList } from '../game/cards/BondList';
+import { activeBonds } from '@/lib/game/bonds';
 import { CARD_CLASS, PRIMARY_BUTTON, SECONDARY_BUTTON } from './MenuShell';
 import {
-  AttackIcon, BossIcon, CardsIcon, CloseIcon, CoinIcon, PowerIcon, ShieldIcon, StarIcon, TerrainIcon
+  AttackIcon, BossIcon, CardsIcon, CloseIcon, CoinIcon, PowerIcon, ShieldIcon, StarIcon, TerrainIcon, BondIcon
 } from '../game/icons';
 import { TerrainType } from '@/types/game';
 
@@ -42,6 +45,7 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
   const profile = useProfile();
   const owned = PLAYER_CARD_IDS.filter(id => profile.cards[id] !== undefined);
   const isFull = profile.deck.length >= MAX_DECK_SIZE;
+  const bonds = activeBonds(profile.deck);
 
   return (
     <div className="mt-4">
@@ -50,7 +54,11 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
           <CardsIcon /> Your cards {profile.deck.length}/{MAX_DECK_SIZE}
         </span>
         <button
-          onClick={() => setDeck(suggestLoadout(profile.cards, enemies))}
+          onClick={() => {
+            const deck = suggestLoadout(profile.cards, enemies);
+            setDeck(deck);
+            trackEvent('loadout_auto_picked', { deck });
+          }}
           className="rounded-lg bg-sky-600 px-2.5 py-1 text-xs font-bold text-white shadow hover:bg-sky-500"
         >
           Auto-pick
@@ -58,12 +66,14 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
       </div>
       <p className="mb-2 text-[11px] text-slate-400">
         {isFull ? 'Tap a card to leave it behind, then pick another.' : 'Tap cards to bring them into battle.'}
-        {' '}<span className="font-bold text-emerald-300">Good pick</span> cards counter this enemy.
+        {' '}<span className="font-bold text-emerald-300">Good pick</span> cards counter this enemy, and
+        {' '}<span className="font-bold text-amber-300">bonded</span> cards fight better together.
       </p>
       <div className="flex flex-wrap gap-2.5">
         {owned.map(id => {
           const inDeck = profile.deck.includes(id);
           const matchup = matchupScore(id, enemies);
+          const bonded = inDeck && bonds.some(bond => bond.cards.includes(id));
           return (
             <div key={id} className="relative">
               <TroopCard
@@ -75,6 +85,11 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
                 onClick={() => toggleDeckCard(id)}
                 title={inDeck ? 'Bringing this card - tap to leave it behind' : isFull ? 'Your hand is full - leave a card behind first' : 'Tap to bring this card'}
               />
+              {bonded && (
+                <span className="pointer-events-none absolute -left-1.5 -top-1.5 rounded-full bg-slate-900 p-0.5 shadow ring-1 ring-amber-300" title="Part of a bond">
+                  <BondIcon className="text-sm" />
+                </span>
+              )}
               {matchup > 0.05 && (
                 <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-emerald-500 px-1.5 text-[9px] font-bold text-slate-900 shadow">
                   Good pick
@@ -88,6 +103,9 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
             </div>
           );
         })}
+      </div>
+      <div className="mt-3">
+        <BondList deck={profile.deck} owned={owned} />
       </div>
     </div>
   );

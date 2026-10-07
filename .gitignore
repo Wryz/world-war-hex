@@ -4,3 +4,4 @@ node_modules
 
 # OS files
 .DS_Store
+/public/sw-manifest.js

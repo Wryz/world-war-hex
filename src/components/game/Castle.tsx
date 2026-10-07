@@ -6,6 +6,7 @@ import { PlayerType } from '@/types/game';
 import { OWNER_COLORS } from './UnitMesh';
 import { CrownIcon } from './icons';
 import { getTimeScale } from './effects/effects';
+import { CastleStyle, getCastleStyle } from '@/lib/meta/cosmetics';
 
 interface CastleProps {
   owner: PlayerType;
@@ -17,12 +18,13 @@ interface CastleProps {
   hideLabel?: boolean;
   // The castle has fallen: it crumbles in a cloud of rubble
   fallen?: boolean;
+  // How it looks (your castle wears the style you picked)
+  look?: CastleStyle;
 }
 
 
-const STONE = '#cfc6b8';
 const STONE_DARK = '#a39a8c';
-const GOLD = '#ffcc33';
+const PENNANT_COLORS = ['#ef4444', '#facc15', '#22c55e', '#f97316', '#a855f7', '#ec4899'];
 
 // Seconds the collapse takes, and how long a hit makes the castle shudder
 const COLLAPSE_DURATION = 1.8;
@@ -36,14 +38,14 @@ const dustGeometry = new THREE.IcosahedronGeometry(0.3, 0);
 const dustMaterial = new THREE.MeshStandardMaterial({ color: '#e7e1d6', transparent: true, opacity: 0.8, flatShading: true });
 
 // A floating golden crown marking whose castle this is
-const Crown: React.FC<{ gemColor: string }> = ({ gemColor }) => {
+const Crown: React.FC<{ gemColor: string; metal: string; glow: string }> = ({ gemColor, metal, glow }) => {
   const spikes = 5;
   return (
     <group>
       {/* Band */}
       <mesh>
         <cylinderGeometry args={[0.32, 0.28, 0.2, 20, 1, true]} />
-        <meshStandardMaterial color={GOLD} metalness={0.8} roughness={0.25} emissive="#b8860b" emissiveIntensity={0.35} side={THREE.DoubleSide} />
+        <meshStandardMaterial color={metal} metalness={0.8} roughness={0.25} emissive={glow} emissiveIntensity={0.35} side={THREE.DoubleSide} />
       </mesh>
       {Array.from({ length: spikes }, (_, i) => {
         const angle = (i / spikes) * Math.PI * 2;
@@ -53,11 +55,11 @@ const Crown: React.FC<{ gemColor: string }> = ({ gemColor }) => {
           <group key={i} position={[x, 0.18, z]}>
             <mesh>
               <coneGeometry args={[0.08, 0.2, 4]} />
-              <meshStandardMaterial color={GOLD} metalness={0.8} roughness={0.25} emissive="#b8860b" emissiveIntensity={0.35} />
+              <meshStandardMaterial color={metal} metalness={0.8} roughness={0.25} emissive={glow} emissiveIntensity={0.35} />
             </mesh>
             <mesh position={[0, 0.12, 0]}>
               <sphereGeometry args={[0.04, 8, 8]} />
-              <meshStandardMaterial color={GOLD} metalness={0.8} roughness={0.2} />
+              <meshStandardMaterial color={metal} metalness={0.8} roughness={0.2} />
             </mesh>
           </group>
         );
@@ -76,7 +78,86 @@ const Crown: React.FC<{ gemColor: string }> = ({ gemColor }) => {
   );
 };
 
-const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHealth, hideLabel = false, fallen = false }) => {
+// Decorations that set each castle style apart
+const CastleDecor: React.FC<{ look: CastleStyle; angles: number[] }> = ({ look, angles }) => {
+  switch (look.decor) {
+    case 'pennants':
+    case 'gilded':
+      return (
+        <>
+          {angles.filter((_, i) => i % 2 === 0).map((angle, i) => (
+            <group key={i} position={[Math.cos(angle) * 0.38, 1.06, Math.sin(angle) * 0.38]}>
+              <mesh position={[0, 0.14, 0]}>
+                <cylinderGeometry args={[0.01, 0.01, 0.28, 5]} />
+                <meshStandardMaterial color="#5d4037" />
+              </mesh>
+              <mesh position={[0.06, 0.23, 0]} rotation={[0, 0, -Math.PI / 2]}>
+                <coneGeometry args={[0.045, 0.13, 3]} />
+                <meshStandardMaterial color={look.decor === 'gilded' ? '#ffd700' : PENNANT_COLORS[i % PENNANT_COLORS.length]} flatShading />
+              </mesh>
+            </group>
+          ))}
+          {look.decor === 'gilded' && (
+            <>
+              <mesh position={[0, 0.9, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.43, 0.025, 6, 24]} />
+                <meshStandardMaterial color="#ffd700" metalness={0.8} roughness={0.25} emissive="#b8860b" emissiveIntensity={0.3} />
+              </mesh>
+              <mesh position={[0, 0.06, 0]} rotation={[Math.PI / 2, 0, 0]}>
+                <torusGeometry args={[0.5, 0.025, 6, 24]} />
+                <meshStandardMaterial color="#ffd700" metalness={0.8} roughness={0.25} emissive="#b8860b" emissiveIntensity={0.3} />
+              </mesh>
+            </>
+          )}
+        </>
+      );
+    case 'crystals':
+      return (
+        <>
+          {angles.map((angle, i) => (
+            <mesh key={i} position={[Math.cos(angle) * 0.38, 1.14 + (i % 2) * 0.05, Math.sin(angle) * 0.38]} scale={[0.6, 1.6 + (i % 2) * 0.5, 0.6]}>
+              <octahedronGeometry args={[0.07]} />
+              <meshStandardMaterial color="#e0f2fe" emissive="#38bdf8" emissiveIntensity={0.6} transparent opacity={0.85} flatShading />
+            </mesh>
+          ))}
+        </>
+      );
+    case 'vines':
+      return (
+        <>
+          {angles.map((angle, i) => (
+            <group key={i}>
+              {[0.2, 0.42, 0.66].map((height, j) => (
+                <mesh key={j} position={[Math.cos(angle + j * 0.25) * (0.47 - height * 0.05), height, Math.sin(angle + j * 0.25) * (0.47 - height * 0.05)]}>
+                  <icosahedronGeometry args={[0.06 + ((i + j) % 2) * 0.02, 0]} />
+                  <meshStandardMaterial color={(i + j) % 3 === 0 ? '#f9a8d4' : '#4d7c0f'} flatShading />
+                </mesh>
+              ))}
+            </group>
+          ))}
+        </>
+      );
+    case 'runes':
+      return (
+        <>
+          {angles.map((angle, i) => (
+            <mesh
+              key={i}
+              position={[Math.cos(angle + Math.PI / 6) * 0.44, 0.5, Math.sin(angle + Math.PI / 6) * 0.44]}
+              rotation={[0, -(angle + Math.PI / 6) + Math.PI / 2, 0]}
+            >
+              <boxGeometry args={[0.04, 0.3, 0.02]} />
+              <meshStandardMaterial color="#c084fc" emissive="#a855f7" emissiveIntensity={1.4} />
+            </mesh>
+          ))}
+        </>
+      );
+    default:
+      return null;
+  }
+};
+
+const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHealth, hideLabel = false, fallen = false, look = getCastleStyle(undefined) }) => {
   const crownRef = useRef<THREE.Group>(null);
   const structureRef = useRef<THREE.Group>(null);
   const debrisRef = useRef<THREE.Group>(null);
@@ -183,19 +264,19 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
       {/* Keep */}
       <mesh position={[0, 0.45, 0]} castShadow>
         <cylinderGeometry args={[0.42, 0.5, 0.9, 6]} />
-        <meshStandardMaterial color={STONE} flatShading />
+        <meshStandardMaterial color={look.stone} flatShading />
       </mesh>
       {/* Battlements */}
       {towerAngles.map((angle, i) => (
         <mesh key={i} position={[Math.cos(angle) * 0.38, 0.98, Math.sin(angle) * 0.38]} castShadow>
           <boxGeometry args={[0.16, 0.16, 0.16]} />
-          <meshStandardMaterial color={STONE_DARK} flatShading />
+          <meshStandardMaterial color={look.stoneDark} flatShading />
         </mesh>
       ))}
       {/* Roof in the owner's colour */}
       <mesh position={[0, 1.15, 0]} castShadow>
         <coneGeometry args={[0.32, 0.4, 6]} />
-        <meshStandardMaterial color={ownerColor} flatShading />
+        <meshStandardMaterial color={look.roof ?? ownerColor} flatShading />
       </mesh>
       {/* Flag */}
       <mesh position={[0.22, 1.35, 0]}>
@@ -206,6 +287,7 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
         <boxGeometry args={[0.26, 0.16, 0.01]} />
         <meshStandardMaterial color={ownerColor} side={THREE.DoubleSide} />
       </mesh>
+      <CastleDecor look={look} angles={towerAngles} />
       </group>
 
       {/* Rubble and dust when the castle falls */}
@@ -222,7 +304,7 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
 
       {/* Crown */}
       <group ref={crownRef} position={[0, 1.75, 0]}>
-        <Crown gemColor={ownerColor} />
+        <Crown gemColor={ownerColor} metal={look.crown} glow={look.crownGlow} />
       </group>
 
       {/* Castle health */}

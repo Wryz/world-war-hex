@@ -13,6 +13,10 @@ import {
   quickBattleReward,
   upgradeCost
 } from './economy';
+import {
+  CARD_SKINS, CASTLE_STYLES, CardSkinId, CastleStyleId, DEFAULT_CARD_SKIN, DEFAULT_CASTLE_STYLE, isCardSkinId, isCastleStyleId
+} from './cosmetics';
+import { trackEvent } from '../analytics';
 
 // The player's saved progress: coins, cards, campaign stars, the bestiary and lifetime stats.
 // Kept in localStorage and exportable to a file.
@@ -59,6 +63,13 @@ export interface ProfileStats {
   upgradesBought: number;
 }
 
+export interface ProfileCosmetics {
+  cardSkins: CardSkinId[];
+  castleStyles: CastleStyleId[];
+  cardSkin: CardSkinId;
+  castleStyle: CastleStyleId;
+}
+
 export interface Profile {
   version: number;
   coins: number;
@@ -69,6 +80,8 @@ export interface Profile {
   bestiary: Partial<Record<TroopId, BestiaryEntry>>;
   stats: ProfileStats;
   tutorialDone: boolean;
+  // Card frames and castle styles owned, and the ones in use
+  cosmetics: ProfileCosmetics;
   createdAt: string;
   updatedAt: string;
 }
@@ -91,6 +104,7 @@ export const createProfile = (): Profile => {
     bestiary: {},
     stats: emptyStats(),
     tutorialDone: false,
+    cosmetics: { cardSkins: [DEFAULT_CARD_SKIN], castleStyles: [DEFAULT_CASTLE_STYLE], cardSkin: DEFAULT_CARD_SKIN, castleStyle: DEFAULT_CASTLE_STYLE },
     createdAt: now,
     updatedAt: now
   };
@@ -160,6 +174,16 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
     }
   }
 
+  const cosmetics = { ...base.cosmetics };
+  if (isRecord(raw.cosmetics)) {
+    const skins = Array.isArray(raw.cosmetics.cardSkins) ? raw.cosmetics.cardSkins.filter(isCardSkinId) : [];
+    const styles = Array.isArray(raw.cosmetics.castleStyles) ? raw.cosmetics.castleStyles.filter(isCastleStyleId) : [];
+    cosmetics.cardSkins = [...new Set([DEFAULT_CARD_SKIN, ...skins])];
+    cosmetics.castleStyles = [...new Set([DEFAULT_CASTLE_STYLE, ...styles])];
+    if (isCardSkinId(raw.cosmetics.cardSkin) && cosmetics.cardSkins.includes(raw.cosmetics.cardSkin)) cosmetics.cardSkin = raw.cosmetics.cardSkin;
+    if (isCastleStyleId(raw.cosmetics.castleStyle) && cosmetics.castleStyles.includes(raw.cosmetics.castleStyle)) cosmetics.castleStyle = raw.cosmetics.castleStyle;
+  }
+
   return {
     ...base,
     coins: toCount(raw.coins),
@@ -169,6 +193,7 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
     bestiary,
     stats,
     tutorialDone: raw.tutorialDone === true,
+    cosmetics,
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : base.createdAt,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : base.updatedAt
   };
@@ -255,6 +280,7 @@ export const buyCard = (id: TroopId): boolean => {
     deck: profile.deck.length < MAX_DECK_SIZE ? [...profile.deck, id] : profile.deck,
     stats: { ...profile.stats, coinsSpent: profile.stats.coinsSpent + price, cardsBought: profile.stats.cardsBought + 1 }
   });
+  trackEvent('card_bought', { card: id, price, highest_cleared: highestCleared(profile) });
   return true;
 };
 
@@ -270,6 +296,7 @@ export const upgradeCard = (id: TroopId): boolean => {
     cards: { ...profile.cards, [id]: level + 1 },
     stats: { ...profile.stats, coinsSpent: profile.stats.coinsSpent + cost, upgradesBought: profile.stats.upgradesBought + 1 }
   });
+  trackEvent('card_upgraded', { card: id, level: level + 1, cost });
   return true;
 };
 
@@ -296,9 +323,52 @@ export const setDeck = (deck: TroopId[]): boolean => {
   return true;
 };
 
+// --- Cosmetics -----------------------------------------------------------------------------
+
+export type CosmeticKind = 'cardSkin' | 'castleStyle';
+
+const cosmeticPrice = (kind: CosmeticKind, id: string) =>
+  (kind === 'cardSkin' ? CARD_SKINS : CASTLE_STYLES).find(item => item.id === id)?.price;
+
+export const ownsCosmetic = (profile: Profile, kind: CosmeticKind, id: string) =>
+  kind === 'cardSkin'
+    ? profile.cosmetics.cardSkins.includes(id as CardSkinId)
+    : profile.cosmetics.castleStyles.includes(id as CastleStyleId);
+
+// Buy a card frame or castle style and put it on straight away
+export const buyCosmetic = (kind: CosmeticKind, id: string): boolean => {
+  const profile = getProfile();
+  const price = cosmeticPrice(kind, id);
+  if (price === undefined || ownsCosmetic(profile, kind, id) || profile.coins < price) return false;
+  const cosmetics: ProfileCosmetics = kind === 'cardSkin'
+    ? { ...profile.cosmetics, cardSkins: [...profile.cosmetics.cardSkins, id as CardSkinId], cardSkin: id as CardSkinId }
+    : { ...profile.cosmetics, castleStyles: [...profile.cosmetics.castleStyles, id as CastleStyleId], castleStyle: id as CastleStyleId };
+  setProfile({
+    ...profile,
+    coins: profile.coins - price,
+    cosmetics,
+    stats: { ...profile.stats, coinsSpent: profile.stats.coinsSpent + price }
+  });
+  return true;
+};
+
+export const equipCosmetic = (kind: CosmeticKind, id: string): boolean => {
+  const profile = getProfile();
+  if (!ownsCosmetic(profile, kind, id)) return false;
+  setProfile({
+    ...profile,
+    cosmetics: kind === 'cardSkin'
+      ? { ...profile.cosmetics, cardSkin: id as CardSkinId }
+      : { ...profile.cosmetics, castleStyle: id as CastleStyleId }
+  });
+  return true;
+};
+
 export const completeTutorial = () => {
   const profile = getProfile();
-  if (!profile.tutorialDone) setProfile({ ...profile, tutorialDone: true });
+  if (profile.tutorialDone) return;
+  setProfile({ ...profile, tutorialDone: true });
+  trackEvent('tutorial_completed');
 };
 
 // --- Battle results ------------------------------------------------------------------------
