@@ -264,7 +264,7 @@ export const getLine = (from: HexCoordinates, to: HexCoordinates): HexCoordinate
     const y = fromCube.y * (1 - t) + toCube.y * t;
     const z = fromCube.z * (1 - t) + toCube.z * t;
     
-    results.push(cubeToAxial({ x, y, z }));
+    results.push(roundHex(cubeToAxial({ x, y, z })));
   }
   
   return results;

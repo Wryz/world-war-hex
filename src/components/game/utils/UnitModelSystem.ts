@@ -1,4 +1,4 @@
-import { UnitType } from '@/types/game';
+import { PlayerType, UnitType } from '@/types/game';
 
 // Define the animation names each unit type can have
 export interface UnitAnimations {
@@ -12,7 +12,6 @@ export interface UnitAnimations {
 
 // Define attributes for each unit type
 export interface UnitAttributes {
-  modelPath: string;             // Path to the 3D model
   animations: UnitAnimations;    // Animation mapping
   scale: number;                 // Scale of the model
   heightOffset: number;          // Height offset to position model correctly
@@ -21,70 +20,59 @@ export interface UnitAttributes {
   indicatorScale: number;        // Scale of the indicator
 }
 
+// 3D models for each side - every unit type uses the knight model in its side's colours,
+// and unit types are told apart by size and by the coloured indicator under the unit
+export const UNIT_MODEL_PATHS: Record<PlayerType, string> = {
+  player: '/models/blue-knight.glb',
+  ai: '/models/red-knight.glb'
+};
+
+// Animation clip names in the knight models (matched case-insensitively by substring)
+const KNIGHT_ANIMATIONS: UnitAnimations = {
+  idle: 'idle',
+  holdShield: 'holdshield',
+  attack: 'stab',
+  walk: 'walk'
+};
+
 // Map of unit types to their 3D model attributes
 export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
   'infantry': {
-    modelPath: '/models/blue-knight.glb',
-    animations: {
-      idle: 'idle',
-      holdShield: 'shield',
-      attack: 'attack',
-      walk: 'walk'
-    },
+    animations: KNIGHT_ANIMATIONS,
     scale: 0.7,
-    heightOffset: 0.1,
+    heightOffset: 0,
     rotationOffset: 0,
     indicatorColor: '#4682B4',
     indicatorScale: 0.5
   },
   'tank': {
-    modelPath: '/models/tank.glb',
-    animations: {
-      idle: 'idle',
-      attack: 'fire',
-      walk: 'move'
-    },
-    scale: 0.8,
-    heightOffset: 0.3,
+    animations: KNIGHT_ANIMATIONS,
+    scale: 0.85,
+    heightOffset: 0,
     rotationOffset: 0,
     indicatorColor: '#8B0000',
     indicatorScale: 0.6
   },
   'helicopter': {
-    modelPath: '/models/helicopter.glb',
-    animations: {
-      idle: 'hover',
-      attack: 'attack',
-      walk: 'fly'
-    },
-    scale: 0.6,
-    heightOffset: 0.8,
+    animations: KNIGHT_ANIMATIONS,
+    scale: 0.75,
+    heightOffset: 0,
     rotationOffset: 0,
-    indicatorColor: '#00008B',
-    indicatorScale: 0.5
+    indicatorColor: '#7B1FA2',
+    indicatorScale: 0.55
   },
   'artillery': {
-    modelPath: '/models/artillery.glb',
-    animations: {
-      idle: 'idle',
-      attack: 'fire',
-      walk: 'move'
-    },
-    scale: 0.75,
-    heightOffset: 0.25,
+    animations: KNIGHT_ANIMATIONS,
+    scale: 0.6,
+    heightOffset: 0,
     rotationOffset: 0,
     indicatorColor: '#006400',
-    indicatorScale: 0.6
+    indicatorScale: 0.5
   },
   'medic': {
-    modelPath: '/models/medic.glb',
-    animations: {
-      idle: 'idle',
-      holdShield: 'heal',
-      walk: 'walk'
-    },
-    scale: 0.7,
-    heightOffset: 0.1,
+    animations: KNIGHT_ANIMATIONS,
+    scale: 0.65,
+    heightOffset: 0,
     rotationOffset: 0,
     indicatorColor: '#FFFF00',
     indicatorScale: 0.5
@@ -98,6 +86,9 @@ export type AnimationState = 'idle' | 'holdShield' | 'attack' | 'walk' | 'death'
 export const getUnitModelAttributes = (unitType: UnitType): UnitAttributes => {
   return UNIT_MODELS[unitType] || UNIT_MODELS.infantry;
 };
+
+// Function to get the 3D model for a unit's owner
+export const getUnitModelPath = (owner: PlayerType): string => UNIT_MODEL_PATHS[owner];
 
 // Function to get the animation name for a given state
 export const getAnimationName = (unitType: UnitType, state: AnimationState): string => {

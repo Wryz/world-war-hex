@@ -1,20 +1,25 @@
-import { 
-  GameState, 
-  Player, 
-  Unit, 
-  UnitType, 
+import {
+  GameState,
+  Player,
+  Unit,
+  UnitType,
   Hex,
-  Move,
-  Purchase
+  HexCoordinates
 } from '@/types/game';
-import { 
-  getHexDistance, 
-  findHexByCoordinates, 
+import {
+  getHexDistance,
+  findHexByCoordinates,
   getNeighbors,
-  getHexesInRange,
-  findPath 
+  getHexesInRange
 } from '../game/hexUtils';
-import { UNITS } from '../game/gameState';
+import {
+  UNITS,
+  addPendingMove,
+  addPendingPurchase,
+  getDeploymentHexes,
+  getValidMoveTargets,
+  findBaseHex
+} from '../game/gameState';
 
 /**
  * AI difficulty settings affecting various strategic parameters
@@ -27,10 +32,10 @@ interface AIDifficultySettings {
   retreatThreshold: number;    // 0-1, health % at which to retreat
 }
 
-const DIFFICULTY_SETTINGS = {
+const DIFFICULTY_SETTINGS: Record<'easy' | 'medium' | 'hard', AIDifficultySettings> = {
   easy: {
     attackAggressiveness: 0.3,
-    defensePreference: 0.7, 
+    defensePreference: 0.7,
     resourceFocus: 0.4,
     unitDiversityDesire: 0.3,
     retreatThreshold: 0.7
@@ -51,51 +56,65 @@ const DIFFICULTY_SETTINGS = {
   }
 };
 
+// Unit types the AI recruits (the same ones offered to the player in the barracks)
+const RECRUITABLE_TYPES: UnitType[] = ['infantry', 'artillery', 'helicopter', 'tank'];
+
+const getDifficultySettings = (state: GameState): AIDifficultySettings =>
+  DIFFICULTY_SETTINGS[state.settings?.aiDifficulty ?? 'medium'] ?? DIFFICULTY_SETTINGS.medium;
+
 /**
- * Get the AI's moves for the current planning phase
+ * Plan the AI's turn: queue a purchase and moves for its units.
+ * Returns the game state with the AI's pending purchases and moves added.
  */
-export const getAIMoves = (
-  state: GameState
-): { moves: Move[], purchases: Purchase[] } => {
-  const aiDifficulty = state.settings?.aiDifficulty || 'medium';
-  const settings = DIFFICULTY_SETTINGS[aiDifficulty as keyof typeof DIFFICULTY_SETTINGS];
-  
-  const aiPlayer = state.players.ai;
-  const playerBase = findPlayerBase(state, 'player');
-  const aiBase = findPlayerBase(state, 'ai');
-  
-  if (!aiBase || !playerBase) {
-    return { moves: [], purchases: [] };
-  }
-  
+export const planAITurn = (state: GameState): GameState => {
+  const settings = getDifficultySettings(state);
+  const playerBase = findBaseHex(state, 'player');
+  const aiBase = findBaseHex(state, 'ai');
+
+  if (!aiBase || !playerBase) return state;
+
   // Analyze the current game state
-  const threatAssessment = assessThreats(state, aiPlayer);
+  const threatAssessment = assessThreats(state, state.players.ai);
   const resourceOpportunities = findResourceOpportunities(state);
-  
-  // Decide what unit to purchase
+
+  // Move existing units first so newly deployed units don't block them
+  let updatedState = state;
+  for (const unit of state.players.ai.units) {
+    if (unit.hasMoved || unit.isEngagedInCombat) continue;
+
+    const target = decideUnitMove(
+      updatedState,
+      unit,
+      settings,
+      playerBase,
+      aiBase,
+      threatAssessment,
+      resourceOpportunities
+    );
+
+    if (target) {
+      updatedState = addPendingMove(updatedState, unit.id, state.players.ai.id, target);
+    }
+  }
+
+  // Then decide what unit to purchase
   const purchase = decidePurchase(
-    state, 
-    aiPlayer, 
-    settings, 
+    updatedState,
+    updatedState.players.ai,
+    settings,
     threatAssessment,
     resourceOpportunities
   );
-  
-  // Decide how to move existing units
-  const moves = decideMoves(
-    state, 
-    aiPlayer, 
-    settings, 
-    playerBase,
-    aiBase,
-    threatAssessment,
-    resourceOpportunities
-  );
-  
-  return {
-    moves,
-    purchases: purchase ? [purchase] : []
-  };
+  if (purchase) {
+    updatedState = addPendingPurchase(
+      updatedState,
+      state.players.ai.id,
+      purchase.unitType,
+      purchase.position
+    );
+  }
+
+  return updatedState;
 };
 
 /**
@@ -109,7 +128,7 @@ interface ThreatAssessment {
 }
 
 const assessThreats = (state: GameState, aiPlayer: Player): ThreatAssessment => {
-  const aiBase = findPlayerBase(state, 'ai');
+  const aiBase = findBaseHex(state, 'ai');
   if (!aiBase) {
     return {
       baseUnderThreat: false,
@@ -117,65 +136,55 @@ const assessThreats = (state: GameState, aiPlayer: Player): ThreatAssessment => 
       enemyStrengthNearBase: 0
     };
   }
-  
+
   // Check for enemies near the base
   const baseProximityRange = 3; // Consider threats within 3 hexes of base
   const hexesNearBase = getHexesInRange(state.hexGrid, aiBase.coordinates, baseProximityRange);
-  
+
   const enemyUnitsNearBase = hexesNearBase
     .filter(hex => hex.unit && hex.unit.owner === 'player')
     .map(hex => hex.unit as Unit);
-  
+
   const enemyStrengthNearBase = enemyUnitsNearBase.reduce(
-    (sum, unit) => sum + unit.attackPower, 
+    (sum, unit) => sum + unit.attackPower,
     0
   );
-  
+
   // Find the strongest enemy unit
-  const playerUnits = state.players.player.units;
   let strongestEnemyUnit: Unit | undefined;
   let maxAttackPower = 0;
-  
-  for (const unit of playerUnits) {
+
+  for (const unit of state.players.player.units) {
     if (unit.attackPower > maxAttackPower) {
       maxAttackPower = unit.attackPower;
       strongestEnemyUnit = unit;
     }
   }
-  
+
   // Check for AI units under immediate threat
   const threatenedUnits: Array<{unit: Unit, threatLevel: number}> = [];
-  
+
   for (const aiUnit of aiPlayer.units) {
-    const adjacentHexes = getNeighbors(aiUnit.position)
-      .map(coord => findHexByCoordinates(state.hexGrid, coord))
-      .filter(Boolean) as Hex[];
-    
-    const adjacentEnemies = adjacentHexes
-      .filter(hex => hex.unit && hex.unit.owner === 'player')
-      .map(hex => hex.unit as Unit);
-    
+    const adjacentEnemies = getNeighbors(aiUnit.position)
+      .map(coord => findHexByCoordinates(state.hexGrid, coord)?.unit)
+      .filter((unit): unit is Unit => !!unit && unit.owner === 'player');
+
     if (adjacentEnemies.length > 0) {
-      const enemyStrength = adjacentEnemies.reduce(
-        (sum, unit) => sum + unit.attackPower, 
-        0
-      );
-      
+      const enemyStrength = adjacentEnemies.reduce((sum, unit) => sum + unit.attackPower, 0);
+
       // Calculate threat level as a ratio of enemy strength to unit health
-      const threatLevel = enemyStrength / aiUnit.lifespan;
-      
       threatenedUnits.push({
         unit: aiUnit,
-        threatLevel
+        threatLevel: enemyStrength / aiUnit.lifespan
       });
     }
   }
-  
+
   // Base is under threat if strong enemy units are nearby
-  const baseUnderThreat = 
+  const baseUnderThreat =
     enemyStrengthNearBase > 5 || // Arbitrary threshold
     enemyUnitsNearBase.length >= 2;
-  
+
   return {
     baseUnderThreat,
     threatenedUnits,
@@ -187,28 +196,8 @@ const assessThreats = (state: GameState, aiPlayer: Player): ThreatAssessment => 
 /**
  * Find resource hexes that the AI could capture
  */
-const findResourceOpportunities = (
-  state: GameState
-): Hex[] => {
-  const resourceHexes = state.hexGrid.filter(hex => 
-    hex.isResourceHex && 
-    (!hex.unit || hex.unit.owner !== 'ai')
-  );
-  
-  return resourceHexes;
-};
-
-/**
- * Find a player's base hex
- */
-const findPlayerBase = (
-  state: GameState, 
-  playerType: 'player' | 'ai'
-): Hex | undefined => {
-  return state.hexGrid.find(hex => 
-    hex.isBase && hex.owner === playerType
-  );
-};
+const findResourceOpportunities = (state: GameState): Hex[] =>
+  state.hexGrid.filter(hex => hex.isResourceHex && !hex.unit);
 
 /**
  * Decide which unit to purchase based on the current game state
@@ -219,452 +208,191 @@ const decidePurchase = (
   settings: AIDifficultySettings,
   threatAssessment: ThreatAssessment,
   resourceOpportunities: Hex[]
-): Purchase | null => {
-  // Check if AI has enough points to purchase any unit
-  const cheapestUnit = Object.values(UNITS).reduce(
-    (cheapest, unit) => unit.cost < cheapest.cost ? unit : cheapest,
-    { cost: Infinity } as typeof UNITS[UnitType]
-  );
-  
-  if (aiPlayer.points < cheapestUnit.cost) {
-    return null;
-  }
-  
+): { unitType: UnitType, position: HexCoordinates } | null => {
+  const affordableTypes = RECRUITABLE_TYPES.filter(type => UNITS[type].cost <= aiPlayer.points);
+  if (affordableTypes.length === 0) return null;
+
+  const canAfford = (type: UnitType) => affordableTypes.includes(type);
+  const cheapest = affordableTypes.reduce((a, b) => UNITS[a].cost <= UNITS[b].cost ? a : b);
+
   // Decide what unit type to purchase based on the situation
   let desiredUnitType: UnitType;
-  
+
   if (threatAssessment.baseUnderThreat) {
     // Under threat, prefer defensive units
-    desiredUnitType = aiPlayer.points >= UNITS.tank.cost ? 'tank' : 'infantry';
+    desiredUnitType = canAfford('tank') ? 'tank' : cheapest;
   } else if (resourceOpportunities.length > 0 && Math.random() < settings.resourceFocus) {
     // Focus on capturing resources with fast units
-    desiredUnitType = aiPlayer.points >= UNITS.helicopter.cost ? 'helicopter' : 'infantry';
+    desiredUnitType = canAfford('helicopter') ? 'helicopter' : cheapest;
   } else if (Math.random() < settings.attackAggressiveness) {
-    // Aggressive attack mode
-    if (aiPlayer.points >= UNITS.artillery.cost) {
-      desiredUnitType = 'artillery';
-    } else if (aiPlayer.points >= UNITS.tank.cost) {
-      desiredUnitType = 'tank';
-    } else {
-      desiredUnitType = 'infantry';
-    }
+    // Aggressive attack mode - buy the hardest hitter available
+    desiredUnitType = affordableTypes.reduce((a, b) =>
+      UNITS[a].attackPower >= UNITS[b].attackPower ? a : b
+    );
   } else {
-    // Balance the army composition
+    // Balance the army composition - pick the least common unit type the AI can afford
     const unitCounts = aiPlayer.units.reduce((counts, unit) => {
       counts[unit.type] = (counts[unit.type] || 0) + 1;
       return counts;
-    }, {} as Record<UnitType, number>);
-    
-    // Find the least common unit type the AI can afford
-    const affordableTypes = Object.keys(UNITS) as UnitType[];
-    const sortedTypes = affordableTypes
-      .filter(type => UNITS[type].cost <= aiPlayer.points)
-      .sort((a, b) => (unitCounts[a] || 0) - (unitCounts[b] || 0));
-    
-    desiredUnitType = sortedTypes[0] || 'infantry';
+    }, {} as Partial<Record<UnitType, number>>);
+
+    const sortedTypes = [...affordableTypes].sort(
+      (a, b) => (unitCounts[a] || 0) - (unitCounts[b] || 0)
+    );
+
+    desiredUnitType = Math.random() < settings.unitDiversityDesire
+      ? sortedTypes[0]
+      : affordableTypes[Math.floor(Math.random() * affordableTypes.length)];
   }
-  
-  // Find a valid position to place the new unit
-  const aiBase = findPlayerBase(state, 'ai');
-  if (!aiBase || !aiBase.coordinates) {
-    return null;
+
+  // Find a valid position next to the base to deploy the new unit
+  const validPositions = getDeploymentHexes(state, 'ai');
+  if (validPositions.length === 0) return null;
+
+  // Prefer the deployment hex closest to the enemy base
+  const playerBase = findBaseHex(state, 'player');
+  const position = playerBase
+    ? closestTo(validPositions.map(h => h.coordinates), playerBase.coordinates)
+    : validPositions[Math.floor(Math.random() * validPositions.length)].coordinates;
+
+  return position ? { unitType: desiredUnitType, position } : null;
+};
+
+const closestTo = (candidates: HexCoordinates[], goal: HexCoordinates): HexCoordinates | null => {
+  let best: HexCoordinates | null = null;
+  let bestDistance = Infinity;
+
+  for (const candidate of candidates) {
+    const distance = getHexDistance(candidate, goal);
+    // Break ties randomly so units don't always take the same route
+    if (distance < bestDistance || (distance === bestDistance && Math.random() < 0.5)) {
+      bestDistance = distance;
+      best = candidate;
+    }
   }
-  
-  // Get adjacent positions to the base
-  const adjacentPositions = getNeighbors(aiBase.coordinates);
-  const validPositions = adjacentPositions.filter(pos => {
-    const hex = findHexByCoordinates(state.hexGrid, pos);
-    return hex && !hex.unit && hex.terrain !== 'water' && hex.terrain !== 'mountain';
-  });
-  
-  if (validPositions.length === 0) {
-    return null;
-  }
-  
-  // Choose a random valid position
-  const position = validPositions[Math.floor(Math.random() * validPositions.length)];
-  
-  return {
-    playerId: aiPlayer.id,
-    unitType: desiredUnitType,
-    position
-  };
+
+  return best;
 };
 
 /**
- * Decide how to move existing units
+ * Pick the reachable hex that gets the unit closest to a goal.
+ * Returns null if no reachable hex is closer to the goal than the unit already is.
  */
-const decideMoves = (
+const moveToward = (state: GameState, unit: Unit, goal: HexCoordinates): HexCoordinates | null => {
+  const targets = getValidMoveTargets(state, unit);
+  const best = closestTo(targets, goal);
+
+  if (!best || getHexDistance(best, goal) >= getHexDistance(unit.position, goal)) {
+    return null;
+  }
+
+  return best;
+};
+
+/**
+ * Pick the reachable hex furthest from all enemy units
+ */
+const moveAwayFromEnemies = (state: GameState, unit: Unit): HexCoordinates | null => {
+  const enemies = state.players.player.units;
+  const targets = getValidMoveTargets(state, unit);
+
+  const nearestEnemyDistance = (coord: HexCoordinates) => enemies.reduce(
+    (min, enemy) => Math.min(min, getHexDistance(coord, enemy.position)),
+    Infinity
+  );
+
+  let best: HexCoordinates | null = null;
+  let bestScore = nearestEnemyDistance(unit.position);
+
+  for (const target of targets) {
+    const score = nearestEnemyDistance(target);
+    if (score > bestScore) {
+      bestScore = score;
+      best = target;
+    }
+  }
+
+  return best;
+};
+
+/**
+ * Decide where a single unit should move this turn (or null to hold position)
+ */
+const decideUnitMove = (
   state: GameState,
-  aiPlayer: Player,
+  unit: Unit,
   settings: AIDifficultySettings,
   playerBase: Hex,
   aiBase: Hex,
   threatAssessment: ThreatAssessment,
   resourceOpportunities: Hex[]
-): Move[] => {
-  const moves: Move[] = [];
-  
-  // Handle each unit separately
-  for (const unit of aiPlayer.units) {
-    if (unit.hasMoved || unit.isEngagedInCombat) continue;
-    
-    // Check if this unit is under threat
-    const unitThreat = threatAssessment.threatenedUnits.find(t => t.unit.id === unit.id);
-    
-    if (unitThreat && unitThreat.threatLevel > settings.retreatThreshold) {
-      // Unit should retreat
-      const retreatMove = decideRetreatMove(state, unit, aiBase);
-      if (retreatMove) {
-        moves.push(retreatMove);
-        continue;
-      }
-    }
-    
-    // If base is under threat and this unit is nearby, defend the base
-    if (
-      threatAssessment.baseUnderThreat && 
-      getHexDistance(unit.position, aiBase.coordinates) < 5 &&
-      Math.random() < settings.defensePreference
-    ) {
-      const defenseMove = decideDefensiveMove(state, unit, aiBase);
-      if (defenseMove) {
-        moves.push(defenseMove);
-        continue;
-      }
-    }
-    
-    // If resources are available and unit is suitable for capturing
-    if (
-      resourceOpportunities.length > 0 && 
-      Math.random() < settings.resourceFocus &&
-      (unit.type === 'infantry' || unit.type === 'helicopter')
-    ) {
-      const resourceMove = decideResourceCaptureMove(state, unit, resourceOpportunities);
-      if (resourceMove) {
-        moves.push(resourceMove);
-        continue;
-      }
-    }
-    
-    // Otherwise, move towards the enemy base with some randomness
-    if (Math.random() < settings.attackAggressiveness) {
-      const attackMove = decideAttackMove(state, unit, playerBase);
-      if (attackMove) {
-        moves.push(attackMove);
-        continue;
-      }
-    } else {
-      // Make a random move for variety
-      const randomMove = decideRandomMove(state, unit);
-      if (randomMove) {
-        moves.push(randomMove);
-      }
-    }
-  }
-  
-  return moves;
-};
+): HexCoordinates | null => {
+  // Retreat badly threatened or badly wounded units towards the base
+  const unitThreat = threatAssessment.threatenedUnits.find(t => t.unit.id === unit.id);
+  const healthRatio = unit.lifespan / unit.maxLifespan;
 
-/**
- * Decide how a unit should retreat
- */
-const decideRetreatMove = (
-  state: GameState,
-  unit: Unit,
-  aiBase: Hex
-): Move | null => {
-  // Try to move towards the base
-  const path = findPath(
-    unit.position,
-    aiBase.coordinates,
-    state.hexGrid,
-    unit.movementRange
-  );
-  
-  if (path && path.length > 1) {
-    // Move as far along the path as possible
-    const targetPos = path[Math.min(path.length - 1, unit.movementRange)];
-    const targetHex = findHexByCoordinates(state.hexGrid, targetPos);
-    
-    if (targetHex && !targetHex.unit) {
-      return {
-        unitId: unit.id,
-        playerId: state.players.ai.id,
-        from: unit.position,
-        to: targetPos
-      };
-    }
+  if (unitThreat && (unitThreat.threatLevel > 1 || healthRatio < settings.retreatThreshold)) {
+    const retreat = moveToward(state, unit, aiBase.coordinates) ?? moveAwayFromEnemies(state, unit);
+    if (retreat) return retreat;
   }
-  
-  // If no path to base, just move away from enemies
-  const neighbors = getNeighbors(unit.position);
-  
-  // Filter to valid moves (no units, passable terrain)
-  const validMoves = neighbors.filter(pos => {
-    const hex = findHexByCoordinates(state.hexGrid, pos);
-    if (!hex || hex.unit) return false;
-    if (unit.type !== 'helicopter' && hex.terrain === 'water') return false;
-    return true;
-  });
-  
-  if (validMoves.length === 0) return null;
-  
-  // Find enemy units
-  const enemyUnits = state.players.player.units;
-  
-  // Score each move by how far it gets from enemies
-  const scoredMoves = validMoves.map(move => {
-    let score = 0;
-    
-    for (const enemy of enemyUnits) {
-      const currentDistance = getHexDistance(unit.position, enemy.position);
-      const newDistance = getHexDistance(move, enemy.position);
-      
-      // Reward moving away from enemies
-      score += newDistance - currentDistance;
-    }
-    
-    return { move, score };
-  });
-  
-  // Sort by score (higher is better)
-  scoredMoves.sort((a, b) => b.score - a.score);
-  
-  if (scoredMoves.length === 0) return null;
-  
-  // Choose the best retreat
-  const bestMove = scoredMoves[0].move;
-  
-  return {
-    unitId: unit.id,
-    playerId: state.players.ai.id,
-    from: unit.position,
-    to: bestMove
-  };
-};
 
-/**
- * Decide how a unit should defend the base
- */
-const decideDefensiveMove = (
-  state: GameState,
-  unit: Unit,
-  aiBase: Hex
-): Move | null => {
-  // Look for enemy units near the base
-  const baseNeighbors = getNeighbors(aiBase.coordinates);
-  const threateningPositions = baseNeighbors.filter(pos => {
-    const hex = findHexByCoordinates(state.hexGrid, pos);
-    return hex && hex.unit && hex.unit.owner === 'player';
-  });
-  
-  // If there are threatening units, move to intercept
-  if (threateningPositions.length > 0) {
-    // Sort by distance to the unit
-    threateningPositions.sort((a, b) => 
-      getHexDistance(unit.position, a) - getHexDistance(unit.position, b)
-    );
-    
-    // Try to move toward the closest threat
-    const target = threateningPositions[0];
-    const path = findPath(
-      unit.position,
-      target,
-      state.hexGrid,
-      unit.movementRange
-    );
-    
-    if (path && path.length > 1) {
-      const moveTarget = path[Math.min(path.length - 1, unit.movementRange)];
-      const targetHex = findHexByCoordinates(state.hexGrid, moveTarget);
-      
-      if (targetHex && !targetHex.unit) {
-        return {
-          unitId: unit.id,
-          playerId: state.players.ai.id,
-          from: unit.position,
-          to: moveTarget
-        };
-      }
-    }
-  }
-  
-  // If no direct threats or can't path to them, position defensively around base
-  const defensivePositions = getNeighbors(aiBase.coordinates);
-  
-  // Filter to valid positions
-  const validPositions = defensivePositions.filter(pos => {
-    const hex = findHexByCoordinates(state.hexGrid, pos);
-    if (!hex || hex.unit) return false;
-    if (unit.type !== 'helicopter' && hex.terrain === 'water') return false;
-    return true;
-  });
-  
-  if (validPositions.length === 0) return null;
-  
-  // Sort by distance to the unit
-  validPositions.sort((a, b) => 
-    getHexDistance(unit.position, a) - getHexDistance(unit.position, b)
-  );
-  
-  // Move to the closest defensive position
-  const bestPosition = validPositions[0];
-  
-  // Check if we can get there
-  const path = findPath(
-    unit.position,
-    bestPosition,
-    state.hexGrid,
-    unit.movementRange
-  );
-  
-  if (path && path.length > 1) {
-    const moveTarget = path[Math.min(path.length - 1, unit.movementRange)];
-    
-    return {
-      unitId: unit.id,
-      playerId: state.players.ai.id,
-      from: unit.position,
-      to: moveTarget
-    };
-  }
-  
-  return null;
-};
+  // If base is under threat and this unit is nearby, defend the base
+  if (
+    threatAssessment.baseUnderThreat &&
+    getHexDistance(unit.position, aiBase.coordinates) < 5 &&
+    Math.random() < settings.defensePreference
+  ) {
+    const nearestThreat = state.players.player.units
+      .filter(enemy => getHexDistance(enemy.position, aiBase.coordinates) <= 3)
+      .sort((a, b) =>
+        getHexDistance(unit.position, a.position) - getHexDistance(unit.position, b.position)
+      )[0];
 
-/**
- * Decide how a unit should capture resources
- */
-const decideResourceCaptureMove = (
-  state: GameState,
-  unit: Unit,
-  resourceOpportunities: Hex[]
-): Move | null => {
-  if (resourceOpportunities.length === 0) return null;
-  
-  // Sort resource hexes by distance to the unit
-  resourceOpportunities.sort((a, b) => 
-    getHexDistance(unit.position, a.coordinates) - 
-    getHexDistance(unit.position, b.coordinates)
-  );
-  
-  // Try to move toward the closest resource
-  for (const resource of resourceOpportunities) {
-    const path = findPath(
-      unit.position,
-      resource.coordinates,
-      state.hexGrid,
-      unit.movementRange
-    );
-    
-    if (path && path.length > 1) {
-      const moveTarget = path[Math.min(path.length - 1, unit.movementRange)];
-      const targetHex = findHexByCoordinates(state.hexGrid, moveTarget);
-      
-      if (targetHex && !targetHex.unit) {
-        return {
-          unitId: unit.id,
-          playerId: state.players.ai.id,
-          from: unit.position,
-          to: moveTarget
-        };
-      }
-    }
+    const defenseMove = nearestThreat
+      ? moveToward(state, unit, nearestThreat.position)
+      : moveToward(state, unit, aiBase.coordinates);
+    if (defenseMove) return defenseMove;
   }
-  
-  return null;
-};
 
-/**
- * Decide how a unit should attack the enemy base
- */
-const decideAttackMove = (
-  state: GameState,
-  unit: Unit,
-  playerBase: Hex
-): Move | null => {
-  // Try to move toward the enemy base
-  const path = findPath(
-    unit.position,
-    playerBase.coordinates,
-    state.hexGrid,
-    unit.movementRange
-  );
-  
-  if (path && path.length > 1) {
-    const moveTarget = path[Math.min(path.length - 1, unit.movementRange)];
-    const targetHex = findHexByCoordinates(state.hexGrid, moveTarget);
-    
-    if (targetHex && (!targetHex.unit || targetHex.isBase)) {
-      return {
-        unitId: unit.id,
-        playerId: state.players.ai.id,
-        from: unit.position,
-        to: moveTarget
-      };
-    }
-  }
-  
-  return null;
-};
+  // Fast units grab unclaimed resource hexes
+  if (
+    resourceOpportunities.length > 0 &&
+    Math.random() < settings.resourceFocus &&
+    (unit.type === 'infantry' || unit.type === 'helicopter')
+  ) {
+    const reservedTargets = state.pendingMoves.map(m => m.to);
+    const nearestResource = resourceOpportunities
+      .filter(hex => !reservedTargets.some(t => t.q === hex.coordinates.q && t.r === hex.coordinates.r))
+      .sort((a, b) =>
+        getHexDistance(unit.position, a.coordinates) - getHexDistance(unit.position, b.coordinates)
+      )[0];
 
-/**
- * Make a random move for variety
- */
-const decideRandomMove = (
-  state: GameState,
-  unit: Unit
-): Move | null => {
-  const possibleMoves = [];
-  const coordsInRange = [];
-  
-  // Get all hexes within movement range
-  for (let q = -unit.movementRange; q <= unit.movementRange; q++) {
-    for (let r = Math.max(-unit.movementRange, -q-unit.movementRange); 
-         r <= Math.min(unit.movementRange, -q+unit.movementRange); 
-         r++) {
-      coordsInRange.push({
-        q: unit.position.q + q,
-        r: unit.position.r + r
-      });
+    if (nearestResource) {
+      const resourceMove = moveToward(state, unit, nearestResource.coordinates);
+      if (resourceMove) return resourceMove;
     }
   }
-  
-  // Filter to valid moves
-  for (const coord of coordsInRange) {
-    const hex = findHexByCoordinates(state.hexGrid, coord);
-    if (!hex) continue;
-    
-    // Skip if occupied or impassable
-    if (hex.unit) continue;
-    if (unit.type !== 'helicopter' && hex.terrain === 'water') continue;
-    
-    // Check if there's a path to this hex
-    const path = findPath(
-      unit.position,
-      coord,
-      state.hexGrid,
-      unit.movementRange
-    );
-    
-    if (path && path.length <= unit.movementRange + 1) {
-      possibleMoves.push(coord);
+
+  // Aggressive units hunt nearby enemy units or march on the enemy base
+  if (Math.random() < settings.attackAggressiveness) {
+    const nearbyEnemy = state.players.player.units
+      .filter(enemy => getHexDistance(unit.position, enemy.position) <= unit.movementRange + 1)
+      .sort((a, b) => a.lifespan - b.lifespan)[0];
+
+    if (nearbyEnemy && healthRatio >= settings.retreatThreshold) {
+      const huntMove = moveToward(state, unit, nearbyEnemy.position);
+      if (huntMove) return huntMove;
     }
+
+    const attackMove = moveToward(state, unit, playerBase.coordinates);
+    if (attackMove) return attackMove;
   }
-  
-  if (possibleMoves.length === 0) return null;
-  
-  // Pick a random move
-  const randomIndex = Math.floor(Math.random() * possibleMoves.length);
-  const randomMove = possibleMoves[randomIndex];
-  
-  return {
-    unitId: unit.id,
-    playerId: state.players.ai.id,
-    from: unit.position,
-    to: randomMove
-  };
+
+  // Otherwise make a random move for variety
+  const targets = getValidMoveTargets(state, unit);
+  if (targets.length === 0 || Math.random() < 0.3) return null;
+
+  return targets[Math.floor(Math.random() * targets.length)];
 };
 
 /**
@@ -674,41 +402,40 @@ export const decideAICombatStrategy = (
   state: GameState,
   combatIndex: number
 ): boolean => {
-  const aiDifficulty = state.settings?.aiDifficulty || 'medium';
-  const settings = DIFFICULTY_SETTINGS[aiDifficulty as keyof typeof DIFFICULTY_SETTINGS];
-  
+  const settings = getDifficultySettings(state);
+
   const combat = state.combats[combatIndex];
   if (!combat) return false; // Fight by default
-  
+
   // Only consider retreating if AI is the defender
   const aiDefenders = combat.defenders.filter(unit => unit.owner === 'ai');
   if (aiDefenders.length === 0) return false; // Fight if AI is attacking
-  
+
   // Calculate total combat strengths
   const attackerStrength = combat.attackers.reduce(
-    (sum, unit) => sum + unit.attackPower, 
+    (sum, unit) => sum + unit.attackPower,
     0
   );
-  
+
   const defenderStrength = combat.defenders.reduce(
-    (sum, unit) => sum + unit.attackPower, 
+    (sum, unit) => sum + unit.attackPower,
     0
   );
-  
+
   // Consider unit health
   const defenderHealth = combat.defenders.reduce(
-    (sum, unit) => sum + unit.lifespan / unit.maxLifespan, 
+    (sum, unit) => sum + unit.lifespan / unit.maxLifespan,
     0
   ) / combat.defenders.length;
-  
+
   // Retreat conditions:
   // 1. Overwhelmed by attacker strength
   // 2. Health too low
   // 3. Near retreat threshold based on difficulty
-  const shouldRetreat = 
+  const shouldRetreat =
     attackerStrength > defenderStrength * 1.5 ||
     defenderHealth < settings.retreatThreshold ||
     Math.random() < (1 - settings.attackAggressiveness) * 0.3; // Occasional random retreat
-  
+
   return shouldRetreat;
-}; 
+};

@@ -1,5 +1,5 @@
 import React from 'react';
-import { GameState } from '@/types/game';
+import { GameState, Unit } from '@/types/game';
 import { getUnitTypeName } from '../utils/UnitHelpers';
 
 interface CombatResolverProps {
@@ -13,10 +13,21 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({
   const unresolvedCombatIndex = gameState.combats.findIndex(c => !c.resolved);
   if (unresolvedCombatIndex === -1) return null;
   
-  const combat = gameState.combats[unresolvedCombatIndex];
+  const storedCombat = gameState.combats[unresolvedCombatIndex];
+  
+  // Show the units' current stats - earlier battles this turn may have damaged or destroyed them
+  const getLiveUnits = (units: Unit[]) => units
+    .map(unit => gameState.players[unit.owner].units.find(u => u.id === unit.id))
+    .filter((unit): unit is Unit => !!unit);
+  const combat = {
+    ...storedCombat,
+    attackers: getLiveUnits(storedCombat.attackers),
+    defenders: getLiveUnits(storedCombat.defenders)
+  };
+  
   const attackerStrength = combat.attackers.reduce((sum, unit) => sum + unit.attackPower, 0);
   const defenderStrength = combat.defenders.reduce((sum, unit) => sum + unit.attackPower, 0);
-  const isPlayerDefending = combat.defenders.some(unit => unit.owner === 'player');
+  const isPlayerDefending = storedCombat.defenders.some(unit => unit.owner === 'player');
   
   // Calculate winning probability based on attack power
   const totalStrength = attackerStrength + defenderStrength;
@@ -64,7 +75,7 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({
           </h3>
           <ul className="text-sm">
             {combat.attackers.map((unit, index) => (
-              <li key={index} className="mb-1">
+              <li key={unit.id ?? index} className="mb-1">
                 {getUnitTypeName(unit.type)} - HP: {unit.lifespan}/{unit.maxLifespan}
               </li>
             ))}
@@ -76,7 +87,7 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({
           </h3>
           <ul className="text-sm">
             {combat.defenders.map((unit, index) => (
-              <li key={index} className="mb-1">
+              <li key={unit.id ?? index} className="mb-1">
                 {getUnitTypeName(unit.type)} - HP: {unit.lifespan}/{unit.maxLifespan}
               </li>
             ))}
@@ -103,7 +114,7 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({
       
       {!isPlayerDefending && (
         <div className="mt-4">
-          <p className="mb-2 text-center italic">AI is deciding whether to retreat...</p>
+          <p className="mb-2 text-center italic">Enemy is deciding whether to retreat...</p>
           <button 
             className="w-full bg-[var(--foreground)] text-[var(--parchment)] font-bold py-2 px-4 rounded opacity-50 cursor-wait"
             disabled

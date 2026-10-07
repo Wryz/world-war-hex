@@ -162,7 +162,9 @@ export const LoadingManagerProvider: React.FC<LoadingManagerProviderProps> = ({
         },
         // Progress callback
         (xhr) => {
-          const progress = xhr.loaded / xhr.total;
+          // Servers don't always send a content length
+          if (!xhr.total) return;
+          const progress = Math.min(1, xhr.loaded / xhr.total);
           setAssets(currentAssets => 
             currentAssets.map(a => 
               a.id === asset.id 
@@ -174,10 +176,11 @@ export const LoadingManagerProvider: React.FC<LoadingManagerProviderProps> = ({
         // Error callback
         (error) => {
           console.error(`Error loading model from ${asset.url}:`, error);
+          // A failed asset counts as settled so loading can still complete
           setAssets(currentAssets => 
             currentAssets.map(a => 
               a.id === asset.id 
-                ? { ...a, error: true }
+                ? { ...a, error: true, progress: 1 }
                 : a
             )
           );
@@ -244,10 +247,11 @@ export const LoadingManagerProvider: React.FC<LoadingManagerProviderProps> = ({
         // Error callback
         (error: unknown) => {
           console.error(`Error loading texture from ${asset.url}:`, error);
+          // A failed asset counts as settled so loading can still complete
           setAssets(currentAssets => 
             currentAssets.map(a => 
               a.id === asset.id 
-                ? { ...a, error: true }
+                ? { ...a, error: true, progress: 1 }
                 : a
             )
           );
@@ -275,13 +279,23 @@ export const LoadingManagerProvider: React.FC<LoadingManagerProviderProps> = ({
             )
           );
           resolve();
+        }).catch(err => {
+          console.error(`Error loading audio from ${asset.url}:`, err);
+          setAssets(currentAssets => 
+            currentAssets.map(a => 
+              a.id === asset.id 
+                ? { ...a, error: true, progress: 1 }
+                : a
+            )
+          );
+          reject(err);
         });
       } catch (err) {
         console.error(`Error loading audio from ${asset.url}:`, err);
         setAssets(currentAssets => 
           currentAssets.map(a => 
             a.id === asset.id 
-              ? { ...a, error: true }
+              ? { ...a, error: true, progress: 1 }
               : a
           )
         );

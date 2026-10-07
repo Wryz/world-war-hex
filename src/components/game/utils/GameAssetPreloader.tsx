@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useLoadingManager, AssetType } from './LoadingManager';
 
 // Define the asset entry type
@@ -34,17 +34,17 @@ interface GameAssetPreloaderProps {
   children?: React.ReactNode;
 }
 
+const ALL_ASSETS = [...GAME_ASSETS.models, ...GAME_ASSETS.textures, ...GAME_ASSETS.audio];
+
 const GameAssetPreloader: React.FC<GameAssetPreloaderProps> = ({ 
   onLoadingComplete, 
   children 
 }) => {
-  const { registerAsset, startLoading, isComplete } = useLoadingManager();
-  const [assetsRegistered, setAssetsRegistered] = useState(false);
+  const { assets, registerAsset, startLoading, isComplete } = useLoadingManager();
+  const loadingStartedRef = useRef(false);
 
   // Register all assets on mount
   useEffect(() => {
-    if (assetsRegistered) return;
-
     // Register models
     GAME_ASSETS.models.forEach(asset => {
       registerAsset(asset.url, 'model' as AssetType, asset.id);
@@ -59,12 +59,18 @@ const GameAssetPreloader: React.FC<GameAssetPreloaderProps> = ({
     GAME_ASSETS.audio.forEach(asset => {
       registerAsset(asset.url, 'audio' as AssetType, asset.id);
     });
+  }, [registerAsset]);
 
-    setAssetsRegistered(true);
-
-    // Start loading assets
+  // Start loading once the registrations have reached the loading manager's state
+  useEffect(() => {
+    if (loadingStartedRef.current) return;
+    
+    const allRegistered = ALL_ASSETS.every(entry => assets.some(asset => asset.id === entry.id));
+    if (!allRegistered) return;
+    
+    loadingStartedRef.current = true;
     startLoading();
-  }, [registerAsset, startLoading, assetsRegistered]);
+  }, [assets, startLoading]);
 
   // Call onLoadingComplete when loading is done
   useEffect(() => {

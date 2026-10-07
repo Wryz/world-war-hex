@@ -12,6 +12,12 @@
   --accent-light: #ffc233;
   --parchment: #dba800;
   
+  /* Status colors */
+  --success: #2e7d32;
+  --success-muted: #c8e6c9;
+  --error: #c62828;
+  --error-muted: #ffcdd2;
+  
   /* Hex tile biome colors - brighter, more vibrant */
   --biome-plain: #9cde57;
   --biome-mountain: #b8b8b8;

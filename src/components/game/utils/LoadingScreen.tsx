@@ -115,18 +115,16 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({
   useEffect(() => {
     if (!isLoading) return;
 
-    // Filter for newly loaded assets
-    const newlyLoaded = assets.filter(asset => 
-      asset.loaded && !recentlyLoaded.some(loaded => loaded.id === asset.id)
-    );
-
-    if (newlyLoaded.length > 0) {
+    setRecentlyLoaded(prev => {
+      // Filter for newly loaded assets
+      const newlyLoaded = assets.filter(asset => 
+        asset.loaded && !prev.some(loaded => loaded.id === asset.id)
+      );
+      if (newlyLoaded.length === 0) return prev;
+      
       // Add to recently loaded queue (limit to 5 items)
-      setRecentlyLoaded(prev => {
-        const combined = [...newlyLoaded, ...prev];
-        return combined.slice(0, 5);
-      });
-    }
+      return [...newlyLoaded, ...prev].slice(0, 5);
+    });
   }, [assets, isLoading]);
 
   // Show "Loading Complete" for a moment before fading out

@@ -30,6 +30,7 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
     selectedHex, 
     selectedUnit,
     validMoves,
+    selectedUnitTypeForPurchase,
     isAITurn, 
     timer,
     gameStarted,
@@ -49,9 +50,8 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
 
   // Start or continue game when the component mounts
   useEffect(() => {
-    if (shouldContinueGame) {
-      handleContinueGame();
-    } else {
+    // Fall back to a new game if there is no saved game to continue
+    if (!shouldContinueGame || !handleContinueGame()) {
       handleStartGame(initialDifficulty);
     }
     // This effect should only run once when component mounts
@@ -101,6 +101,7 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
             {/* Barracks component for troop recruitment */}
             <Barracks
               availableGold={gameState.players.player.points}
+              selectedUnitType={selectedUnitTypeForPurchase}
               onUnitTypeSelect={handleUnitTypeSelect}
               isAITurn={isAITurn}
             />
@@ -152,6 +153,7 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
         gameState={gameState}
         selectedHex={selectedHex ?? undefined}
         validMoves={validMoves}
+        selectedUnitTypeForPurchase={selectedUnitTypeForPurchase}
         onHexClick={handleHexClick}
         onUnitClick={handleUnitSelect}
         gameStarted={gameStarted}

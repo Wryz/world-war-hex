@@ -9,51 +9,20 @@ import SkyDome from './environment/Sky';
 import Clouds from './environment/Clouds';
 import Fog from './environment/Fog';
 import { Html } from '@react-three/drei';
-import { DEFAULT_SETTINGS, UNITS } from '@/lib/game/gameState';
+import { UNITS, getValidBaseLocations } from '@/lib/game/gameState';
+import { axialToWorld, getHexHeight, getHexSurfaceHeight } from './utils/boardGeometry';
 import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
 import { playSound } from './utils/SoundPlayer';
-
-// Constants for hex height calculation (should match those in HexTile.tsx)
-const BASE_HEIGHT = 0.5;
-const MIN_HEIGHT = 0.1;
-const MAX_HEIGHT = 1.0;
-
-const TERRAIN_HEIGHTS: Record<string, number> = {
-  mountain: MAX_HEIGHT,
-  forest: 0.7,
-  plain: 0.5,
-  desert: 0.3,
-  resource: 0.6,
-  water: MIN_HEIGHT
-};
-
-// Calculate height for a specific hex based on terrain
-const getHexHeight = (hex: Hex): number => {
-  const terrainHeight = TERRAIN_HEIGHTS[hex.terrain] || BASE_HEIGHT;
-  // Add some randomness for natural look (but keep a seed based on coordinates for consistency)
-  const randomSeed = hex.coordinates.q * 1000 + hex.coordinates.r;
-  const heightNoise = ((Math.sin(randomSeed) + 1) / 2) * 0.3; // 0-0.3 variation
-  return terrainHeight + heightNoise;
-};
-
-// Calculate position for a hex using pointy-top orientation
-const axialToWorld = (coordinates: HexCoordinates): [number, number, number] => {
-  // For pointy-top layout with proper 3D orientation
-  // q runs along one diagonal, and r runs along the other diagonal
-  const x = 1 * Math.sqrt(3) * (coordinates.q + coordinates.r/2);
-  const z = 1 * 3/2 * coordinates.r;
-  // Always return y=0 to ensure all hexes sit on the same plane
-  return [x, 0, z];
-};
 
 interface GameBoardProps {
   gameState: GameState;
   onHexClick: (hex: Hex) => void;
   onUnitClick: (unit: Unit) => void;
-  onUnitPurchase: (unitType: UnitType) => boolean;
+  onUnitPurchase: (unitType: UnitType, hex: Hex) => boolean;
   selectedHex?: Hex;
   validMoves?: HexCoordinates[];
+  selectedUnitTypeForPurchase?: UnitType | null;
   gameStarted: boolean;
   isAITurn: boolean;
 }
@@ -65,14 +34,12 @@ export const GameBoard: React.FC<GameBoardProps> = ({
   onUnitPurchase,
   selectedHex,
   validMoves = [],
+  selectedUnitTypeForPurchase = null,
   gameStarted,
   isAITurn
 }) => {
   // Use loading state from the parent provider
   const { isComplete: assetsLoaded } = useLoadingManager();
-  
-  // Extract selectedUnitTypeForPurchase from gameState if available
-  const selectedUnitTypeForPurchase = gameState.selectedUnitTypeForPurchase || null;
 
   // Set up scene with appropriate lighting and camera
   return (
@@ -118,6 +85,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
             makeDefault 
             position={[5, 20, 20]} 
             fov={65}
+            far={3000}
           />
         </Suspense>
       </Canvas>
@@ -129,7 +97,7 @@ interface BoardSceneProps {
   gameState: GameState;
   onHexClick: (hex: Hex) => void;
   onUnitClick: (unit: Unit) => void;
-  onUnitPurchase: (unitType: UnitType) => boolean;
+  onUnitPurchase: (unitType: UnitType, hex: Hex) => boolean;
   selectedHex?: Hex;
   validMoves?: HexCoordinates[];
   assetsLoaded: boolean;
@@ -188,21 +156,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const validBasePlacementHexes = useMemo(() => {
     if (!isSetupPhase) return [];
     
-    const gridSize = DEFAULT_SETTINGS.gridSize;
-    return gameState.hexGrid.filter(hex => {
-      // Check if it's an edge hex
-      const isEdgeHex = Math.abs(hex.coordinates.q) === gridSize || 
-                        Math.abs(hex.coordinates.r) === gridSize ||
-                        Math.abs(hex.coordinates.q + hex.coordinates.r) === gridSize;
-                        
-      // Check if it's a valid terrain type (not water, mountain, or resource)
-      const isValidTerrain = hex.terrain !== 'water' && 
-                            hex.terrain !== 'mountain' && 
-                            !hex.isResourceHex;
-      
-      return isEdgeHex && isValidTerrain;
-    });
-  }, [isSetupPhase, gameState.hexGrid]);
+    return getValidBaseLocations(gameState);
+  }, [isSetupPhase, gameState]);
   
   // Check if a hex is a valid move target
   const isValidMoveTarget = useCallback(
@@ -271,7 +226,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         console.log('Attempting to purchase unit:', selectedUnitTypeForPurchase);
         
         // Try to purchase the unit
-        const purchaseSuccess = onUnitPurchase(selectedUnitTypeForPurchase);
+        const purchaseSuccess = onUnitPurchase(selectedUnitTypeForPurchase, hex);
         
         if (purchaseSuccess) {
           console.log('Purchase successful');
@@ -542,7 +497,12 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       )}
       
       {/* Landscape terrain */}
-      {gameStarted && assetsLoaded && <LandscapeModels boardRadius={15} />}
+      {/* Own Suspense boundary so loading scenery never hides the game board */}
+      {gameStarted && assetsLoaded && (
+        <Suspense fallback={null}>
+          <LandscapeModels boardRadius={15} />
+        </Suspense>
+      )}
       
       {/* Hex grid and units */}
       {gameState.hexGrid.map(hex => {
@@ -583,7 +543,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         <AnimatedUnitPreview
           unitType={selectedUnitTypeForPurchase}
           position={axialToWorld(hoveredHex.coordinates)}
-          hexHeight={getHexHeight(hoveredHex)}
+          hexHeight={getHexSurfaceHeight(hoveredHex)}
           isPlaced={false}
         />
       )}
@@ -597,7 +557,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           <AnimatedUnitPreview
             unitType={selectedUnitTypeForPurchase}
             position={axialToWorld(placedUnitHex.coordinates)}
-            hexHeight={getHexHeight(placedUnitHex)}
+            hexHeight={getHexSurfaceHeight(placedUnitHex)}
             isPlaced={true}
             isConfirmed={false}
           />
@@ -606,7 +566,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       
       {/* Check for pending unit purchases and display them */}
       {assetsLoaded && gameState.pendingPurchases
-        .filter(purchase => purchase.playerId === 'player')
+        .filter(purchase => purchase.playerId === gameState.players.player.id)
         .map((purchase, index) => {
           // Find the hex at this position
           const hex = gameState.hexGrid.find(
@@ -636,8 +596,10 @@ const BoardScene: React.FC<BoardSceneProps> = ({
               key={`pending-unit-${purchase.position.q}-${purchase.position.r}-${index}`}
               unit={tempUnit}
               position={axialToWorld(purchase.position)}
-              hexHeight={getHexHeight(hex)}
+              hexHeight={getHexSurfaceHeight(hex)}
               isPendingPurchase={true}
+              // Clicking a queued unit is handled like clicking its hex (cancels the purchase)
+              onClick={() => handleHexClick(hex)}
             />
           );
         })
@@ -665,7 +627,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
               key={uniqueKey}
               unit={hex.unit}
               position={axialToWorld(unitPosition)}
-              hexHeight={getHexHeight(hex)}
+              hexHeight={getHexSurfaceHeight(hex)}
               onClick={(e) => handleUnitClick(hex.unit!, e)}
               isMoving={isMoving}
             />

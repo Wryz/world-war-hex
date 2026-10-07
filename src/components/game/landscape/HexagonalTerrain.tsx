@@ -192,7 +192,7 @@ const HexagonalTerrain: React.FC<HexagonalTerrainProps> = ({
     }
     
     return tiles;
-  }, [worldRadius, centerRadius, maxHeight, grassTexture]);
+  }, [gridSize, worldRadius, centerRadius, maxHeight, grassTexture]);
   
   return (
     <group position={[0, -0.1, 0]}>

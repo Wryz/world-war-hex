@@ -86,21 +86,21 @@ const AnimatedModel: React.FC<{
   );
 };
 
+// Model paths - ensure these match EXACTLY what's in the public/models directory
+const MODEL_PATHS: Record<ModelType, string> = {
+  rock: '/models/rocks-1.glb',
+  tree1: '/models/tree-1.glb',
+  tree2: '/models/tree-2.glb',
+  bush: '/models/bush-1.glb',
+  goldRock: '/models/rock-gold-1.glb'
+};
+
 interface LandscapeModelsProps {
   boardRadius?: number; // Distance from center to use for placement
 }
 
 // Wrap the entire component in React.memo to prevent unnecessary re-renders
 const LandscapeModels = React.memo(({ boardRadius = 15 }: LandscapeModelsProps) => {
-  // Model paths - ensure these match EXACTLY what's in the public/models directory
-  const MODEL_PATHS = {
-    rock: '/models/rocks-1.glb',
-    tree1: '/models/tree-1.glb',
-    tree2: '/models/tree-2.glb',
-    bush: '/models/bush-1.glb',
-    goldRock: '/models/rock-gold-1.glb'
-  };
-  
   // Preload models when the component mounts
   useEffect(() => {
     preloadModels(Object.values(MODEL_PATHS));

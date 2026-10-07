@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as THREE from 'three';
-import { useLoadingManager, getCachedModel } from './LoadingManager';
+import { getCachedModel } from './LoadingManager';
 
 // Legacy model cache for backward compatibility
 const modelCache = new Map<string, THREE.Group>();
@@ -78,30 +78,12 @@ export const useGLTF = (url: string) => {
   const [model, setModel] = useState<THREE.Group | null>(null);
   const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(true);
-  const { registerAsset, getAsset, startLoading } = useLoadingManager();
 
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
     
-    // Register the asset with the LoadingManager
-    registerAsset(url, 'model');
-    
-    // Start loading if not already in progress
-    startLoading();
-    
-    // Check if the model is already loaded in the LoadingManager
-    const asset = getAsset(url);
-    if (asset && asset.loaded) {
-      const cachedModel = getCachedModel(url);
-      if (cachedModel && isMounted) {
-        setModel(cachedModel);
-        setLoading(false);
-        return;
-      }
-    }
-    
-    // Fall back to the old loading mechanism if not in LoadingManager
+    // Uses the model preloaded by the LoadingManager when available
     loadGLTFModel(url)
       .then((loadedModel) => {
         if (isMounted) {
@@ -120,7 +102,7 @@ export const useGLTF = (url: string) => {
     return () => {
       isMounted = false;
     };
-  }, [url, registerAsset, getAsset, startLoading]);
+  }, [url]);
 
   return { model, loading, error };
 };

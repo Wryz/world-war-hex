@@ -68,6 +68,8 @@ export interface GameState {
   hexGrid: Hex[];
   players: Record<PlayerType, Player>;
   currentPhase: GamePhase;
+  // Which side is currently planning/executing its turn
+  activePlayer?: PlayerType;
   turnNumber: number;
   planningTimeRemaining: number;
   winner?: PlayerType;

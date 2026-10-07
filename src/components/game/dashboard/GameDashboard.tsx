@@ -1,9 +1,8 @@
 import React from 'react';
 import { GameState, Unit } from '@/types/game';
 import { getUnitTypeEmoji, getUnitTypeName } from '../utils/UnitHelpers';
+import { BASE_MAX_HEALTH } from '@/lib/game/gameState';
 
-// Base max health constant (should match the one in gameState.ts)
-const BASE_MAX_HEALTH = 50;
 
 interface GameDashboardProps {
   gameState: GameState;
@@ -20,8 +19,8 @@ export const GameDashboard: React.FC<GameDashboardProps> = ({
 }) => {
   const playerUnits = gameState.players.player.units;
   const enemyUnits = gameState.players.ai.units;
-  const playerBaseHealth = gameState.players.player.baseHealth || BASE_MAX_HEALTH;
-  const aiBaseHealth = gameState.players.ai.baseHealth || BASE_MAX_HEALTH;
+  const playerBaseHealth = gameState.players.player.baseHealth ?? BASE_MAX_HEALTH;
+  const aiBaseHealth = gameState.players.ai.baseHealth ?? BASE_MAX_HEALTH;
 
   return (
     <>

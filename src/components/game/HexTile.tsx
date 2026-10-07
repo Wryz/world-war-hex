@@ -1,35 +1,15 @@
 import { useRef, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
-import { Hex, HexCoordinates, TerrainType } from '@/types/game';
+import { Hex, TerrainType } from '@/types/game';
 import * as THREE from 'three';
 import { playSound } from './utils/SoundPlayer';
 
-// Hex geometry
-const HEX_SIZE = 1.0;
-// Base hex height is 5 units, with variations based on terrain
-const BASE_HEIGHT = 0.5;
-const MIN_HEIGHT = 0.1;
-const MAX_HEIGHT = 1.2;
-
-// Terrain heights - scale these to make more dramatic landscape
-const TERRAIN_HEIGHTS: Record<TerrainType, number> = {
-  mountain: MAX_HEIGHT,
-  forest: 0.7,
-  plain: 0.5,
-  desert: 0.3,
-  resource: 0.6,
-  water: MIN_HEIGHT
-};
-
-// Coordinate converter for pointy-top hexagons - y is up in Three.js
-const axialToWorld = (coordinates: HexCoordinates): [number, number, number] => {
-  // For pointy-top layout with proper 3D orientation
-  // q runs along one diagonal, and r runs along the other diagonal
-  const x = HEX_SIZE * Math.sqrt(3) * (coordinates.q + coordinates.r/2);
-  const z = HEX_SIZE * 3/2 * coordinates.r;
-  // Always return y=0 to ensure all hexes sit on the same plane
-  return [x, 0, z];
-};
+import {
+  HEX_SIZE,
+  BEVEL_THICKNESS,
+  axialToWorld,
+  getHexHeight
+} from './utils/boardGeometry';
 
 // Terrain type colors
 const TERRAIN_COLORS: Record<TerrainType, string> = {
@@ -103,12 +83,7 @@ export const HexTile: React.FC<HexTileProps> = ({
   }, [onPointerOver]);
   
   // Get terrain-based height
-  const terrainHeight = TERRAIN_HEIGHTS[hex.terrain] || BASE_HEIGHT;
-  
-  // Add some randomness for natural look (but keep a seed based on coordinates for consistency)
-  const randomSeed = hex.coordinates.q * 1000 + hex.coordinates.r;
-  const heightNoise = ((Math.sin(randomSeed) + 1) / 2) * 0.3; // 0-0.3 variation
-  const hexHeight = terrainHeight + heightNoise;
+  const hexHeight = getHexHeight(hex);
   
   // Position hex in world - always on the ground plane (y=0)
   const [x, , z] = axialToWorld(hex.coordinates);
@@ -138,8 +113,8 @@ export const HexTile: React.FC<HexTileProps> = ({
     shape.lineTo(vertices[0].x, vertices[0].y);
     
     // Fixed bevel settings to ensure consistent bottom alignment
-    const bevelThickness = 0.05;
-    const bevelSize = 0.05;
+    const bevelThickness = BEVEL_THICKNESS;
+    const bevelSize = BEVEL_THICKNESS;
     
     // For the extrude, we'll create the shape in the XY plane
     // Three.js will extrude along the Y axis, but we'll rotate it later
@@ -319,8 +294,7 @@ export const HexTile: React.FC<HexTileProps> = ({
   }, []);
   
   // Calculate the total height including bevel
-  const bevelThickness = 0.05;
-  const totalHeight = hexHeight + bevelThickness;
+  const totalHeight = hexHeight + BEVEL_THICKNESS;
 
   return (
     <group position={[x, 0, z]}>

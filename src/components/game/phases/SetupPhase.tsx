@@ -40,7 +40,8 @@ export const SetupPhase: React.FC<SetupPhaseProps> = ({
         <ul className="list-disc pl-5 space-y-1">
           <li>Must be placed on the edge of the battlefield</li>
           <li>Cannot be placed on water</li>
-          <li>Cannot be placed on resource tiles</li>
+          <li>Cannot be placed on mountains or resource tiles</li>
+          <li>Needs open ground next to it to deploy troops</li>
         </ul>
       </div>
       

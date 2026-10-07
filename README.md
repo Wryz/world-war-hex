@@ -69,6 +69,16 @@ The game is organized into modular components for better maintainability:
 - AI opponent with configurable difficulty levels
 - Interactive sound effects for enhanced gameplay experience
 
+## How to Play
+
+1. **Place your castle.** Click a highlighted hex on the edge of the map, then click it again to confirm. The enemy castle is placed on the far side of the map.
+2. **Take turns.** You and the enemy alternate turns. You have 60 seconds to plan, then press **End Turn** (or let the timer run out).
+   - **Recruit:** pick a unit in the Barracks, click a highlighted hex next to your castle, then click it again to deploy. Units appear at the end of your turn and can move from your next turn. Click a queued unit to cancel it and get your gold back.
+   - **Move:** click one of your units, then a highlighted hex. Click the gold marker to cancel a move. Units can't cross water, mountains or enemy units.
+3. **Combat.** After a side moves, each of its units attacks every adjacent enemy unit. When you're attacked you choose to **Stand & Fight** or **Retreat**.
+4. **Economy.** At the end of every round both sides earn 5 gold, plus the value of any gold mines (resource hexes) their units stand on.
+5. **Win** by moving a unit onto the enemy castle, or by wearing it down. At the end of every round each unit within 3 hexes of an enemy castle deals damage equal to its attack power.
+
 ## Getting Started
 
 1. Clone the repository
