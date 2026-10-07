@@ -22,7 +22,7 @@ export const HelpPanel: React.FC = () => (
     </div>
     <ul className="mt-2 flex flex-col gap-1 border-t border-white/10 pt-2 leading-snug text-slate-300">
       <li>Units in range fight automatically when a turn ends. Archers reach 2 hexes.</li>
-      <li>Scroll or pinch to zoom in on any part of the map.</li>
+      <li>Drag to rotate the view around the map, scroll to zoom.</li>
       <li className="flex gap-1"><GoldIcon className="mt-0.5" /> Earn gold from income, mines, destroying enemies and sieging.</li>
       <li className="flex gap-1"><CrownIcon className="mt-0.5" /> Take the enemy castle, or wear it down from 3 hexes away.</li>
     </ul>

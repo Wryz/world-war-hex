@@ -24,6 +24,9 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
 // Tiles are drawn slightly smaller than their cell so thin gaps outline every hex
 const TILE_SCALE = 0.92;
 
+// Pointer movement (px) between press and release beyond which a click is treated as a camera drag
+export const DRAG_CLICK_TOLERANCE = 5;
+
 // What kind of highlight a tile shows
 export type HexHighlight = 'none' | 'move' | 'deploy' | 'base';
 
@@ -131,12 +134,15 @@ const HexTileComponent: React.FC<HexTileProps> = ({
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     // Only the tile nearest the camera should react
     e.stopPropagation();
+    // A press that moved is a camera drag, not a click
+    if (e.delta > DRAG_CLICK_TOLERANCE) return;
     playSound('hex-select-sound', 0.2);
     onHexClick(hex);
   };
 
   const handleDoubleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
+    if (e.delta > DRAG_CLICK_TOLERANCE) return;
     onHexDoubleClick?.(hex);
   };
 

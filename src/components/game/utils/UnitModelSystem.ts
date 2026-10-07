@@ -27,6 +27,9 @@ export const UNIT_MODEL_PATHS: Record<PlayerType, string> = {
   ai: '/models/red-knight.glb'
 };
 
+// The knight models face -Z; the game treats +Z as forward, so turn them around
+const KNIGHT_MODEL_FACING = Math.PI;
+
 // Animation clip names in the knight models (matched case-insensitively by substring)
 const KNIGHT_ANIMATIONS: UnitAnimations = {
   idle: 'idle',
@@ -41,7 +44,7 @@ export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
     animations: KNIGHT_ANIMATIONS,
     scale: 1.0,
     heightOffset: 0,
-    rotationOffset: 0,
+    rotationOffset: KNIGHT_MODEL_FACING,
     indicatorColor: '#4682B4',
     indicatorScale: 0.5
   },
@@ -49,7 +52,7 @@ export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
     animations: KNIGHT_ANIMATIONS,
     scale: 1.15,
     heightOffset: 0,
-    rotationOffset: 0,
+    rotationOffset: KNIGHT_MODEL_FACING,
     indicatorColor: '#8B0000',
     indicatorScale: 0.6
   },
@@ -57,7 +60,7 @@ export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
     animations: KNIGHT_ANIMATIONS,
     scale: 1.05,
     heightOffset: 0,
-    rotationOffset: 0,
+    rotationOffset: KNIGHT_MODEL_FACING,
     indicatorColor: '#7B1FA2',
     indicatorScale: 0.55
   },
@@ -65,7 +68,7 @@ export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
     animations: KNIGHT_ANIMATIONS,
     scale: 0.9,
     heightOffset: 0,
-    rotationOffset: 0,
+    rotationOffset: KNIGHT_MODEL_FACING,
     indicatorColor: '#006400',
     indicatorScale: 0.5
   },
@@ -73,7 +76,7 @@ export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
     animations: KNIGHT_ANIMATIONS,
     scale: 0.95,
     heightOffset: 0,
-    rotationOffset: 0,
+    rotationOffset: KNIGHT_MODEL_FACING,
     indicatorColor: '#FFFF00',
     indicatorScale: 0.5
   }

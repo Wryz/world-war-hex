@@ -48,6 +48,13 @@ const CAMERA_MAX_ZOOM = 1.1;
 // How quickly the camera follows zoom and turn changes, and how strongly the wheel zooms
 const CAMERA_ZOOM_SPEED = 6;
 const CAMERA_WHEEL_SPEED = 0.0015;
+// Dragging: pixels before a press counts as a drag, rotation and tilt per pixel, and tilt limits
+const CAMERA_DRAG_THRESHOLD = 5;
+const CAMERA_DRAG_ROTATE_SPEED = 0.008;
+const CAMERA_DRAG_TILT_SPEED = 0.004;
+const CAMERA_MIN_ELEVATION = THREE.MathUtils.degToRad(45);
+const CAMERA_MAX_ELEVATION = THREE.MathUtils.degToRad(85);
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 // Furthest the view can be panned from the centre of the board (world units)
 const CAMERA_MAX_PAN = 12;
 
@@ -98,7 +105,7 @@ const angleDelta = (from: number, to: number) => {
 };
 
 // Camera that looks down on the board from behind the castle of the side whose turn it is,
-// swinging smoothly around the board when the turn changes. Players can zoom but not rotate it.
+// swinging smoothly around the board when the turn changes. Players can drag to orbit/tilt and scroll to zoom.
 const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   const { camera, size, gl } = useThree();
   const azimuthRef = useRef<number | null>(null);
@@ -109,6 +116,10 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   // Where the player (or a turn change) wants the camera to go
   const desiredLookAtRef = useRef<THREE.Vector3 | null>(null);
   const desiredZoomRef = useRef(CAMERA_DEFAULT_ZOOM);
+  // Extra rotation around the centre of the map and camera tilt chosen by the player
+  const azimuthOffsetRef = useRef(0);
+  const elevationRef = useRef(CAMERA_ELEVATION);
+  const desiredElevationRef = useRef(CAMERA_ELEVATION);
 
   const viewSide: PlayerType = gameState.currentPhase === 'setup' ? 'player' : getActivePlayer(gameState);
 
@@ -132,7 +143,55 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   useEffect(() => {
     desiredLookAtRef.current = defaultLookAt.clone();
     desiredZoomRef.current = CAMERA_DEFAULT_ZOOM;
+    azimuthOffsetRef.current = 0;
+    desiredElevationRef.current = CAMERA_ELEVATION;
   }, [defaultLookAt]);
+
+  // Orbit around the centre of the map, carrying the current view along with the camera
+  const rotateBy = useCallback((radians: number) => {
+    azimuthOffsetRef.current += radians;
+    desiredLookAtRef.current?.applyAxisAngle(Y_AXIS, radians);
+  }, []);
+
+  // Click and drag: left/right orbits around the centre of the map, up/down tilts the view
+  useEffect(() => {
+    const element = gl.domElement;
+    let drag: { startX: number; startY: number; lastX: number; lastY: number; active: boolean } | null = null;
+
+    const onPointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) return;
+      drag = { startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, active: false };
+    };
+    const onPointerMove = (event: PointerEvent) => {
+      if (!drag) return;
+      // Ignore tiny movements so ordinary clicks never nudge the camera
+      if (!drag.active && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < CAMERA_DRAG_THRESHOLD) return;
+      drag.active = true;
+      rotateBy(-(event.clientX - drag.lastX) * CAMERA_DRAG_ROTATE_SPEED);
+      desiredElevationRef.current = THREE.MathUtils.clamp(
+        desiredElevationRef.current + (event.clientY - drag.lastY) * CAMERA_DRAG_TILT_SPEED,
+        CAMERA_MIN_ELEVATION,
+        CAMERA_MAX_ELEVATION
+      );
+      drag.lastX = event.clientX;
+      drag.lastY = event.clientY;
+    };
+    const onPointerUp = () => {
+      drag = null;
+    };
+
+    element.addEventListener('pointerdown', onPointerDown);
+    // Track the drag on the window so it keeps working when the cursor passes over the HUD
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerUp);
+    return () => {
+      element.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointermove', onPointerMove);
+      window.removeEventListener('pointerup', onPointerUp);
+      window.removeEventListener('pointercancel', onPointerUp);
+    };
+  }, [gl, rotateBy]);
 
   // Mouse wheel / trackpad pinch zooms towards whatever is under the cursor
   useEffect(() => {
@@ -186,14 +245,17 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.1);
     const ease = Math.min(1, delta * CAMERA_TURN_SPEED);
-    const current = azimuthRef.current ?? targetAzimuth;
-    const azimuth = current + angleDelta(current, targetAzimuth) * ease;
+    const desiredAzimuth = targetAzimuth + azimuthOffsetRef.current;
+    const current = azimuthRef.current ?? desiredAzimuth;
+    const azimuth = current + angleDelta(current, desiredAzimuth) * ease;
     azimuthRef.current = azimuth;
 
     const desiredLookAt = desiredLookAtRef.current ?? defaultLookAt;
     if (!lookAtRef.current) lookAtRef.current = desiredLookAt.clone();
     lookAtRef.current.lerp(desiredLookAt, Math.min(1, delta * CAMERA_ZOOM_SPEED));
     zoomRef.current += (desiredZoomRef.current - zoomRef.current) * Math.min(1, delta * CAMERA_ZOOM_SPEED);
+    elevationRef.current += (desiredElevationRef.current - elevationRef.current) * Math.min(1, delta * CAMERA_ZOOM_SPEED);
+    const elevation = elevationRef.current;
 
     // Distance at which the whole board fits on screen, scaled by the zoom level
     const perspective = camera as THREE.PerspectiveCamera;
@@ -205,10 +267,10 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
     ) * zoomRef.current;
 
     const lookAt = lookAtRef.current;
-    const horizontal = distance * Math.cos(CAMERA_ELEVATION);
+    const horizontal = distance * Math.cos(elevation);
     camera.position.set(
       lookAt.x + Math.sin(azimuth) * horizontal,
-      distance * Math.sin(CAMERA_ELEVATION),
+      distance * Math.sin(elevation),
       lookAt.z + Math.cos(azimuth) * horizontal
     );
     camera.lookAt(lookAt);

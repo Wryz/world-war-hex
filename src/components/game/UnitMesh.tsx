@@ -11,6 +11,7 @@ import {
   AnimationState
 } from './utils/UnitModelSystem';
 import { playBattleSound } from './utils/battleSounds';
+import { DRAG_CLICK_TOLERANCE } from './HexTile';
 import { instantiateUnitModel, findAnimationClip } from './utils/unitModelCache';
 import { ArrowIcon, AttackIcon, GoldIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
 
@@ -332,6 +333,8 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     if (!onSelect) return;
     e.stopPropagation();
+    // A press that moved is a camera drag, not a click
+    if (e.delta > DRAG_CLICK_TOLERANCE) return;
     onSelect(unit);
   };
 
