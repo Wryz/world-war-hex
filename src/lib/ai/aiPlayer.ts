@@ -18,6 +18,7 @@ import {
   addPendingPurchase,
   getDeploymentHexes,
   getValidMoveTargets,
+  getTerrainDistanceMap,
   findBaseHex
 } from '../game/gameState';
 
@@ -59,6 +60,9 @@ const DIFFICULTY_SETTINGS: Record<'easy' | 'medium' | 'hard', AIDifficultySettin
 // Unit types the AI recruits (the same ones offered to the player in the barracks)
 const RECRUITABLE_TYPES: UnitType[] = ['infantry', 'artillery', 'helicopter', 'tank'];
 
+// Most units the AI recruits in a single turn
+const MAX_PURCHASES_PER_TURN = 3;
+
 const getDifficultySettings = (state: GameState): AIDifficultySettings =>
   DIFFICULTY_SETTINGS[state.settings?.aiDifficulty ?? 'medium'] ?? DIFFICULTY_SETTINGS.medium;
 
@@ -97,23 +101,27 @@ export const planAITurn = (state: GameState): GameState => {
     }
   }
 
-  // Then decide what unit to purchase
-  const purchase = decidePurchase(
-    updatedState,
-    updatedState.players.ai,
-    settings,
-    threatAssessment,
-    resourceOpportunities
-  );
-  if (purchase) {
-    updatedState = addPendingPurchase(
+  // Then spend gold on reinforcements - several per turn when the treasury allows
+  for (let i = 0; i < MAX_PURCHASES_PER_TURN; i++) {
+    const purchase = decidePurchase(
+      updatedState, 
+      updatedState.players.ai, 
+      settings, 
+      threatAssessment,
+      resourceOpportunities
+    );
+    if (!purchase) break;
+    
+    const afterPurchase = addPendingPurchase(
       updatedState,
       state.players.ai.id,
       purchase.unitType,
       purchase.position
     );
+    if (afterPurchase === updatedState) break;
+    updatedState = afterPurchase;
   }
-
+  
   return updatedState;
 };
 
@@ -274,18 +282,43 @@ const closestTo = (candidates: HexCoordinates[], goal: HexCoordinates): HexCoord
   return best;
 };
 
+// Walking distances to goals, cached per map so each goal is only searched once
+const distanceMapCache = new WeakMap<GameState['hexGrid'], Map<string, Map<string, number>>>();
+
+const walkingDistance = (state: GameState, from: HexCoordinates, goal: HexCoordinates): number => {
+  let cache = distanceMapCache.get(state.hexGrid);
+  if (!cache) {
+    cache = new Map();
+    distanceMapCache.set(state.hexGrid, cache);
+  }
+  const goalKey = `${goal.q},${goal.r}`;
+  let distances = cache.get(goalKey);
+  if (!distances) {
+    distances = getTerrainDistanceMap(state.hexGrid, goal);
+    cache.set(goalKey, distances);
+  }
+  // Fall back to straight-line distance for hexes the goal can't be walked to from
+  return distances.get(`${from.q},${from.r}`) ?? getHexDistance(from, goal) + 100;
+};
+
 /**
- * Pick the reachable hex that gets the unit closest to a goal.
+ * Pick the reachable hex that gets the unit closest to a goal by walking distance,
+ * so units go around lakes and mountain ranges instead of getting stuck behind them.
  * Returns null if no reachable hex is closer to the goal than the unit already is.
  */
 const moveToward = (state: GameState, unit: Unit, goal: HexCoordinates): HexCoordinates | null => {
-  const targets = getValidMoveTargets(state, unit);
-  const best = closestTo(targets, goal);
-
-  if (!best || getHexDistance(best, goal) >= getHexDistance(unit.position, goal)) {
-    return null;
+  let best: HexCoordinates | null = null;
+  let bestDistance = walkingDistance(state, unit.position, goal);
+  
+  for (const target of getValidMoveTargets(state, unit)) {
+    const distance = walkingDistance(state, target, goal);
+    // Break ties randomly so units don't always take the same route
+    if (distance < bestDistance || (best && distance === bestDistance && Math.random() < 0.5)) {
+      bestDistance = distance;
+      best = target;
+    }
   }
-
+  
   return best;
 };
 

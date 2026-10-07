@@ -28,7 +28,7 @@ import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
 import { playSound } from './utils/SoundPlayer';
 import { getUnitTypeName } from './utils/UnitHelpers';
-import { TERRAIN_ICONS } from './hud/terrainInfo';
+import { TERRAIN_ICONS, TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
 
 const coordKey = (c: HexCoordinates) => `${c.q},${c.r}`;
 
@@ -646,26 +646,22 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   );
 };
 
-// Compact description of the hovered hex: its terrain effect and what's standing on it
+// One-line description of the hovered hex: its terrain effect and what's standing on it
 const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
-  const effect = TERRAIN_EFFECTS[hex.terrain];
   const [x, y, z] = surfacePosition(hex);
+  const effect = hex.isResourceHex
+    ? `+${hex.resourceValue ?? 0} gold/round`
+    : TERRAIN_SHORT_EFFECTS[hex.terrain];
 
   return (
     <Html position={[x, y + 0.2, z]} zIndexRange={[9, 0]} style={{ pointerEvents: 'none' }}>
-      <div className="ml-6 -mt-6 w-44 rounded-lg bg-slate-900/90 px-2 py-1 text-[11px] text-slate-100 shadow-lg select-none">
-        <div className="font-bold text-xs">
-          {TERRAIN_ICONS[hex.terrain]} {effect.name}
-          {hex.isResourceHex && ` (+${hex.resourceValue ?? 0} gold/round)`}
-        </div>
-        <div className="text-slate-300 leading-snug">{effect.description}</div>
-        {hex.isBase && (
-          <div className="mt-1 font-semibold">👑 {hex.owner === 'player' ? 'Your castle' : 'Enemy castle'}</div>
-        )}
+      <div className="ml-5 -mt-5 whitespace-nowrap rounded-md bg-slate-900/90 px-2 py-1 text-[11px] text-slate-100 shadow-lg select-none">
+        <span className="font-bold">{TERRAIN_ICONS[hex.terrain]} {TERRAIN_EFFECTS[hex.terrain].name}</span>
+        <span className="text-slate-400"> · {effect}</span>
         {hex.unit && (
-          <div className="mt-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>
-            {hex.unit.owner === 'player' ? 'Your' : 'Enemy'} {getUnitTypeName(hex.unit.type)} · ❤️ {hex.unit.lifespan}/{hex.unit.maxLifespan}
-          </div>
+          <span className="ml-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>
+            · {getUnitTypeName(hex.unit.type)} ❤️{hex.unit.lifespan}
+          </span>
         )}
       </div>
     </Html>

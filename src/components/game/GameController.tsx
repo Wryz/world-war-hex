@@ -12,7 +12,7 @@ import { TopBar } from './hud/TopBar';
 import { ActionBar } from './hud/ActionBar';
 import { SelectionCard } from './hud/SelectionCard';
 import { EventFeed } from './hud/EventFeed';
-import { TerrainLegend } from './hud/TerrainLegend';
+import { HelpPanel } from './hud/HelpPanel';
 import { TurnBanner } from './hud/TurnBanner';
 import { getUnitTypeName } from './utils/UnitHelpers';
 
@@ -99,16 +99,16 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
   const activePlayer = gameState.activePlayer ?? 'player';
   const isPlayerPlanning = currentPhase === 'planning' && !isAITurn;
 
-  // Tell the player what they can do right now
+  // Short instruction while the player is in the middle of an action
   const hint = selectedUnitTypeForPurchase
     ? validMoves.length > 0
-      ? `Click a blue-outlined hex next to your castle, then click it again to deploy ${getUnitTypeName(selectedUnitTypeForPurchase)}. Esc to cancel.`
-      : 'No free hex next to your castle to deploy on. Esc to cancel.'
-    : selectedUnit?.owner === 'player'
+      ? `Click a blue hex twice to deploy ${getUnitTypeName(selectedUnitTypeForPurchase)} · Esc to cancel`
+      : 'No free hex next to your castle · Esc to cancel'
+    : selectedUnit?.owner === 'player' && isPlayerPlanning
       ? validMoves.length > 0
-        ? 'Click a highlighted hex to plan a move - the route is drawn as you hover. Esc to cancel.'
-        : 'This unit can\'t move this turn.'
-      : 'Select one of your units to plan a move, or recruit troops. Moves happen when you end your turn.';
+        ? 'Click a highlighted hex to move there · Esc to cancel'
+        : "This unit can't move this turn"
+      : null;
 
   return (
     <div className="relative w-full h-full">
@@ -143,9 +143,13 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
             showTimer={isPlayerPlanning}
             onSave={isPlayerPlanning ? handleSave : undefined}
           />
-          <SelectionCard gameState={gameState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
-          <EventFeed log={gameState.log ?? []} />
-          <TerrainLegend />
+          <div className="fixed left-3 top-16 z-20 pointer-events-none">
+            <SelectionCard gameState={gameState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
+          </div>
+          <div className="fixed right-3 top-16 z-20 hidden w-64 flex-col gap-2 pointer-events-none sm:flex">
+            <EventFeed log={gameState.log ?? []} />
+            <HelpPanel />
+          </div>
           <TurnBanner phase={currentPhase} activePlayer={activePlayer} turnNumber={gameState.turnNumber} />
         </>
       )}

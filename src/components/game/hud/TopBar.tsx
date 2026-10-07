@@ -11,26 +11,23 @@ interface TopBarProps {
   onSave?: () => void;
 }
 
-const CastleHealth: React.FC<{ label: string; health: number; max: number; color: string; alignRight?: boolean }> = ({
-  label, health, max, color, alignRight = false
+const CastleHealth: React.FC<{ title: string; health: number; max: number; color: string; alignRight?: boolean }> = ({
+  title, health, max, color, alignRight = false
 }) => {
   const ratio = max > 0 ? Math.max(0, health) / max : 0;
-  const barColor = ratio > 0.6 ? '#22c55e' : ratio > 0.3 ? '#eab308' : '#ef4444';
 
   return (
-    <div className={`flex flex-col gap-1 w-40 ${alignRight ? 'items-end' : 'items-start'}`}>
-      <div className="flex items-center gap-1.5 text-xs font-bold" style={{ color }}>
-        {!alignRight && <span>👑</span>}
-        <span>{label}</span>
-        {alignRight && <span>👑</span>}
-      </div>
-      <div className="relative w-full h-3 rounded-full bg-slate-700 overflow-hidden">
+    <div className={`flex items-center gap-2 ${alignRight ? 'flex-row-reverse' : ''}`} title={`${title}: ${Math.max(0, health)}/${max}`}>
+      <span className="text-base leading-none" style={{ filter: `drop-shadow(0 0 3px ${color})` }}>👑</span>
+      <div className="relative w-28 h-2.5 rounded-full bg-slate-700 overflow-hidden">
         <div
           className={`absolute top-0 bottom-0 transition-all duration-700 ${alignRight ? 'right-0' : 'left-0'}`}
-          style={{ width: `${ratio * 100}%`, background: barColor }}
+          style={{ width: `${ratio * 100}%`, background: color }}
         />
       </div>
-      <div className="text-[11px] text-slate-300">{Math.max(0, health)} / {max}</div>
+      <span className="w-6 text-xs font-bold tabular-nums" style={{ textAlign: alignRight ? 'right' : 'left' }}>
+        {Math.max(0, health)}
+      </span>
     </div>
   );
 };
@@ -44,33 +41,33 @@ export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, show
 
   return (
     <div className="fixed top-3 inset-x-3 z-20 flex items-start justify-between gap-3 pointer-events-none">
-      {/* Turn info */}
-      <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-3 px-4 py-2`}>
-        <div className="text-sm font-bold text-slate-300">Round {Math.max(1, turnNumber)}</div>
-        <div
-          className="rounded-full px-3 py-1 text-sm font-bold text-white"
+      {/* Turn */}
+      <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-2 px-3 py-1.5 text-sm`}>
+        <span className="font-bold text-slate-400">Round {Math.max(1, turnNumber)}</span>
+        <span
+          className="rounded-full px-2.5 py-0.5 text-xs font-bold text-white"
           style={{ background: isAITurn ? SIDE_COLORS.ai : SIDE_COLORS.player }}
         >
-          {isAITurn ? "Enemy's turn" : 'Your turn'}
-        </div>
+          {isAITurn ? 'Enemy turn' : 'Your turn'}
+        </span>
         {showTimer && (
-          <div className={`font-mono text-sm font-bold tabular-nums ${timer <= 10 ? 'text-red-400 animate-pulse' : 'text-slate-200'}`}>
-            ⏱ {timer}s
-          </div>
+          <span className={`font-mono text-xs font-bold tabular-nums ${timer <= 10 ? 'text-red-400 animate-pulse' : 'text-slate-300'}`}>
+            {timer}s
+          </span>
         )}
       </div>
 
       {/* Castles */}
-      <div className={`${PANEL_CLASS} pointer-events-auto hidden md:flex items-center gap-4 px-4 py-2`}>
+      <div className={`${PANEL_CLASS} pointer-events-auto hidden md:flex items-center gap-3 px-3 py-2`}>
         <CastleHealth
-          label="Your castle"
+          title="Your castle"
           health={players.player.baseHealth ?? BASE_MAX_HEALTH}
           max={players.player.maxBaseHealth ?? BASE_MAX_HEALTH}
           color={SIDE_COLORS.player}
         />
-        <div className="text-lg">⚔️</div>
+        <span className="text-xs font-bold text-slate-500">VS</span>
         <CastleHealth
-          label="Enemy castle"
+          title="Enemy castle"
           health={players.ai.baseHealth ?? BASE_MAX_HEALTH}
           max={players.ai.maxBaseHealth ?? BASE_MAX_HEALTH}
           color={SIDE_COLORS.ai}
@@ -79,17 +76,12 @@ export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, show
       </div>
 
       {/* Treasury */}
-      <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-3 px-4 py-2`}>
-        <div className="flex flex-col items-end">
-          <div className="text-lg font-bold text-amber-300 leading-tight">💰 {players.player.points}</div>
-          <div className="text-[11px] text-slate-400">+{TURN_INCOME + mineIncome} per round</div>
-        </div>
+      <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-2 px-3 py-1.5`}>
+        <span className="text-base font-bold text-amber-300" title={`+${TURN_INCOME + mineIncome} gold per round`}>
+          💰 {players.player.points}
+        </span>
         {onSave && (
-          <button
-            onClick={onSave}
-            title="Save game"
-            className="rounded-lg bg-slate-700 hover:bg-slate-600 px-2 py-1.5 text-sm"
-          >
+          <button onClick={onSave} title="Save game" aria-label="Save game" className="rounded-md px-1.5 py-0.5 text-sm hover:bg-slate-700">
             💾
           </button>
         )}

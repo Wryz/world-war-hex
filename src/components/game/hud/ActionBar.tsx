@@ -19,17 +19,11 @@ interface ActionBarProps {
   gold: number;
   isAITurn: boolean;
   selectedUnitType: UnitType | null;
-  hint: string;
+  // Short instruction for the current action, if any
+  hint: string | null;
   onUnitTypeSelect: (unitType: UnitType) => void;
   onEndTurn: () => void;
 }
-
-const Stat: React.FC<{ icon: string; value: number; label: string }> = ({ icon, value, label }) => (
-  <span className="flex items-center gap-0.5" title={label}>
-    <span>{icon}</span>
-    <span className="font-bold">{value}</span>
-  </span>
-);
 
 // Bottom bar during planning: recruit units and end the turn
 export const ActionBar: React.FC<ActionBarProps> = ({
@@ -43,70 +37,67 @@ export const ActionBar: React.FC<ActionBarProps> = ({
   if (isAITurn) {
     return (
       <div className="fixed bottom-4 inset-x-0 z-20 flex justify-center pointer-events-none">
-        <div className={`${PANEL_CLASS} px-6 py-3 flex items-center gap-3`}>
-          <span className="inline-block w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-          <span className="font-semibold">The enemy is planning their moves…</span>
+        <div className={`${PANEL_CLASS} px-5 py-2.5 flex items-center gap-3 text-sm`}>
+          <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+          <span className="font-semibold">Enemy is planning…</span>
         </div>
       </div>
     );
   }
 
   return (
-    <>
-    {/* What to do next - shown at the top so it never covers the castle */}
-    <div className="fixed top-24 inset-x-0 z-20 flex justify-center pointer-events-none px-4 lg:px-80">
-      <div className="rounded-full bg-slate-900/80 px-4 py-1.5 text-center text-sm text-slate-100 shadow">
-        {hint}
-      </div>
-    </div>
     <div className="fixed bottom-3 inset-x-3 z-20 flex flex-col items-center gap-2 pointer-events-none">
-
-      <div className={`${PANEL_CLASS} pointer-events-auto flex items-stretch gap-2 p-2 max-w-full overflow-x-auto`}>
-        <div className="hidden sm:flex flex-col justify-center px-2 text-xs font-bold uppercase tracking-wide text-slate-400">
-          Recruit
+      {hint && (
+        <div className="rounded-full bg-slate-900/85 px-4 py-1.5 text-center text-xs font-semibold text-slate-100 shadow">
+          {hint}
         </div>
+      )}
+
+      <div className={`${PANEL_CLASS} pointer-events-auto flex items-stretch gap-1.5 p-1.5`}>
         {RECRUITABLE.map(type => {
           const info = UNITS[type];
           const canAfford = gold >= info.cost;
           const isSelected = selectedUnitType === type;
 
           return (
-            <button
-              key={type}
-              onClick={() => onUnitTypeSelect(type)}
-              disabled={!canAfford && !isSelected}
-              aria-pressed={isSelected}
-              title={`${getUnitTypeName(type)}: ${UNIT_ROLES[type]}`}
-              className={`flex flex-col items-start gap-0.5 rounded-lg px-3 py-1.5 text-left text-xs w-32 shrink-0 transition-colors
-                ${isSelected
-                  ? 'bg-amber-400 text-slate-900 ring-2 ring-amber-200'
-                  : canAfford
-                    ? 'bg-slate-800 hover:bg-slate-700 text-slate-100'
-                    : 'bg-slate-800/50 text-slate-500 cursor-not-allowed'}`}
-            >
-              <span className="flex w-full items-center justify-between">
-                <span className="text-sm font-bold">{getUnitTypeEmoji(type)} {getUnitTypeName(type)}</span>
-              </span>
-              <span className={`font-bold ${isSelected ? 'text-slate-900' : canAfford ? 'text-amber-300' : ''}`}>
-                💰 {info.cost}
-              </span>
-              <span className="flex gap-2">
-                <Stat icon="⚔️" value={info.attackPower} label="Attack" />
-                <Stat icon="❤️" value={info.maxLifespan} label="Health" />
-                <Stat icon="👣" value={info.movementRange} label="Movement" />
-              </span>
-            </button>
+            <div key={type} className="group relative">
+              <button
+                onClick={() => onUnitTypeSelect(type)}
+                disabled={!canAfford && !isSelected}
+                aria-pressed={isSelected}
+                aria-label={`Recruit ${getUnitTypeName(type)} for ${info.cost} gold`}
+                className={`flex h-full w-16 flex-col items-center justify-center rounded-lg px-1 py-1 transition-colors
+                  ${isSelected
+                    ? 'bg-amber-400 text-slate-900 ring-2 ring-amber-200'
+                    : canAfford
+                      ? 'bg-slate-800 hover:bg-slate-700 text-slate-100'
+                      : 'bg-slate-800/50 text-slate-500 cursor-not-allowed'}`}
+              >
+                <span className={`text-xl leading-none ${canAfford || isSelected ? '' : 'opacity-40'}`}>{getUnitTypeEmoji(type)}</span>
+                <span className={`mt-1 text-xs font-bold ${isSelected ? '' : canAfford ? 'text-amber-300' : ''}`}>{info.cost}</span>
+              </button>
+
+              {/* Stats on hover */}
+              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden w-40 -translate-x-1/2 rounded-lg bg-slate-900/95 p-2 text-xs text-slate-100 shadow-xl group-hover:block">
+                <div className="font-bold">{getUnitTypeName(type)}</div>
+                <div className="text-slate-400">{UNIT_ROLES[type]}</div>
+                <div className="mt-1 flex justify-between">
+                  <span>⚔️ {info.attackPower}</span>
+                  <span>❤️ {info.maxLifespan}</span>
+                  <span>👣 {info.movementRange}</span>
+                </div>
+              </div>
+            </div>
           );
         })}
 
         <button
           onClick={onEndTurn}
-          className="ml-1 shrink-0 rounded-lg bg-amber-500 hover:bg-amber-400 px-5 text-base font-bold text-slate-900 shadow"
+          className="ml-1 shrink-0 rounded-lg bg-amber-500 hover:bg-amber-400 px-4 text-sm font-bold text-slate-900 shadow"
         >
           End Turn ➜
         </button>
       </div>
     </div>
-    </>
   );
 };

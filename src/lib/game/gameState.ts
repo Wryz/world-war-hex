@@ -14,11 +14,11 @@ import {
   GameSettings
 } from '@/types/game';
 import {
-  getSpiral,
   getHexDistance,
   findHexByCoordinates,
   getNeighbors
 } from './hexUtils';
+import { createHexagonalGrid } from './mapGenerator';
 
 // Default game settings
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -33,7 +33,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
     desert: 0.10,
     resource: 0.0, // Resource hexes are placed separately
   },
-  resourceHexCount: 10
+  resourceHexCount: 8
 };
 
 // Unit definitions
@@ -186,220 +186,6 @@ export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS): 
     combats: [],
     settings
   };
-};
-
-// Create a hexagonal grid with the specified radius
-const createHexagonalGrid = (settings: GameSettings): Hex[] => {
-  const hexes: Hex[] = [];
-  const center: HexCoordinates = { q: 0, r: 0 };
-  
-  // Generate all coordinates for the grid
-  const coordinates = getSpiral(center, settings.gridSize);
-  
-  // Initialize biome noise map for terrain clustering
-  const terrainTypes = Object.keys(settings.terrainDistribution) as TerrainType[];
-  
-  // Create noise seeds for terrain clustering
-  const noiseSeed1 = Math.random() * 100;
-  const noiseSeed2 = Math.random() * 100;
-  const noiseSeed3 = Math.random() * 100;
-  
-  // First, generate a height/moisture map for each hex to determine terrain clusters
-  const noiseMap: Record<string, { height: number; moisture: number; temperature: number }> = {};
-  
-  for (const coord of coordinates) {
-    // Use coordinate values to generate a consistent noise value
-    // Scale coordinates to create a more interesting noise pattern
-    const scale = 0.12; // Adjust this to control cluster size
-    
-    // Generate multiple noise values for different terrain features
-    // Simple noise function using sin (this could be replaced with a better noise function)
-    const height = Math.sin(noiseSeed1 + scale * (coord.q * 1.7 + coord.r * 2.3)) * 0.5 + 0.5;
-    const moisture = Math.sin(noiseSeed2 + scale * (coord.q * 2.5 - coord.r * 1.8)) * 0.5 + 0.5;
-    const temperature = Math.sin(noiseSeed3 + scale * (coord.q * 1.2 + coord.r * 2.7)) * 0.5 + 0.5;
-    
-    noiseMap[`${coord.q},${coord.r}`] = { height, moisture, temperature };
-  }
-  
-  // Generate terrain based on noise map while respecting distribution
-  const terrainCounts: Record<TerrainType, number> = {
-    plain: 0,
-    mountain: 0,
-    forest: 0,
-    water: 0,
-    desert: 0,
-    resource: 0
-  };
-  
-  const targetDistribution = { ...settings.terrainDistribution };
-  
-  // First pass: assign terrain based on noise values
-  for (const coord of coordinates) {
-    const id = `hex-${coord.q}-${coord.r}`;
-    const noise = noiseMap[`${coord.q},${coord.r}`];
-    
-    // Determine terrain based on noise values
-    let terrain: TerrainType;
-    
-    if (noise.height > 0.75) {
-      // High elevation = mountains
-      terrain = 'mountain';
-    } else if (noise.height > 0.6 && noise.moisture > 0.5) {
-      // Medium-high elevation with moisture = forest
-      terrain = 'forest';
-    } else if (noise.height < 0.3) {
-      // Low elevation = water
-      terrain = 'water';
-    } else if (noise.moisture < 0.3 && noise.temperature > 0.6) {
-      // Dry and hot = desert
-      terrain = 'desert';
-    } else {
-      // Default to plains
-      terrain = 'plain';
-    }
-    
-    hexes.push({
-      id,
-      coordinates: coord,
-      terrain
-    });
-    
-    // Track terrain counts
-    terrainCounts[terrain]++;
-  }
-  
-  // Calculate actual distribution
-  const totalHexes = coordinates.length;
-  const actualDistribution: Record<TerrainType, number> = {
-    plain: 0,
-    mountain: 0,
-    forest: 0,
-    water: 0,
-    desert: 0,
-    resource: 0
-  };
-  for (const type of terrainTypes) {
-    actualDistribution[type] = terrainCounts[type] / totalHexes;
-  }
-  
-  // Second pass: adjust some hexes to match the target distribution
-  // We'll prioritize keeping clusters intact by only changing hexes at the edges of clusters
-  for (let i = 0; i < hexes.length; i++) {
-    const hex = hexes[i];
-    const currentType = hex.terrain;
-    
-    // Calculate if this type is over-represented
-    if (actualDistribution[currentType] > targetDistribution[currentType]) {
-      // Find a type that's under-represented
-      const underRepresentedTypes = terrainTypes.filter(
-        type => actualDistribution[type] < targetDistribution[type]
-      );
-      
-      if (underRepresentedTypes.length > 0) {
-        // Get neighboring hexes to check if this is an edge hex
-        const neighborCoords = getNeighbors(hex.coordinates);
-        const neighborTerrains = neighborCoords
-          .map(coord => {
-            const neighborHex = hexes.find(h => 
-              h.coordinates.q === coord.q && h.coordinates.r === coord.r
-            );
-            return neighborHex?.terrain;
-          })
-          .filter(Boolean) as TerrainType[];
-        
-        // Check if this hex is at an edge of a cluster
-        const uniqueNeighborTerrains = Array.from(new Set(neighborTerrains));
-        const isEdgeHex = uniqueNeighborTerrains.some(t => t !== currentType);
-        
-        // Only change edge hexes to maintain cluster integrity
-        if (isEdgeHex || Math.random() < 0.2) { // 20% chance to change non-edge hexes
-          // Choose an under-represented terrain type based on noise values
-          const noise = noiseMap[`${hex.coordinates.q},${hex.coordinates.r}`];
-          let newType = underRepresentedTypes[0];
-          
-          // Try to assign a terrain that makes sense based on noise values
-          if (underRepresentedTypes.includes('mountain') && noise.height > 0.6) {
-            newType = 'mountain';
-          } else if (underRepresentedTypes.includes('forest') && noise.moisture > 0.5) {
-            newType = 'forest';
-          } else if (underRepresentedTypes.includes('water') && noise.height < 0.35) {
-            newType = 'water';
-          } else if (underRepresentedTypes.includes('desert') && noise.moisture < 0.4) {
-            newType = 'desert';
-          } else if (underRepresentedTypes.includes('plain')) {
-            newType = 'plain';
-          }
-          
-          // Update hex terrain
-          hexes[i] = { ...hex, terrain: newType };
-          
-          // Update terrain counts
-          terrainCounts[currentType]--;
-          terrainCounts[newType]++;
-          
-          // Update actual distribution
-          actualDistribution[currentType] = terrainCounts[currentType] / totalHexes;
-          actualDistribution[newType] = terrainCounts[newType] / totalHexes;
-        }
-      }
-    }
-  }
-  
-  // Place resource hexes
-  placeResourceHexes(hexes, settings.resourceHexCount);
-  
-  return hexes;
-};
-
-// Generate random terrain based on distribution - kept for reference or fallback
-export const generateRandomTerrain = (distribution: Record<TerrainType, number>): TerrainType => {
-  const terrainTypes = Object.keys(distribution) as TerrainType[];
-  const weights = terrainTypes.map(type => distribution[type]);
-  
-  const random = Math.random();
-  let cumulativeWeight = 0;
-  
-  for (let i = 0; i < terrainTypes.length; i++) {
-    cumulativeWeight += weights[i];
-    if (random < cumulativeWeight) {
-      return terrainTypes[i];
-    }
-  }
-  
-  return 'plain'; // Default
-};
-
-// Place resource hexes in a somewhat balanced manner
-const placeResourceHexes = (hexes: Hex[], count: number): void => {
-  // Try to place resources evenly across the map
-  const center: HexCoordinates = { q: 0, r: 0 };
-  const potentialResourceHexes = hexes.filter(hex => 
-    // Not in the center or edges
-    getHexDistance(hex.coordinates, center) > 3 && 
-    getHexDistance(hex.coordinates, center) < 8 &&
-    // Not water or mountain
-    hex.terrain !== 'water' && hex.terrain !== 'mountain'
-  );
-  
-  // Shuffle array
-  for (let i = potentialResourceHexes.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [potentialResourceHexes[i], potentialResourceHexes[j]] = 
-    [potentialResourceHexes[j], potentialResourceHexes[i]];
-  }
-  
-  // Take the first 'count' hexes
-  const resourceHexes = potentialResourceHexes.slice(0, count);
-  
-  for (const hex of resourceHexes) {
-    const hexIndex = hexes.findIndex(h => h.id === hex.id);
-    hexes[hexIndex] = {
-      ...hexes[hexIndex],
-      terrain: 'resource',
-      isResourceHex: true,
-      resourceValue: 2 + Math.floor(Math.random() * 3) // 2-4 points
-    };
-  }
 };
 
 // ---------------------------------------------------------------------------
@@ -749,6 +535,13 @@ export const getMovePath = (state: GameState, unit: Unit, to: HexCoordinates): H
 export const findTerrainPath = (hexGrid: Hex[], from: HexCoordinates, to: HexCoordinates): HexCoordinates[] => {
   const reached = searchPaths(hexGrid, from, Infinity, hex => !isImpassable(hex));
   return buildPath(reached, to) ?? [from, to];
+};
+
+// Walking cost from every hex to a goal across passable terrain, ignoring units.
+// Used to steer around lakes and mountain ranges rather than into them.
+export const getTerrainDistanceMap = (hexGrid: Hex[], goal: HexCoordinates): Map<string, number> => {
+  const reached = searchPaths(hexGrid, goal, Infinity, hex => !isImpassable(hex));
+  return new Map([...reached].map(([key, entry]) => [key, entry.cost]));
 };
 
 // Queue a move for a unit, replacing any move it already had queued.

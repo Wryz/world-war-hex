@@ -10,7 +10,7 @@ import {
   AnimationState
 } from './utils/UnitModelSystem';
 import { instantiateUnitModel, findAnimationClip } from './utils/unitModelCache';
-import { getUnitTypeEmoji, getUnitTypeName } from './utils/UnitHelpers';
+import { getUnitTypeEmoji } from './utils/UnitHelpers';
 
 // Small lift so the unit's indicator doesn't z-fight with the tile surface
 const UNIT_ELEVATION = 0.02;
@@ -256,7 +256,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
         />
       </mesh>
 
-      {/* Readable unit label: type, health and terrain effects */}
+      {/* Compact unit label: type, health and terrain bonuses */}
       <Html
         position={[0, 1.9, 0]}
         center
@@ -264,30 +264,25 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
         style={{ pointerEvents: 'none' }}
       >
         <div
-          className="flex flex-col items-center gap-0.5 select-none"
-          style={{ opacity: isPendingPurchase ? 0.75 : 1 }}
+          className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] leading-none font-bold text-white whitespace-nowrap shadow select-none"
+          style={{
+            background: 'rgba(15, 23, 42, 0.8)',
+            border: `2px solid ${ownerColor}`,
+            opacity: isPendingPurchase ? 0.7 : 1
+          }}
         >
-          <div
-            className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] leading-none font-bold text-white whitespace-nowrap shadow"
-            style={{ background: 'rgba(15, 23, 42, 0.85)', border: `2px solid ${ownerColor}` }}
-          >
-            <span>{getUnitTypeEmoji(unit.type)}</span>
-            {isPendingPurchase ? (
-              <span>{getUnitTypeName(unit.type)} · arrives end of turn</span>
-            ) : (
-              <>
-                <span className="w-8 h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block">
-                  <span className="block h-full" style={{ width: `${healthRatio * 100}%`, background: healthColor }} />
-                </span>
-                <span>{unit.lifespan}</span>
-                {hasPlannedMove && <span title="Move planned">➜</span>}
-              </>
-            )}
-          </div>
-          {terrainBadges.length > 0 && !isPendingPurchase && (
-            <div className="rounded-full px-1.5 py-0.5 text-[10px] leading-none font-semibold text-emerald-100 whitespace-nowrap bg-emerald-900/85">
-              {terrainBadges.join(' · ')}
-            </div>
+          <span>{getUnitTypeEmoji(unit.type)}</span>
+          {isPendingPurchase ? (
+            <span title="Arrives at the end of the turn">⏳</span>
+          ) : (
+            <>
+              <span className="w-6 h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block">
+                <span className="block h-full" style={{ width: `${healthRatio * 100}%`, background: healthColor }} />
+              </span>
+              {/* Terrain bonuses as icons only - details are in the selection card */}
+              {terrainBadges.map(badge => <span key={badge}>{badge.split(' ')[0]}</span>)}
+              {hasPlannedMove && <span>➜</span>}
+            </>
           )}
         </div>
       </Html>
