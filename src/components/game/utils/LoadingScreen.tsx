@@ -16,7 +16,9 @@ const LOADING_TIPS = [
   'Units within 3 hexes of the enemy castle damage it every turn.',
   'Move a unit onto the enemy castle to win instantly.',
   'Archers hit from 2 hexes away, where melee units can\'t strike back.',
-  'Destroying an enemy unit pays a bounty of half its cost.'
+  'Destroying an enemy unit pays a bounty of half its cost.',
+  'Rogues strike from the shadows: enemies can\'t hit back at them.',
+  'Keep Mages next to your front line - they heal adjacent allies every turn.'
 ];
 
 const TIP_INTERVAL = 5000;

@@ -52,7 +52,8 @@ export type UnitType =
   | 'tank' 
   | 'artillery' 
   | 'helicopter' 
-  | 'medic';
+  | 'medic'
+  | 'rogue';
 
 export type Ability = 
   | 'rangedAttack' 

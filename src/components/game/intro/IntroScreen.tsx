@@ -149,7 +149,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
           {/* The army you command */}
           <div className="mt-5 max-w-lg">
             <div className="mb-2 text-xs font-bold uppercase tracking-widest text-slate-600">Your army</div>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-3 gap-2">
               {RECRUITABLE.map(type => {
                 const info = UNITS[type];
                 return (

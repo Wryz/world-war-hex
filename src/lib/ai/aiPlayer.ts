@@ -62,7 +62,7 @@ const DIFFICULTY_SETTINGS: Record<'easy' | 'medium' | 'hard', AIDifficultySettin
 };
 
 // Unit types the AI recruits (the same ones offered to the player in the barracks)
-const RECRUITABLE_TYPES: UnitType[] = ['infantry', 'artillery', 'helicopter', 'tank'];
+const RECRUITABLE_TYPES: UnitType[] = ['infantry', 'artillery', 'helicopter', 'tank', 'rogue', 'medic'];
 
 // The AI goes on the offensive once it has this many more units than the player...
 const PUSH_UNIT_ADVANTAGE = 3;

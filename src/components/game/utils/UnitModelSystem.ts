@@ -1,74 +1,125 @@
 import { PlayerType, UnitType } from '@/types/game';
 
-// Animation clip names in a unit's model (matched case-insensitively by substring)
-interface UnitAnimations {
-  idle: string;
-  holdShield: string;
-  attack: string;
-  walk: string;
+// Unit models: low-poly adventurers from KayKit's Character Pack: Adventurers (CC0, Kay Lousberg).
+// All characters share one skeleton and animation set; each unit type picks a character, the weapons
+// it carries and which animation clips to play. Each side's colour is painted onto capes, shields and hats.
+
+export type AnimationState = 'idle' | 'holdShield' | 'attack' | 'walk';
+
+interface UnitLook {
+  // Character model
+  model: string;
+  scale: number;
+  // Weapon and prop meshes in the model that this unit doesn't carry
+  hide: string[];
+  // Animation clip (by exact name) for each state
+  animations: Record<AnimationState, string>;
+  // Rides a horse (Knights)
+  mounted?: boolean;
+  // Carries a long pike (Pikemen)
+  pike?: boolean;
+  // Height of the unit's label above its hex
+  labelHeight: number;
+  // Projectile fired by ranged units
+  projectile?: 'arrow' | 'magic';
+  // Colour of the disc under a unit previewed in the barracks
+  indicatorColor: string;
+  indicatorScale: number;
 }
 
-interface UnitAttributes {
-  animations: UnitAnimations;
-  scale: number;                 // Scale of the model
-  heightOffset: number;          // Height offset to position model correctly
-  rotationOffset: number;        // Rotation in radians if needed
-  indicatorColor: string;        // Color for the unit indicator
-  indicatorScale: number;        // Scale of the indicator
-}
-
-// 3D models for each side - every unit type uses the knight model in its side's colours,
-// and unit types are told apart by size and by the coloured indicator under the unit
-const UNIT_MODEL_PATHS: Record<PlayerType, string> = {
-  player: '/models/blue-knight.glb',
-  ai: '/models/red-knight.glb'
+const MODELS = {
+  knight: '/models/units/knight.glb',
+  barbarian: '/models/units/barbarian.glb',
+  ranger: '/models/units/ranger.glb',
+  mage: '/models/units/mage.glb',
+  rogue: '/models/units/rogue.glb'
 };
 
-// The knight models face -Z; the game treats +Z as forward, so turn them around
-const KNIGHT_MODEL_FACING = Math.PI;
+// Low-poly galloping horse from the three.js examples (MIT; model by mirada for ROME)
+export const HORSE_MODEL = '/models/units/horse.glb';
 
-const KNIGHT_ANIMATIONS: UnitAnimations = {
-  idle: 'idle',
-  holdShield: 'holdshield',
-  attack: 'stab',
-  walk: 'walk'
+// Every model the game loads, for preloading
+export const ALL_UNIT_MODELS = [...Object.values(MODELS), HORSE_MODEL];
+
+const UNIT_LOOKS: Record<UnitType, UnitLook> = {
+  infantry: {
+    model: MODELS.knight,
+    scale: 0.44,
+    hide: ['Badge_Shield'],
+    animations: { idle: 'Idle', holdShield: 'Blocking', attack: '1H_Melee_Attack_Slice_Diagonal', walk: 'Walking_A' },
+    labelHeight: 1.53,
+    indicatorColor: '#4682B4',
+    indicatorScale: 0.5
+  },
+  helicopter: {
+    model: MODELS.knight,
+    scale: 0.41,
+    hide: ['Round_Shield'],
+    animations: { idle: 'Idle', holdShield: 'Blocking', attack: '1H_Melee_Attack_Slice_Diagonal', walk: 'Idle' },
+    mounted: true,
+    labelHeight: 1.95,
+    indicatorColor: '#7B1FA2',
+    indicatorScale: 0.55
+  },
+  tank: {
+    model: MODELS.barbarian,
+    scale: 0.47,
+    hide: [],
+    animations: { idle: 'Idle', holdShield: 'Blocking', attack: '1H_Melee_Attack_Stab', walk: 'Walking_A' },
+    pike: true,
+    labelHeight: 1.59,
+    indicatorColor: '#8B0000',
+    indicatorScale: 0.6
+  },
+  artillery: {
+    model: MODELS.ranger,
+    scale: 0.42,
+    hide: [],
+    animations: { idle: 'Idle', holdShield: '2H_Ranged_Aiming', attack: '2H_Ranged_Shoot', walk: 'Walking_A' },
+    labelHeight: 1.47,
+    projectile: 'arrow',
+    indicatorColor: '#006400',
+    indicatorScale: 0.5
+  },
+  medic: {
+    model: MODELS.mage,
+    scale: 0.43,
+    hide: [],
+    animations: { idle: 'Idle', holdShield: 'Spellcasting', attack: 'Spellcast_Shoot', walk: 'Walking_A' },
+    labelHeight: 1.59,
+    projectile: 'magic',
+    indicatorColor: '#a855f7',
+    indicatorScale: 0.5
+  },
+  rogue: {
+    model: MODELS.rogue,
+    scale: 0.41,
+    hide: [],
+    animations: { idle: 'Idle', holdShield: 'Blocking', attack: 'Dualwield_Melee_Attack_Slice', walk: 'Running_A' },
+    labelHeight: 1.42,
+    indicatorColor: '#334155',
+    indicatorScale: 0.5
+  }
 };
 
-const knight = (scale: number, indicatorColor: string, indicatorScale: number): UnitAttributes => ({
-  animations: KNIGHT_ANIMATIONS,
-  scale,
-  heightOffset: 0,
-  rotationOffset: KNIGHT_MODEL_FACING,
-  indicatorColor,
-  indicatorScale
-});
-
-// Map of unit types to their 3D model attributes
-const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
-  infantry: knight(1.0, '#4682B4', 0.5),
-  tank: knight(1.15, '#8B0000', 0.6),
-  helicopter: knight(1.05, '#7B1FA2', 0.55),
-  artillery: knight(0.9, '#006400', 0.5),
-  medic: knight(0.95, '#FFFF00', 0.5)
+// Team colour for each side (capes, shields, hats)
+export const TEAM_COLORS: Record<PlayerType, string> = {
+  player: '#2f6fe4',
+  ai: '#d93a3a'
 };
 
 // Seconds between strikes in battle - each troop type fights at its own pace
 export const ATTACK_INTERVALS: Record<UnitType, number> = {
+  rogue: 0.6,      // Rogues: flurries of quick stabs
   helicopter: 0.7, // Knights: quick cavalry strikes
   infantry: 0.9,   // Swordsmen
-  medic: 1.2,
   tank: 1.3,       // Pikemen: heavy, deliberate thrusts
+  medic: 1.4,      // Mages: gather and release a spell
   artillery: 1.6   // Archers: draw, aim and loose
 };
 
-export type AnimationState = keyof UnitAnimations;
-
-export const getUnitModelAttributes = (unitType: UnitType): UnitAttributes =>
-  UNIT_MODELS[unitType] ?? UNIT_MODELS.infantry;
-
-// The 3D model for a unit's owner
-export const getUnitModelPath = (owner: PlayerType): string => UNIT_MODEL_PATHS[owner];
+export const getUnitLook = (unitType: UnitType): UnitLook => UNIT_LOOKS[unitType] ?? UNIT_LOOKS.infantry;
 
 // Name of the animation clip to play for a unit doing something
 export const getAnimationName = (unitType: UnitType, state: AnimationState): string =>
-  getUnitModelAttributes(unitType).animations[state];
+  getUnitLook(unitType).animations[state];

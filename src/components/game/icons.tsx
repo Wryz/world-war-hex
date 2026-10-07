@@ -3,9 +3,10 @@ import { IconType } from 'react-icons';
 import {
   GiBroadsword,
   GiBowArrow,
-  GiHorseHead,
   GiPikeman,
-  GiHammerNails,
+  GiMountedKnight,
+  GiPointyHat,
+  GiHoodedAssassin,
   GiWheat,
   GiPineTree,
   GiCactus,
@@ -38,9 +39,10 @@ import { TerrainType, UnitType } from '@/types/game';
 export const UNIT_ICONS: Record<UnitType, IconType> = {
   infantry: GiBroadsword,
   artillery: GiBowArrow,
-  helicopter: GiHorseHead,
+  helicopter: GiMountedKnight,
   tank: GiPikeman,
-  medic: GiHammerNails
+  medic: GiPointyHat,
+  rogue: GiHoodedAssassin
 };
 
 export const TERRAIN_ICON_COMPONENTS: Record<TerrainType, IconType> = {

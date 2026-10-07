@@ -83,8 +83,15 @@ The game is organized into modular components for better maintainability:
 - Resource management
 - Turn-based combat system
 - AI opponent with three difficulty levels
-- Animated battles: each troop type strikes at its own pace, archers fire arrows, with clash, bow and impact sounds
-- Battle sounds synthesised in the browser with [ZzFX](https://github.com/KilledByAPixel/ZzFX) (MIT); icons from [Game Icons](https://game-icons.net) and [Lucide](https://lucide.dev) via [react-icons](https://react-icons.github.io/react-icons/)
+- Animated battles: each troop type strikes at its own pace, archers fire bolts and mages hurl spells, with clash, bow, spell and impact sounds
+- Six troop types, each with its own low-poly model in its side's colours
+
+## Credits
+
+- Unit models: [KayKit Character Pack: Adventurers](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0) by Kay Lousberg ([CC0](http://creativecommons.org/publicdomain/zero/1.0/)), trimmed and meshopt-compressed for the web
+- Knights' horse: from the [three.js examples](https://github.com/mrdoob/three.js) (MIT), model by [mirada](https://mirada.com/) for ROME
+- Battle sounds synthesised in the browser with [ZzFX](https://github.com/KilledByAPixel/ZzFX) (MIT)
+- Icons from [Game Icons](https://game-icons.net) and [Lucide](https://lucide.dev) via [react-icons](https://react-icons.github.io/react-icons/)
 
 ## How to Play
 
@@ -94,8 +101,19 @@ The game is organized into modular components for better maintainability:
    - **Move:** click one of your units, then a highlighted hex - the route is drawn as you hover. If a hex is out of reach or impassable you get a short warning and the unit stays selected. Click a planned destination to cancel the move. Units walk there when the turn ends.
    - **Camera:** click and drag to rotate the view around the map (drag up/down to tilt), and scroll or pinch to zoom in on any part of it. The view swings to whoever's turn it is.
    - **Menu:** the buttons next to your gold save the game, mute the sound and return to the main menu. The game also saves itself at the start of each of your turns, and the turn timer pauses while the tab is in the background.
-3. **Combat.** When a side ends its turn, each of its units automatically attacks one enemy in range - adjacent for most units, up to 2 hexes for Archers - preferring one it can finish off, otherwise the weakest. A unit attacked by several enemies splits its strike-back between the attackers it can reach, so Archers firing from 2 hexes take no damage.
-4. **Terrain matters.** Every map has its own theme and only some of the terrain types below; the Guide panel lists the ones on the current map. Hover any hex to see its effect.
+3. **Your army.**
+
+   | Unit | Cost | Attack | Health | Move | Special |
+   |---|---|---|---|---|---|
+   | Swordsmen | 5 | 2 | 5 | 2 | Cheap all-rounders |
+   | Archers | 10 | 5 | 3 | 1 | Shoot from 2 hexes away (3 from hills) |
+   | Knights | 15 | 3 | 4 | 5 | Fast mounted cavalry |
+   | Pikemen | 12 | 4 | 8 | 3 | Tough; attack 50% harder from a forest |
+   | Rogues | 9 | 3 | 4 | 4 | Sneak attacks: enemies can't strike back at them |
+   | Mages | 12 | 2 | 4 | 2 | Cast spells from 2 hexes away and heal adjacent allies 2 health each turn |
+
+4. **Combat.** When a side ends its turn, each of its units automatically attacks one enemy in range - adjacent for most units, up to 2 hexes for Archers - preferring one it can finish off, otherwise the weakest. A unit attacked by several enemies splits its strike-back between the attackers it can reach, so Archers firing from 2 hexes take no damage.
+5. **Terrain matters.** Every map has its own theme and only some of the terrain types below; the Guide panel lists the ones on the current map. Hover any hex to see its effect.
 
    | Terrain | Effect |
    |---|---|
@@ -110,9 +128,9 @@ The game is organized into modular components for better maintainability:
    | Mountains, Water | Impassable |
 
    A unit can always step onto one neighbouring hex, however rough, even if that takes all of its movement.
-5. **Camps.** Two neutral camps sit between the castles, the same distance from each. Move a unit onto a camp to capture it: from then on you can deploy recruits on and around it as well as next to your castle. The enemy can take it back the same way.
-6. **Economy.** At the end of each of its turns a side earns 5 gold, plus the value of any gold mines (resource hexes) its units stand on. Destroying an enemy unit pays a bounty of half its cost, and damaging the enemy castle plunders gold (1 per 2 damage).
-7. **Win** by moving a unit onto the enemy castle, or by wearing it down. At the end of each of your turns, each of your units within 3 hexes of the enemy castle deals damage equal to its attack power (and the enemy does the same at the end of theirs).
+6. **Camps.** Two neutral camps sit between the castles, the same distance from each. Move a unit onto a camp to capture it: from then on you can deploy recruits on and around it as well as next to your castle. The enemy can take it back the same way.
+7. **Economy.** At the end of each of its turns a side earns 5 gold, plus the value of any gold mines (resource hexes) its units stand on. Destroying an enemy unit pays a bounty of half its cost, and damaging the enemy castle plunders gold (1 per 2 damage).
+8. **Win** by moving a unit onto the enemy castle, or by wearing it down. At the end of each of your turns, each of your units within 3 hexes of the enemy castle deals damage equal to its attack power (and the enemy does the same at the end of theirs).
 
 ## Getting Started
 

@@ -24,12 +24,14 @@ const TROOPS: [UnitType, PlayerType, HexCoordinates][] = [
   ['infantry', 'player', { q: 0, r: 1 }],
   ['artillery', 'player', { q: 1, r: 1 }],
   ['helicopter', 'player', { q: -2, r: 1 }],
+  ['medic', 'player', { q: -1, r: 2 }],
   ['tank', 'ai', { q: 0, r: 0 }],
-  ['infantry', 'ai', { q: 1, r: -1 }],
-  ['artillery', 'ai', { q: -1, r: -1 }]
+  ['rogue', 'ai', { q: 1, r: 0 }],
+  ['artillery', 'ai', { q: -1, r: -1 }],
+  ['helicopter', 'ai', { q: 2, r: -2 }]
 ];
 // Skirmishes that play on a loop: [attacker index, target index] into TROOPS
-const SKIRMISHES: [number, number][] = [[0, 3], [3, 0], [1, 3]];
+const SKIRMISHES: [number, number][] = [[0, 4], [4, 0], [1, 4], [5, 1], [3, 0]];
 // Hexes that must be open ground so the pieces above have somewhere to stand
 const OPEN_HEXES = [...CASTLES.map(([c]) => c), ...CAMPS.map(([c]) => c), ...TROOPS.map(([, , c]) => c)];
 

@@ -1,14 +1,14 @@
 import { createContext, useContext, useEffect, useMemo, useState, ReactNode } from 'react';
 import { loadGltf } from './unitModelCache';
 import { preloadSound } from './SoundPlayer';
+import { ALL_UNIT_MODELS } from './UnitModelSystem';
 
 // Everything the game needs before the board is shown
-const GAME_ASSETS = [
-  { id: 'blue-knight-model', url: '/models/blue-knight.glb', type: 'model' },
-  { id: 'red-knight-model', url: '/models/red-knight.glb', type: 'model' },
+const GAME_ASSETS: { id: string; url: string; type: 'model' | 'audio' }[] = [
+  ...ALL_UNIT_MODELS.map(url => ({ id: url, url, type: 'model' as const })),
   { id: 'hex-hover-sound', url: '/sounds/hover-1.mp3', type: 'audio' },
   { id: 'hex-select-sound', url: '/sounds/select-1.mp3', type: 'audio' }
-] as const;
+];
 
 interface LoadingState {
   // 0..1 across all assets

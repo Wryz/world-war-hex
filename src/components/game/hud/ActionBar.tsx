@@ -44,7 +44,7 @@ export const ActionBar: React.FC<ActionBarProps> = ({
         </div>
       )}
 
-      <div className={`${PANEL_CLASS} pointer-events-auto flex max-w-full items-stretch gap-1 p-1 sm:gap-1.5 sm:p-1.5`}>
+      <div className={`${PANEL_CLASS} pointer-events-auto flex max-w-full flex-wrap items-stretch justify-center gap-1 p-1 sm:flex-nowrap sm:gap-1.5 sm:p-1.5`}>
         {RECRUITABLE.map(type => {
           const info = UNITS[type];
           const canAfford = gold >= info.cost;

@@ -5,8 +5,7 @@ import * as THREE from 'three';
 import { HexCoordinates, Unit } from '@/types/game';
 import {
   ATTACK_INTERVALS,
-  getUnitModelAttributes,
-  getUnitModelPath,
+  getUnitLook,
   getAnimationName,
   AnimationState
 } from './utils/UnitModelSystem';
@@ -24,8 +23,9 @@ const TURN_SPEED = 8; // how quickly units rotate to face their target
 const ANIMATION_FADE_DURATION = 0.3;
 // How far melee units step towards their target on each strike
 const LUNGE_DISTANCE = 0.4;
-// Seconds an arrow takes to reach its target
+// Seconds a bolt or spell takes to reach its target, and the height it is shot from
 const ARROW_FLIGHT_TIME = 0.35;
+const PROJECTILE_HEIGHT = 0.6;
 
 // Small per-unit delay so units in the same battle don't strike in lockstep
 const strikeOffset = (id: string) => {
@@ -91,13 +91,14 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   terrainBadges = [],
   decorative = false
 }) => {
-  const unitModelAttributes = getUnitModelAttributes(unit.type);
-  const modelUrl = getUnitModelPath(unit.owner);
+  const look = getUnitLook(unit.type);
   const ownerColor = OWNER_COLORS[unit.owner];
 
   const rootRef = useRef<THREE.Group>(null);
   const modelRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  // Horse under a mounted unit, galloping while the unit walks
+  const mountRef = useRef<{ mixer: THREE.AnimationMixer; gallop: THREE.AnimationAction } | null>(null);
   const clipsRef = useRef<THREE.AnimationClip[]>([]);
   const actionRef = useRef<THREE.AnimationAction | null>(null);
   const [modelLoaded, setModelLoaded] = useState(false);
@@ -128,7 +129,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     }
   }, [unit.position, computeWalkPath]);
 
-  // Load (a clone of) the model once per model URL
+  // Load (a clone of) the model for this unit type and side
   useEffect(() => {
     const container = modelRef.current;
     if (!container) return;
@@ -136,19 +137,19 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     let cancelled = false;
     let loadedScene: THREE.Group | null = null;
 
-    instantiateUnitModel(modelUrl)
-      .then(({ scene, animations }) => {
+    instantiateUnitModel(unit.type, unit.owner)
+      .then(({ scene, animations, mount }) => {
         if (cancelled) {
           disposeUnitModel(scene);
           return;
         }
         loadedScene = scene;
 
-        scene.scale.setScalar(unitModelAttributes.scale);
-        scene.position.set(0, unitModelAttributes.heightOffset, 0);
+        scene.scale.setScalar(look.scale);
         container.add(scene);
 
         mixerRef.current = new THREE.AnimationMixer(scene);
+        mountRef.current = mount ?? null;
         clipsRef.current = animations;
         setModelLoaded(true);
       })
@@ -159,13 +160,15 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     return () => {
       cancelled = true;
       if (loadedScene) disposeUnitModel(loadedScene, mixerRef.current);
+      mountRef.current?.mixer.stopAllAction();
+      mountRef.current = null;
       mixerRef.current = null;
       actionRef.current = null;
       clipsRef.current = [];
       container.clear();
       setModelLoaded(false);
     };
-  }, [modelUrl, unit.type, unitModelAttributes.scale, unitModelAttributes.heightOffset]);
+  }, [unit.type, unit.owner, look.scale]);
 
   // Cross-fade to an animation clip if it isn't already playing
   const playAnimation = (state: AnimationState) => {
@@ -188,6 +191,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   };
 
   const isRanged = unit.abilities.includes('rangedAttack');
+  const projectile = look.projectile ?? 'arrow';
   const attackInterval = ATTACK_INTERVALS[unit.type];
   const arrowRef = useRef<THREE.Group>(null);
   // When the current battle started (clock time) and which strike was last played
@@ -276,27 +280,30 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
 
         if (strikeNumber !== clock.lastStrike) {
           clock.lastStrike = strikeNumber;
-          if (!isRanged) strike();
-          else playSfx('bowShot', 0.8);
+          strike();
+          if (isRanged) playSfx(projectile === 'magic' ? 'spellCast' : 'bowShot', 0.8);
         }
 
         if (isRanged) {
-          // Arrow flies from the archer to the target in an arc
-          if (sinceStrike < ARROW_FLIGHT_TIME && arrow) {
-            const flight = sinceStrike / ARROW_FLIGHT_TIME;
+          // The bolt (or spell) flies from the shooter to the target in an arc, once the shot is released
+          const flightStart = attackInterval * 0.3;
+          if (sinceStrike >= flightStart && sinceStrike < flightStart + ARROW_FLIGHT_TIME && arrow) {
+            const flight = (sinceStrike - flightStart) / ARROW_FLIGHT_TIME;
+            const arc = projectile === 'magic' ? 0.3 : 0.6;
             const local = arrowOffset.current.copy(targetVector.current).sub(root.position);
             arrow.visible = true;
-            arrow.position.set(local.x * flight, 1 + local.y * flight + Math.sin(flight * Math.PI) * 0.8, local.z * flight);
+            arrow.position.set(local.x * flight, PROJECTILE_HEIGHT + local.y * flight + Math.sin(flight * Math.PI) * arc, local.z * flight);
             const ahead = Math.min(1, flight + 0.05);
             arrow.lookAt(
               root.position.x + local.x * ahead,
-              root.position.y + 1 + local.y * ahead + Math.sin(ahead * Math.PI) * 0.8,
+              root.position.y + PROJECTILE_HEIGHT + local.y * ahead + Math.sin(ahead * Math.PI) * arc,
               root.position.z + local.z * ahead
             );
-          } else if (strikeNumber !== clock.lastImpact) {
+          } else if (sinceStrike >= flightStart + ARROW_FLIGHT_TIME && strikeNumber !== clock.lastImpact) {
             clock.lastImpact = strikeNumber;
-            playSfx('arrowHit', 0.7);
+            playSfx(projectile === 'magic' ? 'spellHit' : 'arrowHit', 0.7);
           }
+          isStriking = progress < 0.6;
         } else {
           // Step in, strike, step back
           isStriking = progress < 0.6;
@@ -335,7 +342,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     }
     if (modelRef.current) {
       // With nothing to face yet, still apply the model's own facing correction
-      modelRef.current.rotation.y = (headingRef.current ?? 0) + unitModelAttributes.rotationOffset;
+      modelRef.current.rotation.y = headingRef.current ?? 0;
     }
 
     // Pick the animation for what the unit is doing right now
@@ -348,6 +355,13 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     else playAnimation('idle');
 
     mixerRef.current?.update(delta);
+
+    // The horse gallops while walking and stands still otherwise
+    const mount = mountRef.current;
+    if (mount) {
+      mount.gallop.timeScale = walkRef.current ? 1.6 : 0;
+      mount.mixer.update(delta);
+    }
   });
 
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
@@ -376,20 +390,32 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       {/* The 3D model is loaded into this group */}
       <group ref={modelRef} visible={modelLoaded} />
 
-      {/* Arrow fired by archers in battle (pointed along +z) */}
-      {isRanged && (
+      {/* Crossbow bolt (pointed along +z) or glowing spell fired by ranged units in battle */}
+      {isRanged && projectile === 'arrow' && (
         <group ref={arrowRef} visible={false}>
           <mesh rotation={[Math.PI / 2, 0, 0]}>
-            <cylinderGeometry args={[0.02, 0.02, 0.6, 5]} />
+            <cylinderGeometry args={[0.015, 0.015, 0.4, 5]} />
             <meshStandardMaterial color="#8d5a3b" />
           </mesh>
-          <mesh position={[0, 0, 0.33]} rotation={[Math.PI / 2, 0, 0]}>
-            <coneGeometry args={[0.05, 0.1, 6]} />
+          <mesh position={[0, 0, 0.22]} rotation={[Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[0.035, 0.08, 6]} />
             <meshStandardMaterial color="#cbd5e1" />
           </mesh>
-          <mesh position={[0, 0, -0.28]} rotation={[Math.PI / 2, 0, 0]}>
-            <coneGeometry args={[0.06, 0.08, 3]} />
+          <mesh position={[0, 0, -0.19]} rotation={[Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[0.045, 0.06, 3]} />
             <meshStandardMaterial color="#f8fafc" />
+          </mesh>
+        </group>
+      )}
+      {isRanged && projectile === 'magic' && (
+        <group ref={arrowRef} visible={false}>
+          <mesh>
+            <icosahedronGeometry args={[0.1, 0]} />
+            <meshStandardMaterial color="#e9d5ff" emissive="#a855f7" emissiveIntensity={1.5} flatShading />
+          </mesh>
+          <mesh position={[0, 0, -0.14]} scale={[0.6, 0.6, 1.6]}>
+            <icosahedronGeometry args={[0.07, 0]} />
+            <meshBasicMaterial color="#c084fc" transparent opacity={0.6} />
           </mesh>
         </group>
       )}
@@ -416,7 +442,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       {/* Compact unit label: type, health and terrain bonuses */}
       {!decorative && (
         <Html
-          position={[0, 1.9, 0]}
+          position={[0, look.labelHeight, 0]}
           center
           zIndexRange={[5, 0]}
           style={{ pointerEvents: 'none' }}

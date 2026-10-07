@@ -2,11 +2,7 @@ import { useRef, useEffect, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { UnitType } from '@/types/game';
-import {
-  getUnitModelAttributes,
-  getUnitModelPath,
-  getAnimationName
-} from './utils/UnitModelSystem';
+import { getUnitLook, getAnimationName } from './utils/UnitModelSystem';
 import { instantiateUnitModel, findAnimationClip, disposeUnitModel } from './utils/unitModelCache';
 
 // How far a hovering (not yet placed) preview floats above the tile
@@ -27,8 +23,7 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
   hexHeight,
   isPlaced = false
 }) => {
-  const unitModelAttributes = getUnitModelAttributes(unitType);
-  const modelUrl = getUnitModelPath('player');
+  const unitModelAttributes = getUnitLook(unitType);
   const animationState = isPlaced ? 'holdShield' : 'idle';
 
   const [x, y, z] = position;
@@ -40,11 +35,12 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
   const hoverRef = useRef<THREE.Group>(null);
   const indicatorRef = useRef<THREE.Mesh>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const mountMixerRef = useRef<THREE.AnimationMixer | null>(null);
   const clipsRef = useRef<THREE.AnimationClip[]>([]);
   const actionRef = useRef<THREE.AnimationAction | null>(null);
   const [modelLoaded, setModelLoaded] = useState(false);
 
-  // Load (a clone of) the model once per model URL
+  // Load (a clone of) the model for this unit type
   useEffect(() => {
     const container = modelRef.current;
     if (!container) return;
@@ -52,8 +48,8 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
     let cancelled = false;
     let loadedScene: THREE.Group | null = null;
 
-    instantiateUnitModel(modelUrl)
-      .then(({ scene, animations }) => {
+    instantiateUnitModel(unitType, 'player')
+      .then(({ scene, animations, mount }) => {
         if (cancelled) {
           disposeUnitModel(scene);
           return;
@@ -61,8 +57,12 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
         loadedScene = scene;
 
         scene.scale.setScalar(unitModelAttributes.scale);
-        scene.position.set(0, unitModelAttributes.heightOffset, 0);
         container.add(scene);
+        if (mount) {
+          // The horse stands still in the barracks
+          mount.gallop.timeScale = 0;
+          mountMixerRef.current = mount.mixer;
+        }
 
         mixerRef.current = new THREE.AnimationMixer(scene);
         clipsRef.current = animations;
@@ -75,13 +75,15 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
     return () => {
       cancelled = true;
       if (loadedScene) disposeUnitModel(loadedScene, mixerRef.current);
+      mountMixerRef.current?.stopAllAction();
+      mountMixerRef.current = null;
       mixerRef.current = null;
       actionRef.current = null;
       clipsRef.current = [];
       container.clear();
       setModelLoaded(false);
     };
-  }, [modelUrl, unitType, unitModelAttributes.scale, unitModelAttributes.heightOffset]);
+  }, [unitType, unitModelAttributes.scale]);
 
   // Cross-fade to the animation for the current state
   useEffect(() => {
@@ -102,6 +104,7 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
   // Animate indicator effects
   useFrame((state, delta) => {
     mixerRef.current?.update(delta);
+    mountMixerRef.current?.update(delta);
     const time = state.clock.getElapsedTime();
 
     if (indicatorRef.current) {
@@ -136,7 +139,7 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
         {/* The model is loaded into this group */}
         <group
           ref={modelRef}
-          rotation={[0, facing + unitModelAttributes.rotationOffset, 0]}
+          rotation={[0, facing, 0]}
           visible={modelLoaded}
         />
       </group>

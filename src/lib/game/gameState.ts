@@ -69,11 +69,20 @@ export const UNITS: Record<UnitType, Omit<Unit, 'id' | 'owner' | 'position' | 'h
   medic: {
     type: 'medic',
     movementRange: 2,
-    attackPower: 1,
+    attackPower: 2,
     lifespan: 4,
     maxLifespan: 4,
-    cost: 8,
-    abilities: ['healing']
+    cost: 12,
+    abilities: ['rangedAttack', 'healing']
+  },
+  rogue: {
+    type: 'rogue',
+    movementRange: 4,
+    attackPower: 3,
+    lifespan: 4,
+    maxLifespan: 4,
+    cost: 9,
+    abilities: ['stealth']
   }
 };
 
@@ -90,7 +99,8 @@ export const UNIT_NAMES: Record<UnitType, string> = {
   tank: 'Pikemen',
   artillery: 'Archers',
   helicopter: 'Knights',
-  medic: 'Siege Engineers'
+  medic: 'Mages',
+  rogue: 'Rogues'
 };
 
 export interface TerrainEffect {
@@ -184,6 +194,8 @@ export const RANGED_ATTACK_RANGE = 2;
 export const KILL_BOUNTY_FRACTION = 0.5;
 // Gold plundered per point of siege damage dealt to an enemy castle
 export const SIEGE_PLUNDER_PER_DAMAGE = 0.5;
+// Health a unit with the healing ability (Mages) restores to each adjacent ally at the end of its side's turn
+export const HEALER_HEAL_AMOUNT = 2;
 
 // Initialize a new game state
 export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS): GameState => {
@@ -990,19 +1002,36 @@ const finishTurn = (state: GameState): GameState => {
     pendingPurchases: []
   };
 
-  // The side that just played recovers health at healing springs
-  let healed = 0;
+  // The side that just played recovers health at healing springs and next to its Mages
+  const healers = newState.players[activePlayer].units.filter(unit => unit.abilities.includes('healing'));
+  let healedAtSprings = 0;
+  let healedByMages = 0;
   for (const side of ['player', 'ai'] as const) {
     newState.players[side].units = newState.players[side].units.map(unit => {
-      const heal = side === activePlayer ? TERRAIN_EFFECTS[terrainUnder(newState, unit)].healPerTurn ?? 0 : 0;
-      const lifespan = Math.min(unit.maxLifespan, unit.lifespan + heal);
-      healed += lifespan - unit.lifespan;
+      let lifespan = unit.lifespan;
+      if (side === activePlayer) {
+        const springHeal = TERRAIN_EFFECTS[terrainUnder(newState, unit)].healPerTurn ?? 0;
+        const springed = Math.min(unit.maxLifespan, lifespan + springHeal);
+        healedAtSprings += springed - lifespan;
+        lifespan = springed;
+
+        const mageHeal = HEALER_HEAL_AMOUNT * healers.filter(healer =>
+          healer.id !== unit.id && getHexDistance(healer.position, unit.position) === 1
+        ).length;
+        const mended = Math.min(unit.maxLifespan, lifespan + mageHeal);
+        healedByMages += mended - lifespan;
+        lifespan = mended;
+      }
       return { ...unit, lifespan, hasMoved: false, isEngagedInCombat: false };
     });
   }
   syncHexUnits(newState);
-  if (healed > 0) {
-    addLog(newState, activePlayer, `${activePlayer === 'player' ? 'Your' : 'Enemy'} troops recover ${healed} health at the springs.`);
+  const sideTroops = activePlayer === 'player' ? 'Your' : 'Enemy';
+  if (healedAtSprings > 0) {
+    addLog(newState, activePlayer, `${sideTroops} troops recover ${healedAtSprings} health at the springs.`);
+  }
+  if (healedByMages > 0) {
+    addLog(newState, activePlayer, `${sideTroops} Mages heal ${healedByMages} health.`);
   }
 
   processDamageToBase(newState, activePlayer);
@@ -1137,9 +1166,11 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
 
   const defenders = describe(combat.defenders.map(getLiveUnit).filter((u): u is Unit => !!u));
   const attackers = describe(combat.attackers.map(getLiveUnit).filter((u): u is Unit => !!u)).map(entry => {
-    // Defenders can only strike back at attackers within their own reach
-    const canBeHitBack = defenders.some(d => isInAttackRange(state, d.unit, entry.unit));
-    if (!canBeHitBack) entry.modifiers.push('out of reach - takes no damage');
+    // Defenders can only strike back at attackers within their own reach, and never at a sneak attack
+    const isSneakAttack = entry.unit.abilities.includes('stealth');
+    const canBeHitBack = !isSneakAttack && defenders.some(d => isInAttackRange(state, d.unit, entry.unit));
+    if (isSneakAttack) entry.modifiers.push('sneak attack - takes no damage');
+    else if (!canBeHitBack) entry.modifiers.push('out of reach - takes no damage');
     return { ...entry, canBeHitBack };
   });
   const attackerPower = attackers.reduce((sum, a) => sum + a.power, 0);

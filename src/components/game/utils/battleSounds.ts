@@ -3,7 +3,7 @@
 
 import { isMuted } from './SoundPlayer';
 
-export type BattleSound = 'swordClash' | 'swordHit' | 'bowShot' | 'arrowHit' | 'unitFalls' | 'bounty' | 'blocked';
+export type BattleSound = 'swordClash' | 'swordHit' | 'bowShot' | 'arrowHit' | 'spellCast' | 'spellHit' | 'unitFalls' | 'bounty' | 'blocked';
 
 // ZzFX parameters: volume, randomness, frequency, attack, sustain, release, shape, shapeCurve,
 // slide, deltaSlide, pitchJump, pitchJumpTime, repeatTime, noise, modulation, bitCrush, delay,
@@ -17,6 +17,10 @@ const PRESETS: Record<BattleSound, (number | undefined)[]> = {
   bowShot: [0.4, 0.05, 420, 0, 0.01, 0.16, 2, 1.5, -12, 0, 0, 0, 0, 0, 0, 0, 0, 0.7, 0.02],
   // Arrow thunking into its target
   arrowHit: [0.4, 0.1, 220, 0, 0, 0.08, 4, 1, -20, 0, 0, 0, 0, 3],
+  // Rising shimmer as a Mage releases a spell
+  spellCast: [0.35, 0.05, 520, 0.02, 0.08, 0.2, 0, 1.8, 12, 0, 0, 0, 0.05, 0, 5, 0, 0, 0.7, 0.04],
+  // Sparkling burst where the spell lands
+  spellHit: [0.35, 0.1, 900, 0, 0.03, 0.25, 1, 1.5, -4, 0, 300, 0.04, 0, 0.3, 0, 0, 0, 0.6, 0.05],
   // Low falling groan when a unit is destroyed
   unitFalls: [0.45, 0.05, 180, 0, 0.05, 0.4, 2, 1, -10, 0, 0, 0, 0, 0.2, 0, 0, 0, 0.5, 0.1],
   // Coin chime for a bounty
