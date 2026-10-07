@@ -40,9 +40,12 @@ const CAMERA_ELEVATION = THREE.MathUtils.degToRad(68);
 const CAMERA_FOV = 45;
 // How much of the board's radius the camera frames, beyond the outermost hexes, at zoom 1
 const BOARD_VIEW_MARGIN = 1.11;
-// Look slightly towards the viewing side's castle so it stays clear of the bottom HUD
-// (as a fraction of the framed radius)
-const CAMERA_TARGET_OFFSET = 0.36;
+// In the default view the near edge of the board (behind the viewing side's castle) sits this many
+// pixels above the bottom of the screen: just clear of the action bar once the battle has started
+const BOARD_NEAR_EDGE_MARGIN_SETUP = 28;
+const BOARD_NEAR_EDGE_MARGIN_BATTLE = 125;
+// Room left above the board's far edge for the top HUD when the whole board fits on screen
+const BOARD_FAR_EDGE_MARGIN = 90;
 const CAMERA_TURN_SPEED = 2.2;
 // Zoom levels as a fraction of the distance at which the whole board fits on screen
 const CAMERA_DEFAULT_ZOOM = 0.8;
@@ -101,6 +104,10 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
 // Memoised so HUD updates (like the turn timer) don't re-render the 3D scene
 export const GameBoard = memo(GameBoardComponent);
 
+// Camera distance at which a circle of `radius` fits the screen, scaled by the zoom level
+const getViewDistance = (radius: number, tanHalfFov: number, aspect: number, zoom: number) =>
+  Math.max(radius / tanHalfFov, radius / (tanHalfFov * aspect)) * zoom;
+
 // Smallest signed difference between two angles
 const angleDelta = (from: number, to: number) => {
   let delta = (to - from) % (Math.PI * 2);
@@ -134,24 +141,48 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   const viewRadiusRef = useRef(viewRadius);
   viewRadiusRef.current = viewRadius;
 
-  const targetAzimuth = useMemo(() => {
+  // Camera sits on the viewing side's castle side of the board, looking across it.
+  // Also returns how far the board's near edge (behind that castle) is from the centre.
+  const { targetAzimuth, nearEdgeDistance } = useMemo(() => {
     const base = findBaseHex(gameState, viewSide);
-    if (!base) return 0;
+    // Before castles are placed, look from the south edge
+    if (!base) return { targetAzimuth: 0, nearEdgeDistance: gridSize * 1.5 + HEX_SIZE };
     const [x, , z] = axialToWorld(base.coordinates);
-    // Camera sits on the castle's side of the board, looking across it
-    return Math.atan2(x, z);
+    return { targetAzimuth: Math.atan2(x, z), nearEdgeDistance: Math.hypot(x, z) + HEX_SIZE };
     // Only depends on where the bases are, not on the rest of the state
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState.players.player.baseLocation, gameState.players.ai.baseLocation, viewSide]);
+  }, [gameState.players.player.baseLocation, gameState.players.ai.baseLocation, viewSide, gridSize]);
 
-  // Default overview: look across the board from just in front of the active side's castle
-  const defaultLookAt = useMemo(
-    () => {
-      const offset = viewRadius * CAMERA_TARGET_OFFSET;
-      return new THREE.Vector3(Math.sin(targetAzimuth) * offset, 0, Math.cos(targetAzimuth) * offset);
-    },
-    [targetAzimuth, viewRadius]
-  );
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
+  const nearEdgeMargin = gameState.currentPhase === 'setup' ? BOARD_NEAR_EDGE_MARGIN_SETUP : BOARD_NEAR_EDGE_MARGIN_BATTLE;
+
+  // Default overview: aim the camera so the near edge of the board lands just above the bottom HUD,
+  // whatever the shape of the screen, leaving as much room as possible for the rest of the board.
+  // On tall screens where the whole board fits, centre it between the top and bottom HUD instead.
+  const getDefaultLookAt = useCallback(() => {
+    const perspective = camera as THREE.PerspectiveCamera;
+    const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(perspective.fov / 2));
+    const { width, height } = sizeRef.current;
+    const aspect = width / Math.max(height, 1);
+    const distance = getViewDistance(viewRadius, tanHalfFov, aspect, CAMERA_DEFAULT_ZOOM);
+    const sin = Math.sin(CAMERA_ELEVATION);
+    const cos = Math.cos(CAMERA_ELEVATION);
+    // How far in front of the look-at point (towards the camera) a ground point appears at a given
+    // screen height, in normalised device coordinates (-1 is the bottom of the screen, 1 the top)
+    const groundDistanceAt = (screenY: number) =>
+      screenY * tanHalfFov * distance / (screenY * tanHalfFov * cos - sin);
+    const bottomY = Math.min(0, -1 + (2 * nearEdgeMargin) / Math.max(height, 1));
+    const topY = Math.max(0, 1 - (2 * BOARD_FAR_EDGE_MARGIN) / Math.max(height, 1));
+    // Offsets that put the near edge at the bottom target, or the far edge at the top target
+    const nearPinned = nearEdgeDistance - groundDistanceAt(bottomY);
+    const farPinned = -groundDistanceAt(topY) - nearEdgeDistance;
+    // Looking at a point nearer the camera moves the board up the screen, so if pinning the far edge
+    // needs a nearer look-at point than pinning the near edge, the whole board fits: centre it
+    const offset = farPinned > nearPinned ? (nearPinned + farPinned) / 2 : nearPinned;
+    return new THREE.Vector3(Math.sin(targetAzimuth) * offset, 0, Math.cos(targetAzimuth) * offset);
+  }, [camera, viewRadius, nearEdgeDistance, targetAzimuth, nearEdgeMargin]);
+  const defaultLookAt = useMemo(() => getDefaultLookAt(), [getDefaultLookAt]);
 
   // New turn (or castles placed): swing to the active side's default view
   useEffect(() => {
@@ -274,12 +305,9 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
 
     // Distance at which the whole board fits on screen, scaled by the zoom level
     const perspective = camera as THREE.PerspectiveCamera;
-    const halfFov = THREE.MathUtils.degToRad(perspective.fov / 2);
+    const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(perspective.fov / 2));
     const aspect = size.width / Math.max(size.height, 1);
-    const distance = Math.max(
-      viewRadius / Math.tan(halfFov),
-      viewRadius / (Math.tan(halfFov) * aspect)
-    ) * zoomRef.current;
+    const distance = getViewDistance(viewRadius, tanHalfFov, aspect, zoomRef.current);
 
     const lookAt = lookAtRef.current;
     const horizontal = distance * Math.cos(elevation);
