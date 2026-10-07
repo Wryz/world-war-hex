@@ -43,10 +43,9 @@ const CAMERA_TARGET_OFFSET = 6;
 const CAMERA_TURN_SPEED = 2.2;
 // Zoom levels as a fraction of the distance at which the whole board fits on screen
 const CAMERA_DEFAULT_ZOOM = 0.8;
-const CAMERA_FOCUS_ZOOM = 0.55;
 const CAMERA_MIN_ZOOM = 0.35;
 const CAMERA_MAX_ZOOM = 1.1;
-// How quickly the camera follows zoom and focus changes, and how strongly the wheel zooms
+// How quickly the camera follows zoom and turn changes, and how strongly the wheel zooms
 const CAMERA_ZOOM_SPEED = 6;
 const CAMERA_WHEEL_SPEED = 0.0015;
 // Furthest the view can be panned from the centre of the board (world units)
@@ -69,16 +68,6 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
   // Use loading state from the parent provider
   const { isComplete: assetsLoaded } = useLoadingManager();
 
-  // Zoom in on the player's selected unit while they plan its move
-  const { selectedUnit, gameState } = props;
-  const focusQ = selectedUnit?.position.q;
-  const focusR = selectedUnit?.position.r;
-  const isFocusing = selectedUnit?.owner === 'player' && gameState.currentPhase === 'planning' && !props.isAITurn;
-  const cameraFocus = useMemo<[number, number] | null>(() => {
-    if (!isFocusing || focusQ === undefined || focusR === undefined) return null;
-    const [x, , z] = axialToWorld({ q: focusQ, r: focusR });
-    return [x, z];
-  }, [isFocusing, focusQ, focusR]);
 
   return (
     // Bright sky gradient behind the floating battlefield
@@ -90,7 +79,7 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
           <BoardScene {...props} assetsLoaded={assetsLoaded} />
 
           <PerspectiveCamera makeDefault fov={CAMERA_FOV} near={0.1} far={3000} position={[0, 35, 14]} />
-          <CameraRig gameState={props.gameState} focus={cameraFocus} />
+          <CameraRig gameState={props.gameState} />
         </Suspense>
       </Canvas>
     </div>
@@ -108,20 +97,18 @@ const angleDelta = (from: number, to: number) => {
   return delta;
 };
 
-// Fixed camera that looks down on the board from behind the castle of the side whose turn it is,
-// swinging smoothly around the board when the turn changes. The player can't move it.
-const CameraRig: React.FC<{ gameState: GameState; focus: [number, number] | null }> = ({ gameState, focus }) => {
+// Camera that looks down on the board from behind the castle of the side whose turn it is,
+// swinging smoothly around the board when the turn changes. Players can zoom but not rotate it.
+const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   const { camera, size, gl } = useThree();
   const azimuthRef = useRef<number | null>(null);
 
   // Where the camera looks and how far it is pulled back (1 = whole board fits); smoothed every frame
   const lookAtRef = useRef<THREE.Vector3 | null>(null);
   const zoomRef = useRef(CAMERA_DEFAULT_ZOOM);
-  // Where the player (or a selection / turn change) wants the camera to go
+  // Where the player (or a turn change) wants the camera to go
   const desiredLookAtRef = useRef<THREE.Vector3 | null>(null);
   const desiredZoomRef = useRef(CAMERA_DEFAULT_ZOOM);
-  // View to return to after a unit is deselected
-  const savedViewRef = useRef<{ lookAt: THREE.Vector3; zoom: number } | null>(null);
 
   const viewSide: PlayerType = gameState.currentPhase === 'setup' ? 'player' : getActivePlayer(gameState);
 
@@ -145,23 +132,7 @@ const CameraRig: React.FC<{ gameState: GameState; focus: [number, number] | null
   useEffect(() => {
     desiredLookAtRef.current = defaultLookAt.clone();
     desiredZoomRef.current = CAMERA_DEFAULT_ZOOM;
-    savedViewRef.current = null;
   }, [defaultLookAt]);
-
-  // Selecting a unit eases in on it; deselecting returns to the previous view
-  useEffect(() => {
-    if (focus) {
-      if (!savedViewRef.current && desiredLookAtRef.current) {
-        savedViewRef.current = { lookAt: desiredLookAtRef.current.clone(), zoom: desiredZoomRef.current };
-      }
-      desiredLookAtRef.current = new THREE.Vector3(focus[0], 0, focus[1]);
-      desiredZoomRef.current = Math.min(desiredZoomRef.current, CAMERA_FOCUS_ZOOM);
-    } else if (savedViewRef.current) {
-      desiredLookAtRef.current = savedViewRef.current.lookAt;
-      desiredZoomRef.current = savedViewRef.current.zoom;
-      savedViewRef.current = null;
-    }
-  }, [focus]);
 
   // Mouse wheel / trackpad pinch zooms towards whatever is under the cursor
   useEffect(() => {
@@ -199,8 +170,6 @@ const CameraRig: React.FC<{ gameState: GameState; focus: [number, number] | null
         if (horizontal > CAMERA_MAX_PAN) desiredLookAt.multiplyScalar(CAMERA_MAX_PAN / horizontal);
       }
       desiredZoomRef.current = nextZoom;
-      // Manual zoom replaces the "return after deselecting" view
-      savedViewRef.current = null;
     };
 
     element.addEventListener('wheel', onWheel, { passive: false });

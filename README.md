@@ -86,7 +86,7 @@ The game is organized into modular components for better maintainability:
 1. **Place your castle.** Click a highlighted hex on the edge of the map, then click it again to confirm. The enemy castle is placed on the far side of the map.
 2. **Take turns.** You and the enemy alternate turns. You have 60 seconds to plan, then press **End Turn** (or let the timer run out).
    - **Recruit:** pick a unit in the Barracks, click a highlighted hex next to your castle, then click it again to deploy. Units appear at the end of your turn and can move from your next turn. Click a queued unit to cancel it and get your gold back.
-   - **Move:** click one of your units (the camera zooms in on it), then a highlighted hex - the route is drawn as you hover. Click a planned destination to cancel the move. Units walk there when the turn ends.
+   - **Move:** click one of your units, then a highlighted hex - the route is drawn as you hover. If a hex is out of reach or impassable you get a short warning and the unit stays selected. Click a planned destination to cancel the move. Units walk there when the turn ends.
    - **Camera:** scroll or pinch to zoom in and out on any part of the map. The view swings to whoever's turn it is.
 3. **Combat.** When a side ends its turn, its units automatically attack every enemy in range - adjacent for most units, up to 2 hexes for Archers. Defenders strike back only at attackers they can reach, so Archers firing from 2 hexes take no damage.
 4. **Terrain matters.** Forests give cover (units there take 40% less damage, and Pikemen attack 50% harder from them), desert costs 2 movement to cross, gold mines pay out every round, and water and mountains are impassable. Hover any hex to see its effect.

@@ -1,7 +1,7 @@
 // Battle sound effects synthesised with ZzFX (https://github.com/KilledByAPixel/ZzFX, MIT).
 // ZzFX generates each sound from a list of parameters, so no audio files are needed.
 
-export type BattleSound = 'swordClash' | 'swordHit' | 'bowShot' | 'arrowHit' | 'unitFalls' | 'bounty';
+export type BattleSound = 'swordClash' | 'swordHit' | 'bowShot' | 'arrowHit' | 'unitFalls' | 'bounty' | 'blocked';
 
 // ZzFX parameters: volume, randomness, frequency, attack, sustain, release, shape, shapeCurve,
 // slide, deltaSlide, pitchJump, pitchJumpTime, repeatTime, noise, modulation, bitCrush, delay,
@@ -18,7 +18,9 @@ const PRESETS: Record<BattleSound, (number | undefined)[]> = {
   // Low falling groan when a unit is destroyed
   unitFalls: [0.45, 0.05, 180, 0, 0.05, 0.4, 2, 1, -10, 0, 0, 0, 0, 0.2, 0, 0, 0, 0.5, 0.1],
   // Coin chime for a bounty
-  bounty: [0.35, 0.05, 1200, 0, 0.03, 0.15, 1, 1.5, 0, 0, 600, 0.05]
+  bounty: [0.35, 0.05, 1200, 0, 0.03, 0.15, 1, 1.5, 0, 0, 600, 0.05],
+  // Short low buzz when an action isn't allowed
+  blocked: [0.3, 0.02, 150, 0, 0.02, 0.08, 2, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0.5]
 };
 
 // Don't play the same sound more often than this, so big battles don't turn into noise

@@ -15,6 +15,7 @@ import { EventFeed } from './hud/EventFeed';
 import { HelpPanel } from './hud/HelpPanel';
 import { TurnBanner } from './hud/TurnBanner';
 import { getUnitTypeName } from './utils/UnitHelpers';
+import { WarningIcon } from './icons';
 
 interface GameControllerProps {
   initialDifficulty?: 'easy' | 'medium' | 'hard';
@@ -54,10 +55,11 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
     handleContinueGame,
     handleRestart,
     handleUnitTypeSelect,
-    handleCancelSelection
+    handleCancelSelection,
+    notice
   } = useGameHandlers();
 
-  const [toast, setToast] = useState<string | null>(null);
+  const [toast, setToast] = useState<{ id: number; text: string; isWarning?: boolean } | null>(null);
 
   // Stable handlers so the memoised 3D board doesn't re-render on every timer tick
   const onBoardHexClick = useStableCallback(handleHexClick);
@@ -83,15 +85,20 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [handleCancelSelection]);
 
+  // Warnings from the game (e.g. picking a hex a unit can't reach) appear as a brief toast
+  useEffect(() => {
+    if (notice) setToast({ id: notice.id, text: notice.text, isWarning: true });
+  }, [notice]);
+
   useEffect(() => {
     if (!toast) return;
-    const timeout = setTimeout(() => setToast(null), 2000);
+    const timeout = setTimeout(() => setToast(null), toast.isWarning ? 1800 : 2000);
     return () => clearTimeout(timeout);
   }, [toast]);
 
   const handleSave = () => {
     const saved = saveGameToLocalStorage(gameState, { selectedHex, isAITurn, timer, difficulty });
-    setToast(saved ? 'Game saved' : 'Could not save the game');
+    setToast({ id: Date.now(), text: saved ? 'Game saved' : 'Could not save the game' });
   };
 
   const { currentPhase } = gameState;
@@ -174,7 +181,15 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
 
       {toast && (
         <div className="fixed top-20 inset-x-0 z-40 flex justify-center pointer-events-none">
-          <div className="rounded-full bg-slate-900/90 px-4 py-2 text-sm font-semibold text-slate-100 shadow-lg">{toast}</div>
+          <div
+            key={toast.id}
+            className={`animate-fadeIn flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold shadow-lg ${
+              toast.isWarning ? 'bg-amber-500/95 text-slate-900' : 'bg-slate-900/90 text-slate-100'
+            }`}
+          >
+            {toast.isWarning && <WarningIcon />}
+            {toast.text}
+          </div>
         </div>
       )}
     </div>

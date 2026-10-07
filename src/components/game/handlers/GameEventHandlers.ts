@@ -19,16 +19,36 @@ import {
   getValidBaseLocations,
   getValidMoveTargets,
   placeBases,
+  TERRAIN_EFFECTS,
   resolveCombat,
   DEFAULT_SETTINGS
 } from '@/lib/game/gameState';
 import { planAITurn } from '@/lib/ai/aiPlayer';
+import { playBattleSound } from '../utils/battleSounds';
+import { getUnitTypeName } from '../utils/UnitHelpers';
 import {
   loadGameFromLocalStorage,
   clearSavedGame
 } from '../storage/GameStorage';
 
 type Difficulty = 'easy' | 'medium' | 'hard';
+
+// Why a selected unit can't move to a hex, in words the player can act on
+const describeInvalidMove = (state: GameState, unit: Unit, hex: Hex): string => {
+  const name = getUnitTypeName(unit.type);
+  if (unit.hasMoved) return `${name} just arrived and can't move until next turn`;
+  if (coordsEqual(unit.position, hex.coordinates)) return `${name} is already here`;
+  if (TERRAIN_EFFECTS[hex.terrain].moveCost === null) {
+    return `${name} can't cross ${TERRAIN_EFFECTS[hex.terrain].name.toLowerCase()} - pick another hex`;
+  }
+  if (hex.unit) return 'An enemy holds that hex - move next to it to attack';
+  if (hex.isBase && hex.owner === 'player') return "Units can't stand on your own castle";
+  const isClaimed =
+    state.pendingMoves.some(m => m.unitId !== unit.id && coordsEqual(m.to, hex.coordinates)) ||
+    state.pendingPurchases.some(p => coordsEqual(p.position, hex.coordinates));
+  if (isClaimed) return 'Another unit is already heading there';
+  return `Out of reach - ${name} can move ${unit.movementRange} this turn`;
+};
 
 // Delays that make the AI look like it's "thinking"
 const AI_PLANNING_DELAY = 1500;
@@ -50,6 +70,13 @@ export const useGameHandlers = () => {
   const [selectedUnitTypeForPurchase, setSelectedUnitTypeForPurchase] = useState<UnitType | null>(null);
   const [validMoves, setValidMoves] = useState<HexCoordinates[]>([]);
   const [timer, setTimer] = useState(DEFAULT_SETTINGS.planningPhaseTime);
+  // Short warning shown to the player, e.g. when they pick a hex a unit can't move to
+  const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
+
+  const showNotice = useCallback((text: string) => {
+    setNotice(current => ({ id: (current?.id ?? 0) + 1, text }));
+    playBattleSound('blocked', 0.6);
+  }, []);
 
   // Always points at the latest game state so timers and async callbacks never act on stale state
   const stateRef = useRef(gameState);
@@ -246,9 +273,8 @@ export const useGameHandlers = () => {
       }
 
       case 'planning': {
-        setSelectedHex(hex);
-
         if (isAITurn) {
+          setSelectedHex(hex);
           // Don't allow player actions during AI turn
           setSelectedUnit(null);
           setValidMoves([]);
@@ -260,6 +286,7 @@ export const useGameHandlers = () => {
         // Placing a unit from the barracks: the board shows a preview and asks for a
         // second click to confirm, so here we only keep or cancel placement mode
         if (selectedUnitTypeForPurchase) {
+          setSelectedHex(hex);
           const isDeployable = validMoves.some(c => coordsEqual(c, hex.coordinates));
           if (!isDeployable) {
             setSelectedUnitTypeForPurchase(null);
@@ -271,10 +298,20 @@ export const useGameHandlers = () => {
         // Move the selected unit to a valid destination
         if (selectedUnit && validMoves.some(c => coordsEqual(c, hex.coordinates))) {
           commitState(addPendingMove(current, selectedUnit.id, playerId, hex.coordinates));
+          setSelectedHex(hex);
           setSelectedUnit(null);
           setValidMoves([]);
           return;
         }
+
+        // A unit is selected but this isn't somewhere it can go: explain why and keep it selected
+        // so the player can pick another hex (clicking another of their units still switches to it)
+        if (selectedUnit && !(hex.unit && hex.unit.owner === 'player')) {
+          showNotice(describeInvalidMove(current, selectedUnit, hex));
+          return;
+        }
+
+        setSelectedHex(hex);
 
         // Clicking a queued purchase cancels it and refunds the gold
         const pendingPurchaseHere = current.pendingPurchases.find(
@@ -365,6 +402,7 @@ export const useGameHandlers = () => {
     handleContinueGame,
     handleRestart,
     handleReturnToIntro,
-    handleCancelSelection: clearSelection
+    handleCancelSelection: clearSelection,
+    notice
   };
 };
