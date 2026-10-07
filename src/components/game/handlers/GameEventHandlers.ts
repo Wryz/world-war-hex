@@ -22,10 +22,7 @@ import {
   resolveCombat,
   DEFAULT_SETTINGS
 } from '@/lib/game/gameState';
-import {
-  planAITurn,
-  decideAICombatStrategy
-} from '@/lib/ai/aiPlayer';
+import { planAITurn } from '@/lib/ai/aiPlayer';
 import {
   loadGameFromLocalStorage,
   clearSavedGame
@@ -36,7 +33,8 @@ type Difficulty = 'easy' | 'medium' | 'hard';
 // Delays that make the AI look like it's "thinking"
 const AI_PLANNING_DELAY = 1500;
 const AI_EXECUTION_DELAY = 1000;
-const AI_COMBAT_DECISION_DELAY = 1000;
+// Pause before each battle is fought so the player can see what's happening
+const BATTLE_DELAY = 900;
 
 const createNewGame = (difficulty: Difficulty) =>
   initializeGameState({ ...DEFAULT_SETTINGS, aiDifficulty: difficulty });
@@ -131,23 +129,18 @@ export const useGameHandlers = () => {
     };
   }, [currentPhase, isAITurn, turnNumber, commitState]);
 
-  // Combat resolution for AI - when the AI is defending it decides whether to fight or retreat
+  // Battles fight themselves out one at a time - units in range always fight
   useEffect(() => {
     if (currentPhase !== 'combat') return;
 
     const unresolvedCombatIndex = gameState.combats.findIndex(c => !c.resolved);
     if (unresolvedCombatIndex === -1) return;
 
-    const combat = gameState.combats[unresolvedCombatIndex];
-    if (!combat.defenders.some(unit => unit.owner === 'ai')) return;
+    const battleDelay = setTimeout(() => {
+      commitState(resolveCombat(stateRef.current, unresolvedCombatIndex));
+    }, BATTLE_DELAY);
 
-    const aiDelay = setTimeout(() => {
-      const current = stateRef.current;
-      const shouldRetreat = decideAICombatStrategy(current, unresolvedCombatIndex);
-      commitState(resolveCombat(current, unresolvedCombatIndex, shouldRetreat));
-    }, AI_COMBAT_DECISION_DELAY);
-
-    return () => clearTimeout(aiDelay);
+    return () => clearTimeout(battleDelay);
   }, [currentPhase, gameState.combats, commitState]);
 
   // Continue saved game. Returns false if there is no saved game to continue.
@@ -349,11 +342,6 @@ export const useGameHandlers = () => {
     executeAllMoves();
   };
 
-  // Handle the player's combat decision
-  const handleCombatResolve = (combatIndex: number, retreat: boolean) => {
-    commitState(resolveCombat(stateRef.current, combatIndex, retreat));
-  };
-
   return {
     // State
     gameState,
@@ -373,7 +361,6 @@ export const useGameHandlers = () => {
     handleUnitPurchase,
     handleUnitTypeSelect,
     handleEndTurn,
-    handleCombatResolve,
     handleStartGame,
     handleContinueGame,
     handleRestart,

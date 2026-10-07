@@ -35,7 +35,7 @@ The game is organized into modular components for better maintainability:
 ### Combat System
 
 - `src/components/game/combat/`
-  - `CombatResolver`: Shows the current battle with terrain modifiers and the expected outcome
+  - `CombatResolver`: Shows the battle being fought, with each unit's damage and any kill bounty
 
 ### UI Components
 
@@ -85,10 +85,11 @@ The game is organized into modular components for better maintainability:
 1. **Place your castle.** Click a highlighted hex on the edge of the map, then click it again to confirm. The enemy castle is placed on the far side of the map.
 2. **Take turns.** You and the enemy alternate turns. You have 60 seconds to plan, then press **End Turn** (or let the timer run out).
    - **Recruit:** pick a unit in the Barracks, click a highlighted hex next to your castle, then click it again to deploy. Units appear at the end of your turn and can move from your next turn. Click a queued unit to cancel it and get your gold back.
-   - **Move:** click one of your units, then a highlighted hex - the route is drawn as you hover. Click a planned destination to cancel the move. Units walk there when the turn ends.
-3. **Combat.** After a side moves, each of its units attacks every adjacent enemy unit. When you're attacked you choose to **Fight** or **Retreat**.
+   - **Move:** click one of your units (the camera zooms in on it), then a highlighted hex - the route is drawn as you hover. Click a planned destination to cancel the move. Units walk there when the turn ends.
+   - **Camera:** scroll or pinch to zoom in and out on any part of the map. The view swings to whoever's turn it is.
+3. **Combat.** When a side ends its turn, its units automatically attack every enemy in range - adjacent for most units, up to 2 hexes for Archers. Defenders strike back only at attackers they can reach, so Archers firing from 2 hexes take no damage.
 4. **Terrain matters.** Forests give cover (units there take 40% less damage, and Pikemen attack 50% harder from them), desert costs 2 movement to cross, gold mines pay out every round, and water and mountains are impassable. Hover any hex to see its effect.
-5. **Economy.** At the end of every round both sides earn 5 gold, plus the value of any gold mines (resource hexes) their units stand on.
+5. **Economy.** At the end of every round both sides earn 5 gold, plus the value of any gold mines (resource hexes) their units stand on. Destroying an enemy unit pays a bounty of half its cost, and damaging the enemy castle plunders gold (1 per 2 damage).
 6. **Win** by moving a unit onto the enemy castle, or by wearing it down. At the end of every round each unit within 3 hexes of an enemy castle deals damage equal to its attack power.
 
 ## Getting Started

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { PANEL_CLASS } from './styles';
+import { ChevronIcon } from '../icons';
 
 interface CollapsiblePanelProps {
   // Used to remember whether the panel was open between visits
@@ -54,7 +55,7 @@ export const CollapsiblePanel: React.FC<CollapsiblePanelProps> = ({
         className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
       >
         <span className="text-[11px] font-bold uppercase tracking-wide text-slate-300">{title}</span>
-        <span className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`}>▾</span>
+        <ChevronIcon className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open ? (
         <div className="px-3 pb-3">{children}</div>

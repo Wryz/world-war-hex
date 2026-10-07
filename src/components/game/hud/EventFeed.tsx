@@ -2,6 +2,7 @@ import React from 'react';
 import { GameLogEntry } from '@/types/game';
 import { SIDE_COLORS } from './styles';
 import { CollapsiblePanel } from './CollapsiblePanel';
+import { LogIcon } from '../icons';
 
 interface EventFeedProps {
   log: GameLogEntry[];
@@ -22,7 +23,7 @@ export const EventFeed: React.FC<EventFeedProps> = ({ log }) => {
   return (
     <CollapsiblePanel
       id="battle-log"
-      title="📜 Battle log"
+      title={<span className="flex items-center gap-1.5"><LogIcon className="text-sm" /> Battle log</span>}
       collapsedPreview={<Entry entry={latest} truncate />}
     >
       <div className="flex max-h-64 flex-col gap-1.5 overflow-y-auto pr-1">

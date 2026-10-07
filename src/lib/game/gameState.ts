@@ -153,6 +153,13 @@ export const TERRAIN_EFFECTS: Record<TerrainType, TerrainEffect> = {
 // Attack multiplier for units with the terrainBonus ability fighting from a forest
 export const TERRAIN_BONUS_ATTACK_MULTIPLIER = 1.5;
 
+// How many hexes away archers (rangedAttack) can strike from
+export const RANGED_ATTACK_RANGE = 2;
+// Fraction of a destroyed unit's cost paid to the side that destroyed it
+export const KILL_BOUNTY_FRACTION = 0.5;
+// Gold plundered per point of siege damage dealt to an enemy castle
+export const SIEGE_PLUNDER_PER_DAMAGE = 0.5;
+
 // Initialize a new game state
 export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS): GameState => {
   // Create the hexagonal grid
@@ -701,18 +708,21 @@ export const executeMoves = (state: GameState): GameState => {
   return finishTurn(newState);
 };
 
-// Create one combat per defending unit that has attackers adjacent to it
+// How far a unit can strike: archers (ranged attack) reach 2 hexes, everyone else 1
+export const getAttackRange = (unit: Unit): number =>
+  unit.abilities.includes('rangedAttack') ? RANGED_ATTACK_RANGE : 1;
+
+const isInAttackRange = (attacker: Unit, target: Unit) =>
+  getHexDistance(attacker.position, target.position) <= getAttackRange(attacker);
+
+// Create one combat per defending unit that has attackers within range of it
 const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
   const defenderSide = getOpponent(attackerSide);
-  const hexByKey = new Map(state.hexGrid.map(hex => [coordKey(hex.coordinates), hex]));
   const combats: Combat[] = [];
   const engaged = new Set<string>();
 
   for (const defender of state.players[defenderSide].units) {
-    const attackers = getNeighbors(defender.position)
-      .map(coord => hexByKey.get(coordKey(coord))?.unit)
-      .filter((unit): unit is Unit => !!unit && unit.owner === attackerSide);
-
+    const attackers = state.players[attackerSide].units.filter(unit => isInAttackRange(unit, defender));
     if (attackers.length === 0) continue;
 
     combats.push({
@@ -832,10 +842,16 @@ const processDamageToBase = (state: GameState): GameState => {
 
     state.players[side].baseHealth = newHealth;
     updateHex(state, baseHex.coordinates, { baseHealth: newHealth });
+
+    // Besiegers plunder gold from the castle they damage
+    const besieger = getOpponent(side);
+    const plunder = Math.floor((currentHealth - newHealth) * SIEGE_PLUNDER_PER_DAMAGE);
+    state.players[besieger].points += plunder;
     addLog(
       state,
-      getOpponent(side),
-      `${side === 'player' ? 'Your' : 'The enemy'} castle takes ${totalDamage} siege damage (${newHealth}/${BASE_MAX_HEALTH}).`
+      besieger,
+      `${side === 'player' ? 'Your' : 'The enemy'} castle takes ${totalDamage} siege damage (${newHealth}/${BASE_MAX_HEALTH})` +
+        (plunder > 0 ? ` - ${besieger === 'player' ? 'you plunder' : 'the enemy plunders'} ${plunder} gold.` : '.')
     );
   }
 
@@ -866,10 +882,12 @@ export interface CombatantPreview {
   terrain: TerrainType;
   // Attack power after terrain bonuses
   power: number;
-  // Damage this unit takes if both sides fight
+  // Damage this unit takes in the fight
   damageTaken: number;
   destroyed: boolean;
-  // Human readable terrain modifiers that apply to this unit
+  // False for attackers out of the defender's reach (e.g. archers shooting from 2 hexes)
+  canBeHitBack: boolean;
+  // Human readable modifiers that apply to this unit
   modifiers: string[];
 }
 
@@ -880,7 +898,10 @@ export interface CombatPreview {
   defenderPower: number;
 }
 
-// Work out what will happen if a combat is fought, using the units' current stats and terrain
+// Gold awarded for destroying an enemy unit
+export const getKillBounty = (unit: Unit) => Math.max(2, Math.round(unit.cost * KILL_BOUNTY_FRACTION));
+
+// Work out what a combat will do, using the units' current stats, terrain and reach
 export const getCombatPreview = (state: GameState, combat: Combat): CombatPreview => {
   const getLiveUnit = (unit: Unit) =>
     state.players[unit.owner].units.find(u => u.id === unit.id);
@@ -905,64 +926,57 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     return { unit, terrain, power, damageMultiplier, modifiers };
   });
 
-  const attackers = describe(combat.attackers.map(getLiveUnit).filter((u): u is Unit => !!u));
   const defenders = describe(combat.defenders.map(getLiveUnit).filter((u): u is Unit => !!u));
+  const attackers = describe(combat.attackers.map(getLiveUnit).filter((u): u is Unit => !!u)).map(entry => {
+    // Defenders can only strike back at attackers within their own reach
+    const canBeHitBack = defenders.some(d => isInAttackRange(d.unit, entry.unit));
+    if (!canBeHitBack) entry.modifiers.push('out of reach - takes no damage');
+    return { ...entry, canBeHitBack };
+  });
   const attackerPower = attackers.reduce((sum, a) => sum + a.power, 0);
   const defenderPower = defenders.reduce((sum, d) => sum + d.power, 0);
 
-  // Each side's damage is split evenly between the enemy units, then reduced by their cover
-  const withDamage = (side: typeof attackers, enemyPower: number): CombatantPreview[] =>
-    side.map(({ damageMultiplier, ...entry }) => {
-      const damageTaken = enemyPower > 0
-        ? Math.max(1, Math.round(enemyPower / side.length * damageMultiplier))
-        : 0;
-      return { ...entry, damageTaken, destroyed: damageTaken >= entry.unit.lifespan };
-    });
+  // Each side's damage is split evenly between the enemy units it can reach, then reduced by cover
+  const reachableAttackers = attackers.filter(a => a.canBeHitBack).length;
+  const withDamage = <T extends (typeof attackers)[number] | (typeof defenders)[number]>(
+    entry: T,
+    enemyPower: number,
+    targets: number,
+    canBeHit: boolean
+  ): CombatantPreview => {
+    const { damageMultiplier, ...rest } = entry;
+    const damageTaken = canBeHit && enemyPower > 0 && targets > 0
+      ? Math.max(1, Math.round(enemyPower / targets * damageMultiplier))
+      : 0;
+    return {
+      ...rest,
+      canBeHitBack: canBeHit,
+      damageTaken,
+      destroyed: damageTaken >= entry.unit.lifespan
+    };
+  };
 
   return {
-    attackers: withDamage(attackers, defenderPower),
-    defenders: withDamage(defenders, attackerPower),
+    attackers: attackers.map(a => withDamage(a, defenderPower, reachableAttackers, a.canBeHitBack)),
+    defenders: defenders.map(d => withDamage(d, attackerPower, defenders.length, true)),
     attackerPower,
     defenderPower
   };
 };
 
-// Resolve a combat - the defenders either stand and fight or retreat
-export const resolveCombat = (
-  state: GameState,
-  combatIndex: number,
-  retreat: boolean
-): GameState => {
+// Fight out a combat. Damage is dealt simultaneously; destroying a unit earns its killer a bounty.
+export const resolveCombat = (state: GameState, combatIndex: number): GameState => {
   const combat = state.combats[combatIndex];
   if (state.currentPhase !== 'combat' || !combat || combat.resolved) return state;
 
   const newState = cloneState(state);
-  const retreatingUnits: Unit[] = [];
   const preview = getCombatPreview(newState, combat);
   const getLiveUnit = (unit: Unit) =>
     newState.players[unit.owner].units.find(u => u.id === unit.id);
 
-  if (retreat) {
-    for (const { unit } of preview.defenders) {
-      const defender = getLiveUnit(unit);
-      if (!defender) continue;
+  if (preview.attackers.length > 0 && preview.defenders.length > 0) {
+    const bounties: Record<PlayerType, number> = { player: 0, ai: 0 };
 
-      const retreatTo = chooseRetreatPosition(newState, defender);
-
-      if (retreatTo) {
-        defender.position = retreatTo;
-        defender.isEngagedInCombat = false;
-        retreatingUnits.push({ ...defender });
-        syncHexUnits(newState);
-        addLog(newState, defender.owner, `${unitLabel(defender)} retreated.`);
-      } else {
-        // Nowhere to run - the unit is destroyed
-        removeUnit(newState, defender);
-        addLog(newState, defender.owner, `${unitLabel(defender)} was cut off and destroyed!`);
-      }
-    }
-  } else if (preview.attackers.length > 0 && preview.defenders.length > 0) {
-    // Damage is dealt simultaneously
     for (const entry of [...preview.attackers, ...preview.defenders]) {
       const unit = getLiveUnit(entry.unit);
       if (!unit) continue;
@@ -970,57 +984,39 @@ export const resolveCombat = (
       unit.lifespan = Math.max(0, unit.lifespan - entry.damageTaken);
       if (unit.lifespan <= 0) {
         removeUnit(newState, unit);
+        bounties[getOpponent(unit.owner)] += getKillBounty(unit);
       }
     }
     syncHexUnits(newState);
 
     const defender = preview.defenders[0];
-    const outcome = (entry: CombatantPreview) => entry.destroyed ? 'destroyed' : `-${entry.damageTaken} HP`;
+    const outcome = (entry: CombatantPreview) =>
+      entry.destroyed ? 'destroyed' : entry.damageTaken > 0 ? `-${entry.damageTaken} HP` : 'unharmed';
     addLog(
       newState,
       getActivePlayer(newState),
       `${preview.attackers.map(a => unitLabel(a.unit)).join(' & ')} attacked ${unitLabel(defender.unit)}: ` +
         `defender ${outcome(defender)}, attackers ${preview.attackers.map(outcome).join(', ')}.`
     );
+
+    for (const side of ['player', 'ai'] as const) {
+      if (bounties[side] === 0) continue;
+      newState.players[side].points += bounties[side];
+      addLog(
+        newState,
+        side,
+        `${side === 'player' ? 'You earn' : 'The enemy earns'} ${bounties[side]} gold in bounty.`
+      );
+    }
   }
 
-  newState.combats[combatIndex] = {
-    ...combat,
-    resolved: true,
-    retreating: retreatingUnits
-  };
+  newState.combats[combatIndex] = { ...combat, resolved: true };
 
   if (newState.combats.every(c => c.resolved)) {
     return finishTurn(newState);
   }
 
   return newState;
-};
-
-// Pick the free neighbouring hex that gets a retreating unit furthest from enemy units
-const chooseRetreatPosition = (state: GameState, unit: Unit): HexCoordinates | null => {
-  const enemies = state.players[getOpponent(unit.owner)].units;
-
-  const candidates = getNeighbors(unit.position).filter(coord => {
-    const hex = findHexByCoordinates(state.hexGrid, coord);
-    return hex && !hex.unit && !hex.isBase && !isImpassable(hex);
-  });
-
-  let best: HexCoordinates | null = null;
-  let bestScore = -Infinity;
-
-  for (const coord of candidates) {
-    const nearestEnemy = enemies.reduce(
-      (min, enemy) => Math.min(min, getHexDistance(coord, enemy.position)),
-      Infinity
-    );
-    if (nearestEnemy > bestScore) {
-      bestScore = nearestEnemy;
-      best = coord;
-    }
-  }
-
-  return best;
 };
 
 // Remove a unit from the game

@@ -12,7 +12,7 @@ import {
   UNITS,
   BASE_MAX_HEALTH,
   TERRAIN_EFFECTS,
-  TERRAIN_BONUS_ATTACK_MULTIPLIER,
+  getKillBounty,
   findBaseHex,
   findTerrainPath,
   getActivePlayer,
@@ -25,7 +25,9 @@ import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
 import { playSound } from './utils/SoundPlayer';
 import { getUnitTypeName } from './utils/UnitHelpers';
-import { TERRAIN_ICONS, TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
+import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
+import { AttackIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon } from './icons';
+import type { UnitBadge } from './UnitMesh';
 
 const coordKey = (c: HexCoordinates) => `${c.q},${c.r}`;
 
@@ -35,8 +37,18 @@ const CAMERA_FOV = 45;
 // Radius of the playing field in world units, plus a margin for the HUD
 const BOARD_VIEW_RADIUS = 16.5;
 // Look slightly towards the viewing side's castle so it stays clear of the bottom HUD
-const CAMERA_TARGET_OFFSET = 3.5;
+const CAMERA_TARGET_OFFSET = 6;
 const CAMERA_TURN_SPEED = 2.2;
+// Zoom levels as a fraction of the distance at which the whole board fits on screen
+const CAMERA_DEFAULT_ZOOM = 0.8;
+const CAMERA_FOCUS_ZOOM = 0.55;
+const CAMERA_MIN_ZOOM = 0.35;
+const CAMERA_MAX_ZOOM = 1.1;
+// How quickly the camera follows zoom and focus changes, and how strongly the wheel zooms
+const CAMERA_ZOOM_SPEED = 6;
+const CAMERA_WHEEL_SPEED = 0.0015;
+// Furthest the view can be panned from the centre of the board (world units)
+const CAMERA_MAX_PAN = 12;
 
 interface GameBoardProps {
   gameState: GameState;
@@ -55,6 +67,17 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
   // Use loading state from the parent provider
   const { isComplete: assetsLoaded } = useLoadingManager();
 
+  // Zoom in on the player's selected unit while they plan its move
+  const { selectedUnit, gameState } = props;
+  const focusQ = selectedUnit?.position.q;
+  const focusR = selectedUnit?.position.r;
+  const isFocusing = selectedUnit?.owner === 'player' && gameState.currentPhase === 'planning' && !props.isAITurn;
+  const cameraFocus = useMemo<[number, number] | null>(() => {
+    if (!isFocusing || focusQ === undefined || focusR === undefined) return null;
+    const [x, , z] = axialToWorld({ q: focusQ, r: focusR });
+    return [x, z];
+  }, [isFocusing, focusQ, focusR]);
+
   return (
     // Bright sky gradient behind the floating battlefield
     <div className="w-full h-full" style={{ background: 'radial-gradient(ellipse at 50% 40%, #e0f4ff 0%, #b3e1ff 55%, #8ccfff 100%)' }}>
@@ -65,7 +88,7 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
           <BoardScene {...props} assetsLoaded={assetsLoaded} />
 
           <PerspectiveCamera makeDefault fov={CAMERA_FOV} near={0.1} far={3000} position={[0, 35, 14]} />
-          <CameraRig gameState={props.gameState} />
+          <CameraRig gameState={props.gameState} focus={cameraFocus} />
         </Suspense>
       </Canvas>
     </div>
@@ -85,9 +108,18 @@ const angleDelta = (from: number, to: number) => {
 
 // Fixed camera that looks down on the board from behind the castle of the side whose turn it is,
 // swinging smoothly around the board when the turn changes. The player can't move it.
-const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
-  const { camera, size } = useThree();
+const CameraRig: React.FC<{ gameState: GameState; focus: [number, number] | null }> = ({ gameState, focus }) => {
+  const { camera, size, gl } = useThree();
   const azimuthRef = useRef<number | null>(null);
+
+  // Where the camera looks and how far it is pulled back (1 = whole board fits); smoothed every frame
+  const lookAtRef = useRef<THREE.Vector3 | null>(null);
+  const zoomRef = useRef(CAMERA_DEFAULT_ZOOM);
+  // Where the player (or a selection / turn change) wants the camera to go
+  const desiredLookAtRef = useRef<THREE.Vector3 | null>(null);
+  const desiredZoomRef = useRef(CAMERA_DEFAULT_ZOOM);
+  // View to return to after a unit is deselected
+  const savedViewRef = useRef<{ lookAt: THREE.Vector3; zoom: number } | null>(null);
 
   const viewSide: PlayerType = gameState.currentPhase === 'setup' ? 'player' : getActivePlayer(gameState);
 
@@ -101,30 +133,113 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameState.players.player.baseLocation, gameState.players.ai.baseLocation, viewSide]);
 
+  // Default overview: look across the board from just in front of the active side's castle
+  const defaultLookAt = useMemo(
+    () => new THREE.Vector3(Math.sin(targetAzimuth) * CAMERA_TARGET_OFFSET, 0, Math.cos(targetAzimuth) * CAMERA_TARGET_OFFSET),
+    [targetAzimuth]
+  );
+
+  // New turn (or castles placed): swing to the active side's default view
+  useEffect(() => {
+    desiredLookAtRef.current = defaultLookAt.clone();
+    desiredZoomRef.current = CAMERA_DEFAULT_ZOOM;
+    savedViewRef.current = null;
+  }, [defaultLookAt]);
+
+  // Selecting a unit eases in on it; deselecting returns to the previous view
+  useEffect(() => {
+    if (focus) {
+      if (!savedViewRef.current && desiredLookAtRef.current) {
+        savedViewRef.current = { lookAt: desiredLookAtRef.current.clone(), zoom: desiredZoomRef.current };
+      }
+      desiredLookAtRef.current = new THREE.Vector3(focus[0], 0, focus[1]);
+      desiredZoomRef.current = Math.min(desiredZoomRef.current, CAMERA_FOCUS_ZOOM);
+    } else if (savedViewRef.current) {
+      desiredLookAtRef.current = savedViewRef.current.lookAt;
+      desiredZoomRef.current = savedViewRef.current.zoom;
+      savedViewRef.current = null;
+    }
+  }, [focus]);
+
+  // Mouse wheel / trackpad pinch zooms towards whatever is under the cursor
+  useEffect(() => {
+    const element = gl.domElement;
+    const raycaster = new THREE.Raycaster();
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.6);
+
+    const onWheel = (event: WheelEvent) => {
+      event.preventDefault();
+      const desiredLookAt = desiredLookAtRef.current;
+      if (!desiredLookAt) return;
+
+      const currentZoom = desiredZoomRef.current;
+      const nextZoom = THREE.MathUtils.clamp(
+        currentZoom * Math.exp(event.deltaY * CAMERA_WHEEL_SPEED),
+        CAMERA_MIN_ZOOM,
+        CAMERA_MAX_ZOOM
+      );
+      if (nextZoom === currentZoom) return;
+
+      // Scale the view about the point under the cursor so that point stays put on screen
+      const rect = element.getBoundingClientRect();
+      const pointer = new THREE.Vector2(
+        ((event.clientX - rect.left) / rect.width) * 2 - 1,
+        -((event.clientY - rect.top) / rect.height) * 2 + 1
+      );
+      raycaster.setFromCamera(pointer, camera);
+      const anchor = raycaster.ray.intersectPlane(groundPlane, new THREE.Vector3());
+      if (anchor) {
+        desiredLookAt.sub(anchor).multiplyScalar(nextZoom / currentZoom).add(anchor);
+        desiredLookAt.y = 0;
+        // Keep the view over the battlefield
+        const horizontal = Math.hypot(desiredLookAt.x, desiredLookAt.z);
+        if (horizontal > CAMERA_MAX_PAN) desiredLookAt.multiplyScalar(CAMERA_MAX_PAN / horizontal);
+      }
+      desiredZoomRef.current = nextZoom;
+      // Manual zoom replaces the "return after deselecting" view
+      savedViewRef.current = null;
+    };
+
+    element.addEventListener('wheel', onWheel, { passive: false });
+    return () => element.removeEventListener('wheel', onWheel);
+  }, [gl, camera]);
+
+  // Expose the camera in development so automated browser tests can aim clicks precisely
+  useEffect(() => {
+    if (process.env.NODE_ENV !== 'production') {
+      (window as unknown as { __wwhCamera?: THREE.Camera }).__wwhCamera = camera;
+    }
+  }, [camera]);
+
   useFrame((_, rawDelta) => {
     const delta = Math.min(rawDelta, 0.1);
+    const ease = Math.min(1, delta * CAMERA_TURN_SPEED);
     const current = azimuthRef.current ?? targetAzimuth;
-    const azimuth = current + angleDelta(current, targetAzimuth) * Math.min(1, delta * CAMERA_TURN_SPEED);
+    const azimuth = current + angleDelta(current, targetAzimuth) * ease;
     azimuthRef.current = azimuth;
 
-    // Pull back far enough that the whole board fits on screen
+    const desiredLookAt = desiredLookAtRef.current ?? defaultLookAt;
+    if (!lookAtRef.current) lookAtRef.current = desiredLookAt.clone();
+    lookAtRef.current.lerp(desiredLookAt, Math.min(1, delta * CAMERA_ZOOM_SPEED));
+    zoomRef.current += (desiredZoomRef.current - zoomRef.current) * Math.min(1, delta * CAMERA_ZOOM_SPEED);
+
+    // Distance at which the whole board fits on screen, scaled by the zoom level
     const perspective = camera as THREE.PerspectiveCamera;
     const halfFov = THREE.MathUtils.degToRad(perspective.fov / 2);
     const aspect = size.width / Math.max(size.height, 1);
     const distance = Math.max(
       BOARD_VIEW_RADIUS / Math.tan(halfFov),
       BOARD_VIEW_RADIUS / (Math.tan(halfFov) * aspect)
-    );
+    ) * zoomRef.current;
 
-    const targetX = Math.sin(azimuth) * CAMERA_TARGET_OFFSET;
-    const targetZ = Math.cos(azimuth) * CAMERA_TARGET_OFFSET;
+    const lookAt = lookAtRef.current;
     const horizontal = distance * Math.cos(CAMERA_ELEVATION);
     camera.position.set(
-      targetX + Math.sin(azimuth) * horizontal,
+      lookAt.x + Math.sin(azimuth) * horizontal,
       distance * Math.sin(CAMERA_ELEVATION),
-      targetZ + Math.cos(azimuth) * horizontal
+      lookAt.z + Math.cos(azimuth) * horizontal
     );
-    camera.lookAt(targetX, 0, targetZ);
+    camera.lookAt(lookAt);
   });
 
   return null;
@@ -142,27 +257,22 @@ const surfacePosition = (hex: Hex): [number, number, number] => {
 
 const toVector = ([x, y, z]: [number, number, number]) => new THREE.Vector3(x, y, z);
 
-// Short labels for the terrain effects that currently help a unit
-const getTerrainBadges = (unit: Unit, hex: Hex | undefined): string[] => {
+// Terrain effects that currently help a unit, shown as small icons on its label
+const getTerrainBadges = (unit: Unit, hex: Hex | undefined): UnitBadge[] => {
   if (!hex) return [];
-  const badges: string[] = [];
-  const effect = TERRAIN_EFFECTS[hex.terrain];
+  const badges: UnitBadge[] = [];
 
-  if (effect.damageTakenMultiplier < 1) {
-    badges.push(`${TERRAIN_ICONS[hex.terrain]} -${Math.round((1 - effect.damageTakenMultiplier) * 100)}% dmg`);
-  }
-  if (hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) {
-    badges.push(`⚔️ +${Math.round((TERRAIN_BONUS_ATTACK_MULTIPLIER - 1) * 100)}% atk`);
-  }
-  if (hex.isResourceHex) {
-    badges.push(`${TERRAIN_ICONS.resource} +${hex.resourceValue ?? 0} gold`);
-  }
+  if (TERRAIN_EFFECTS[hex.terrain].damageTakenMultiplier < 1) badges.push('cover');
+  if (hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) badges.push('attack');
+  if (hex.isResourceHex) badges.push('gold');
   return badges;
 };
 
 interface DamagePopup {
   id: number;
   position: [number, number, number];
+  // Gold paid out for this unit's destruction, shown with a skull
+  bounty?: number;
   text: string;
   color: string;
 }
@@ -403,7 +513,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   // --- Damage popups -----------------------------------------------------------------------
 
-  const previousUnitsRef = useRef(new Map<string, { lifespan: number; position: [number, number, number] }>());
+  const previousUnitsRef = useRef(new Map<string, { unit: Unit; position: [number, number, number] }>());
   const previousGameIdRef = useRef(players.player.id);
   const popupIdRef = useRef(0);
   const popupTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
@@ -418,19 +528,25 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     }
 
     const previous = previousUnitsRef.current;
-    const next = new Map<string, { lifespan: number; position: [number, number, number] }>();
+    const next = new Map<string, { unit: Unit; position: [number, number, number] }>();
     const created: DamagePopup[] = [];
 
     for (const { unit, position } of unitRenderData) {
-      next.set(unit.id, { lifespan: unit.lifespan, position });
+      next.set(unit.id, { unit, position });
       const before = previous.get(unit.id);
-      if (before && unit.lifespan < before.lifespan) {
-        created.push({ id: ++popupIdRef.current, position, text: `-${before.lifespan - unit.lifespan}`, color: '#f87171' });
+      if (before && unit.lifespan < before.unit.lifespan) {
+        created.push({ id: ++popupIdRef.current, position, text: `-${before.unit.lifespan - unit.lifespan}`, color: '#f87171' });
       }
     }
     for (const [id, before] of previous) {
       if (!next.has(id)) {
-        created.push({ id: ++popupIdRef.current, position: before.position, text: '💀', color: '#ffffff' });
+        created.push({
+          id: ++popupIdRef.current,
+          position: before.position,
+          text: '',
+          color: '#ffffff',
+          bounty: getKillBounty(before.unit)
+        });
       }
     }
     previousUnitsRef.current = next;
@@ -596,7 +712,11 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         const isActive = combat === activeCombat;
         return (
           <Html key={coordKey(combat.hexCoordinates)} position={[x, y + 2.2, z]} center zIndexRange={[7, 0]} style={{ pointerEvents: 'none' }}>
-            <div className={`select-none ${isActive ? 'text-3xl animate-bounce' : 'text-xl opacity-70'}`}>⚔️</div>
+            <div
+              className={`select-none rounded-full bg-slate-900/80 p-1 ${isActive ? 'text-3xl animate-bounce' : 'text-xl opacity-70'}`}
+            >
+              <AttackIcon />
+            </div>
           </Html>
         );
       })}
@@ -610,8 +730,17 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           zIndexRange={[8, 0]}
           style={{ pointerEvents: 'none' }}
         >
-          <div className="animate-float-up text-2xl font-black select-none" style={{ color: popup.color, textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}>
-            {popup.text}
+          <div
+            className="animate-float-up flex items-center gap-1 text-2xl font-black select-none"
+            style={{ color: popup.color, textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}
+          >
+            {popup.bounty !== undefined ? (
+              <>
+                <SkullIcon className="drop-shadow" />
+                <span className="text-lg text-amber-300">+{popup.bounty}</span>
+                <GoldIcon className="text-lg drop-shadow" />
+              </>
+            ) : popup.text}
           </div>
         </Html>
       ))}
@@ -634,11 +763,11 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
   return (
     <Html position={[x, y + 0.2, z]} zIndexRange={[9, 0]} style={{ pointerEvents: 'none' }}>
       <div className="ml-5 -mt-5 whitespace-nowrap rounded-md bg-slate-900/90 px-2 py-1 text-[11px] text-slate-100 shadow-lg select-none">
-        <span className="font-bold">{TERRAIN_ICONS[hex.terrain]} {TERRAIN_EFFECTS[hex.terrain].name}</span>
+        <span className="font-bold"><TerrainIcon terrain={hex.terrain} /> {TERRAIN_EFFECTS[hex.terrain].name}</span>
         <span className="text-slate-400"> · {effect}</span>
         {hex.unit && (
           <span className="ml-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>
-            · {getUnitTypeName(hex.unit.type)} ❤️{hex.unit.lifespan}
+            · {getUnitTypeName(hex.unit.type)} <HealthIcon /> {hex.unit.lifespan}
           </span>
         )}
       </div>

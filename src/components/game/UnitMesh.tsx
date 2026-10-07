@@ -10,7 +10,7 @@ import {
   AnimationState
 } from './utils/UnitModelSystem';
 import { instantiateUnitModel, findAnimationClip } from './utils/unitModelCache';
-import { getUnitTypeEmoji } from './utils/UnitHelpers';
+import { ArrowIcon, AttackIcon, GoldIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
 
 // Small lift so the unit's indicator doesn't z-fight with the tile surface
 const UNIT_ELEVATION = 0.02;
@@ -24,6 +24,9 @@ export const OWNER_COLORS = {
 };
 
 export type CombatRole = 'attacker' | 'defender' | null;
+
+// Terrain effects shown on a unit's label: forest cover, Pikemen's forest attack bonus, a held gold mine
+export type UnitBadge = 'cover' | 'attack' | 'gold';
 
 interface UnitMeshProps {
   unit: Unit;
@@ -39,7 +42,7 @@ interface UnitMeshProps {
   hasPlannedMove?: boolean;
   combatRole?: CombatRole;
   // Short labels for terrain effects currently helping this unit
-  terrainBadges?: string[];
+  terrainBadges?: UnitBadge[];
 }
 
 // Smallest signed difference between two angles
@@ -271,17 +274,21 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
             opacity: isPendingPurchase ? 0.7 : 1
           }}
         >
-          <span>{getUnitTypeEmoji(unit.type)}</span>
+          <UnitIcon type={unit.type} className="text-[13px]" />
           {isPendingPurchase ? (
-            <span title="Arrives at the end of the turn">⏳</span>
+            <WaitIcon title="Arrives at the end of the turn" />
           ) : (
             <>
               <span className="w-6 h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block">
                 <span className="block h-full" style={{ width: `${healthRatio * 100}%`, background: healthColor }} />
               </span>
               {/* Terrain bonuses as icons only - details are in the selection card */}
-              {terrainBadges.map(badge => <span key={badge}>{badge.split(' ')[0]}</span>)}
-              {hasPlannedMove && <span>➜</span>}
+              {terrainBadges.map(badge =>
+                badge === 'cover' ? <TerrainIcon key={badge} terrain="forest" />
+                  : badge === 'attack' ? <AttackIcon key={badge} />
+                    : <GoldIcon key={badge} />
+              )}
+              {hasPlannedMove && <ArrowIcon />}
             </>
           )}
         </div>

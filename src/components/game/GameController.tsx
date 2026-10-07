@@ -50,7 +50,6 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
     handleUnitSelect,
     handleUnitPurchase,
     handleEndTurn,
-    handleCombatResolve,
     handleStartGame,
     handleContinueGame,
     handleRestart,
@@ -92,7 +91,7 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
 
   const handleSave = () => {
     const saved = saveGameToLocalStorage(gameState, { selectedHex, isAITurn, timer, difficulty });
-    setToast(saved ? '💾 Game saved' : 'Could not save the game');
+    setToast(saved ? 'Game saved' : 'Could not save the game');
   };
 
   const { currentPhase } = gameState;
@@ -166,7 +165,7 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
       )}
 
       {currentPhase === 'combat' && (
-        <CombatResolver gameState={gameState} onResolveCombat={handleCombatResolve} />
+        <CombatResolver gameState={gameState} />
       )}
 
       {currentPhase === 'gameOver' && (

@@ -1,9 +1,10 @@
 import React from 'react';
 import { GameState, Hex, Unit } from '@/types/game';
 import { BASE_MAX_HEALTH, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS } from '@/lib/game/gameState';
-import { getUnitTypeEmoji, getUnitTypeName } from '../utils/UnitHelpers';
+import { getUnitTypeName } from '../utils/UnitHelpers';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
-import { TERRAIN_ICONS, TERRAIN_SHORT_EFFECTS } from './terrainInfo';
+import { TERRAIN_SHORT_EFFECTS } from './terrainInfo';
+import { AttackIcon, CrownIcon, MoveIcon, TerrainIcon, UnitIcon } from '../icons';
 
 interface SelectionCardProps {
   gameState: GameState;
@@ -52,7 +53,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
       {unit ? (
         <>
           <div className="flex items-center justify-between">
-            <span className="text-sm font-bold">{getUnitTypeEmoji(unit.type)} {getUnitTypeName(unit.type)}</span>
+            <span className="flex items-center gap-1.5 text-sm font-bold"><UnitIcon type={unit.type} className="text-base" /> {getUnitTypeName(unit.type)}</span>
             <span
               className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
               style={{ background: SIDE_COLORS[unit.owner] }}
@@ -62,10 +63,10 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
           </div>
           <div className="mt-2"><HealthBar value={unit.lifespan} max={unit.maxLifespan} /></div>
           <div className="mt-2 flex gap-3 text-slate-200">
-            <span title="Attack">⚔️ <b>{unit.attackPower}</b></span>
-            <span title="Movement">👣 <b>{unit.movementRange}</b></span>
+            <span title="Attack" className="flex items-center gap-1"><AttackIcon /> <b>{unit.attackPower}</b></span>
+            <span title="Movement" className="flex items-center gap-1"><MoveIcon /> <b>{unit.movementRange}</b></span>
             <span className="ml-auto text-slate-400" title={effect.description}>
-              {TERRAIN_ICONS[hex.terrain]} {terrainBonuses.length > 0 ? terrainBonuses.join(' · ') : effect.name}
+              <TerrainIcon terrain={hex.terrain} /> {terrainBonuses.length > 0 ? terrainBonuses.join(' · ') : effect.name}
             </span>
           </div>
           {unit.owner === 'player' && unit.hasMoved && gameState.currentPhase === 'planning' && (
@@ -74,7 +75,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
         </>
       ) : (
         <>
-          <div className="text-sm font-bold">👑 {hex.owner === 'player' ? 'Your castle' : 'Enemy castle'}</div>
+          <div className="flex items-center gap-1.5 text-sm font-bold"><CrownIcon /> {hex.owner === 'player' ? 'Your castle' : 'Enemy castle'}</div>
           <div className="mt-2">
             <HealthBar value={hex.baseHealth ?? BASE_MAX_HEALTH} max={BASE_MAX_HEALTH} />
           </div>
@@ -84,7 +85,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
         </>
       )}
       {!unit && hex.terrain !== 'plain' && (
-        <div className="mt-1 text-slate-400">{TERRAIN_ICONS[hex.terrain]} {TERRAIN_SHORT_EFFECTS[hex.terrain]}</div>
+        <div className="mt-1 text-slate-400"><TerrainIcon terrain={hex.terrain} /> {TERRAIN_SHORT_EFFECTS[hex.terrain]}</div>
       )}
     </div>
   );

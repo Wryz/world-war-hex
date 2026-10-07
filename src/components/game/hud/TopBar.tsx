@@ -2,6 +2,7 @@ import React from 'react';
 import { GameState } from '@/types/game';
 import { BASE_MAX_HEALTH, TURN_INCOME } from '@/lib/game/gameState';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
+import { CrownIcon, GoldIcon, SaveIcon } from '../icons';
 
 interface TopBarProps {
   gameState: GameState;
@@ -18,7 +19,7 @@ const CastleHealth: React.FC<{ title: string; health: number; max: number; color
 
   return (
     <div className={`flex items-center gap-2 ${alignRight ? 'flex-row-reverse' : ''}`} title={`${title}: ${Math.max(0, health)}/${max}`}>
-      <span className="text-base leading-none" style={{ filter: `drop-shadow(0 0 3px ${color})` }}>👑</span>
+      <CrownIcon className="text-lg" color={color} />
       <div className="relative w-28 h-2.5 rounded-full bg-slate-700 overflow-hidden">
         <div
           className={`absolute top-0 bottom-0 transition-all duration-700 ${alignRight ? 'right-0' : 'left-0'}`}
@@ -77,12 +78,12 @@ export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, show
 
       {/* Treasury */}
       <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-2 px-3 py-1.5`}>
-        <span className="font-display text-base text-amber-300" title={`+${TURN_INCOME + mineIncome} gold per round`}>
-          💰 {players.player.points}
+        <span className="font-display flex items-center gap-1 text-base text-amber-300" title={`+${TURN_INCOME + mineIncome} gold per round`}>
+          <GoldIcon className="text-lg" /> {players.player.points}
         </span>
         {onSave && (
-          <button onClick={onSave} title="Save game" aria-label="Save game" className="rounded-md px-1.5 py-0.5 text-sm hover:bg-slate-700">
-            💾
+          <button onClick={onSave} title="Save game" aria-label="Save game" className="rounded-md p-1 text-slate-300 hover:bg-slate-700 hover:text-white">
+            <SaveIcon className="text-base" />
           </button>
         )}
       </div>

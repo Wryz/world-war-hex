@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { GamePhase, PlayerType } from '@/types/game';
 import { SIDE_COLORS } from './styles';
+import { AttackIcon } from '../icons';
 
 interface TurnBannerProps {
   phase: GamePhase;
@@ -12,7 +13,7 @@ const BANNER_DURATION = 1800;
 
 // Big announcement whenever the turn changes or a battle starts
 export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, turnNumber }) => {
-  const [banner, setBanner] = useState<{ key: string; title: string; subtitle: string; color: string } | null>(null);
+  const [banner, setBanner] = useState<{ key: string; title: string; subtitle: string; color: string; isBattle?: boolean } | null>(null);
 
   useEffect(() => {
     let next: typeof banner = null;
@@ -24,9 +25,10 @@ export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, tur
     } else if (phase === 'combat') {
       next = {
         key: `c-${turnNumber}-${activePlayer}`,
-        title: '⚔️ Battle!',
+        title: 'Battle!',
         subtitle: activePlayer === 'player' ? 'Your troops attack' : 'You are under attack',
-        color: '#f59e0b'
+        color: '#f59e0b',
+        isBattle: true
       };
     }
 
@@ -41,7 +43,10 @@ export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, tur
   return (
     <div className="fixed inset-x-0 top-1/3 z-30 flex justify-center pointer-events-none">
       <div key={banner.key} className="animate-banner flex flex-col items-center rounded-2xl bg-slate-900/75 px-8 py-3 shadow-2xl">
-        <div className="font-display text-3xl tracking-wide" style={{ color: banner.color }}>{banner.title}</div>
+        <div className="font-display flex items-center gap-2 text-3xl tracking-wide" style={{ color: banner.color }}>
+          {banner.isBattle && <AttackIcon color={banner.color} />}
+          {banner.title}
+        </div>
         <div className="text-sm font-semibold text-slate-300">{banner.subtitle}</div>
       </div>
     </div>

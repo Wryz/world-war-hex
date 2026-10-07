@@ -60,6 +60,11 @@ const DIFFICULTY_SETTINGS: Record<'easy' | 'medium' | 'hard', AIDifficultySettin
 // Unit types the AI recruits (the same ones offered to the player in the barracks)
 const RECRUITABLE_TYPES: UnitType[] = ['infantry', 'artillery', 'helicopter', 'tank'];
 
+// The AI goes on the offensive once it has this many more units than the player...
+const PUSH_UNIT_ADVANTAGE = 3;
+// ...or once the game reaches this round
+const PUSH_AFTER_ROUND = 25;
+
 // Most units the AI recruits in a single turn
 const MAX_PURCHASES_PER_TURN = 3;
 
@@ -387,6 +392,16 @@ const decideUnitMove = (
     if (defenseMove) return defenseMove;
   }
 
+  // Press the attack when the AI clearly outnumbers the player, or once the game drags on,
+  // so armies don't trade units in the middle of the map forever
+  const isPushing =
+    state.players.ai.units.length >= state.players.player.units.length + PUSH_UNIT_ADVANTAGE ||
+    state.turnNumber >= PUSH_AFTER_ROUND;
+  if (isPushing) {
+    const pushMove = moveToward(state, unit, playerBase.coordinates);
+    if (pushMove) return pushMove;
+  }
+  
   // Fast units grab unclaimed resource hexes
   if (
     resourceOpportunities.length > 0 &&
@@ -426,49 +441,4 @@ const decideUnitMove = (
   if (targets.length === 0 || Math.random() < 0.3) return null;
 
   return targets[Math.floor(Math.random() * targets.length)];
-};
-
-/**
- * Decide whether to fight or retreat during combat
- */
-export const decideAICombatStrategy = (
-  state: GameState,
-  combatIndex: number
-): boolean => {
-  const settings = getDifficultySettings(state);
-
-  const combat = state.combats[combatIndex];
-  if (!combat) return false; // Fight by default
-
-  // Only consider retreating if AI is the defender
-  const aiDefenders = combat.defenders.filter(unit => unit.owner === 'ai');
-  if (aiDefenders.length === 0) return false; // Fight if AI is attacking
-
-  // Calculate total combat strengths
-  const attackerStrength = combat.attackers.reduce(
-    (sum, unit) => sum + unit.attackPower,
-    0
-  );
-
-  const defenderStrength = combat.defenders.reduce(
-    (sum, unit) => sum + unit.attackPower,
-    0
-  );
-
-  // Consider unit health
-  const defenderHealth = combat.defenders.reduce(
-    (sum, unit) => sum + unit.lifespan / unit.maxLifespan,
-    0
-  ) / combat.defenders.length;
-
-  // Retreat conditions:
-  // 1. Overwhelmed by attacker strength
-  // 2. Health too low
-  // 3. Near retreat threshold based on difficulty
-  const shouldRetreat =
-    attackerStrength > defenderStrength * 1.5 ||
-    defenderHealth < settings.retreatThreshold ||
-    Math.random() < (1 - settings.attackAggressiveness) * 0.3; // Occasional random retreat
-
-  return shouldRetreat;
 };

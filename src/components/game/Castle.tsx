@@ -4,6 +4,7 @@ import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { PlayerType } from '@/types/game';
 import { OWNER_COLORS } from './UnitMesh';
+import { CrownIcon } from './icons';
 
 interface CastleProps {
   owner: PlayerType;
@@ -114,7 +115,7 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
           className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] leading-none font-bold text-white whitespace-nowrap shadow select-none"
           style={{ background: 'rgba(15, 23, 42, 0.85)', border: `2px solid ${ownerColor}` }}
         >
-          <span>👑</span>
+          <CrownIcon />
           <span className="w-10 h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block">
             <span className="block h-full" style={{ width: `${healthRatio * 100}%`, background: healthColor }} />
           </span>

@@ -1,5 +1,6 @@
 import React from 'react';
 import { PANEL_CLASS } from '../hud/styles';
+import { CastleIcon, CrownIcon } from '../icons';
 
 interface GameOverScreenProps {
   winner: 'player' | 'ai';
@@ -9,7 +10,9 @@ interface GameOverScreenProps {
 export const GameOverScreen: React.FC<GameOverScreenProps> = ({ winner, onRestart }) => (
   <div className="absolute inset-0 z-40 flex items-center justify-center bg-slate-950/60">
     <div className={`${PANEL_CLASS} max-w-md p-8 text-center`}>
-      <div className="text-6xl">{winner === 'player' ? '👑' : '🏚️'}</div>
+      <div className="flex justify-center text-7xl">
+        {winner === 'player' ? <CrownIcon /> : <CastleIcon color="#94a3b8" />}
+      </div>
       <h1 className={`font-display mt-2 text-4xl ${winner === 'player' ? 'text-amber-300' : 'text-red-400'}`}>
         {winner === 'player' ? 'Victory!' : 'Defeat!'}
       </h1>

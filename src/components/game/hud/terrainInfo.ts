@@ -1,15 +1,5 @@
 import { TerrainType } from '@/types/game';
 
-// Icons used for each terrain type throughout the HUD
-export const TERRAIN_ICONS: Record<TerrainType, string> = {
-  plain: '🌾',
-  forest: '🌲',
-  desert: '🏜️',
-  resource: '💰',
-  mountain: '⛰️',
-  water: '🌊'
-};
-
 // One-line summary of what each terrain does
 export const TERRAIN_SHORT_EFFECTS: Record<TerrainType, string> = {
   plain: 'No effect',

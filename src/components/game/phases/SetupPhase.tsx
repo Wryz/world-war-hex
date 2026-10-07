@@ -1,5 +1,6 @@
 import React from 'react';
 import { PANEL_CLASS } from '../hud/styles';
+import { CrownIcon } from '../icons';
 
 interface SetupPhaseProps {
   isConfirmMode?: boolean;
@@ -20,7 +21,7 @@ export const SetupPhase: React.FC<SetupPhaseProps> = ({
   return (
     <div className="fixed top-3 inset-x-0 z-20 flex justify-center pointer-events-none">
       <div className={`${PANEL_CLASS} px-5 py-3 text-center`}>
-        <div className="font-display text-lg">👑 Place your castle</div>
+        <div className="font-display flex items-center justify-center gap-2 text-lg"><CrownIcon /> Place your castle</div>
         <div className={`mt-1 text-sm ${isConfirmMode && !selectedHexValid ? 'text-red-300' : 'text-slate-300'}`}>
           {message}
         </div>

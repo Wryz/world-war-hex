@@ -1,7 +1,8 @@
 import React from 'react';
 import { UnitType } from '@/types/game';
 import { UNITS } from '@/lib/game/gameState';
-import { getUnitTypeEmoji, getUnitTypeName } from '../utils/UnitHelpers';
+import { getUnitTypeName } from '../utils/UnitHelpers';
+import { ArrowIcon, AttackIcon, GoldIcon, HealthIcon, MoveIcon, UnitIcon } from '../icons';
 import { PANEL_CLASS } from './styles';
 
 // Unit types offered in the barracks
@@ -73,8 +74,8 @@ export const ActionBar: React.FC<ActionBarProps> = ({
                       ? 'bg-slate-800 hover:bg-slate-700 text-slate-100'
                       : 'bg-slate-800/50 text-slate-500 cursor-not-allowed'}`}
               >
-                <span className={`text-xl leading-none ${canAfford || isSelected ? '' : 'opacity-40'}`}>{getUnitTypeEmoji(type)}</span>
-                <span className={`font-display mt-1 text-xs ${isSelected ? '' : canAfford ? 'text-amber-300' : ''}`}>{info.cost}</span>
+                <UnitIcon type={type} className={`text-2xl ${canAfford || isSelected ? '' : 'opacity-40'}`} />
+                <span className={`font-display mt-1 flex items-center gap-0.5 text-xs ${isSelected ? '' : canAfford ? 'text-amber-300' : ''}`}><GoldIcon color={isSelected ? '#0f172a' : undefined} />{info.cost}</span>
               </button>
 
               {/* Stats on hover */}
@@ -82,9 +83,9 @@ export const ActionBar: React.FC<ActionBarProps> = ({
                 <div className="font-bold">{getUnitTypeName(type)}</div>
                 <div className="text-slate-400">{UNIT_ROLES[type]}</div>
                 <div className="mt-1 flex justify-between">
-                  <span>⚔️ {info.attackPower}</span>
-                  <span>❤️ {info.maxLifespan}</span>
-                  <span>👣 {info.movementRange}</span>
+                  <span className="flex items-center gap-1"><AttackIcon />{info.attackPower}</span>
+                  <span className="flex items-center gap-1"><HealthIcon />{info.maxLifespan}</span>
+                  <span className="flex items-center gap-1"><MoveIcon />{info.movementRange}</span>
                 </div>
               </div>
             </div>
@@ -95,7 +96,7 @@ export const ActionBar: React.FC<ActionBarProps> = ({
           onClick={onEndTurn}
           className="font-display ml-1 shrink-0 rounded-lg bg-amber-500 hover:bg-amber-400 px-4 text-base text-slate-900 shadow"
         >
-          End Turn ➜
+          <span className="flex items-center gap-1.5">End Turn <ArrowIcon /></span>
         </button>
       </div>
     </div>

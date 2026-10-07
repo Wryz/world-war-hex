@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Image from 'next/image';
 import HexBackground from './HexBackground';
+import { AttackIcon, ResumeIcon, ShieldIcon, SkullIcon } from '../icons';
 
 export interface IntroScreenProps {
   onStartGame: (difficulty: 'easy' | 'medium' | 'hard') => void;
@@ -58,9 +59,11 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
                     }
                   `}
                 >
-                  {level === 'easy' && '🛡️ '}
-                  {level === 'medium' && '⚔️ '}
-                  {level === 'hard' && '💀 '}
+                  <span className="mr-2 inline-flex align-[-0.15em]">
+                    {level === 'easy' && <ShieldIcon color="currentColor" />}
+                    {level === 'medium' && <AttackIcon color="currentColor" />}
+                    {level === 'hard' && <SkullIcon color="currentColor" />}
+                  </span>
                   {level.charAt(0).toUpperCase() + level.slice(1)}
                 </button>
               ))}
@@ -75,7 +78,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
                 active:transform active:scale-95
                 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--foreground)]"
             >
-              ⚔️ Begin Conquest
+              <span className="inline-flex items-center gap-2"><AttackIcon color="currentColor" /> Begin Conquest</span>
             </button>
             
             {hasSavedGame && onContinueGame && (
@@ -86,7 +89,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
                   active:transform active:scale-95
                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--accent)]"
               >
-                🔄 Continue Battle
+                <span className="inline-flex items-center gap-2"><ResumeIcon /> Continue Battle</span>
               </button>
             )}
           </div>
