@@ -14,7 +14,7 @@ const LOADING_TIPS = [
   'Hold gold mines with a unit to earn extra gold every turn.',
   'Water and mountains are impassable - look for the passes.',
   'Units within 3 hexes of the enemy castle damage it every turn.',
-  'Move a unit onto the enemy castle to win instantly.',
+  'At half health a castle\'s walls break - then a single unit can storm it.',
   'Archers hit from 2 hexes away, where melee units can\'t strike back.',
   'Destroying an enemy unit pays a bounty of half its cost.',
   'Rogues strike from the shadows: enemies can\'t hit back at them.',

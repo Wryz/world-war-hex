@@ -18,7 +18,7 @@ const STEPS: Record<Step, { text: string; target?: string; manual?: boolean }> =
     manual: true
   },
   win: {
-    text: 'Win by wearing down the enemy castle from 3 hexes away, or by marching onto it. Good luck, commander!',
+    text: 'Win by wearing down the enemy castle from 3 hexes away. Once its walls are breached (half health), march onto it to storm it. Good luck, commander!',
     manual: true
   }
 };

@@ -41,7 +41,7 @@ export const HelpPanel: React.FC<HelpPanelProps> = ({ hexGrid, mapName }) => {
         <li>Drag to rotate the view around the map, scroll to zoom.</li>
         <li className="flex gap-1"><GoldIcon className="mt-0.5" /> Earn gold from income, mines, camps, bounties and sieging. Armies over {FREE_UPKEEP_UNITS} units cost {UPKEEP_PER_UNIT} gold each per turn.</li>
         <li className="flex gap-1"><CampIcon className="mt-0.5" /> Capture a camp by moving onto it, then recruit troops there too.</li>
-        <li className="flex gap-1"><CrownIcon className="mt-0.5" /> Take the enemy castle, or wear it down from 3 hexes away.</li>
+        <li className="flex gap-1"><CrownIcon className="mt-0.5" /> Wear the enemy castle down from 3 hexes away; once its walls are breached (half health), storm it.</li>
       </ul>
     </CollapsiblePanel>
   );

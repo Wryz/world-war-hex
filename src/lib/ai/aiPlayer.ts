@@ -35,7 +35,8 @@ import {
   getMaxRounds,
   getRosterStats,
   getRosterTypes,
-  findBaseHex
+  findBaseHex,
+  canStormCastle
 } from '../game/gameState';
 import { TroopClass, getTroopClass } from '../game/troops';
 
@@ -402,8 +403,9 @@ const assessThreats = (state: GameState): ThreatAssessment => {
     .map(hex => hex.unit as Unit);
   const enemyStrengthNearBase = enemyUnitsNearBase.reduce((sum, unit) => sum + unit.attackPower, 0);
 
+  const breached = canStormCastle(state, 'player');
   const castleRaiders = state.players.player.units.filter(enemy =>
-    walkingDistance(state, enemy.position, aiBase.coordinates) <= enemy.movementRange ||
+    (breached && walkingDistance(state, enemy.position, aiBase.coordinates) <= enemy.movementRange) ||
     getHexDistance(enemy.position, aiBase.coordinates) <= BASE_ATTACK_RANGE
   );
 

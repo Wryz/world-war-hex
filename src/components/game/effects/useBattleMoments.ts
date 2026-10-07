@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { GameState, PlayerType } from '@/types/game';
-import { castleHealthRatio, findBaseHex, getMaxRounds } from '@/lib/game/gameState';
+import { canStormCastle, castleHealthRatio, findBaseHex, getMaxRounds } from '@/lib/game/gameState';
 import { playStinger, setMusicIntensity } from '@/lib/audio/music';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
 import { playBattleSound } from '../utils/battleSounds';
@@ -11,7 +11,7 @@ import {
 // Your castle is in danger below this share of its health
 const LAST_STAND_RATIO = 0.3;
 // Siege damage that earns a callout
-const CRUSHING_BLOW = 8;
+const CRUSHING_BLOW = 12;
 
 const KILL_STREAKS: Record<number, { title: string; tone: 'gold' | 'purple' }> = {
   2: { title: 'Double Kill!', tone: 'gold' },
@@ -81,7 +81,12 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
       shakeScreen(Math.min(0.6, 0.15 + siegeDamage / 20));
       const from = castleOnScreen(gameState, 'ai');
       if (from) emitCoins(from, Math.min(8, Math.ceil(siegeDamage / 3)));
-      if (siegeDamage >= CRUSHING_BLOW) emitMoment({ title: 'Crushing Blow!', subtitle: `-${siegeDamage} castle health`, tone: 'gold' });
+      if (!canStormCastle(previous, 'player') && canStormCastle(gameState, 'player')) {
+        playStinger('levelUp');
+        emitMoment({ title: 'Walls Breached!', subtitle: 'Storm the castle to win', tone: 'gold', big: true });
+      } else if (siegeDamage >= CRUSHING_BLOW) {
+        emitMoment({ title: 'Crushing Blow!', subtitle: `-${siegeDamage} castle health`, tone: 'gold' });
+      }
     }
 
     const playerCastleBefore = previous.players.player.baseHealth ?? 0;
@@ -89,6 +94,9 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
     if (playerCastleAfter < playerCastleBefore && gameState.currentPhase !== 'gameOver') {
       shakeScreen(Math.min(0.7, 0.2 + (playerCastleBefore - playerCastleAfter) / 15));
       flashDamage();
+      if (!canStormCastle(previous, 'ai') && canStormCastle(gameState, 'ai')) {
+        emitMoment({ title: 'Walls Breached!', subtitle: 'Guard your castle!', tone: 'red', big: true });
+      }
       if (!flagsRef.current.lastStand && castleHealthRatio(gameState, 'player') <= LAST_STAND_RATIO) {
         flagsRef.current.lastStand = true;
         setMusicIntensity(2);

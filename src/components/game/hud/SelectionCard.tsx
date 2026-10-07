@@ -2,7 +2,8 @@ import React from 'react';
 import { GameState, Hex, Unit, UnitType } from '@/types/game';
 import { ABILITIES, TROOP_CLASSES, getTroopClass, strongAgainst, weakAgainst } from '@/lib/game/troops';
 import {
-  BASE_MAX_HEALTH, HIGH_GROUND_ELEVATION, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS, getCastleMaxHealth
+  BASE_ATTACK_RANGE, BASE_MAX_HEALTH, HIGH_GROUND_ELEVATION, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS, canStormCastle,
+  getCastleMaxHealth
 } from '@/lib/game/gameState';
 import { getUnitTypeName } from '../utils/UnitHelpers';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
@@ -128,7 +129,11 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
             <HealthBar value={hex.baseHealth ?? BASE_MAX_HEALTH} max={getCastleMaxHealth(gameState, hex.owner ?? 'player')} />
           </div>
           <div className="mt-2 text-slate-400">
-            {hex.owner === 'player' ? 'Recruits deploy next to it' : 'Move a unit onto it to win'}
+            {hex.owner === 'player'
+              ? canStormCastle(gameState, 'ai') ? 'Walls breached - guard it or the enemy can storm it!' : 'Recruits deploy next to it'
+              : canStormCastle(gameState, 'player')
+                ? 'Walls breached - move a unit onto it to win!'
+                : `Besiege it from ${BASE_ATTACK_RANGE} hexes; at half health its walls break and you can storm it`}
           </div>
         </>
       )}

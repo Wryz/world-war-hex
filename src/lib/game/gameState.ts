@@ -187,6 +187,8 @@ export const TERRAIN_BONUS_ATTACK_MULTIPLIER = 1.5;
 export const BERSERK_ATTACK_MULTIPLIER = 1.5;
 // Damage multiplier against castles for units with the siege ability
 export const SIEGE_MULTIPLIER = 2;
+// A castle can only be stormed once its walls are breached: at this share of its health or less
+export const STORM_BREACH_RATIO = 0.5;
 
 // How many hexes away ranged units (rangedAttack) can strike from
 export const RANGED_ATTACK_RANGE = 2;
@@ -836,7 +838,8 @@ const getReachableHexes = (state: GameState, unit: Unit) =>
   );
 
 // All hexes a unit can legally be ordered to move to this turn.
-// Units can't end on an occupied hex, impassable ground, their own base, or a hex another order already reserved.
+// Units can't end on an occupied hex, impassable ground, their own base, an enemy castle whose walls
+// still stand, or a hex another order already reserved.
 export const getValidMoveTargets = (state: GameState, unit: Unit): HexCoordinates[] => {
   if (unit.hasMoved) return [];
 
@@ -852,7 +855,8 @@ export const getValidMoveTargets = (state: GameState, unit: Unit): HexCoordinate
     if (!hex || entry.cost === 0 || isImpassable(hex)) continue;
 
     const isOwnBase = hex.isBase && hex.owner === unit.owner;
-    if (!hex.unit && !isOwnBase && !reserved.has(key)) {
+    const isIntactCastle = hex.isBase && hex.owner !== unit.owner && !canStormCastle(state, unit.owner);
+    if (!hex.unit && !isOwnBase && !isIntactCastle && !reserved.has(key)) {
       targets.push(hex.coordinates);
     }
   }
@@ -1279,6 +1283,10 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
 
   return combats;
 };
+
+// Whether `attacker` has breached the enemy castle's walls, so its troops may storm it
+export const canStormCastle = (state: GameState, attacker: PlayerType): boolean =>
+  castleHealthRatio(state, attacker === 'player' ? 'ai' : 'player') <= STORM_BREACH_RATIO;
 
 // A unit standing on the enemy base wins the game
 const checkBaseCapture = (state: GameState): PlayerType | undefined => {
