@@ -30,7 +30,7 @@ import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
 import { playSound } from './utils/SoundPlayer';
 import { playBattleSound } from './utils/battleSounds';
-import { getImpactTimes } from './utils/battleTiming';
+import { getBattleStartDelay, getDeathTime, getImpactTimesUntil } from './utils/battleTiming';
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
@@ -408,7 +408,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const [popups, setPopups] = useState<DamagePopup[]>([]);
   // Units destroyed a moment ago, still falling on the battlefield
-  const [dyingUnits, setDyingUnits] = useState<{ unit: Unit; position: [number, number, number] }[]>([]);
+  const [dyingUnits, setDyingUnits] = useState<{ unit: Unit; position: [number, number, number]; fallen: boolean }[]>([]);
 
   const { hexGrid, currentPhase, pendingMoves, pendingPurchases, combats, players, turnNumber } = gameState;
   const activePlayerSide = getActivePlayer(gameState);
@@ -495,7 +495,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     const combatFacing = new Map<string, HexCoordinates>();
     const battles = new Map<string, UnitBattle>();
     if (currentPhase === 'combat') {
-      // Every battle of the turn is fought at the same time
+      // Every battle of the turn is fought at the same time, once the troops walking into them arrive
+      const startDelay = getBattleStartDelay();
       combats.forEach((combat, index) => {
         if (combat.resolved) return;
         for (const defender of combat.defenders) {
@@ -511,33 +512,53 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         const liveAttackers = combat.attackers
           .map(a => players[a.owner].units.find(u => u.id === a.id))
           .filter((u): u is Unit => !!u);
+        const liveDefenders = combat.defenders
+          .map(d => players[d.owner].units.find(u => u.id === d.id))
+          .filter((u): u is Unit => !!u);
         // The same outcome the battle will resolve to, so health drops blow by blow to the final result
         const preview = getCombatPreview(gameState, combat);
         const damageTo = new Map(
           [...preview.attackers, ...preview.defenders].map(entry => [entry.unit.id, entry.damageTaken])
         );
-        const sortedTimes = (units: Unit[]) => units.flatMap(getImpactTimes).sort((a, b) => a - b);
-        const liveDefenders = combat.defenders
-          .map(d => players[d.owner].units.find(u => u.id === d.id))
-          .filter((u): u is Unit => !!u);
+        const hitBack = new Set(preview.attackers.filter(a => a.canBeHitBack).map(a => a.unit.id));
+        // Who strikes whom: defenders strike back at the nearest attacker they can reach
+        const defenderTarget = new Map(liveDefenders.map(live => [live.id, liveAttackers
+          .filter(a => canStrike(gameState, live, a))
+          .sort((a, b) => getHexDistance(a.position, live.position) - getHexDistance(b.position, live.position))[0] ?? null]));
 
+        // When each blow lands, and so when each unit falls; a fallen unit strikes no more
+        const blowsOn = (unit: Unit, diesAt: Map<string, number | null>) => {
+          const strikers = liveAttackers.some(a => a.id === unit.id)
+            ? (hitBack.has(unit.id) ? liveDefenders : [])
+            : liveAttackers;
+          return strikers.flatMap(striker => getImpactTimesUntil(striker, diesAt.get(striker.id) ?? null)).sort((a, b) => a - b);
+        };
+        const fighters = [...liveAttackers, ...liveDefenders];
+        const deathsOf = (diesAt: Map<string, number | null>) => new Map(fighters.map(unit =>
+          [unit.id, getDeathTime(blowsOn(unit, diesAt), damageTo.get(unit.id) ?? 0, unit.lifespan)]));
+        const firstGuess = deathsOf(new Map());
+        const diesAt = deathsOf(firstGuess);
+
+        const defenderAt = liveDefenders.find(d => coordKey(d.position) === coordKey(combat.hexCoordinates)) ?? liveDefenders[0];
         for (const attacker of liveAttackers) {
-          const isHitBack = preview.attackers.find(a => a.unit.id === attacker.id)?.canBeHitBack ?? false;
           battles.set(attacker.id, {
             key,
             target: worldOf(combat.hexCoordinates),
-            incoming: { times: isHitBack ? sortedTimes(liveDefenders) : [], damage: damageTo.get(attacker.id) ?? 0 }
+            startDelay,
+            incoming: { times: blowsOn(attacker, diesAt), damage: damageTo.get(attacker.id) ?? 0 },
+            diesAt: diesAt.get(attacker.id) ?? null,
+            targetDiesAt: defenderAt ? diesAt.get(defenderAt.id) ?? null : null
           });
         }
         for (const live of liveDefenders) {
-          // Defenders strike back at the nearest attacker they can reach
-          const reachable = liveAttackers
-            .filter(a => canStrike(gameState, live, a))
-            .sort((a, b) => getHexDistance(a.position, live.position) - getHexDistance(b.position, live.position));
+          const target = defenderTarget.get(live.id) ?? null;
           battles.set(live.id, {
             key,
-            target: reachable[0] ? worldOf(reachable[0].position) : null,
-            incoming: { times: sortedTimes(liveAttackers), damage: damageTo.get(live.id) ?? 0 }
+            target: target ? worldOf(target.position) : null,
+            startDelay,
+            incoming: { times: blowsOn(live, diesAt), damage: damageTo.get(live.id) ?? 0 },
+            diesAt: diesAt.get(live.id) ?? null,
+            targetDiesAt: target ? diesAt.get(target.id) ?? null : null
           });
         }
       });
@@ -688,7 +709,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   // --- Damage popups -----------------------------------------------------------------------
 
-  const previousUnitsRef = useRef(new Map<string, { unit: Unit; position: [number, number, number] }>());
+  const previousUnitsRef = useRef(new Map<string, { unit: Unit; position: [number, number, number]; fallen: boolean }>());
   const previousGameIdRef = useRef(players.player.id);
   const popupIdRef = useRef(0);
   const popupTimeoutsRef = useRef(new Set<ReturnType<typeof setTimeout>>());
@@ -704,13 +725,14 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     }
 
     const previous = previousUnitsRef.current;
-    const next = new Map<string, { unit: Unit; position: [number, number, number] }>();
+    const next = new Map<string, { unit: Unit; position: [number, number, number]; fallen: boolean }>();
     const created: DamagePopup[] = [];
 
-    for (const { unit, position } of unitRenderData) {
-      next.set(unit.id, { unit, position });
+    // Units struck down in the battle being fought have already fallen on the field
+    for (const { unit, position, battle } of unitRenderData) {
+      next.set(unit.id, { unit, position, fallen: battle?.diesAt != null });
     }
-    const fallen: { unit: Unit; position: [number, number, number] }[] = [];
+    const fallen: { unit: Unit; position: [number, number, number]; fallen: boolean }[] = [];
     for (const [id, before] of previous) {
       if (!next.has(id)) {
         const bounty = getKillBounty(before.unit);
@@ -866,7 +888,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
       {/* Units that just fell, playing out their death */}
       {assetsLoaded && dyingUnits.map(data => (
-        <UnitMesh key={`dying-${data.unit.id}`} unit={data.unit} position={data.position} dying decorative />
+        <UnitMesh key={`dying-${data.unit.id}`} unit={data.unit} position={data.position} dying fallen={data.fallen} decorative />
       ))}
 
       {/* Cards played this turn appear at their deployment hex */}

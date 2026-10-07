@@ -1,4 +1,4 @@
-import { memo, useRef, useEffect, useLayoutEffect, useState } from 'react';
+import { memo, useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import { Html } from '@react-three/drei';
 import { useFrame, ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
@@ -13,7 +13,7 @@ import {
 } from './utils/UnitModelSystem';
 import type { CreatureRig, CreatureState } from './utils/creatureTypes';
 import { getTimeScale } from './effects/effects';
-import { MELEE_IMPACT_POINT, PROJECTILE_FLIGHT_TIME, RANGED_RELEASE_POINT, strikeOffset } from './utils/battleTiming';
+import { MELEE_IMPACT_POINT, PROJECTILE_FLIGHT_TIME, RANGED_RELEASE_POINT, WALK_SPEED, strikeOffset } from './utils/battleTiming';
 import { playBattleSound, BattleSound } from './utils/battleSounds';
 import { DRAG_CLICK_TOLERANCE } from './HexTile';
 import { instantiateUnitModel, findAnimationClip, disposeUnitModel, UnitModelInstance } from './utils/unitModelCache';
@@ -23,7 +23,6 @@ import { ArrowIcon, AttackIcon, CrownIcon, GoldIcon, TerrainIcon, UnitIcon, Wait
 const UNIT_ELEVATION = 0.02;
 // Owner ring height above the unit's base: clear of hovered tiles, which rise slightly
 const RING_HEIGHT = 0.05;
-const WALK_SPEED = 2.4; // world units per second
 const TURN_SPEED = 8; // how quickly units rotate to face their target
 const ANIMATION_FADE_DURATION = 0.3;
 // How far melee units step towards their target on each strike
@@ -32,8 +31,15 @@ const LUNGE_DISTANCE = 0.4;
 const PROJECTILE_HEIGHT = 0.6;
 // How long a floating damage number stays up (ms)
 const HIT_NUMBER_DURATION = 1200;
-// How long a fallen unit lies on the field before it sinks away
-export const DEATH_DURATION = 1.4;
+// A destroyed unit falls, then shrinks and sinks into the ground in a puff of dust (s)
+const DEATH_FALL = 0.8;
+const DEATH_FADE = 1;
+export const DEATH_DURATION = DEATH_FALL + DEATH_FADE;
+// How far a fallen unit sinks, and how long its dust puff lasts
+const DEATH_SINK = 0.45;
+const PUFF_SECONDS = 0.9;
+const PUFF_COUNT = 10;
+const PUFF_COLOR = '#d6cfc2';
 
 // Colours of glowing projectiles
 const PROJECTILE_COLORS: Record<Exclude<Projectile, 'arrow' | 'rock'>, { core: string; glow: string; trail: string }> = {
@@ -54,10 +60,53 @@ export interface UnitBattle {
   key: string;
   // World position (on the tile surface) of the enemy this unit strikes at, or null if it can't reach any
   target: [number, number, number] | null;
+  // Seconds to wait before the fight begins, while the troops walking into it arrive
+  startDelay?: number;
   // Blows this unit takes during the battle: when each lands (seconds after the battle starts) and the
   // total damage they add up to, so its health bar can drop hit by hit
   incoming?: { times: number[]; damage: number };
+  // When this unit, and the enemy it strikes at, fall in the battle (null if they survive it)
+  diesAt?: number | null;
+  targetDiesAt?: number | null;
 }
+
+// Dust kicked up as a fallen unit sinks into the ground
+const DustPuff: React.FC<{ delay: number }> = ({ delay }) => {
+  const groupRef = useRef<THREE.Group>(null);
+  const timeRef = useRef(-delay);
+  const motes = useMemo(() => Array.from({ length: PUFF_COUNT }, (_, i) => {
+    const angle = (i / PUFF_COUNT) * Math.PI * 2 + Math.random() * 0.5;
+    return { x: Math.cos(angle), z: Math.sin(angle), speed: 0.6 + Math.random() * 0.6 };
+  }), []);
+
+  useFrame((_, rawDelta) => {
+    timeRef.current += Math.min(rawDelta, 0.1) * getTimeScale();
+    const group = groupRef.current;
+    if (!group) return;
+    const t = timeRef.current / PUFF_SECONDS;
+    group.visible = t >= 0 && t <= 1;
+    if (!group.visible) return;
+    const spread = 1 - (1 - t) ** 3;
+    group.children.forEach((child, i) => {
+      const mote = motes[i];
+      const mesh = child as THREE.Mesh;
+      mesh.position.set(mote.x * spread * 0.75 * mote.speed, 0.08 + spread * 0.4 * mote.speed, mote.z * spread * 0.75 * mote.speed);
+      mesh.scale.setScalar(0.08 + spread * 0.16);
+      (mesh.material as THREE.MeshBasicMaterial).opacity = 0.8 * (1 - t);
+    });
+  });
+
+  return (
+    <group ref={groupRef} visible={false}>
+      {motes.map((_, i) => (
+        <mesh key={i}>
+          <icosahedronGeometry args={[1, 0]} />
+          <meshBasicMaterial color={PUFF_COLOR} transparent opacity={0.8} depthWrite={false} />
+        </mesh>
+      ))}
+    </group>
+  );
+};
 
 // Terrain effects shown on a unit's label: cover, an attack bonus (Pikemen in forest, high ground),
 // being exposed in a swamp, healing at a spring, a held gold mine
@@ -82,6 +131,8 @@ interface UnitMeshProps {
   decorative?: boolean;
   // The unit has just been destroyed: play its death and sink into the ground
   dying?: boolean;
+  // ...having already fallen in the battle that destroyed it, so it only sinks away
+  fallen?: boolean;
 }
 
 // Smallest signed difference between two angles
@@ -104,7 +155,8 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   battle = null,
   terrainBadges = [],
   decorative = false,
-  dying = false
+  dying = false,
+  fallen = false
 }) => {
   const look = getUnitLook(unit.type);
   const ownerColor = OWNER_COLORS[unit.owner];
@@ -123,6 +175,9 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   const rigStateRef = useRef<CreatureState | null>(null);
   const wingsRef = useRef<UnitModelInstance['wings'] | null>(null);
   const deathRef = useRef<number | null>(null);
+  // Struck down in the battle being fought: it stops fighting and falls where it stands
+  const [killed, setKilled] = useState(false);
+  const killedRef = useRef(false);
   const [modelLoaded, setModelLoaded] = useState(false);
 
   // Damage shown so far in the current battle, and floating numbers for recent hits
@@ -137,13 +192,26 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     return () => timeouts.forEach(clearTimeout);
   }, []);
 
-  // A new battle (or the end of one) starts the health bar from the unit's real health again
+  // A new battle (or the end of one) starts the health bar from the unit's real health again;
+  // its clock starts once the troops walking into it arrive
   const battleKey = battle?.key ?? null;
+  const startDelayRef = useRef(0);
+  startDelayRef.current = battle?.startDelay ?? 0;
   useEffect(() => {
     setShownDamage(0);
     setHitNumbers([]);
     battleProgressRef.current = null;
-    battleTimeRef.current = 0;
+    battleTimeRef.current = -startDelayRef.current;
+    // A unit that fell in a battle but survived it after all gets back up
+    if (killedRef.current) {
+      killedRef.current = false;
+      setKilled(false);
+      deathRef.current = null;
+      rigRef.current?.setState('idle');
+      rigStateRef.current = null;
+      actionRef.current?.fadeOut(0.2);
+      actionRef.current = null;
+    }
   }, [battleKey]);
 
   const showHit = (amount: number) => {
@@ -292,12 +360,14 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     actionRef.current = action;
   };
 
-  // Fall when destroyed: the death animation plays, then the body sinks into the ground
-  const playDeath = () => {
+  // Fall when destroyed: the death animation plays (or, for a unit that already fell, is shown
+  // finished), then the body sinks into the ground
+  const playDeath = (alreadyFallen: boolean) => {
     const rig = rigRef.current;
     if (rig) {
       rig.setState('death');
       rigStateRef.current = 'death';
+      if (alreadyFallen) for (let i = 0; i < 20; i++) rig.update(0.1);
       return;
     }
     const mixer = mixerRef.current;
@@ -307,7 +377,13 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     action.setLoop(THREE.LoopOnce, 1);
     action.clampWhenFinished = true;
     actionRef.current?.fadeOut(0.1);
-    action.reset().fadeIn(0.1).play();
+    action.reset().play();
+    if (alreadyFallen) {
+      action.time = clip.duration;
+      mixer.update(0);
+    } else {
+      action.fadeIn(0.1);
+    }
     actionRef.current = action;
   };
 
@@ -317,17 +393,51 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     // Avoid huge jumps after the tab was in the background; follow the game speed and slow motion
     const delta = Math.min(rawDelta, 0.1) * getTimeScale();
 
-    if (dying) {
+    if (!dying) {
+      if (battle) battleTimeRef.current += delta;
+
+      // Blows landing on this unit: drop its health bar a step at a time as they hit
+      if (battle?.incoming && battle.incoming.damage > 0) {
+        if (battleProgressRef.current?.key !== battle.key) {
+          battleProgressRef.current = { key: battle.key, landed: 0, shown: 0 };
+        }
+        const tally = battleProgressRef.current;
+        const { times, damage } = battle.incoming;
+        const landed = times.filter(time => time <= battleTimeRef.current).length;
+        if (landed > tally.landed) {
+          tally.landed = landed;
+          const shown = Math.round(damage * landed / times.length);
+          if (shown > tally.shown) {
+            showHit(shown - tally.shown);
+            tally.shown = shown;
+            setShownDamage(shown);
+          }
+        }
+      }
+
+      // The killing blow has landed: stop fighting and fall
+      if (!killedRef.current && battle?.diesAt != null && battleTimeRef.current >= battle.diesAt) {
+        killedRef.current = true;
+        setKilled(true);
+      }
+    }
+
+    if (dying || killedRef.current) {
       if (deathRef.current === null && modelLoaded) {
-        deathRef.current = 0;
-        playDeath();
+        const alreadyFallen = dying && fallen;
+        deathRef.current = alreadyFallen ? DEATH_FALL : 0;
+        playDeath(alreadyFallen);
       }
-      if (deathRef.current !== null) {
+      if (deathRef.current !== null && dying) {
         deathRef.current += delta;
-        // Sink once the fall has played out
-        const sink = Math.max(0, deathRef.current - DEATH_DURATION * 0.6) / (DEATH_DURATION * 0.4);
-        root.position.y = targetPosition.current.y - sink * 0.8;
+        // Once it has fallen, the body shrinks and sinks into the ground
+        const fade = Math.min(1, Math.max(0, deathRef.current - DEATH_FALL) / DEATH_FADE);
+        const eased = fade * fade;
+        root.position.y = targetPosition.current.y - eased * DEATH_SINK;
+        root.scale.setScalar(1 - eased * 0.9);
       }
+      if (modelRef.current) modelRef.current.position.set(0, 0, 0);
+      if (arrowRef.current) arrowRef.current.visible = false;
       mixerRef.current?.update(delta);
       rigRef.current?.update(delta);
       return;
@@ -373,31 +483,11 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     let isStriking = false;
     const arrow = arrowRef.current;
     if (arrow) arrow.visible = false;
-    if (battle) battleTimeRef.current += delta;
-
-    // Blows landing on this unit: drop its health bar a step at a time as they hit
-    if (battle?.incoming && battle.incoming.damage > 0) {
-      if (battleProgressRef.current?.key !== battle.key) {
-        battleProgressRef.current = { key: battle.key, landed: 0, shown: 0 };
-      }
-      const tally = battleProgressRef.current;
-      const { times, damage } = battle.incoming;
-      const landed = times.filter(time => time <= battleTimeRef.current).length;
-      if (landed > tally.landed) {
-        tally.landed = landed;
-        const shown = Math.round(damage * landed / times.length);
-        if (shown > tally.shown) {
-          showHit(shown - tally.shown);
-          tally.shown = shown;
-          setShownDamage(shown);
-        }
-      }
-    }
-
     if (battle && !walkRef.current) {
       const now = battleTimeRef.current;
       if (battleClockRef.current?.key !== battle.key) {
-        battleClockRef.current = { key: battle.key, start: now + strikeOffset(unit.id), lastStrike: -1, lastImpact: -1 };
+        // Nobody strikes before the battle begins (its clock runs from minus the walk-in time)
+        battleClockRef.current = { key: battle.key, start: Math.max(now, 0) + strikeOffset(unit.id), lastStrike: -1, lastImpact: -1 };
       }
       const clock = battleClockRef.current;
       const elapsed = now - clock.start;
@@ -411,13 +501,17 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
         const sinceStrike = elapsed - strikeNumber * attackInterval;
         const progress = sinceStrike / attackInterval;
 
-        if (strikeNumber !== clock.lastStrike) {
+        // Its foe has fallen: finish the strike in hand, then stand down
+        const targetDown = battle.targetDiesAt != null && now >= battle.targetDiesAt;
+        if (strikeNumber !== clock.lastStrike && !targetDown) {
           clock.lastStrike = strikeNumber;
           strike();
           if (isRanged) playSfx(isMagicShot ? 'spellCast' : 'bowShot', 0.8);
         }
 
-        if (isRanged) {
+        if (strikeNumber !== clock.lastStrike) {
+          // Standing down
+        } else if (isRanged) {
           // The bolt (or spell) flies from the shooter to the target in an arc, once the shot is released
           const flightStart = attackInterval * RANGED_RELEASE_POINT;
           if (sinceStrike >= flightStart && sinceStrike < flightStart + PROJECTILE_FLIGHT_TIME && arrow) {
@@ -517,6 +611,13 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   const healthColor = healthRatio > 0.6 ? '#22c55e' : healthRatio > 0.3 ? '#eab308' : '#ef4444';
 
   return (
+    <>
+    {/* Dust thrown up as the fallen unit sinks away */}
+    {dying && (
+      <group position={position}>
+        <DustPuff delay={fallen ? 0 : DEATH_FALL} />
+      </group>
+    )}
     <group
       ref={rootRef}
       onClick={onSelect ? handleClick : undefined}
@@ -575,7 +676,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       )}
 
       {/* Simple placeholder while the model is loading (no external assets so it can't suspend the scene) */}
-      {!modelLoaded && (
+      {!modelLoaded && !dying && (
         <mesh position={[0, 0.5, 0]}>
           <capsuleGeometry args={[0.2, 0.5, 4, 8]} />
           <meshStandardMaterial color={ownerColor} />
@@ -583,7 +684,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       )}
 
       {/* Owner ring so it's always clear which side a unit belongs to */}
-      <mesh visible={!dying} position={[0, RING_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh visible={!dying && !killed} position={[0, RING_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.42, isSelected ? 0.62 : 0.54, 32]} />
         <meshBasicMaterial
           color={isSelected ? '#facc15' : ownerColor}
@@ -594,7 +695,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       </mesh>
 
       {/* Compact unit label: type, health and terrain bonuses */}
-      {!decorative && !dying && (
+      {!decorative && !dying && !killed && (
         <Html
           position={[0, look.labelHeight, 0]}
           center
@@ -655,6 +756,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
         </Html>
       )}
     </group>
+    </>
   );
 };
 

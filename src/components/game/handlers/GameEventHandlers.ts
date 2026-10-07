@@ -26,7 +26,7 @@ import { buildBattle } from '@/lib/campaign/battleSetup';
 import { getProfile } from '@/lib/meta/profile';
 import { playBattleSound } from '../utils/battleSounds';
 import { getGameSpeed } from '../effects/effects';
-import { BATTLE_DURATION_MS } from '../utils/battleTiming';
+import { BATTLE_DURATION_MS, getArrivalTime, getBattleStartDelay, setBattleStartDelay } from '../utils/battleTiming';
 import {
   BattleConfig,
   loadGameFromLocalStorage,
@@ -53,6 +53,13 @@ const describeInvalidMove = (state: GameState, unit: Unit, hex: Hex): string => 
 };
 
 // Short pauses that make the enemy's turn readable (scaled by the game speed)
+// Executes a side's orders, noting how long its troops take to walk into any battles that follow
+const executeTurn = (state: GameState): GameState => {
+  const next = executeMoves(state);
+  setBattleStartDelay(next.currentPhase === 'combat' ? getArrivalTime(state, next) : 0);
+  return next;
+};
+
 const AI_PLANNING_DELAY = 700;
 const AI_EXECUTION_DELAY = 450;
 
@@ -163,7 +170,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     if (current.currentPhase !== 'planning' || (current.activePlayer ?? 'player') !== 'player') return;
 
     clearSelection();
-    commitState(executeMoves(current));
+    commitState(executeTurn(current));
   }, [clearSelection, commitState]);
 
   // Planning timer for the player's turn - when it runs out the turn ends automatically.
@@ -199,7 +206,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
       commitState(planAITurn(stateRef.current));
 
       executionTimeout = setTimeout(() => {
-        commitState(executeMoves(stateRef.current));
+        commitState(executeTurn(stateRef.current));
       }, AI_EXECUTION_DELAY / speed);
     }, AI_PLANNING_DELAY / speed);
 
@@ -214,9 +221,10 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     if (!isReady || currentPhase !== 'combat') return;
     if (!gameState.combats.some(c => !c.resolved)) return;
 
+    // Troops walk to the fight first, then it plays out
     const battleDelay = setTimeout(() => {
       commitState(resolveAllCombats(stateRef.current));
-    }, BATTLE_DURATION_MS / getGameSpeed());
+    }, (getBattleStartDelay() * 1000 + BATTLE_DURATION_MS) / getGameSpeed());
 
     return () => clearTimeout(battleDelay);
   }, [isReady, currentPhase, gameState.combats, commitState]);
