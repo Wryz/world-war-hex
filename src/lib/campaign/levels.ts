@@ -123,13 +123,13 @@ const ENEMY_STRENGTH = 0.81;
 // Factions whose troops are cheaper or trickier than their power suggests (goblin swarms, undead
 // healed by cursed ground) are toned down; the simulator measured these
 const FACTION_STRENGTH: Partial<Record<Faction, number>> = {
-  bandits: 1.1, goblins: 0.86, beasts: 1.08, swamp: 0.8, desert: 0.7, frost: 0.7, undead: 0.68, orcs: 0.83, infernal: 0.68, dragons: 0.72
+  bandits: 1.06, goblins: 0.79, beasts: 0.87, swamp: 0.59, desert: 0.49, frost: 0.52, undead: 0.55, orcs: 0.54, infernal: 0.42, dragons: 0.6
 };
 // Later levels in a region are a little harder than earlier ones; the first meets a new enemy, so it is gentler
 const IN_REGION_RAMP = 0.012;
 const FIRST_LEVEL_EASE = 0.92;
 // The tutorial battle is gentler still
-const TUTORIAL_EASE = 0.85;
+const TUTORIAL_EASE = 0.75;
 // Bosses and champions are far tougher than a regular troop, so their stats are scaled less
 const BOSS_STRENGTH = 0.42;
 // ...adjusted per boss, as some abilities (flying, healing) count for more than others
