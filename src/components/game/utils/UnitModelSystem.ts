@@ -79,6 +79,15 @@ export const UNIT_MODELS: Record<UnitType, UnitAttributes> = {
   }
 };
 
+// Seconds between strikes in battle - each troop type fights at its own pace
+export const ATTACK_INTERVALS: Record<UnitType, number> = {
+  helicopter: 0.7, // Knights: quick cavalry strikes
+  infantry: 0.9,   // Swordsmen
+  medic: 1.2,
+  tank: 1.3,       // Pikemen: heavy, deliberate thrusts
+  artillery: 1.6   // Archers: draw, aim and loose
+};
+
 // Animation state for each unit type
 export type AnimationState = 'idle' | 'holdShield' | 'attack' | 'walk' | 'death' | 'special';
 

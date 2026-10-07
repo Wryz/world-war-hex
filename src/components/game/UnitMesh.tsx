@@ -4,11 +4,13 @@ import { useFrame, ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 import { HexCoordinates, Unit } from '@/types/game';
 import {
+  ATTACK_INTERVALS,
   getUnitModelAttributes,
   getUnitModelPath,
   getAnimationName,
   AnimationState
 } from './utils/UnitModelSystem';
+import { playBattleSound } from './utils/battleSounds';
 import { instantiateUnitModel, findAnimationClip } from './utils/unitModelCache';
 import { ArrowIcon, AttackIcon, GoldIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
 
@@ -17,13 +19,30 @@ const UNIT_ELEVATION = 0.02;
 const WALK_SPEED = 2.4; // world units per second
 const TURN_SPEED = 8; // how quickly units rotate to face their target
 const ANIMATION_FADE_DURATION = 0.3;
+// How far melee units step towards their target on each strike
+const LUNGE_DISTANCE = 0.4;
+// Seconds an arrow takes to reach its target
+const ARROW_FLIGHT_TIME = 0.35;
+
+// Small per-unit delay so units in the same battle don't strike in lockstep
+const strikeOffset = (id: string) => {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) | 0;
+  return (Math.abs(hash) % 1000) / 1000 * 0.35;
+};
 
 export const OWNER_COLORS = {
   player: '#3b82f6',
   ai: '#ef4444'
 };
 
-export type CombatRole = 'attacker' | 'defender' | null;
+// The fight a unit is taking part in right now, if any
+export interface UnitBattle {
+  // Changes for every new battle so the animation restarts
+  key: string;
+  // World position (on the tile surface) of the enemy this unit strikes at, or null if it can't reach any
+  target: [number, number, number] | null;
+}
 
 // Terrain effects shown on a unit's label: forest cover, Pikemen's forest attack bonus, a held gold mine
 export type UnitBadge = 'cover' | 'attack' | 'gold';
@@ -40,7 +59,7 @@ interface UnitMeshProps {
   isPendingPurchase?: boolean;
   isSelected?: boolean;
   hasPlannedMove?: boolean;
-  combatRole?: CombatRole;
+  battle?: UnitBattle | null;
   // Short labels for terrain effects currently helping this unit
   terrainBadges?: UnitBadge[];
 }
@@ -62,7 +81,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   isPendingPurchase = false,
   isSelected = false,
   hasPlannedMove = false,
-  combatRole = null,
+  battle = null,
   terrainBadges = []
 }) => {
   const unitModelAttributes = getUnitModelAttributes(unit.type);
@@ -152,7 +171,28 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     actionRef.current = nextAction;
   };
 
-  useFrame((_, rawDelta) => {
+  const isRanged = unit.abilities.includes('rangedAttack');
+  const attackInterval = ATTACK_INTERVALS[unit.type];
+  const arrowRef = useRef<THREE.Group>(null);
+  // When the current battle started (clock time) and which strike was last played
+  const battleClockRef = useRef<{ key: string; start: number; lastStrike: number; lastImpact: number } | null>(null);
+  const targetVector = useRef(new THREE.Vector3());
+
+  // Play one strike of the attack animation, sped up to fit the unit's attack interval
+  const strike = () => {
+    const mixer = mixerRef.current;
+    if (!mixer) return;
+    const clip = findAnimationClip(clipsRef.current, getAnimationName(unit.type, 'attack'));
+    if (!clip) return;
+
+    const action = mixer.clipAction(clip);
+    action.setLoop(THREE.LoopOnce, 1);
+    if (actionRef.current && actionRef.current !== action) actionRef.current.fadeOut(0.1);
+    action.reset().setEffectiveTimeScale(Math.max(1, clip.duration / (attackInterval * 0.8))).fadeIn(0.05).play();
+    actionRef.current = action;
+  };
+
+  useFrame((frameState, rawDelta) => {
     const root = rootRef.current;
     if (!root) return;
     // Avoid huge jumps after the tab was in the background
@@ -193,6 +233,77 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       root.position.lerp(targetPosition.current, Math.min(1, delta * 10));
     }
 
+    // Battle: strike at the target on this unit's own cadence
+    let lunge = 0;
+    let isStriking = false;
+    const arrow = arrowRef.current;
+    if (arrow) arrow.visible = false;
+
+    if (battle && !walkRef.current) {
+      const now = frameState.clock.getElapsedTime();
+      if (battleClockRef.current?.key !== battle.key) {
+        battleClockRef.current = { key: battle.key, start: now + strikeOffset(unit.id), lastStrike: -1, lastImpact: -1 };
+      }
+      const clock = battleClockRef.current;
+      const elapsed = now - clock.start;
+
+      if (battle.target && elapsed >= 0) {
+        const [tx, ty, tz] = battle.target;
+        targetVector.current.set(tx, ty, tz);
+        desiredHeading = Math.atan2(tx - root.position.x, tz - root.position.z);
+
+        const strikeNumber = Math.floor(elapsed / attackInterval);
+        const sinceStrike = elapsed - strikeNumber * attackInterval;
+        const progress = sinceStrike / attackInterval;
+
+        if (strikeNumber !== clock.lastStrike) {
+          clock.lastStrike = strikeNumber;
+          if (!isRanged) strike();
+          else playBattleSound('bowShot', 0.8);
+        }
+
+        if (isRanged) {
+          // Arrow flies from the archer to the target in an arc
+          if (sinceStrike < ARROW_FLIGHT_TIME && arrow) {
+            const flight = sinceStrike / ARROW_FLIGHT_TIME;
+            const local = targetVector.current.clone().sub(root.position);
+            arrow.visible = true;
+            arrow.position.set(local.x * flight, 1 + local.y * flight + Math.sin(flight * Math.PI) * 0.8, local.z * flight);
+            const ahead = Math.min(1, flight + 0.05);
+            arrow.lookAt(
+              root.position.x + local.x * ahead,
+              root.position.y + 1 + local.y * ahead + Math.sin(ahead * Math.PI) * 0.8,
+              root.position.z + local.z * ahead
+            );
+          } else if (strikeNumber !== clock.lastImpact) {
+            clock.lastImpact = strikeNumber;
+            playBattleSound('arrowHit', 0.7);
+          }
+        } else {
+          // Step in, strike, step back
+          isStriking = progress < 0.6;
+          lunge = progress < 0.25
+            ? Math.sin((progress / 0.25) * Math.PI / 2)
+            : progress < 0.6 ? Math.cos(((progress - 0.25) / 0.35) * Math.PI / 2) : 0;
+          if (progress >= 0.25 && strikeNumber !== clock.lastImpact) {
+            clock.lastImpact = strikeNumber;
+            playBattleSound('swordClash', 0.7);
+            playBattleSound('swordHit', 0.5);
+          }
+        }
+      }
+    } else {
+      battleClockRef.current = null;
+    }
+
+    if (modelRef.current) {
+      if (lunge > 0 && desiredHeading !== null) {
+        modelRef.current.position.set(Math.sin(desiredHeading) * lunge * LUNGE_DISTANCE, 0, Math.cos(desiredHeading) * lunge * LUNGE_DISTANCE);
+      } else {
+        modelRef.current.position.set(0, 0, 0);
+      }
+    }
+
     if (desiredHeading === null && facingTarget) {
       const dx = facingTarget[0] - root.position.x;
       const dz = facingTarget[1] - root.position.z;
@@ -208,8 +319,11 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
 
     // Pick the animation for what the unit is doing right now
     if (walkRef.current) playAnimation('walk');
-    else if (combatRole === 'attacker') playAnimation('attack');
-    else if (combatRole === 'defender' || isPendingPurchase) playAnimation('holdShield');
+    else if (battle) {
+      // Between strikes, hold the shield up
+      if (!isStriking || !actionRef.current?.isRunning()) playAnimation('holdShield');
+    }
+    else if (isPendingPurchase) playAnimation('holdShield');
     else playAnimation('idle');
 
     mixerRef.current?.update(delta);
@@ -239,6 +353,24 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
 
       {/* The 3D model is loaded into this group */}
       <group ref={modelRef} visible={modelLoaded} />
+
+      {/* Arrow fired by archers in battle (pointed along +z) */}
+      {isRanged && (
+        <group ref={arrowRef} visible={false}>
+          <mesh rotation={[Math.PI / 2, 0, 0]}>
+            <cylinderGeometry args={[0.02, 0.02, 0.6, 5]} />
+            <meshStandardMaterial color="#8d5a3b" />
+          </mesh>
+          <mesh position={[0, 0, 0.33]} rotation={[Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[0.05, 0.1, 6]} />
+            <meshStandardMaterial color="#cbd5e1" />
+          </mesh>
+          <mesh position={[0, 0, -0.28]} rotation={[Math.PI / 2, 0, 0]}>
+            <coneGeometry args={[0.06, 0.08, 3]} />
+            <meshStandardMaterial color="#f8fafc" />
+          </mesh>
+        </group>
+      )}
 
       {/* Simple placeholder while the model is loading (no external assets so it can't suspend the scene) */}
       {!modelLoaded && (

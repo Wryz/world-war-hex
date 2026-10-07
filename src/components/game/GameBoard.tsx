@@ -4,7 +4,7 @@ import { Html, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import { GameState, Hex, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
 import { HexTile, HexHighlight } from './HexTile';
-import { UnitMesh, CombatRole, OWNER_COLORS } from './UnitMesh';
+import { UnitMesh, UnitBattle, OWNER_COLORS } from './UnitMesh';
 import { Castle } from './Castle';
 import { BoardDecorations } from './BoardDecorations';
 import { MovePath } from './MovePath';
@@ -16,6 +16,7 @@ import {
   findBaseHex,
   findTerrainPath,
   getActivePlayer,
+  getAttackRange,
   getMovePath,
   getValidBaseLocations
 } from '@/lib/game/gameState';
@@ -24,6 +25,7 @@ import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
 import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
 import { playSound } from './utils/SoundPlayer';
+import { playBattleSound } from './utils/battleSounds';
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
 import { AttackIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon } from './icons';
@@ -165,7 +167,8 @@ const CameraRig: React.FC<{ gameState: GameState; focus: [number, number] | null
   useEffect(() => {
     const element = gl.domElement;
     const raycaster = new THREE.Raycaster();
-    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -0.6);
+    // Roughly the height of an average tile surface
+    const groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), -1.3);
 
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
@@ -292,7 +295,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const [placedUnitHex, setPlacedUnitHex] = useState<Hex | null>(null);
   const [popups, setPopups] = useState<DamagePopup[]>([]);
 
-  const { hexGrid, currentPhase, pendingMoves, pendingPurchases, combats, players } = gameState;
+  const { hexGrid, currentPhase, pendingMoves, pendingPurchases, combats, players, turnNumber } = gameState;
+  const activePlayerSide = getActivePlayer(gameState);
   const isSetupPhase = currentPhase === 'setup';
 
   const hexByKey = useMemo(() => new Map(hexGrid.map(hex => [coordKey(hex.coordinates), hex])), [hexGrid]);
@@ -400,20 +404,41 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       }
     }
 
-    const roles = new Map<string, CombatRole>();
+    // Units in other unresolved battles face their opponent; the battle being fought right now animates
     const combatFacing = new Map<string, HexCoordinates>();
+    const battles = new Map<string, UnitBattle>();
     if (currentPhase === 'combat') {
-      for (const combat of combats) {
-        if (combat.resolved) continue;
+      const activeIndex = combats.findIndex(c => !c.resolved);
+      combats.forEach((combat, index) => {
+        if (combat.resolved) return;
         for (const defender of combat.defenders) {
-          roles.set(defender.id, 'defender');
           if (combat.attackers[0]) combatFacing.set(defender.id, combat.attackers[0].position);
         }
-        for (const attacker of combat.attackers) {
-          roles.set(attacker.id, 'attacker');
-          combatFacing.set(attacker.id, combat.hexCoordinates);
+        for (const attacker of combat.attackers) combatFacing.set(attacker.id, combat.hexCoordinates);
+        if (index !== activeIndex) return;
+
+        const key = `${turnNumber}-${activePlayerSide}-${index}`;
+        const worldOf = (coordinates: HexCoordinates): [number, number, number] => {
+          const hex = hexByKey.get(coordKey(coordinates));
+          return hex ? surfacePosition(hex) : axialToWorld(coordinates);
+        };
+        const liveAttackers = combat.attackers
+          .map(a => players[a.owner].units.find(u => u.id === a.id))
+          .filter((u): u is Unit => !!u);
+
+        for (const attacker of liveAttackers) {
+          battles.set(attacker.id, { key, target: worldOf(combat.hexCoordinates) });
         }
-      }
+        for (const defender of combat.defenders) {
+          const live = players[defender.owner].units.find(u => u.id === defender.id);
+          if (!live) continue;
+          // Defenders strike back at the nearest attacker they can reach
+          const reachable = liveAttackers
+            .filter(a => getHexDistance(a.position, live.position) <= getAttackRange(live))
+            .sort((a, b) => getHexDistance(a.position, live.position) - getHexDistance(b.position, live.position));
+          battles.set(defender.id, { key, target: reachable[0] ? worldOf(reachable[0].position) : null });
+        }
+      });
     }
 
     const plannedUnitIds = new Set(pendingMoves.map(m => m.unitId));
@@ -447,14 +472,14 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         unit,
         position: hex ? surfacePosition(hex) : axialToWorld(unit.position),
         facingTarget,
-        combatRole: roles.get(unit.id) ?? null,
+        battle: battles.get(unit.id) ?? null,
         hasPlannedMove: plannedUnitIds.has(unit.id),
         terrainBadges: getTerrainBadges(unit, hex)
       };
     });
     // gameState is only used to find the bases
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allUnits, hexByKey, combats, currentPhase, pendingMoves, players]);
+  }, [allUnits, hexByKey, combats, currentPhase, pendingMoves, players, turnNumber, activePlayerSide]);
 
   // Keep prop identities stable between renders so memoised units can skip re-rendering
   const unitPropsCache = useRef(new Map<string, (typeof unitRenderData)[number]>());
@@ -547,6 +572,9 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           color: '#ffffff',
           bounty: getKillBounty(before.unit)
         });
+        playBattleSound('unitFalls', 0.8);
+        // Coin chime when the player earns the bounty
+        if (before.unit.owner === 'ai') playBattleSound('bounty', 0.6);
       }
     }
     previousUnitsRef.current = next;
@@ -645,7 +673,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           onSelect={stableUnitSelect}
           isSelected={selectedUnit?.id === data.unit.id}
           hasPlannedMove={data.hasPlannedMove}
-          combatRole={data.combatRole}
+          battle={data.battle}
           terrainBadges={data.terrainBadges}
         />
       ))}

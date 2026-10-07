@@ -33,8 +33,8 @@ type Difficulty = 'easy' | 'medium' | 'hard';
 // Delays that make the AI look like it's "thinking"
 const AI_PLANNING_DELAY = 1500;
 const AI_EXECUTION_DELAY = 1000;
-// Pause before each battle is fought so the player can see what's happening
-const BATTLE_DELAY = 900;
+// How long each battle plays out on the board before its result is applied
+const BATTLE_DURATION = 2600;
 
 const createNewGame = (difficulty: Difficulty) =>
   initializeGameState({ ...DEFAULT_SETTINGS, aiDifficulty: difficulty });
@@ -138,7 +138,7 @@ export const useGameHandlers = () => {
 
     const battleDelay = setTimeout(() => {
       commitState(resolveCombat(stateRef.current, unresolvedCombatIndex));
-    }, BATTLE_DELAY);
+    }, BATTLE_DURATION);
 
     return () => clearTimeout(battleDelay);
   }, [currentPhase, gameState.combats, commitState]);

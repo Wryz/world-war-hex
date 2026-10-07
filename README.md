@@ -78,7 +78,8 @@ The game is organized into modular components for better maintainability:
 - Resource management
 - Turn-based combat system
 - AI opponent with configurable difficulty levels
-- Interactive sound effects for enhanced gameplay experience
+- Animated battles: each troop type strikes at its own pace, archers fire arrows, with clash, bow and impact sounds
+- Battle sounds synthesised in the browser with [ZzFX](https://github.com/KilledByAPixel/ZzFX) (MIT); icons from [Game Icons](https://game-icons.net) and [Lucide](https://lucide.dev) via [react-icons](https://react-icons.github.io/react-icons/)
 
 ## How to Play
 
