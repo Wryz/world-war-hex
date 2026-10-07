@@ -3,14 +3,6 @@
 :root {
   --background: #0f172a;
   --foreground: #f1f5f9;
-
-  /* Terrain colours for the menu's hex backdrop (match the board's palette) */
-  --biome-plain: #9be15d;
-  --biome-mountain: #b8c4cc;
-  --biome-forest: #5cc45a;
-  --biome-water: #48c6ef;
-  --biome-desert: #ffd97a;
-  --biome-resource: #ffc94d;
 }
 
 @theme inline {
@@ -57,4 +49,31 @@ body {
 
 .animate-banner {
   animation: bannerInOut 1.8s ease-in-out forwards;
+}
+
+/* Clouds drifting across the menu sky */
+@keyframes drift {
+  from { transform: translateX(-12rem); }
+  to { transform: translateX(110vw); }
+}
+
+.animate-drift {
+  animation: drift 80s linear infinite;
+}
+
+/* Gentle bob for the menu logo */
+@keyframes bob {
+  0%, 100% { transform: translateY(0) rotate(-3deg); }
+  50% { transform: translateY(-6px) rotate(3deg); }
+}
+
+.animate-bob {
+  animation: bob 3.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-drift,
+  .animate-bob {
+    animation: none;
+  }
 }

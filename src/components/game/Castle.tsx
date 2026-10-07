@@ -12,6 +12,8 @@ interface CastleProps {
   position: [number, number, number];
   health: number;
   maxHealth: number;
+  // Hide the health label (e.g. on the menu's decorative island)
+  hideLabel?: boolean;
 }
 
 const STONE = '#cfc6b8';
@@ -59,7 +61,7 @@ const Crown: React.FC<{ gemColor: string }> = ({ gemColor }) => {
   );
 };
 
-const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHealth }) => {
+const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHealth, hideLabel = false }) => {
   const crownRef = useRef<THREE.Group>(null);
   const ownerColor = OWNER_COLORS[owner];
   const healthRatio = maxHealth > 0 ? Math.max(0, health) / maxHealth : 0;
@@ -110,18 +112,20 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
       </group>
 
       {/* Castle health */}
-      <Html position={[0, 2.35, 0]} center zIndexRange={[6, 0]} style={{ pointerEvents: 'none' }}>
-        <div
-          className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] leading-none font-bold text-white whitespace-nowrap shadow select-none"
-          style={{ background: 'rgba(15, 23, 42, 0.85)', border: `2px solid ${ownerColor}` }}
-        >
-          <CrownIcon />
-          <span className="w-10 h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block">
-            <span className="block h-full" style={{ width: `${healthRatio * 100}%`, background: healthColor }} />
-          </span>
-          <span>{health}</span>
-        </div>
-      </Html>
+      {!hideLabel && (
+        <Html position={[0, 2.35, 0]} center zIndexRange={[6, 0]} style={{ pointerEvents: 'none' }}>
+          <div
+            className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] leading-none font-bold text-white whitespace-nowrap shadow select-none"
+            style={{ background: 'rgba(15, 23, 42, 0.85)', border: `2px solid ${ownerColor}` }}
+          >
+            <CrownIcon />
+            <span className="w-10 h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block">
+              <span className="block h-full" style={{ width: `${healthRatio * 100}%`, background: healthColor }} />
+            </span>
+            <span>{health}</span>
+          </div>
+        </Html>
+      )}
     </group>
   );
 };

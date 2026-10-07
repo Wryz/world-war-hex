@@ -10,7 +10,7 @@ import {
   getAnimationName,
   AnimationState
 } from './utils/UnitModelSystem';
-import { playBattleSound } from './utils/battleSounds';
+import { playBattleSound, BattleSound } from './utils/battleSounds';
 import { DRAG_CLICK_TOLERANCE } from './HexTile';
 import { instantiateUnitModel, findAnimationClip, disposeUnitModel } from './utils/unitModelCache';
 import { ArrowIcon, AttackIcon, GoldIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
@@ -66,6 +66,8 @@ interface UnitMeshProps {
   battle?: UnitBattle | null;
   // Short labels for terrain effects currently helping this unit
   terrainBadges?: UnitBadge[];
+  // Decorative use (e.g. the menu's island): no label and no battle sounds
+  decorative?: boolean;
 }
 
 // Smallest signed difference between two angles
@@ -86,7 +88,8 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   isSelected = false,
   hasPlannedMove = false,
   battle = null,
-  terrainBadges = []
+  terrainBadges = [],
+  decorative = false
 }) => {
   const unitModelAttributes = getUnitModelAttributes(unit.type);
   const modelUrl = getUnitModelPath(unit.owner);
@@ -180,6 +183,10 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     actionRef.current = nextAction;
   };
 
+  const playSfx = (sound: BattleSound, volume: number) => {
+    if (!decorative) playBattleSound(sound, volume);
+  };
+
   const isRanged = unit.abilities.includes('rangedAttack');
   const attackInterval = ATTACK_INTERVALS[unit.type];
   const arrowRef = useRef<THREE.Group>(null);
@@ -270,7 +277,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
         if (strikeNumber !== clock.lastStrike) {
           clock.lastStrike = strikeNumber;
           if (!isRanged) strike();
-          else playBattleSound('bowShot', 0.8);
+          else playSfx('bowShot', 0.8);
         }
 
         if (isRanged) {
@@ -288,7 +295,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
             );
           } else if (strikeNumber !== clock.lastImpact) {
             clock.lastImpact = strikeNumber;
-            playBattleSound('arrowHit', 0.7);
+            playSfx('arrowHit', 0.7);
           }
         } else {
           // Step in, strike, step back
@@ -298,8 +305,8 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
             : progress < 0.6 ? Math.cos(((progress - 0.25) / 0.35) * Math.PI / 2) : 0;
           if (progress >= 0.25 && strikeNumber !== clock.lastImpact) {
             clock.lastImpact = strikeNumber;
-            playBattleSound('swordClash', 0.7);
-            playBattleSound('swordHit', 0.5);
+            playSfx('swordClash', 0.7);
+            playSfx('swordHit', 0.5);
           }
         }
       }
@@ -407,41 +414,43 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       </mesh>
 
       {/* Compact unit label: type, health and terrain bonuses */}
-      <Html
-        position={[0, 1.9, 0]}
-        center
-        zIndexRange={[5, 0]}
-        style={{ pointerEvents: 'none' }}
-      >
-        <div
-          className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] leading-none font-bold text-white whitespace-nowrap shadow select-none"
-          style={{
-            background: 'rgba(15, 23, 42, 0.8)',
-            border: `2px solid ${ownerColor}`,
-            opacity: isPendingPurchase ? 0.7 : 1
-          }}
+      {!decorative && (
+        <Html
+          position={[0, 1.9, 0]}
+          center
+          zIndexRange={[5, 0]}
+          style={{ pointerEvents: 'none' }}
         >
-          <UnitIcon type={unit.type} className="text-[13px]" />
-          {isPendingPurchase ? (
-            <WaitIcon title="Arrives at the end of the turn" />
-          ) : (
-            <>
-              <span className="w-6 h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block">
-                <span className="block h-full" style={{ width: `${healthRatio * 100}%`, background: healthColor }} />
-              </span>
-              {/* Terrain bonuses as icons only - details are in the selection card */}
-              {terrainBadges.map(badge =>
-                badge === 'cover' ? <TerrainIcon key={badge} terrain="forest" />
-                  : badge === 'attack' ? <AttackIcon key={badge} />
-                    : badge === 'exposed' ? <TerrainIcon key={badge} terrain="swamp" />
-                      : badge === 'heal' ? <TerrainIcon key={badge} terrain="spring" />
-                        : <GoldIcon key={badge} />
-              )}
-              {hasPlannedMove && <ArrowIcon />}
-            </>
-          )}
-        </div>
-      </Html>
+          <div
+            className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] leading-none font-bold text-white whitespace-nowrap shadow select-none"
+            style={{
+              background: 'rgba(15, 23, 42, 0.8)',
+              border: `2px solid ${ownerColor}`,
+              opacity: isPendingPurchase ? 0.7 : 1
+            }}
+          >
+            <UnitIcon type={unit.type} className="text-[13px]" />
+            {isPendingPurchase ? (
+              <WaitIcon title="Arrives at the end of the turn" />
+            ) : (
+              <>
+                <span className="w-6 h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block">
+                  <span className="block h-full" style={{ width: `${healthRatio * 100}%`, background: healthColor }} />
+                </span>
+                {/* Terrain bonuses as icons only - details are in the selection card */}
+                {terrainBadges.map(badge =>
+                  badge === 'cover' ? <TerrainIcon key={badge} terrain="forest" />
+                    : badge === 'attack' ? <AttackIcon key={badge} />
+                      : badge === 'exposed' ? <TerrainIcon key={badge} terrain="swamp" />
+                        : badge === 'heal' ? <TerrainIcon key={badge} terrain="spring" />
+                          : <GoldIcon key={badge} />
+                )}
+                {hasPlannedMove && <ArrowIcon />}
+              </>
+            )}
+          </div>
+        </Html>
+      )}
     </group>
   );
 };

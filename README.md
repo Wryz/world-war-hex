@@ -46,7 +46,8 @@ The game is organized into modular components for better maintainability:
 ### Game Intro
 
 - `src/components/game/intro/`
-  - `IntroScreen`: Initial screen for starting/loading a game and selecting difficulty
+  - `IntroScreen`: Main menu: pick a difficulty, start or continue a game, and meet your army
+  - `IslandDiorama`: A small 3D island built from the game's own tiles, castles, camps and troops, skirmishing on a loop and cycling through the map themes
 
 ### Storage Utilities
 

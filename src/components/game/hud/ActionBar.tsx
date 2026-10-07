@@ -4,17 +4,7 @@ import { UNITS } from '@/lib/game/gameState';
 import { getUnitTypeName } from '../utils/UnitHelpers';
 import { ArrowIcon, AttackIcon, GoldIcon, HealthIcon, MoveIcon, UnitIcon } from '../icons';
 import { PANEL_CLASS } from './styles';
-
-// Unit types offered in the barracks
-const RECRUITABLE: UnitType[] = ['infantry', 'artillery', 'helicopter', 'tank'];
-
-const UNIT_ROLES: Record<UnitType, string> = {
-  infantry: 'Cheap all-rounder',
-  artillery: 'Hits hard, fragile',
-  helicopter: 'Fast cavalry',
-  tank: 'Tough, strong in forest',
-  medic: 'Support'
-};
+import { RECRUITABLE, UNIT_ROLES } from './unitInfo';
 
 interface ActionBarProps {
   gold: number;

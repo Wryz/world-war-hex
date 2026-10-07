@@ -11,6 +11,8 @@ interface CampProps {
   owner: PlayerType | null;
   // World x/z of the camp hex and the height of its surface
   position: [number, number, number];
+  // Hide the floating label (e.g. on the menu's decorative island)
+  hideLabel?: boolean;
 }
 
 const NEUTRAL_COLOR = '#facc15';
@@ -22,7 +24,7 @@ const CANVAS = '#f5ecd7';
 const STAKES = Array.from({ length: 14 }, (_, i) => (i / 16) * Math.PI * 2 + Math.PI / 8);
 
 // A small neutral camp: palisade, tent and a banner in the colour of whoever holds it
-const CampComponent: React.FC<CampProps> = ({ owner, position }) => {
+const CampComponent: React.FC<CampProps> = ({ owner, position, hideLabel = false }) => {
   const flagRef = useRef<THREE.Group>(null);
   const color = owner ? OWNER_COLORS[owner] : NEUTRAL_COLOR;
 
@@ -69,15 +71,17 @@ const CampComponent: React.FC<CampProps> = ({ owner, position }) => {
       </group>
 
       {/* Label so camps are easy to spot from far away */}
-      <Html position={[0, 1.3, 0]} center zIndexRange={[4, 0]} style={{ pointerEvents: 'none' }}>
-        <div
-          className="flex items-center rounded-full p-1 text-[13px] leading-none shadow select-none"
-          style={{ background: 'rgba(15, 23, 42, 0.8)', border: `2px solid ${color}` }}
-          title={owner ? (owner === 'player' ? 'Your camp' : 'Enemy camp') : 'Neutral camp'}
-        >
-          <CampIcon color={color} />
-        </div>
-      </Html>
+      {!hideLabel && (
+        <Html position={[0, 1.3, 0]} center zIndexRange={[4, 0]} style={{ pointerEvents: 'none' }}>
+          <div
+            className="flex items-center rounded-full p-1 text-[13px] leading-none shadow select-none"
+            style={{ background: 'rgba(15, 23, 42, 0.8)', border: `2px solid ${color}` }}
+            title={owner ? (owner === 'player' ? 'Your camp' : 'Enemy camp') : 'Neutral camp'}
+          >
+            <CampIcon color={color} />
+          </div>
+        </Html>
+      )}
     </group>
   );
 };
