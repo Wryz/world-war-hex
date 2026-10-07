@@ -41,7 +41,7 @@ export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, tur
   return (
     <div className="fixed inset-x-0 top-1/3 z-30 flex justify-center pointer-events-none">
       <div key={banner.key} className="animate-banner flex flex-col items-center rounded-2xl bg-slate-900/75 px-8 py-3 shadow-2xl">
-        <div className="text-3xl font-black tracking-wide" style={{ color: banner.color }}>{banner.title}</div>
+        <div className="font-display text-3xl tracking-wide" style={{ color: banner.color }}>{banner.title}</div>
         <div className="text-sm font-semibold text-slate-300">{banner.subtitle}</div>
       </div>
     </div>

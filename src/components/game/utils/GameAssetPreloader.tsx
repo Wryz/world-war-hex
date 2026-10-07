@@ -10,18 +10,10 @@ interface AssetEntry {
 // Define categories of assets that need to be loaded
 const GAME_ASSETS: Record<string, AssetEntry[]> = {
   models: [
-    { url: '/models/rocks-1.glb', id: 'rock-model' },
-    { url: '/models/tree-1.glb', id: 'tree1-model' },
-    { url: '/models/tree-2.glb', id: 'tree2-model' },
-    { url: '/models/bush-1.glb', id: 'bush-model' },
-    { url: '/models/rock-gold-1.glb', id: 'gold-rock-model' },
     { url: '/models/blue-knight.glb', id: 'blue-knight-model' },
     { url: '/models/red-knight.glb', id: 'red-knight-model' },
   ],
-  textures: [
-    { url: '/textures/sky.jpg', id: 'sky-texture' },
-    { url: '/textures/grass_texture.jpg', id: 'grass-plain-texture' },
-  ],
+  textures: [],
   audio: [
     // Game sound effects
     { url: '/sounds/hover-1.mp3', id: 'hex-hover-sound' },

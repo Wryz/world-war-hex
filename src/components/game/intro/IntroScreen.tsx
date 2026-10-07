@@ -41,7 +41,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
           </p>
           
           <div className="mb-10">
-            <h2 className="text-2xl md:text-3xl font-semibold text-[var(--primary)] mb-6 text-center">
+            <h2 className="font-display text-2xl md:text-3xl text-[var(--primary)] mb-6 text-center">
               Choose Your Challenge
             </h2>
             
@@ -51,7 +51,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
                   key={level}
                   onClick={() => handleDifficultySelect(level)}
                   className={`
-                    p-5 rounded-lg text-xl font-bold transition-all duration-300
+                    font-display p-5 rounded-lg text-xl transition-all duration-300
                     ${selectedDifficulty === level 
                       ? 'bg-[var(--foreground)] text-[var(--background)] transform scale-110 shadow-lg border-2 border-white' 
                       : 'bg-[var(--background)] bg-opacity-80 text-[var(--primary)] border-2 border-[var(--foreground)] hover:bg-[var(--accent-light)] hover:text-[var(--background)]'
@@ -70,7 +70,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
           <div className="flex flex-col md:flex-row justify-center space-y-4 md:space-y-0 md:space-x-6">
             <button
               onClick={() => onStartGame(selectedDifficulty)}
-              className="bg-[var(--foreground)] text-[var(--background)] py-4 px-10 rounded-lg text-2xl font-bold transition-all duration-300 
+              className="bg-[var(--foreground)] text-[var(--background)] font-display py-4 px-10 rounded-lg text-2xl transition-all duration-300 
                 hover:bg-[var(--accent-light)] hover:shadow-lg hover:scale-105 
                 active:transform active:scale-95
                 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--foreground)]"
@@ -81,7 +81,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
             {hasSavedGame && onContinueGame && (
               <button
                 onClick={onContinueGame}
-                className="bg-[var(--accent)] text-[var(--background)] py-4 px-10 rounded-lg text-2xl font-bold transition-all duration-300 
+                className="bg-[var(--accent)] text-[var(--background)] font-display py-4 px-10 rounded-lg text-2xl transition-all duration-300 
                   hover:bg-[var(--accent-light)] hover:shadow-lg hover:scale-105 
                   active:transform active:scale-95
                   focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--accent)]"

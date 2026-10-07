@@ -20,7 +20,7 @@ export const SetupPhase: React.FC<SetupPhaseProps> = ({
   return (
     <div className="fixed top-3 inset-x-0 z-20 flex justify-center pointer-events-none">
       <div className={`${PANEL_CLASS} px-5 py-3 text-center`}>
-        <div className="text-base font-black">👑 Place your castle</div>
+        <div className="font-display text-lg">👑 Place your castle</div>
         <div className={`mt-1 text-sm ${isConfirmMode && !selectedHexValid ? 'text-red-300' : 'text-slate-300'}`}>
           {message}
         </div>

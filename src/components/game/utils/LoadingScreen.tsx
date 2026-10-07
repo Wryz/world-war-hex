@@ -10,16 +10,14 @@ interface LoadingScreenProps {
 
 // Loading tips to display during loading
 const LOADING_TIPS = [
-  "Place your base on an elevated terrain for better defense.",
-  "Forest hexes provide cover for your units, making them harder to hit.",
-  "Mountain hexes give ranged units increased attack range.",
-  "Resource hexes can be captured to gain additional resources every turn.",
-  "Units can only move on certain terrain types based on their mobility.",
-  "Ensure you have a mix of melee and ranged units for a balanced army.",
-  "Defensive structures can protect important hexes from enemy attacks.",
-  "The game's fog of war makes scouting essential for victory.",
-  "Water hexes can only be crossed by naval units.",
-  "Try to capture strategic locations early in the game.",
+  "Units standing in a forest take 40% less damage.",
+  "Pikemen attack 50% harder when fighting from a forest.",
+  "Desert costs 2 movement to cross - plan your routes around it.",
+  "Hold gold mines with a unit to earn extra gold every round.",
+  "Water and mountains are impassable - look for the passes.",
+  "Units within 3 hexes of the enemy castle damage it every round.",
+  "Move a unit onto the enemy castle to win instantly.",
+  "When attacked you can retreat to a safe hex instead of fighting.",
 ];
 
 // Loading stages for better feedback
@@ -203,7 +201,7 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({
               priority
             />
           </div>
-          <h2 className="text-2xl font-bold">Loading World War Hex</h2>
+          <h2 className="font-display text-2xl">Loading World War Hex</h2>
         </div>
         
         {/* Current stage indicator */}

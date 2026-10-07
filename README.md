@@ -98,7 +98,7 @@ The game is organized into modular components for better maintainability:
 3. Run the development server: `npm run dev`
 4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to load [Nunito](https://fonts.google.com/specimen/Nunito) for body text and [DynaPuff](https://fonts.google.com/specimen/DynaPuff) for titles and buttons.
 
 ## Learn More
 

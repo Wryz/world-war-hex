@@ -9,18 +9,18 @@ import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
 const PARTS = {
   treeTrunk: {
     geometry: new THREE.CylinderGeometry(0.04, 0.05, 0.2, 5).translate(0, 0.1, 0),
-    material: new THREE.MeshStandardMaterial({ color: '#6d4c41' }),
+    material: new THREE.MeshStandardMaterial({ color: '#8d5a3b' }),
     castShadow: false
   },
   treeTop: {
     geometry: new THREE.ConeGeometry(0.18, 0.45, 6).translate(0, 0.38, 0),
-    material: new THREE.MeshStandardMaterial({ color: '#2e7d32', flatShading: true }),
+    material: new THREE.MeshStandardMaterial({ color: '#2fa84f', flatShading: true }),
     castShadow: true
   },
   peak: {
     // Unit-height cone with its base at y=0, scaled per instance
     geometry: new THREE.ConeGeometry(0.35, 1, 5).translate(0, 0.5, 0),
-    material: new THREE.MeshStandardMaterial({ color: '#8d8d8d', flatShading: true }),
+    material: new THREE.MeshStandardMaterial({ color: '#97a6b0', flatShading: true }),
     castShadow: true
   },
   snow: {
@@ -30,7 +30,7 @@ const PARTS = {
   },
   dune: {
     geometry: new THREE.SphereGeometry(1, 10, 6),
-    material: new THREE.MeshStandardMaterial({ color: '#e6c068', flatShading: true }),
+    material: new THREE.MeshStandardMaterial({ color: '#f2c45a', flatShading: true }),
     castShadow: false
   },
   nugget: {

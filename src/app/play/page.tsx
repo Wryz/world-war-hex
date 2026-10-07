@@ -44,7 +44,7 @@ function GameContent() {
   if (isDirectNavigation) {
     return (
       <div className="w-screen h-screen bg-[var(--background)] flex flex-col items-center justify-center text-[var(--parchment)]">
-        <h1 className="text-3xl mb-6">Oops! Improper game initialization</h1>
+        <h1 className="font-display text-3xl mb-6">Oops! Improper game initialization</h1>
         <p className="mb-6">It looks like you tried to access the game directly without proper setup.</p>
         <Link 
           href="/" 

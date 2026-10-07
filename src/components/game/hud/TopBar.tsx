@@ -43,7 +43,7 @@ export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, show
     <div className="fixed top-3 inset-x-3 z-20 flex items-start justify-between gap-3 pointer-events-none">
       {/* Turn */}
       <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-2 px-3 py-1.5 text-sm`}>
-        <span className="font-bold text-slate-400">Round {Math.max(1, turnNumber)}</span>
+        <span className="font-display text-slate-300">Round {Math.max(1, turnNumber)}</span>
         <span
           className="rounded-full px-2.5 py-0.5 text-xs font-bold text-white"
           style={{ background: isAITurn ? SIDE_COLORS.ai : SIDE_COLORS.player }}
@@ -77,7 +77,7 @@ export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, show
 
       {/* Treasury */}
       <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-2 px-3 py-1.5`}>
-        <span className="text-base font-bold text-amber-300" title={`+${TURN_INCOME + mineIncome} gold per round`}>
+        <span className="font-display text-base text-amber-300" title={`+${TURN_INCOME + mineIncome} gold per round`}>
           💰 {players.player.points}
         </span>
         {onSave && (

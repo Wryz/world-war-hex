@@ -8,9 +8,6 @@ import { UnitMesh, CombatRole, OWNER_COLORS } from './UnitMesh';
 import { Castle } from './Castle';
 import { BoardDecorations } from './BoardDecorations';
 import { MovePath } from './MovePath';
-import LandscapeModels from './landscape/LandscapeModels';
-import SkyDome from './environment/Sky';
-import Fog from './environment/Fog';
 import {
   UNITS,
   BASE_MAX_HEALTH,
@@ -36,7 +33,7 @@ const coordKey = (c: HexCoordinates) => `${c.q},${c.r}`;
 const CAMERA_ELEVATION = THREE.MathUtils.degToRad(68);
 const CAMERA_FOV = 45;
 // Radius of the playing field in world units, plus a margin for the HUD
-const BOARD_VIEW_RADIUS = 18;
+const BOARD_VIEW_RADIUS = 16.5;
 // Look slightly towards the viewing side's castle so it stays clear of the bottom HUD
 const CAMERA_TARGET_OFFSET = 3.5;
 const CAMERA_TURN_SPEED = 2.2;
@@ -59,15 +56,11 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
   const { isComplete: assetsLoaded } = useLoadingManager();
 
   return (
-    <div className="w-full h-full">
-      {/* Cap the pixel ratio so high-DPI screens stay smooth */}
-      <Canvas shadows dpr={[1, 1.5]}>
+    // Bright sky gradient behind the floating battlefield
+    <div className="w-full h-full" style={{ background: 'radial-gradient(ellipse at 50% 40%, #e0f4ff 0%, #b3e1ff 55%, #8ccfff 100%)' }}>
+      {/* Flat (no tone mapping) keeps the low-poly colours bright and true; cap the pixel ratio for smoothness */}
+      <Canvas shadows flat dpr={[1, 1.5]}>
         <Suspense fallback={null}>
-          {/* Sky background - always visible */}
-          <SkyDome />
-
-          {/* Basic lighting that's always available */}
-          <ambientLight intensity={0.4} />
 
           <BoardScene {...props} assetsLoaded={assetsLoaded} />
 
@@ -183,7 +176,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   selectedUnit = null,
   validMoves = [],
   assetsLoaded,
-  gameStarted,
   selectedUnitTypeForPurchase = null
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
@@ -469,35 +461,21 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   return (
     <>
-      {assetsLoaded && <Fog color="#e6f7ff" near={90} far={170} />}
-
-      {/* Lighting */}
-      {assetsLoaded && (
-        <>
-          <ambientLight intensity={0.6} />
-          <directionalLight
-            position={[20, 30, 10]}
-            intensity={1.3}
-            castShadow
-            shadow-mapSize-width={1024}
-            shadow-mapSize-height={1024}
-            shadow-camera-far={150}
-            shadow-camera-left={-30}
-            shadow-camera-right={30}
-            shadow-camera-top={30}
-            shadow-camera-bottom={-30}
-            color="#fffaf0"
-          />
-          <directionalLight position={[-15, 10, -15]} intensity={0.5} color="#e6f7ff" />
-        </>
-      )}
-
-      {/* Own Suspense boundary so loading scenery never hides the game board */}
-      {gameStarted && assetsLoaded && (
-        <Suspense fallback={null}>
-          <LandscapeModels boardRadius={15} />
-        </Suspense>
-      )}
+      {/* Soft, bright lighting for the low-poly look */}
+      <hemisphereLight args={['#ffffff', '#9ccfe8', 1.6]} />
+      <directionalLight
+        position={[12, 30, 18]}
+        intensity={1.6}
+        castShadow
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
+        shadow-camera-far={80}
+        shadow-camera-left={-20}
+        shadow-camera-right={20}
+        shadow-camera-top={20}
+        shadow-camera-bottom={-20}
+        shadow-bias={-0.0005}
+      />
 
       {/* Hex grid */}
       {hexGrid.map(hex => {

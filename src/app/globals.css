@@ -30,8 +30,8 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-dyna-puff);
-  --font-mono: var(--font-dyna-puff);
+  --font-sans: var(--font-nunito);
+  --font-display: var(--font-dyna-puff);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -44,7 +44,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-dyna-puff), Arial, Helvetica, sans-serif;
+  font-family: var(--font-nunito), Arial, Helvetica, sans-serif;
 }
 
 /* Enhanced button styles */

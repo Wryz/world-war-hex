@@ -74,7 +74,7 @@ export const ActionBar: React.FC<ActionBarProps> = ({
                       : 'bg-slate-800/50 text-slate-500 cursor-not-allowed'}`}
               >
                 <span className={`text-xl leading-none ${canAfford || isSelected ? '' : 'opacity-40'}`}>{getUnitTypeEmoji(type)}</span>
-                <span className={`mt-1 text-xs font-bold ${isSelected ? '' : canAfford ? 'text-amber-300' : ''}`}>{info.cost}</span>
+                <span className={`font-display mt-1 text-xs ${isSelected ? '' : canAfford ? 'text-amber-300' : ''}`}>{info.cost}</span>
               </button>
 
               {/* Stats on hover */}
@@ -93,7 +93,7 @@ export const ActionBar: React.FC<ActionBarProps> = ({
 
         <button
           onClick={onEndTurn}
-          className="ml-1 shrink-0 rounded-lg bg-amber-500 hover:bg-amber-400 px-4 text-sm font-bold text-slate-900 shadow"
+          className="font-display ml-1 shrink-0 rounded-lg bg-amber-500 hover:bg-amber-400 px-4 text-base text-slate-900 shadow"
         >
           End Turn ➜
         </button>

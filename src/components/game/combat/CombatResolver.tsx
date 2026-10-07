@@ -55,7 +55,7 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({ gameState, onRes
   return (
     <div className={`${PANEL_CLASS} fixed right-3 bottom-3 z-30 w-72 p-3 text-xs`}>
       <div className="mb-2 flex items-center justify-between">
-        <span className="text-sm font-black">⚔️ Battle</span>
+        <span className="font-display text-base">⚔️ Battle</span>
         <span className="text-slate-400">{unresolvedCombatIndex + 1} / {gameState.combats.length}</span>
       </div>
 
@@ -92,14 +92,14 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({ gameState, onRes
         <div className="mt-3 flex gap-2">
           <button
             onClick={() => onResolveCombat(unresolvedCombatIndex, false)}
-            className="flex-1 rounded-lg bg-amber-500 hover:bg-amber-400 py-2 text-sm font-bold text-slate-900"
+            className="font-display flex-1 rounded-lg bg-amber-500 hover:bg-amber-400 py-2 text-sm text-slate-900"
           >
             Fight
           </button>
           <button
             onClick={() => onResolveCombat(unresolvedCombatIndex, true)}
             title="Move to a safe hex without taking damage"
-            className="flex-1 rounded-lg bg-slate-700 hover:bg-slate-600 py-2 text-sm font-bold"
+            className="font-display flex-1 rounded-lg bg-slate-700 hover:bg-slate-600 py-2 text-sm"
           >
             Retreat
           </button>

@@ -1,17 +1,14 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono, DynaPuff } from "next/font/google";
+import { Nunito, DynaPuff } from "next/font/google";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+// Readable body font
+const nunito = Nunito({
+  variable: "--font-nunito",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
-
+// Playful display font for titles, buttons and big numbers
 const dynaPuff = DynaPuff({
   variable: "--font-dyna-puff",
   subsets: ["latin"],
@@ -30,7 +27,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} ${dynaPuff.variable} antialiased`}
+        className={`${nunito.variable} ${dynaPuff.variable} antialiased`}
       >
         {children}
       </body>

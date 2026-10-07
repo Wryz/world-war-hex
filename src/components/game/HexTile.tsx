@@ -11,15 +11,18 @@ import {
   getHexSurfaceHeight
 } from './utils/boardGeometry';
 
-// Terrain type colors
+// Bright low-poly palette for each terrain type
 const TERRAIN_COLORS: Record<TerrainType, string> = {
-  plain: '#8bc34a',
-  mountain: '#9e9e9e',
-  forest: '#4c8c3c',
-  water: '#4fc3f7',
-  desert: '#f2d17a',
-  resource: '#e0b25a'
+  plain: '#9be15d',
+  mountain: '#b8c4cc',
+  forest: '#5cc45a',
+  water: '#48c6ef',
+  desert: '#ffd97a',
+  resource: '#ffc94d'
 };
+
+// Tiles are drawn slightly smaller than their cell so thin gaps outline every hex
+const TILE_SCALE = 0.92;
 
 // What kind of highlight a tile shows
 export type HexHighlight = 'none' | 'move' | 'deploy' | 'base';
@@ -59,8 +62,8 @@ const createHexShape = (size: number) => {
 
 // Outline ring geometry shared by every tile
 const ringGeometry = (() => {
-  const outer = createHexShape(HEX_SIZE * 0.98);
-  outer.holes.push(createHexShape(HEX_SIZE * 0.82));
+  const outer = createHexShape(HEX_SIZE * 0.92);
+  outer.holes.push(createHexShape(HEX_SIZE * 0.76));
   const geometry = new THREE.ShapeGeometry(outer);
   geometry.rotateX(-Math.PI / 2);
   return geometry;
@@ -86,7 +89,7 @@ const HexTileComponent: React.FC<HexTileProps> = ({
 
   // Extruded hexagon with bottom at y=0
   const geometry = useMemo(() => {
-    const hexGeometry = new THREE.ExtrudeGeometry(createHexShape(HEX_SIZE), {
+    const hexGeometry = new THREE.ExtrudeGeometry(createHexShape(HEX_SIZE * TILE_SCALE), {
       steps: 1,
       depth: hexHeight,
       bevelEnabled: true,
@@ -108,7 +111,7 @@ const HexTileComponent: React.FC<HexTileProps> = ({
   }, [hex.terrain, isHovered, highlight]);
 
   const sideColor = useMemo(
-    () => new THREE.Color(TERRAIN_COLORS[hex.terrain]).offsetHSL(0, -0.05, -0.15),
+    () => new THREE.Color(TERRAIN_COLORS[hex.terrain]).offsetHSL(0, -0.05, -0.18),
     [hex.terrain]
   );
 
@@ -164,16 +167,16 @@ const HexTileComponent: React.FC<HexTileProps> = ({
           <meshStandardMaterial
             attach="material-0"
             color={color}
-            roughness={isWater ? 0.2 : 0.85}
-            metalness={isWater ? 0.3 : 0.05}
+            roughness={isWater ? 0.4 : 1}
+            metalness={0}
             flatShading
           />
           {/* Side faces */}
           <meshStandardMaterial
             attach="material-1"
             color={sideColor}
-            roughness={0.9}
-            metalness={0.05}
+            roughness={1}
+            metalness={0}
             flatShading
           />
         </mesh>
