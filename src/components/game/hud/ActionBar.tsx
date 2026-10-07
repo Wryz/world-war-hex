@@ -54,7 +54,7 @@ export const ActionBar: React.FC<ActionBarProps> = ({
         </div>
       )}
 
-      <div className={`${PANEL_CLASS} pointer-events-auto flex items-stretch gap-1.5 p-1.5`}>
+      <div className={`${PANEL_CLASS} pointer-events-auto flex max-w-full items-stretch gap-1 p-1 sm:gap-1.5 sm:p-1.5`}>
         {RECRUITABLE.map(type => {
           const info = UNITS[type];
           const canAfford = gold >= info.cost;
@@ -67,7 +67,7 @@ export const ActionBar: React.FC<ActionBarProps> = ({
                 disabled={!canAfford && !isSelected}
                 aria-pressed={isSelected}
                 aria-label={`Recruit ${getUnitTypeName(type)} for ${info.cost} gold`}
-                className={`flex h-full w-16 flex-col items-center justify-center rounded-lg px-1 py-1 transition-colors
+                className={`flex h-full w-14 flex-col items-center justify-center rounded-lg px-1 py-1 transition-colors sm:w-16
                   ${isSelected
                     ? 'bg-amber-400 text-slate-900 ring-2 ring-amber-200'
                     : canAfford
@@ -79,7 +79,7 @@ export const ActionBar: React.FC<ActionBarProps> = ({
               </button>
 
               {/* Stats on hover */}
-              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden w-40 -translate-x-1/2 rounded-lg bg-slate-900/95 p-2 text-xs text-slate-100 shadow-xl group-hover:block">
+              <div className="pointer-events-none absolute bottom-full left-1/2 mb-2 hidden w-40 -translate-x-1/2 rounded-lg bg-slate-900/95 p-2 text-xs text-slate-100 shadow-xl group-hover:block group-focus-within:block">
                 <div className="font-bold">{getUnitTypeName(type)}</div>
                 <div className="text-slate-400">{UNIT_ROLES[type]}</div>
                 <div className="mt-1 flex justify-between">
@@ -94,7 +94,7 @@ export const ActionBar: React.FC<ActionBarProps> = ({
 
         <button
           onClick={onEndTurn}
-          className="font-display ml-1 shrink-0 rounded-lg bg-amber-500 hover:bg-amber-400 px-4 text-base text-slate-900 shadow"
+          className="font-display ml-1 shrink-0 rounded-lg bg-amber-500 hover:bg-amber-400 px-3 text-sm text-slate-900 shadow sm:px-4 sm:text-base"
         >
           <span className="flex items-center gap-1.5">End Turn <ArrowIcon /></span>
         </button>

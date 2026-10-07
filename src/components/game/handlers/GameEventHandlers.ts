@@ -28,10 +28,10 @@ import { playBattleSound } from '../utils/battleSounds';
 import { getUnitTypeName } from '../utils/UnitHelpers';
 import {
   loadGameFromLocalStorage,
-  clearSavedGame
+  saveGameToLocalStorage,
+  clearSavedGame,
+  Difficulty
 } from '../storage/GameStorage';
-
-type Difficulty = 'easy' | 'medium' | 'hard';
 
 // Why a selected unit can't move to a hex, in words the player can act on
 const describeInvalidMove = (state: GameState, unit: Unit, hex: Hex): string => {
@@ -59,17 +59,41 @@ const BATTLE_DURATION = 2600;
 const createNewGame = (difficulty: Difficulty) =>
   initializeGameState({ ...DEFAULT_SETTINGS, aiDifficulty: difficulty });
 
-export const useGameHandlers = () => {
-  // State variables
-  const [hasSavedGame, setHasSavedGame] = useState(false);
-  const [gameStarted, setGameStarted] = useState(false);
-  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
-  const [gameState, setGameState] = useState<GameState>(() => createNewGame('medium'));
+// Resume the saved game if asked to and one exists, otherwise start a new one
+const createInitialGame = (difficulty: Difficulty, resume: boolean) => {
+  const saved = resume ? loadGameFromLocalStorage() : null;
+  if (!saved) {
+    return { gameState: createNewGame(difficulty), difficulty, isResumed: false };
+  }
+
+  const savedState = saved.gameState;
+  const gameState: GameState = {
+    ...savedState,
+    activePlayer: savedState.activePlayer ?? 'player',
+    planningTimeRemaining: saved.additionalData.timer || savedState.settings!.planningPhaseTime,
+    selectedUnitTypeForPurchase: null
+  };
+  return { gameState, difficulty: saved.additionalData.difficulty ?? difficulty, isResumed: true };
+};
+
+interface GameHandlerOptions {
+  initialDifficulty: Difficulty;
+  // Continue the saved game instead of starting a new one (falls back to a new game if there is none)
+  resume: boolean;
+  // False while the loading screen still covers the board: turn timers and the AI wait until then
+  isReady: boolean;
+}
+
+export const useGameHandlers = ({ initialDifficulty, resume, isReady }: GameHandlerOptions) => {
+  // Created once: either the saved game or a fresh one
+  const [initialGame] = useState(() => createInitialGame(initialDifficulty, resume));
+  const difficulty = initialGame.difficulty;
+  const [gameState, setGameState] = useState<GameState>(initialGame.gameState);
   const [selectedHex, setSelectedHex] = useState<Hex | null>(null);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   const [selectedUnitTypeForPurchase, setSelectedUnitTypeForPurchase] = useState<UnitType | null>(null);
   const [validMoves, setValidMoves] = useState<HexCoordinates[]>([]);
-  const [timer, setTimer] = useState(DEFAULT_SETTINGS.planningPhaseTime);
+  const [timer, setTimer] = useState(initialGame.gameState.planningTimeRemaining);
   // Short warning shown to the player, e.g. when they pick a hex a unit can't move to
   const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
 
@@ -81,6 +105,8 @@ export const useGameHandlers = () => {
   // Always points at the latest game state so timers and async callbacks never act on stale state
   const stateRef = useRef(gameState);
   stateRef.current = gameState;
+  const timerRef = useRef(timer);
+  timerRef.current = timer;
 
   const commitState = useCallback((newState: GameState) => {
     stateRef.current = newState;
@@ -89,6 +115,9 @@ export const useGameHandlers = () => {
 
   const isAITurn = (gameState.activePlayer ?? 'player') === 'ai';
   const { currentPhase, turnNumber } = gameState;
+  // Whether the player may act right now (read from the ref so it's correct even before a re-render)
+  const isPlayerPlanning = () =>
+    stateRef.current.currentPhase === 'planning' && (stateRef.current.activePlayer ?? 'player') === 'player';
 
   const clearSelection = useCallback(() => {
     setSelectedHex(null);
@@ -97,33 +126,50 @@ export const useGameHandlers = () => {
     setValidMoves([]);
   }, []);
 
-  // Check for saved game on mount
+  // A brand new game replaces any older save
   useEffect(() => {
-    setHasSavedGame(!!loadGameFromLocalStorage());
-  }, []);
+    if (!initialGame.isResumed) clearSavedGame();
+  }, [initialGame]);
+
+  // Save the current game (anything after castle placement and before the end), with the
+  // planning time left on the clock
+  const saveGame = useCallback((timeLeft = timerRef.current) => {
+    const current = stateRef.current;
+    if (current.currentPhase === 'setup' || current.currentPhase === 'gameOver') return false;
+    return saveGameToLocalStorage(current, { timer: timeLeft, difficulty });
+  }, [difficulty]);
+
+  // Autosave at the start of each of the player's turns, and forget the save once the game is over
+  useEffect(() => {
+    if (currentPhase === 'planning' && !isAITurn) saveGame(stateRef.current.planningTimeRemaining);
+    if (currentPhase === 'gameOver') clearSavedGame();
+  }, [currentPhase, isAITurn, turnNumber, saveGame]);
 
   // Clear selection whenever the phase or the active side changes
   useEffect(() => {
     clearSelection();
   }, [currentPhase, isAITurn, clearSelection]);
 
-  // Execute all pending moves for the side whose turn it is
+  // End the player's turn: execute their pending moves and purchases
   const executeAllMoves = useCallback(() => {
     const current = stateRef.current;
-    if (current.currentPhase !== 'planning') return;
+    // The turn may already have ended (e.g. the timer ran out just before End Turn was clicked)
+    if (current.currentPhase !== 'planning' || (current.activePlayer ?? 'player') !== 'player') return;
 
     clearSelection();
     commitState(executeMoves(current));
   }, [clearSelection, commitState]);
 
-  // Planning timer for the player's turn - when it runs out the turn ends automatically
+  // Planning timer for the player's turn - when it runs out the turn ends automatically.
+  // It doesn't start until the board is visible, and pauses while the tab is in the background.
   useEffect(() => {
-    if (currentPhase !== 'planning' || isAITurn) return;
+    if (!isReady || currentPhase !== 'planning' || isAITurn) return;
 
     let remaining = stateRef.current.planningTimeRemaining;
     setTimer(remaining);
 
     const timerInterval = setInterval(() => {
+      if (document.hidden) return;
       remaining -= 1;
       setTimer(Math.max(0, remaining));
 
@@ -134,11 +180,11 @@ export const useGameHandlers = () => {
     }, 1000);
 
     return () => clearInterval(timerInterval);
-  }, [currentPhase, isAITurn, turnNumber, executeAllMoves]);
+  }, [isReady, currentPhase, isAITurn, turnNumber, executeAllMoves]);
 
   // AI turn: plan purchases and moves, then execute them
   useEffect(() => {
-    if (currentPhase !== 'planning' || !isAITurn) return;
+    if (!isReady || currentPhase !== 'planning' || !isAITurn) return;
 
     let executionTimeout: ReturnType<typeof setTimeout> | undefined;
 
@@ -154,11 +200,11 @@ export const useGameHandlers = () => {
       clearTimeout(planningTimeout);
       if (executionTimeout) clearTimeout(executionTimeout);
     };
-  }, [currentPhase, isAITurn, turnNumber, commitState]);
+  }, [isReady, currentPhase, isAITurn, turnNumber, commitState]);
 
   // Battles fight themselves out one at a time - units in range always fight
   useEffect(() => {
-    if (currentPhase !== 'combat') return;
+    if (!isReady || currentPhase !== 'combat') return;
 
     const unresolvedCombatIndex = gameState.combats.findIndex(c => !c.resolved);
     if (unresolvedCombatIndex === -1) return;
@@ -168,55 +214,19 @@ export const useGameHandlers = () => {
     }, BATTLE_DURATION);
 
     return () => clearTimeout(battleDelay);
-  }, [currentPhase, gameState.combats, commitState]);
+  }, [isReady, currentPhase, gameState.combats, commitState]);
 
-  // Continue saved game. Returns false if there is no saved game to continue.
-  const handleContinueGame = (): boolean => {
-    const savedData = loadGameFromLocalStorage();
-    if (!savedData?.gameState) return false;
-
-    const savedDifficulty = savedData.additionalData?.difficulty || 'medium';
-    const savedState = savedData.gameState;
-    const settings = savedState.settings ?? { ...DEFAULT_SETTINGS, aiDifficulty: savedDifficulty };
-
-    commitState({
-      ...savedState,
-      settings,
-      activePlayer: savedState.activePlayer ?? (savedData.additionalData?.isAITurn ? 'ai' : 'player'),
-      planningTimeRemaining: savedData.additionalData?.timer || settings.planningPhaseTime,
-      selectedUnitTypeForPurchase: null
-    });
-    setDifficulty(savedDifficulty);
-    clearSelection();
-    setGameStarted(true);
-    return true;
-  };
-
-  // Handle game start
-  const handleStartGame = (selectedDifficulty: Difficulty) => {
-    setDifficulty(selectedDifficulty);
-    commitState(createNewGame(selectedDifficulty));
-    clearSelection();
-    // Clear any existing saved game
-    clearSavedGame();
-    setHasSavedGame(false);
-    setGameStarted(true);
-  };
-
-  // Force return to intro screen
-  const handleReturnToIntro = () => {
-    setGameStarted(false);
-  };
-
-  // Restart game with the same difficulty
+  // Start a new game with the same difficulty
   const handleRestart = () => {
-    handleStartGame(difficulty);
+    clearSavedGame();
+    commitState(createNewGame(difficulty));
+    clearSelection();
   };
 
   // Handle selection of unit type from barracks
   const handleUnitTypeSelect = (unitType: UnitType) => {
     const current = stateRef.current;
-    if (current.currentPhase !== 'planning' || isAITurn) return;
+    if (!isPlayerPlanning()) return;
 
     // Clicking the selected unit type again cancels placement mode
     if (selectedUnitTypeForPurchase === unitType) {
@@ -242,7 +252,7 @@ export const useGameHandlers = () => {
   // Purchase the selected unit type and deploy it on the given hex
   const handleUnitPurchase = (unitType: UnitType, hex: Hex): boolean => {
     const current = stateRef.current;
-    if (current.currentPhase !== 'planning' || isAITurn) return false;
+    if (!isPlayerPlanning()) return false;
 
     const newState = addPendingPurchase(current, current.players.player.id, unitType, hex.coordinates);
     if (newState === current) return false;
@@ -273,7 +283,7 @@ export const useGameHandlers = () => {
       }
 
       case 'planning': {
-        if (isAITurn) {
+        if (!isPlayerPlanning()) {
           setSelectedHex(hex);
           // Don't allow player actions during AI turn
           setSelectedUnit(null);
@@ -375,7 +385,6 @@ export const useGameHandlers = () => {
 
   // Handle end turn button click
   const handleEndTurn = () => {
-    if (isAITurn) return;
     executeAllMoves();
   };
 
@@ -388,9 +397,6 @@ export const useGameHandlers = () => {
     validMoves,
     isAITurn,
     timer,
-    gameStarted,
-    hasSavedGame,
-    difficulty,
 
     // Handlers
     handleHexClick,
@@ -398,10 +404,8 @@ export const useGameHandlers = () => {
     handleUnitPurchase,
     handleUnitTypeSelect,
     handleEndTurn,
-    handleStartGame,
-    handleContinueGame,
     handleRestart,
-    handleReturnToIntro,
+    saveGame,
     handleCancelSelection: clearSelection,
     notice
   };

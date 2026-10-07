@@ -1,6 +1,6 @@
-# Hex Kingdoms - Board Game
+# World War Hex
 
-A strategic hexagonal grid board game built with React, TypeScript, and Tailwind CSS.
+A turn-based strategy game on a 3D hexagonal battlefield, built with Next.js, React, TypeScript, Tailwind CSS and three.js (via React Three Fiber and drei).
 
 ## Project Structure
 
@@ -9,7 +9,7 @@ The game is organized into modular components for better maintainability:
 ### Core Components
 
 - `GameController`: Main game controller that manages game state and lays out the HUD for each phase
-- `GameBoard`: Renders the 3D board, the fixed camera that swings to the active side's view each turn, planned routes and battle markers
+- `GameBoard`: Renders the 3D board, the camera (swings to the active side's view each turn; drag to orbit, scroll to zoom), planned routes and battle markers
 - `HexTile`: Individual hexagon tile component
 - `BoardDecorations`: Instanced trees, peaks, dunes and gold that show each hex's terrain
 - `UnitMesh`: Animated unit that walks along its route, faces its opponent and shows its health and terrain bonuses
@@ -19,7 +19,7 @@ The game is organized into modular components for better maintainability:
 ### HUD
 
 - `src/components/game/hud/`
-  - `TopBar`: Round, whose turn it is, timer, both castles' health and your gold
+  - `TopBar`: Round, whose turn it is, timer, both castles' health, your gold, and save / mute / main menu buttons
   - `ActionBar`: Recruit units and end your turn
   - `SelectionCard`: Details about the selected unit and the terrain it stands on
   - `EventFeed`: Battle log of recent events
@@ -50,20 +50,23 @@ The game is organized into modular components for better maintainability:
 ### Storage Utilities
 
 - `src/components/game/storage/`
-  - `GameStorage`: Utilities for saving/loading game state
+  - `GameStorage`: Versioned save/load of the game in localStorage (the game also autosaves at the start of each of your turns)
 
 ### Helper Utilities
 
 - `src/components/game/utils/`
-  - `UnitHelpers`: Helper functions for unit types, icons, and names
-  - `LoadingManager`: Asset loading and management
-  - `SoundPlayer`: Sound effects playback and volume control
+  - `LoadingManager` / `LoadingScreen`: Download the unit models and sounds before the board is shown
+  - `unitModelCache`: Loads each animated model once and clones it per unit
+  - `UnitModelSystem`: Model, animation and attack-speed settings for each unit type
+  - `SoundPlayer` / `battleSounds`: UI sounds, synthesised battle sounds and the global mute
+  - `boardGeometry`: Hex heights and hex-to-world positions
 
 ### Game Logic
 
 - `src/lib/game/`
-  - `gameState.ts`: Core game state management
-  - `hexUtils.ts`: Utility functions for hex grid calculations
+  - `gameState.ts`: Rules engine: setup, purchases, movement, combat, economy and win conditions (pure functions)
+  - `mapGenerator.ts`: Seeded natural map generation (noise-based terrain, connected regions, gold mines)
+  - `hexUtils.ts`: Hex grid maths (neighbours, distances)
 
 ### AI Player
 
@@ -77,7 +80,7 @@ The game is organized into modular components for better maintainability:
 - Multiple unit types with different abilities
 - Resource management
 - Turn-based combat system
-- AI opponent with configurable difficulty levels
+- AI opponent with three difficulty levels
 - Animated battles: each troop type strikes at its own pace, archers fire arrows, with clash, bow and impact sounds
 - Battle sounds synthesised in the browser with [ZzFX](https://github.com/KilledByAPixel/ZzFX) (MIT); icons from [Game Icons](https://game-icons.net) and [Lucide](https://lucide.dev) via [react-icons](https://react-icons.github.io/react-icons/)
 
@@ -88,6 +91,7 @@ The game is organized into modular components for better maintainability:
    - **Recruit:** pick a unit in the Barracks, click a highlighted hex next to your castle, then click it again to deploy. Units appear at the end of your turn and can move from your next turn. Click a queued unit to cancel it and get your gold back.
    - **Move:** click one of your units, then a highlighted hex - the route is drawn as you hover. If a hex is out of reach or impassable you get a short warning and the unit stays selected. Click a planned destination to cancel the move. Units walk there when the turn ends.
    - **Camera:** click and drag to rotate the view around the map (drag up/down to tilt), and scroll or pinch to zoom in on any part of it. The view swings to whoever's turn it is.
+   - **Menu:** the buttons next to your gold save the game, mute the sound and return to the main menu. The game also saves itself at the start of each of your turns, and the turn timer pauses while the tab is in the background.
 3. **Combat.** When a side ends its turn, its units automatically attack every enemy in range - adjacent for most units, up to 2 hexes for Archers. Defenders strike back only at attackers they can reach, so Archers firing from 2 hexes take no damage.
 4. **Terrain matters.** Forests give cover (units there take 40% less damage, and Pikemen attack 50% harder from them), desert costs 2 movement to cross, gold mines pay out every round, and water and mountains are impassable. Hover any hex to see its effect.
 5. **Economy.** At the end of every round both sides earn 5 gold, plus the value of any gold mines (resource hexes) their units stand on. Destroying an enemy unit pays a bounty of half its cost, and damaging the enemy castle plunders gold (1 per 2 damage).
@@ -101,18 +105,3 @@ The game is organized into modular components for better maintainability:
 4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to load [Nunito](https://fonts.google.com/specimen/Nunito) for body text and [DynaPuff](https://fonts.google.com/specimen/DynaPuff) for titles and buttons.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.

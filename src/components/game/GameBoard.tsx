@@ -60,6 +60,10 @@ const Y_AXIS = new THREE.Vector3(0, 1, 0);
 // Furthest the view can be panned from the centre of the board (fraction of the framed radius)
 const CAMERA_MAX_PAN = 0.73;
 
+// Sun position; the shadow camera looks from here towards the board centre
+const SHADOW_LIGHT_POSITION: [number, number, number] = [12, 30, 18];
+const SHADOW_LIGHT_DISTANCE = Math.hypot(...SHADOW_LIGHT_POSITION);
+
 interface GameBoardProps {
   gameState: GameState;
   onHexClick: (hex: Hex) => void;
@@ -69,8 +73,6 @@ interface GameBoardProps {
   selectedUnit?: Unit | null;
   validMoves?: HexCoordinates[];
   selectedUnitTypeForPurchase?: UnitType | null;
-  gameStarted: boolean;
-  isAITurn: boolean;
 }
 
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
@@ -536,7 +538,9 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         ...data,
         position: sameArray(previous.position, data.position) ? previous.position : data.position,
         facingTarget: sameArray(previous.facingTarget, data.facingTarget) ? previous.facingTarget : data.facingTarget,
-        terrainBadges: sameArray(previous.terrainBadges, data.terrainBadges) ? previous.terrainBadges : data.terrainBadges
+        terrainBadges: sameArray(previous.terrainBadges, data.terrainBadges) ? previous.terrainBadges : data.terrainBadges,
+        battle: previous.battle && data.battle && previous.battle.key === data.battle.key &&
+          sameArray(previous.battle.target, data.battle.target) ? previous.battle : data.battle
       } : data;
       next.set(data.unit.id, stable);
       return stable;
@@ -544,6 +548,43 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     unitPropsCache.current = next;
     return result;
   }, [unitRenderData]);
+
+  // Units queued in the barracks, with stable props so hovering the board doesn't re-render them
+  const pendingUnitCache = useRef(new Map<string, { unit: Unit; position: [number, number, number]; facingTarget: [number, number] | null }>());
+  const pendingUnitRenderData = useMemo(() => {
+    const next = new Map<string, { unit: Unit; position: [number, number, number]; facingTarget: [number, number] | null }>();
+    for (const purchase of pendingPurchases) {
+      const hex = hexByKey.get(coordKey(purchase.position));
+      if (!hex) continue;
+      const owner: PlayerType = purchase.playerId === players.player.id ? 'player' : 'ai';
+      const id = `pending-${coordKey(purchase.position)}`;
+      const previous = pendingUnitCache.current.get(id);
+      if (previous && previous.unit.type === purchase.unitType && previous.unit.owner === owner) {
+        next.set(id, previous);
+        continue;
+      }
+
+      const info = UNITS[purchase.unitType];
+      // Face the enemy castle, like units already on the board
+      const enemyBase = hexGrid.find(h => h.isBase && h.owner === (owner === 'player' ? 'ai' : 'player'));
+      const enemyCenter = enemyBase ? axialToWorld(enemyBase.coordinates) : null;
+      next.set(id, {
+        unit: {
+          ...info,
+          abilities: [...info.abilities],
+          id,
+          owner,
+          position: purchase.position,
+          hasMoved: false,
+          isEngagedInCombat: false
+        },
+        position: surfacePosition(hex),
+        facingTarget: enemyCenter ? [enemyCenter[0], enemyCenter[2]] : null
+      });
+    }
+    pendingUnitCache.current = next;
+    return [...next.values()];
+  }, [pendingPurchases, hexByKey, hexGrid, players.player.id]);
 
   // --- Planned moves -----------------------------------------------------------------------
 
@@ -584,7 +625,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const previousUnitsRef = useRef(new Map<string, { unit: Unit; position: [number, number, number] }>());
   const previousGameIdRef = useRef(players.player.id);
   const popupIdRef = useRef(0);
-  const popupTimeoutsRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+  const popupTimeoutsRef = useRef(new Set<ReturnType<typeof setTimeout>>());
 
   useEffect(() => () => popupTimeoutsRef.current.forEach(clearTimeout), []);
 
@@ -625,12 +666,19 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     if (created.length === 0) return;
     setPopups(current => [...current, ...created]);
     const ids = new Set(created.map(p => p.id));
-    popupTimeoutsRef.current.push(
-      setTimeout(() => setPopups(current => current.filter(p => !ids.has(p.id))), 1600)
-    );
+    const timeout = setTimeout(() => {
+      popupTimeoutsRef.current.delete(timeout);
+      setPopups(current => current.filter(p => !ids.has(p.id)));
+    }, 1600);
+    popupTimeoutsRef.current.add(timeout);
   }, [unitRenderData, players.player.id]);
 
   // --- Rendering ---------------------------------------------------------------------------
+
+  // Fit the shadow map to the board (plus headroom for castles and units) so shadows stay crisp
+  const boardRadius = (gameState.settings?.gridSize ?? DEFAULT_SETTINGS.gridSize) * Math.sqrt(3) + HEX_SIZE;
+  const shadowExtent = boardRadius + 2;
+  const shadowFar = SHADOW_LIGHT_DISTANCE + boardRadius + 10;
 
   const unresolvedCombats = currentPhase === 'combat' ? combats.filter(c => !c.resolved) : [];
   const activeCombat = unresolvedCombats[0];
@@ -651,16 +699,16 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {/* Soft, bright lighting for the low-poly look */}
       <hemisphereLight args={['#ffffff', '#9ccfe8', 1.6]} />
       <directionalLight
-        position={[12, 30, 18]}
+        position={SHADOW_LIGHT_POSITION}
         intensity={1.6}
         castShadow
         shadow-mapSize-width={1024}
         shadow-mapSize-height={1024}
-        shadow-camera-far={80}
-        shadow-camera-left={-20}
-        shadow-camera-right={20}
-        shadow-camera-top={20}
-        shadow-camera-bottom={-20}
+        shadow-camera-far={shadowFar}
+        shadow-camera-left={-shadowExtent}
+        shadow-camera-right={shadowExtent}
+        shadow-camera-top={shadowExtent}
+        shadow-camera-bottom={-shadowExtent}
         shadow-bias={-0.0005}
       />
 
@@ -722,32 +770,15 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       ))}
 
       {/* Units queued in the barracks appear at their deployment hex */}
-      {assetsLoaded && pendingPurchases.map(purchase => {
-        const hex = hexByKey.get(coordKey(purchase.position));
-        const owner: PlayerType = purchase.playerId === players.player.id ? 'player' : 'ai';
-        if (!hex) return null;
-
-        const info = UNITS[purchase.unitType];
-        const tempUnit: Unit = {
-          ...info,
-          abilities: [...info.abilities],
-          id: `pending-${coordKey(purchase.position)}`,
-          owner,
-          position: purchase.position,
-          hasMoved: false,
-          isEngagedInCombat: false
-        };
-
-        return (
-          <UnitMesh
-            key={tempUnit.id}
-            unit={tempUnit}
-            position={surfacePosition(hex)}
-            facingTarget={null}
-            isPendingPurchase
-          />
-        );
-      })}
+      {assetsLoaded && pendingUnitRenderData.map(data => (
+        <UnitMesh
+          key={data.unit.id}
+          unit={data.unit}
+          position={data.position}
+          facingTarget={data.facingTarget}
+          isPendingPurchase
+        />
+      ))}
 
       {/* Planned routes */}
       {assetsLoaded && plannedPaths.map(path => (

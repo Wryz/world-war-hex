@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { GameBoard } from './GameBoard';
 import { SetupPhase } from './phases/SetupPhase';
 import { CombatResolver } from './combat/CombatResolver';
 import { GameOverScreen } from './shared/GameOverScreen';
 import { useGameHandlers } from './handlers/GameEventHandlers';
 import { LoadingManagerProvider } from './utils/LoadingManager';
-import GameAssetPreloader from './utils/GameAssetPreloader';
 import LoadingScreen from './utils/LoadingScreen';
-import { saveGameToLocalStorage } from './storage/GameStorage';
+import { setMuted, useMuted } from './utils/SoundPlayer';
+import { Difficulty } from './storage/GameStorage';
 import { TopBar } from './hud/TopBar';
 import { ActionBar } from './hud/ActionBar';
 import { SelectionCard } from './hud/SelectionCard';
@@ -18,9 +19,9 @@ import { getUnitTypeName } from './utils/UnitHelpers';
 import { WarningIcon } from './icons';
 
 interface GameControllerProps {
-  initialDifficulty?: 'easy' | 'medium' | 'hard';
+  initialDifficulty?: Difficulty;
+  // Continue the saved game if there is one
   shouldContinueGame?: boolean;
-  onReturnToHome?: () => void;
 }
 
 // Returns a function with a stable identity that always calls the latest version of `fn`
@@ -32,10 +33,14 @@ const useStableCallback = <T extends (...args: any[]) => any>(fn: T): T => {
 };
 
 // The inner game component that uses the preloaded assets
-const GameControllerInner: React.FC<GameControllerProps> = ({
+const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> = ({
   initialDifficulty = 'medium',
   shouldContinueGame = false,
+  isReady
 }) => {
+  const router = useRouter();
+  const isMuted = useMuted();
+
   // Use our custom hook to handle all game logic
   const {
     gameState,
@@ -45,19 +50,16 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
     selectedUnitTypeForPurchase,
     isAITurn,
     timer,
-    gameStarted,
-    difficulty,
     handleHexClick,
     handleUnitSelect,
     handleUnitPurchase,
     handleEndTurn,
-    handleStartGame,
-    handleContinueGame,
     handleRestart,
+    saveGame,
     handleUnitTypeSelect,
     handleCancelSelection,
     notice
-  } = useGameHandlers();
+  } = useGameHandlers({ initialDifficulty, resume: shouldContinueGame, isReady });
 
   const [toast, setToast] = useState<{ id: number; text: string; isWarning?: boolean } | null>(null);
 
@@ -65,16 +67,6 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
   const onBoardHexClick = useStableCallback(handleHexClick);
   const onBoardUnitClick = useStableCallback(handleUnitSelect);
   const onBoardUnitPurchase = useStableCallback(handleUnitPurchase);
-
-  // Start or continue game when the component mounts
-  useEffect(() => {
-    // Fall back to a new game if there is no saved game to continue
-    if (!shouldContinueGame || !handleContinueGame()) {
-      handleStartGame(initialDifficulty);
-    }
-    // This effect should only run once when component mounts
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   // Escape cancels the current selection
   useEffect(() => {
@@ -97,8 +89,14 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
   }, [toast]);
 
   const handleSave = () => {
-    const saved = saveGameToLocalStorage(gameState, { selectedHex, isAITurn, timer, difficulty });
+    const saved = saveGame();
     setToast({ id: Date.now(), text: saved ? 'Game saved' : 'Could not save the game' });
+  };
+
+  // Leave for the main menu; the game is saved so it can be continued from there
+  const handleQuit = () => {
+    saveGame();
+    router.push('/');
   };
 
   const { currentPhase } = gameState;
@@ -126,9 +124,7 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
         selectedUnitTypeForPurchase={selectedUnitTypeForPurchase}
         onHexClick={onBoardHexClick}
         onUnitClick={onBoardUnitClick}
-        gameStarted={gameStarted}
         onUnitPurchase={onBoardUnitPurchase}
-        isAITurn={isAITurn}
       />
 
       {currentPhase === 'setup' && (
@@ -148,11 +144,15 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
             timer={timer}
             showTimer={isPlayerPlanning}
             onSave={isPlayerPlanning ? handleSave : undefined}
+            isMuted={isMuted}
+            onToggleMute={() => setMuted(!isMuted)}
+            onQuit={handleQuit}
           />
           <div className="fixed left-3 top-16 z-20 pointer-events-none">
             <SelectionCard gameState={gameState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
           </div>
-          <div className="fixed right-3 top-16 z-20 hidden w-64 flex-col gap-2 pointer-events-none sm:flex">
+          {/* Capped above the battle card and action bar so panels never run under them */}
+          <div className="fixed right-3 top-16 z-20 hidden max-h-[calc(100vh-15rem)] w-64 flex-col gap-2 overflow-y-auto pointer-events-none sm:flex">
             <EventFeed log={gameState.log ?? []} />
             <HelpPanel />
           </div>
@@ -176,11 +176,11 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
       )}
 
       {currentPhase === 'gameOver' && (
-        <GameOverScreen winner={gameState.winner as 'player' | 'ai'} onRestart={handleRestart} />
+        <GameOverScreen winner={gameState.winner as 'player' | 'ai'} onRestart={handleRestart} onMainMenu={() => router.push('/')} />
       )}
 
       {toast && (
-        <div className="fixed top-20 inset-x-0 z-40 flex justify-center pointer-events-none">
+        <div className="fixed top-20 inset-x-0 z-40 flex justify-center pointer-events-none" role="status" aria-live="polite">
           <div
             key={toast.id}
             className={`animate-fadeIn flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold shadow-lg ${
@@ -198,25 +198,16 @@ const GameControllerInner: React.FC<GameControllerProps> = ({
 
 // The main controller that provides the loading manager
 export const GameController: React.FC<GameControllerProps> = (props) => {
-  // Always render the game, but loading screen will be on top initially
+  // The board renders behind the loading screen; turns don't start until it has faded away
   const [loadingComplete, setLoadingComplete] = useState(false);
+  const handleLoadingComplete = useCallback(() => setLoadingComplete(true), []);
 
   return (
     <LoadingManagerProvider>
-      <GameAssetPreloader>
-        <div className="relative w-full h-full">
-          {/* Always render the game component */}
-          <GameControllerInner {...props} />
-
-          {/* Loading screen will fade itself out when complete */}
-          {!loadingComplete && (
-            <LoadingScreen
-              onLoadingComplete={() => setLoadingComplete(true)}
-              className="pointer-events-auto"
-            />
-          )}
-        </div>
-      </GameAssetPreloader>
+      <div className="relative w-full h-full">
+        <GameControllerInner {...props} isReady={loadingComplete} />
+        {!loadingComplete && <LoadingScreen onLoadingComplete={handleLoadingComplete} />}
+      </div>
     </LoadingManagerProvider>
   );
 };

@@ -7,7 +7,7 @@ import {
   getUnitModelPath,
   getAnimationName
 } from './utils/UnitModelSystem';
-import { instantiateUnitModel, findAnimationClip } from './utils/unitModelCache';
+import { instantiateUnitModel, findAnimationClip, disposeUnitModel } from './utils/unitModelCache';
 
 // How far a hovering (not yet placed) preview floats above the tile
 const HOVER_ELEVATION = 0.4;
@@ -18,7 +18,6 @@ interface AnimatedUnitPreviewProps {
   // Height of the top surface of the tile the preview is shown on
   hexHeight: number;
   isPlaced?: boolean;
-  isConfirmed?: boolean; // To indicate a confirmed unit that should show hold shield
 }
 
 // Semi-transparent preview of a unit the player is about to deploy from the barracks
@@ -26,15 +25,14 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
   unitType,
   position,
   hexHeight,
-  isPlaced = false,
-  isConfirmed = false
+  isPlaced = false
 }) => {
   const unitModelAttributes = getUnitModelAttributes(unitType);
   const modelUrl = getUnitModelPath('player');
-  const animationState = isConfirmed || isPlaced ? 'holdShield' : 'idle';
+  const animationState = isPlaced ? 'holdShield' : 'idle';
 
   const [x, y, z] = position;
-  const elevation = isPlaced || isConfirmed ? 0.02 : HOVER_ELEVATION;
+  const elevation = isPlaced ? 0.02 : HOVER_ELEVATION;
   // Face the center of the map
   const facing = Math.abs(x) + Math.abs(z) > 0.001 ? Math.atan2(-x, -z) : 0;
 
@@ -52,10 +50,15 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
     if (!container) return;
 
     let cancelled = false;
+    let loadedScene: THREE.Group | null = null;
 
     instantiateUnitModel(modelUrl)
       .then(({ scene, animations }) => {
-        if (cancelled) return;
+        if (cancelled) {
+          disposeUnitModel(scene);
+          return;
+        }
+        loadedScene = scene;
 
         scene.scale.setScalar(unitModelAttributes.scale);
         scene.position.set(0, unitModelAttributes.heightOffset, 0);
@@ -71,7 +74,7 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
 
     return () => {
       cancelled = true;
-      mixerRef.current?.stopAllAction();
+      if (loadedScene) disposeUnitModel(loadedScene, mixerRef.current);
       mixerRef.current = null;
       actionRef.current = null;
       clipsRef.current = [];
@@ -104,11 +107,7 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
     if (indicatorRef.current) {
       const material = indicatorRef.current.material as THREE.MeshStandardMaterial;
 
-      if (isConfirmed) {
-        // Pulsing confirmed indicator
-        indicatorRef.current.scale.setScalar(0.7 + Math.sin(time * 5) * 0.1);
-        material.opacity = 0.8 + Math.sin(time * 3) * 0.2;
-      } else if (isPlaced) {
+      if (isPlaced) {
         // Gentle bobbing for placed indicator
         indicatorRef.current.position.y = Math.sin(time * 3) * 0.02;
         material.opacity = 0.6 + Math.sin(time * 2) * 0.2;
@@ -120,7 +119,7 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
 
     // Hover animation for a preview that hasn't been placed yet
     if (hoverRef.current) {
-      if (!isPlaced && !isConfirmed) {
+      if (!isPlaced) {
         hoverRef.current.position.y = Math.sin(time * 1.5) * 0.15;
         hoverRef.current.rotation.y = Math.sin(time * 0.7) * 0.1;
       } else {
@@ -153,14 +152,14 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
         <meshStandardMaterial
           color={unitModelAttributes.indicatorColor}
           emissive={unitModelAttributes.indicatorColor}
-          emissiveIntensity={isConfirmed ? 0.8 : isPlaced ? 0.5 : 0.3}
+          emissiveIntensity={isPlaced ? 0.5 : 0.3}
           transparent={true}
           opacity={0.7}
         />
       </mesh>
 
       {/* Glowing ring for placed/confirmed units */}
-      {(isPlaced || isConfirmed) && (
+      {isPlaced && (
         <mesh position={[0, 0.05, 0]} rotation={[-Math.PI / 2, 0, 0]}>
           <ringGeometry args={[0.55, 0.65, 32]} />
           <meshStandardMaterial

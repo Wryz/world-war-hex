@@ -1,75 +1,77 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 
-// Cache for audio elements to prevent reloading
-const audioCache = new Map<string, HTMLAudioElement>();
+// A few copies of each sound so quick repeats (e.g. sweeping over tiles) can overlap
+const POOL_SIZE = 4;
+const MUTE_STORAGE_KEY = 'wwhMuted';
 
-// Sound volume settings
-const DEFAULT_VOLUME = 0.5;
+interface SoundPool {
+  instances: HTMLAudioElement[];
+  next: number;
+}
+
+const soundPools = new Map<string, SoundPool>();
+
+// Global mute shared by file-based sounds and the synthesised battle sounds
+let muted = false;
+const muteListeners = new Set<() => void>();
+
+if (typeof window !== 'undefined') {
+  try {
+    muted = localStorage.getItem(MUTE_STORAGE_KEY) === 'true';
+  } catch {
+    // Storage can be unavailable (e.g. private mode); sound simply starts unmuted
+  }
+}
+
+export const isMuted = () => muted;
+
+export const setMuted = (value: boolean) => {
+  muted = value;
+  try {
+    localStorage.setItem(MUTE_STORAGE_KEY, String(value));
+  } catch {
+    // Not remembered across visits, but still applies now
+  }
+  muteListeners.forEach(listener => listener());
+};
+
+const subscribeToMute = (listener: () => void) => {
+  muteListeners.add(listener);
+  return () => muteListeners.delete(listener);
+};
+
+// Current mute state for React components
+export const useMuted = () => useSyncExternalStore(subscribeToMute, isMuted, () => false);
 
 /**
- * Preloads an audio file and adds it to the cache
+ * Preloads an audio file so it can be played instantly by id
  */
 export const preloadSound = (url: string, id: string): void => {
-  if (audioCache.has(id)) return;
-  
-  const audio = new Audio(url);
-  audio.volume = DEFAULT_VOLUME;
-  audio.load();
-  audioCache.set(id, audio);
+  if (soundPools.has(id)) return;
+
+  const instances = Array.from({ length: POOL_SIZE }, () => {
+    const audio = new Audio(url);
+    audio.preload = 'auto';
+    return audio;
+  });
+  soundPools.set(id, { instances, next: 0 });
 };
 
 /**
- * Plays a sound from the cache
+ * Plays a preloaded sound
  */
-export const playSound = (id: string, volume = DEFAULT_VOLUME): void => {
-  const audio = audioCache.get(id);
-  if (!audio) {
-    console.warn(`Sound with id "${id}" not found in cache`);
-    return;
-  }
-  
-  // Create a clone to allow for overlapping sounds
-  const soundInstance = audio.cloneNode() as HTMLAudioElement;
-  soundInstance.volume = volume;
-  
-  // Play the sound
-  soundInstance.play().catch(error => {
-    // Often happens due to user interaction requirements in browsers
-    console.warn(`Failed to play sound: ${error.message}`);
+export const playSound = (id: string, volume = 0.5): void => {
+  if (muted) return;
+
+  const pool = soundPools.get(id);
+  if (!pool) return;
+
+  const audio = pool.instances[pool.next];
+  pool.next = (pool.next + 1) % pool.instances.length;
+
+  audio.volume = volume;
+  audio.currentTime = 0;
+  audio.play().catch(() => {
+    // Browsers block audio until the player has interacted with the page
   });
 };
-
-/**
- * Sets the volume for a specific sound
- */
-export const setSoundVolume = (id: string, volume: number): void => {
-  const audio = audioCache.get(id);
-  if (audio) {
-    audio.volume = Math.max(0, Math.min(1, volume));
-  }
-};
-
-/**
- * Hook for using sounds in React components
- */
-export const useSound = (soundId: string) => {
-  const [volume, setVolume] = useState(DEFAULT_VOLUME);
-  
-  useEffect(() => {
-    // Update volume if the sound exists
-    const audio = audioCache.get(soundId);
-    if (audio) {
-      audio.volume = volume;
-    }
-  }, [soundId, volume]);
-  
-  const play = useCallback(() => {
-    playSound(soundId, volume);
-  }, [soundId, volume]);
-  
-  return {
-    play,
-    setVolume,
-    volume
-  };
-}; 

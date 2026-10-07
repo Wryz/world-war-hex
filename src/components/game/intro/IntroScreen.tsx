@@ -2,92 +2,86 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import HexBackground from './HexBackground';
 import { AttackIcon, ResumeIcon, ShieldIcon, SkullIcon } from '../icons';
+import { PANEL_CLASS } from '../hud/styles';
+import { Difficulty } from '../storage/GameStorage';
 
 export interface IntroScreenProps {
-  onStartGame: (difficulty: 'easy' | 'medium' | 'hard') => void;
+  onStartGame: (difficulty: Difficulty) => void;
   onContinueGame?: () => void;
   hasSavedGame?: boolean;
 }
 
-const IntroScreen: React.FC<IntroScreenProps> = ({ 
-  onStartGame, 
-  onContinueGame, 
-  hasSavedGame = false 
-}) => {
-  const [selectedDifficulty, setSelectedDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy');
+const DIFFICULTY_OPTIONS: { level: Difficulty; label: string; description: string; Icon: typeof ShieldIcon }[] = [
+  { level: 'easy', label: 'Easy', description: 'A cautious enemy', Icon: ShieldIcon },
+  { level: 'medium', label: 'Medium', description: 'A fair fight', Icon: AttackIcon },
+  { level: 'hard', label: 'Hard', description: 'A ruthless warlord', Icon: SkullIcon }
+];
 
-  const handleDifficultySelect = (level: 'easy' | 'medium' | 'hard') => {
-    setSelectedDifficulty(level);
-  };
+const IntroScreen: React.FC<IntroScreenProps> = ({
+  onStartGame,
+  onContinueGame,
+  hasSavedGame = false
+}) => {
+  const [selectedDifficulty, setSelectedDifficulty] = useState<Difficulty>('easy');
 
   return (
     <div className="relative min-h-screen w-full overflow-hidden">
       <HexBackground />
-      
-      <div className="container mx-auto px-4 py-8 flex flex-col items-center justify-center min-h-screen z-10 relative">
-        <div className="backdrop-blur-md bg-opacity-70 bg-[var(--background)] rounded-lg shadow-2xl p-6 md:p-8 max-w-4xl w-full border-2 border-[var(--foreground)]">
-          <div className="flex justify-center mb-6">
-            <Image 
-              src="/world-war-hex-logo.png" 
-              alt="World War Hex Logo" 
-              width={200} 
-              height={200} 
-              className="max-w-full h-auto"
+
+      <div className="relative z-10 flex min-h-screen items-center justify-center px-4 py-8">
+        <div className={`${PANEL_CLASS} w-full max-w-2xl p-6 md:p-8`}>
+          <div className="mb-4 flex justify-center">
+            <Image
+              src="/world-war-hex-logo.png"
+              alt="World War Hex"
+              width={200}
+              height={200}
+              className="h-auto max-w-[160px] md:max-w-[200px]"
               priority
             />
           </div>
-          
-          <p className="text-xl md:text-2xl text-[var(--foreground)] mb-10 text-center italic">
+
+          <p className="mb-8 text-center text-lg text-slate-300 md:text-xl">
             Conquer the hexagonal battlefield and claim victory!
           </p>
-          
-          <div className="mb-10">
-            <h2 className="font-display text-2xl md:text-3xl text-[var(--primary)] mb-6 text-center">
-              Choose Your Challenge
-            </h2>
-            
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {(['easy', 'medium', 'hard'] as const).map((level) => (
+
+          <h2 className="font-display mb-4 text-center text-2xl text-amber-300">Choose your challenge</h2>
+
+          <div className="mb-8 grid grid-cols-1 gap-3 sm:grid-cols-3" role="group" aria-label="Difficulty">
+            {DIFFICULTY_OPTIONS.map(({ level, label, description, Icon }) => {
+              const isSelected = selectedDifficulty === level;
+              return (
                 <button
                   key={level}
-                  onClick={() => handleDifficultySelect(level)}
-                  className={`
-                    font-display p-5 rounded-lg text-xl transition-all duration-300
-                    ${selectedDifficulty === level 
-                      ? 'bg-[var(--foreground)] text-[var(--background)] transform scale-110 shadow-lg border-2 border-white' 
-                      : 'bg-[var(--background)] bg-opacity-80 text-[var(--primary)] border-2 border-[var(--foreground)] hover:bg-[var(--accent-light)] hover:text-[var(--background)]'
-                    }
-                  `}
+                  onClick={() => setSelectedDifficulty(level)}
+                  aria-pressed={isSelected}
+                  className={`flex flex-col items-center rounded-xl px-4 py-4 transition-colors ${
+                    isSelected
+                      ? 'bg-amber-400 text-slate-900 ring-2 ring-amber-200'
+                      : 'bg-slate-800 text-slate-100 hover:bg-slate-700'
+                  }`}
                 >
-                  <span className="mr-2 inline-flex align-[-0.15em]">
-                    {level === 'easy' && <ShieldIcon color="currentColor" />}
-                    {level === 'medium' && <AttackIcon color="currentColor" />}
-                    {level === 'hard' && <SkullIcon color="currentColor" />}
+                  <span className="font-display flex items-center gap-2 text-xl">
+                    <Icon color="currentColor" /> {label}
                   </span>
-                  {level.charAt(0).toUpperCase() + level.slice(1)}
+                  <span className={`mt-1 text-sm ${isSelected ? 'text-slate-800' : 'text-slate-400'}`}>{description}</span>
                 </button>
-              ))}
-            </div>
+              );
+            })}
           </div>
-          
-          <div className="flex flex-col md:flex-row justify-center space-y-4 md:space-y-0 md:space-x-6">
+
+          <div className="flex flex-col justify-center gap-3 sm:flex-row">
             <button
               onClick={() => onStartGame(selectedDifficulty)}
-              className="bg-[var(--foreground)] text-[var(--background)] font-display py-4 px-10 rounded-lg text-2xl transition-all duration-300 
-                hover:bg-[var(--accent-light)] hover:shadow-lg hover:scale-105 
-                active:transform active:scale-95
-                focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--foreground)]"
+              className="font-display rounded-xl bg-amber-500 px-8 py-3 text-xl text-slate-900 shadow transition-colors hover:bg-amber-400 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
             >
               <span className="inline-flex items-center gap-2"><AttackIcon color="currentColor" /> Begin Conquest</span>
             </button>
-            
+
             {hasSavedGame && onContinueGame && (
               <button
                 onClick={onContinueGame}
-                className="bg-[var(--accent)] text-[var(--background)] font-display py-4 px-10 rounded-lg text-2xl transition-all duration-300 
-                  hover:bg-[var(--accent-light)] hover:shadow-lg hover:scale-105 
-                  active:transform active:scale-95
-                  focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--accent)]"
+                className="font-display rounded-xl bg-slate-700 px-8 py-3 text-xl text-slate-100 shadow transition-colors hover:bg-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300"
               >
                 <span className="inline-flex items-center gap-2"><ResumeIcon /> Continue Battle</span>
               </button>
@@ -99,4 +93,4 @@ const IntroScreen: React.FC<IntroScreenProps> = ({
   );
 };
 
-export default IntroScreen; 
+export default IntroScreen;

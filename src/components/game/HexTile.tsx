@@ -1,4 +1,4 @@
-import { memo, useRef, useMemo } from 'react';
+import { memo, useEffect, useRef, useMemo } from 'react';
 import { useFrame, ThreeEvent } from '@react-three/fiber';
 import { Hex, TerrainType } from '@/types/game';
 import * as THREE from 'three';
@@ -23,6 +23,14 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
 
 // Tiles are drawn slightly smaller than their cell so thin gaps outline every hex
 const TILE_SCALE = 0.92;
+
+// How far hovered and highlighted tiles rise. Kept below the markers drawn on top of tiles
+// (unit rings, route destinations) so a raised tile never covers them.
+const HOVER_LIFT = 0.03;
+const HIGHLIGHT_LIFT = 0.015;
+// Selection outline height above the tile surface, bobbing up and down
+const SELECTION_RING_HEIGHT = 0.06;
+const SELECTION_RING_BOB = 0.02;
 
 // Pointer movement (px) between press and release beyond which a click is treated as a camera drag
 export const DRAG_CLICK_TOLERANCE = 5;
@@ -106,6 +114,9 @@ const HexTileComponent: React.FC<HexTileProps> = ({
     return hexGeometry;
   }, [hexHeight]);
 
+  // Geometry passed as a prop isn't disposed automatically when it's replaced
+  useEffect(() => () => geometry.dispose(), [geometry]);
+
   const color = useMemo(() => {
     const base = new THREE.Color(TERRAIN_COLORS[hex.terrain]);
     if (isHovered) return base.offsetHSL(0, 0.05, 0.12);
@@ -120,14 +131,17 @@ const HexTileComponent: React.FC<HexTileProps> = ({
 
   useFrame((state) => {
     // Gently raise highlighted and hovered tiles
-    if (liftRef.current) {
-      const targetY = isHovered ? 0.06 : highlight !== 'none' ? 0.03 : 0;
-      liftRef.current.position.y = THREE.MathUtils.lerp(liftRef.current.position.y, targetY, 0.2);
+    const lift = liftRef.current;
+    if (lift) {
+      const targetY = isHovered ? HOVER_LIFT : highlight !== 'none' ? HIGHLIGHT_LIFT : 0;
+      const gap = targetY - lift.position.y;
+      // Most tiles are at rest, so skip them
+      if (gap !== 0) lift.position.y = Math.abs(gap) < 0.001 ? targetY : lift.position.y + gap * 0.2;
     }
 
     if (selectionRingRef.current) {
       const time = state.clock.getElapsedTime();
-      selectionRingRef.current.position.y = surfaceHeight + 0.04 + Math.sin(time * 3) * 0.03;
+      selectionRingRef.current.position.y = surfaceHeight + SELECTION_RING_HEIGHT + Math.sin(time * 3) * SELECTION_RING_BOB;
     }
   });
 
@@ -197,7 +211,7 @@ const HexTileComponent: React.FC<HexTileProps> = ({
 
       {/* Selection outline */}
       {isSelected && (
-        <mesh ref={selectionRingRef} geometry={ringGeometry} position={[0, surfaceHeight + 0.04, 0]} scale={1.08} renderOrder={3}>
+        <mesh ref={selectionRingRef} geometry={ringGeometry} position={[0, surfaceHeight + SELECTION_RING_HEIGHT, 0]} scale={1.08} renderOrder={3}>
           <meshBasicMaterial color={selectionColor} transparent opacity={0.95} depthWrite={false} />
         </mesh>
       )}

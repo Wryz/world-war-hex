@@ -59,7 +59,7 @@ export const MovePath: React.FC<MovePathProps> = ({ points, color, isPreview = f
         renderOrder={5}
       />
       {/* Destination marker */}
-      <mesh position={[arrow.end.x, arrow.end.y - PATH_LIFT + 0.04, arrow.end.z]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={4}>
+      <mesh position={[arrow.end.x, arrow.end.y - PATH_LIFT + 0.06, arrow.end.z]} rotation={[-Math.PI / 2, 0, 0]} renderOrder={4}>
         <ringGeometry args={[0.5, 0.68, 6, 1, Math.PI / 6]} />
         <meshBasicMaterial color={color} transparent opacity={isPreview ? 0.5 : 0.85} depthWrite={false} side={THREE.DoubleSide} />
       </mesh>

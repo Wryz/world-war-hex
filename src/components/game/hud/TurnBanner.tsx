@@ -38,17 +38,17 @@ export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, tur
     return () => clearTimeout(timeout);
   }, [phase, activePlayer, turnNumber]);
 
-  if (!banner) return null;
-
   return (
-    <div className="fixed inset-x-0 top-1/3 z-30 flex justify-center pointer-events-none">
-      <div key={banner.key} className="animate-banner flex flex-col items-center rounded-2xl bg-slate-900/75 px-8 py-3 shadow-2xl">
-        <div className="font-display flex items-center gap-2 text-3xl tracking-wide" style={{ color: banner.color }}>
-          {banner.isBattle && <AttackIcon color={banner.color} />}
-          {banner.title}
+    <div className="fixed inset-x-0 top-1/3 z-30 flex justify-center pointer-events-none" role="status" aria-live="polite">
+      {banner && (
+        <div key={banner.key} className="animate-banner flex flex-col items-center rounded-2xl bg-slate-900/75 px-8 py-3 shadow-2xl">
+          <div className="font-display flex items-center gap-2 text-3xl tracking-wide" style={{ color: banner.color }}>
+            {banner.isBattle && <AttackIcon color={banner.color} />}
+            {banner.title}
+          </div>
+          <div className="text-sm font-semibold text-slate-300">{banner.subtitle}</div>
         </div>
-        <div className="text-sm font-semibold text-slate-300">{banner.subtitle}</div>
-      </div>
+      )}
     </div>
   );
 };

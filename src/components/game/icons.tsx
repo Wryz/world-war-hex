@@ -22,7 +22,10 @@ import {
   GiCastle,
   GiCheckedShield
 } from 'react-icons/gi';
-import { LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuChevronDown, LuRotateCcw, LuTriangleAlert } from 'react-icons/lu';
+import {
+  LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuChevronDown, LuRotateCcw, LuTriangleAlert,
+  LuVolume2, LuVolumeX, LuHouse
+} from 'react-icons/lu';
 import { TerrainType, UnitType } from '@/types/game';
 
 // SVG icons used throughout the game: Game Icons (game-icons.net) and Lucide, via react-icons
@@ -108,3 +111,6 @@ export const ArrowIcon = icon(LuArrowRight);
 export const ChevronIcon = icon(LuChevronDown);
 export const ResumeIcon = icon(LuRotateCcw);
 export const WarningIcon = icon(LuTriangleAlert);
+export const SoundOnIcon = icon(LuVolume2);
+export const SoundOffIcon = icon(LuVolumeX);
+export const HomeIcon = icon(LuHouse);

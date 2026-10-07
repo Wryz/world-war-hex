@@ -2,7 +2,7 @@ import React from 'react';
 import { GameState } from '@/types/game';
 import { BASE_MAX_HEALTH, TURN_INCOME } from '@/lib/game/gameState';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
-import { CrownIcon, GoldIcon, SaveIcon } from '../icons';
+import { CrownIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon } from '../icons';
 
 interface TopBarProps {
   gameState: GameState;
@@ -10,7 +10,12 @@ interface TopBarProps {
   timer: number;
   showTimer: boolean;
   onSave?: () => void;
+  isMuted: boolean;
+  onToggleMute: () => void;
+  onQuit: () => void;
 }
+
+const ICON_BUTTON_CLASS = 'rounded-md p-1 text-slate-300 hover:bg-slate-700 hover:text-white';
 
 const CastleHealth: React.FC<{ title: string; health: number; max: number; color: string; alignRight?: boolean }> = ({
   title, health, max, color, alignRight = false
@@ -34,7 +39,7 @@ const CastleHealth: React.FC<{ title: string; health: number; max: number; color
 };
 
 // Compact status bar: whose turn it is, both castles' health, and the player's gold
-export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, showTimer, onSave }) => {
+export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit }) => {
   const { players, turnNumber } = gameState;
   const mineIncome = gameState.hexGrid
     .filter(hex => hex.isResourceHex && hex.unit?.owner === 'player')
@@ -81,11 +86,24 @@ export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, show
         <span className="font-display flex items-center gap-1 text-base text-amber-300" title={`+${TURN_INCOME + mineIncome} gold per round`}>
           <GoldIcon className="text-lg" /> {players.player.points}
         </span>
+        <span className="mx-0.5 h-5 w-px bg-slate-700" />
         {onSave && (
-          <button onClick={onSave} title="Save game" aria-label="Save game" className="rounded-md p-1 text-slate-300 hover:bg-slate-700 hover:text-white">
+          <button onClick={onSave} title="Save game" aria-label="Save game" className={ICON_BUTTON_CLASS}>
             <SaveIcon className="text-base" />
           </button>
         )}
+        <button
+          onClick={onToggleMute}
+          title={isMuted ? 'Turn sound on' : 'Mute sound'}
+          aria-label={isMuted ? 'Turn sound on' : 'Mute sound'}
+          aria-pressed={isMuted}
+          className={ICON_BUTTON_CLASS}
+        >
+          {isMuted ? <SoundOffIcon className="text-base" /> : <SoundOnIcon className="text-base" />}
+        </button>
+        <button onClick={onQuit} title="Save and return to the main menu" aria-label="Save and return to the main menu" className={ICON_BUTTON_CLASS}>
+          <HomeIcon className="text-base" />
+        </button>
       </div>
     </div>
   );

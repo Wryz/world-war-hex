@@ -12,11 +12,13 @@ import {
 } from './utils/UnitModelSystem';
 import { playBattleSound } from './utils/battleSounds';
 import { DRAG_CLICK_TOLERANCE } from './HexTile';
-import { instantiateUnitModel, findAnimationClip } from './utils/unitModelCache';
+import { instantiateUnitModel, findAnimationClip, disposeUnitModel } from './utils/unitModelCache';
 import { ArrowIcon, AttackIcon, GoldIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
 
 // Small lift so the unit's indicator doesn't z-fight with the tile surface
 const UNIT_ELEVATION = 0.02;
+// Owner ring height above the unit's base: clear of hovered tiles, which rise slightly
+const RING_HEIGHT = 0.05;
 const WALK_SPEED = 2.4; // world units per second
 const TURN_SPEED = 8; // how quickly units rotate to face their target
 const ANIMATION_FADE_DURATION = 0.3;
@@ -128,10 +130,15 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     if (!container) return;
 
     let cancelled = false;
+    let loadedScene: THREE.Group | null = null;
 
     instantiateUnitModel(modelUrl)
       .then(({ scene, animations }) => {
-        if (cancelled) return;
+        if (cancelled) {
+          disposeUnitModel(scene);
+          return;
+        }
+        loadedScene = scene;
 
         scene.scale.setScalar(unitModelAttributes.scale);
         scene.position.set(0, unitModelAttributes.heightOffset, 0);
@@ -147,7 +154,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
 
     return () => {
       cancelled = true;
-      mixerRef.current?.stopAllAction();
+      if (loadedScene) disposeUnitModel(loadedScene, mixerRef.current);
       mixerRef.current = null;
       actionRef.current = null;
       clipsRef.current = [];
@@ -178,6 +185,8 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   // When the current battle started (clock time) and which strike was last played
   const battleClockRef = useRef<{ key: string; start: number; lastStrike: number; lastImpact: number } | null>(null);
   const targetVector = useRef(new THREE.Vector3());
+  // Scratch vector reused every frame for the arrow's flight
+  const arrowOffset = useRef(new THREE.Vector3());
 
   // Play one strike of the attack animation, sped up to fit the unit's attack interval
   const strike = () => {
@@ -267,7 +276,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
           // Arrow flies from the archer to the target in an arc
           if (sinceStrike < ARROW_FLIGHT_TIME && arrow) {
             const flight = sinceStrike / ARROW_FLIGHT_TIME;
-            const local = targetVector.current.clone().sub(root.position);
+            const local = arrowOffset.current.copy(targetVector.current).sub(root.position);
             arrow.visible = true;
             arrow.position.set(local.x * flight, 1 + local.y * flight + Math.sin(flight * Math.PI) * 0.8, local.z * flight);
             const ahead = Math.min(1, flight + 0.05);
@@ -315,7 +324,10 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     if (modelRef.current && desiredHeading !== null) {
       if (headingRef.current === null) headingRef.current = desiredHeading;
       headingRef.current += angleDelta(headingRef.current, desiredHeading) * Math.min(1, delta * TURN_SPEED);
-      modelRef.current.rotation.y = headingRef.current + unitModelAttributes.rotationOffset;
+    }
+    if (modelRef.current) {
+      // With nothing to face yet, still apply the model's own facing correction
+      modelRef.current.rotation.y = (headingRef.current ?? 0) + unitModelAttributes.rotationOffset;
     }
 
     // Pick the animation for what the unit is doing right now
@@ -348,9 +360,8 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     >
       {/* Invisible click area */}
       {onSelect && (
-        <mesh position={[0, 0.6, 0]}>
+        <mesh position={[0, 0.6, 0]} visible={false}>
           <cylinderGeometry args={[0.45, 0.45, 1.2, 10]} />
-          <meshBasicMaterial transparent opacity={0} depthWrite={false} />
         </mesh>
       )}
 
@@ -384,7 +395,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       )}
 
       {/* Owner ring so it's always clear which side a unit belongs to */}
-      <mesh position={[0, 0.02, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh position={[0, RING_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.42, isSelected ? 0.62 : 0.54, 32]} />
         <meshBasicMaterial
           color={isSelected ? '#facc15' : ownerColor}

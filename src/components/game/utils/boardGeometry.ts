@@ -7,8 +7,8 @@ export const BEVEL_THICKNESS = 0.05;
 
 const BASE_HEIGHT = 1.0;
 
-// Terrain heights - scale these to make more dramatic landscape
-export const TERRAIN_HEIGHTS: Record<TerrainType, number> = {
+// Height of each terrain's tile - mountains tower, water sits low
+const TERRAIN_HEIGHTS: Record<TerrainType, number> = {
   mountain: 2.4,
   forest: 1.4,
   plain: 1.0,

@@ -2,7 +2,7 @@
 
 import IntroScreen from '@/components/game/intro/IntroScreen';
 import { useRouter } from 'next/navigation';
-import { loadGameFromLocalStorage } from '@/components/game/storage/GameStorage';
+import { Difficulty, loadGameFromLocalStorage } from '@/components/game/storage/GameStorage';
 import { useEffect, useState } from 'react';
 
 export default function Home() {
@@ -10,30 +10,23 @@ export default function Home() {
   const [hasSavedGame, setHasSavedGame] = useState(false);
 
   useEffect(() => {
-    // Check if there's a saved game on mount
-    const savedGame = loadGameFromLocalStorage();
-    setHasSavedGame(!!savedGame);
+    setHasSavedGame(!!loadGameFromLocalStorage());
   }, []);
 
-  const handleStartGame = (difficulty: 'easy' | 'medium' | 'hard') => {
-    // Store difficulty in session storage to access it on the game page
-    sessionStorage.setItem('gameDifficulty', difficulty);
-    router.push('/play');
+  const handleStartGame = (difficulty: Difficulty) => {
+    if (hasSavedGame && !window.confirm('Start a new game? Your saved game will be lost.')) return;
+    router.push(`/play?new=true&difficulty=${difficulty}`);
   };
 
   const handleContinueGame = () => {
-    router.push('/play?continue=true');
+    router.push('/play');
   };
 
   return (
-    <div className="w-screen h-screen">
-      <div className="w-full h-full">
-        <IntroScreen
-          onStartGame={handleStartGame}
-          onContinueGame={handleContinueGame}
-          hasSavedGame={hasSavedGame}
-        />
-      </div>
-    </div>
+    <IntroScreen
+      onStartGame={handleStartGame}
+      onContinueGame={handleContinueGame}
+      hasSavedGame={hasSavedGame}
+    />
   );
 }
