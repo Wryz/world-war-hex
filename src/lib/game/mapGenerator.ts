@@ -69,11 +69,79 @@ const fractalNoise = (noise: (x: number, y: number) => number, x: number, y: num
 // Hex centre in world-like units so noise isn't skewed by the axial coordinate system
 const toPlane = (c: HexCoordinates) => [Math.sqrt(3) * (c.q + c.r / 2), 1.5 * c.r];
 
-// Assign terrain types by rank so the map starts out with the requested terrain mix.
+// A map theme: which terrain types appear and roughly how much of each. Every map rolls one
+// theme, so no map has every terrain and each plays differently.
+// Fractions are of the whole board; whatever isn't listed becomes plains.
+export interface MapTheme {
+  name: string;
+  // Filled from the lowest ground upwards (first entry lowest)
+  lowlands: [TerrainType, number][];
+  // Filled from the highest ground downwards (first entry highest)
+  highlands: [TerrainType, number][];
+  // Remaining land: wettest areas
+  wet: [TerrainType, number][];
+  // Remaining land: driest areas
+  dry: [TerrainType, number][];
+  // Healing springs scattered across the middle of the map
+  springs: number;
+}
+
+export const MAP_THEMES: MapTheme[] = [
+  {
+    name: 'Green Valley',
+    lowlands: [['water', 0.1]],
+    highlands: [['mountain', 0.12], ['hills', 0.1]],
+    wet: [['forest', 0.22]],
+    dry: [],
+    springs: 1
+  },
+  {
+    name: 'Frozen Pass',
+    lowlands: [['water', 0.08]],
+    highlands: [['mountain', 0.14], ['snow', 0.22]],
+    wet: [['forest', 0.14]],
+    dry: [],
+    springs: 0
+  },
+  {
+    name: 'Marshlands',
+    lowlands: [['water', 0.12], ['swamp', 0.18]],
+    highlands: [['hills', 0.07]],
+    wet: [['forest', 0.18]],
+    dry: [],
+    springs: 1
+  },
+  {
+    name: 'Desert Frontier',
+    lowlands: [['water', 0.04]],
+    highlands: [['mountain', 0.12], ['hills', 0.1]],
+    wet: [],
+    dry: [['desert', 0.28]],
+    springs: 3
+  },
+  {
+    name: 'Highlands',
+    lowlands: [['water', 0.06]],
+    highlands: [['mountain', 0.1], ['snow', 0.06], ['hills', 0.18]],
+    wet: [['forest', 0.15]],
+    dry: [],
+    springs: 1
+  },
+  {
+    name: 'Riverlands',
+    lowlands: [['water', 0.14], ['swamp', 0.06]],
+    highlands: [],
+    wet: [['forest', 0.16]],
+    dry: [['desert', 0.08]],
+    springs: 2
+  }
+];
+
+// Assign terrain types by rank so the map starts out with the theme's terrain mix.
 // Speckle removal and pass carving change a few hexes afterwards, so the final mix is close but not exact.
 const assignTerrain = (
   coordinates: HexCoordinates[],
-  settings: GameSettings,
+  theme: MapTheme,
   random: () => number
 ): Map<string, TerrainType> => {
   const elevationNoise = createValueNoise(random);
@@ -90,25 +158,30 @@ const assignTerrain = (
   });
 
   const total = cells.length;
-  const distribution = settings.terrainDistribution;
   const terrain = new Map<string, TerrainType>();
+  type Cell = (typeof cells)[number];
 
-  // Lowest ground floods, highest ground becomes mountains
+  // Hand out terrain bands from the front of an ordered list of cells
+  const takeBands = (ordered: Cell[], bands: [TerrainType, number][]) => {
+    let index = 0;
+    for (const [type, fraction] of bands) {
+      const count = Math.round(total * fraction);
+      for (const cell of ordered.slice(index, index + count)) terrain.set(cell.key, type);
+      index += count;
+    }
+    return ordered.slice(index);
+  };
+
+  // Lowest ground floods (water, then marsh), highest ground rises (peaks, then snow and hills)
   const byElevation = [...cells].sort((a, b) => a.elevation - b.elevation);
-  const waterCount = Math.round(total * distribution.water);
-  const mountainCount = Math.round(total * distribution.mountain);
-  byElevation.slice(0, waterCount).forEach(cell => terrain.set(cell.key, 'water'));
-  byElevation.slice(total - mountainCount).forEach(cell => terrain.set(cell.key, 'mountain'));
+  const aboveLowlands = takeBands(byElevation, theme.lowlands);
+  const land = takeBands(aboveLowlands.reverse(), theme.highlands);
 
   // Remaining land: wettest areas grow forests, driest become desert
-  const land = byElevation.slice(waterCount, total - mountainCount).sort((a, b) => b.moisture - a.moisture);
-  const forestCount = Math.round(total * distribution.forest);
-  const desertCount = Math.round(total * distribution.desert);
-  land.forEach((cell, index) => {
-    if (index < forestCount) terrain.set(cell.key, 'forest');
-    else if (index >= land.length - desertCount) terrain.set(cell.key, 'desert');
-    else terrain.set(cell.key, 'plain');
-  });
+  const byMoisture = [...land].sort((a, b) => b.moisture - a.moisture);
+  const notWet = takeBands(byMoisture, theme.wet);
+  const middle = takeBands(notWet.reverse(), theme.dry);
+  middle.forEach(cell => terrain.set(cell.key, 'plain'));
 
   return terrain;
 };
@@ -217,19 +290,22 @@ const connectRegions = (coordinates: HexCoordinates[], terrain: Map<string, Terr
   }
 };
 
-// Spread gold mines out across the middle of the map
-const chooseResourceHexes = (
+// Spread special hexes (gold mines, springs) out across the middle of the map,
+// keeping them apart from each other and from any already chosen
+const chooseFeatureHexes = (
   coordinates: HexCoordinates[],
   terrain: Map<string, TerrainType>,
   gridSize: number,
   count: number,
-  random: () => number
+  random: () => number,
+  taken: HexCoordinates[] = []
 ): HexCoordinates[] => {
   const center = { q: 0, r: 0 };
   const candidates = shuffle(
     coordinates.filter(c => {
       const distance = getHexDistance(c, center);
-      return distance >= 2 && distance <= gridSize - 2 && isPassableTerrain(terrain.get(coordKey(c))!);
+      return distance >= 2 && distance <= gridSize - 2 && isPassableTerrain(terrain.get(coordKey(c))!) &&
+        !taken.some(other => getHexDistance(other, c) < 2);
     }),
     random
   );
@@ -245,20 +321,25 @@ const chooseResourceHexes = (
   return chosen;
 };
 
-// Create a hexagonal battlefield with the configured radius and terrain mix
-export const createHexagonalGrid = (settings: GameSettings, seed = Math.floor(Math.random() * 2 ** 31)): Hex[] => {
+// Create a hexagonal battlefield with the configured radius, using a random theme's terrain
+export const createHexagonalGrid = (
+  settings: GameSettings,
+  seed = Math.floor(Math.random() * 2 ** 31)
+): { hexGrid: Hex[]; theme: MapTheme } => {
   const random = createRandom(seed);
   const coordinates = getSpiral({ q: 0, r: 0 }, settings.gridSize);
+  const theme = MAP_THEMES[Math.floor(random() * MAP_THEMES.length)];
 
-  const terrain = assignTerrain(coordinates, settings, random);
+  const terrain = assignTerrain(coordinates, theme, random);
   removeSpeckles(coordinates, terrain);
   connectRegions(coordinates, terrain);
 
-  const resources = new Set(
-    chooseResourceHexes(coordinates, terrain, settings.gridSize, settings.resourceHexCount, random).map(coordKey)
-  );
+  const resourceCoordinates = chooseFeatureHexes(coordinates, terrain, settings.gridSize, settings.resourceHexCount, random);
+  const resources = new Set(resourceCoordinates.map(coordKey));
+  chooseFeatureHexes(coordinates, terrain, settings.gridSize, theme.springs, random, resourceCoordinates)
+    .forEach(c => terrain.set(coordKey(c), 'spring'));
 
-  return coordinates.map(coordinates => {
+  const hexGrid = coordinates.map(coordinates => {
     const key = coordKey(coordinates);
     const hex: Hex = {
       id: `hex-${coordinates.q}-${coordinates.r}`,
@@ -274,4 +355,6 @@ export const createHexagonalGrid = (settings: GameSettings, seed = Math.floor(Ma
 
     return hex;
   });
+
+  return { hexGrid, theme };
 };

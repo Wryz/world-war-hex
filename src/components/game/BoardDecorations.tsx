@@ -37,6 +37,42 @@ const PARTS = {
     geometry: new THREE.OctahedronGeometry(1),
     material: new THREE.MeshStandardMaterial({ color: '#ffd54f', emissive: '#ffb300', emissiveIntensity: 0.5, metalness: 0.6, roughness: 0.3 }),
     castShadow: false
+  },
+  hill: {
+    // Low grassy dome, scaled per instance
+    geometry: new THREE.SphereGeometry(1, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2),
+    material: new THREE.MeshStandardMaterial({ color: '#a9c25f', flatShading: true }),
+    castShadow: true
+  },
+  reed: {
+    geometry: new THREE.ConeGeometry(0.025, 0.32, 4).translate(0, 0.16, 0),
+    material: new THREE.MeshStandardMaterial({ color: '#4d6b3a', flatShading: true }),
+    castShadow: false
+  },
+  puddle: {
+    geometry: new THREE.CylinderGeometry(1, 1, 0.02, 7),
+    material: new THREE.MeshStandardMaterial({ color: '#5f8f86', roughness: 0.3 }),
+    castShadow: false
+  },
+  snowTree: {
+    geometry: new THREE.ConeGeometry(0.17, 0.42, 6).translate(0, 0.36, 0),
+    material: new THREE.MeshStandardMaterial({ color: '#dceef7', flatShading: true }),
+    castShadow: true
+  },
+  drift: {
+    geometry: new THREE.SphereGeometry(1, 8, 5),
+    material: new THREE.MeshStandardMaterial({ color: '#ffffff', flatShading: true }),
+    castShadow: false
+  },
+  pool: {
+    geometry: new THREE.CylinderGeometry(1, 1, 0.03, 12),
+    material: new THREE.MeshStandardMaterial({ color: '#3fd7e8', emissive: '#22b8cf', emissiveIntensity: 0.35, roughness: 0.2 }),
+    castShadow: false
+  },
+  rock: {
+    geometry: new THREE.DodecahedronGeometry(1),
+    material: new THREE.MeshStandardMaterial({ color: '#b8c4cc', flatShading: true }),
+    castShadow: false
   }
 };
 
@@ -58,7 +94,8 @@ const rimSpots = (hex: Hex, count: number) =>
 
 const buildMatrices = (hexes: Hex[]): Record<PartName, THREE.Matrix4[]> => {
   const result: Record<PartName, THREE.Matrix4[]> = {
-    treeTrunk: [], treeTop: [], peak: [], snow: [], dune: [], nugget: []
+    treeTrunk: [], treeTop: [], peak: [], snow: [], dune: [], nugget: [],
+    hill: [], reed: [], puddle: [], snowTree: [], drift: [], pool: [], rock: []
   };
   const position = new THREE.Vector3();
   const rotation = new THREE.Euler();
@@ -98,6 +135,38 @@ const buildMatrices = (hexes: Hex[]): Record<PartName, THREE.Matrix4[]> => {
         for (const { x, z, r } of rimSpots(hex, 3)) {
           const s = 0.12 + r * 0.05;
           add('nugget', cx + x, y + 0.1, cz + z, s, s, s, r, r * 2);
+        }
+        break;
+      case 'hills':
+        for (const { x, z, r } of rimSpots(hex, 2)) {
+          add('hill', cx + x * 0.8, y, cz + z * 0.8, 0.32 + r * 0.08, 0.16 + r * 0.06, 0.26 + r * 0.06, 0, r * 3);
+        }
+        break;
+      case 'swamp':
+        for (const { x, z, r } of rimSpots(hex, 2)) {
+          add('puddle', cx + x * 0.7, y + 0.005, cz + z * 0.7, 0.2 + r * 0.08, 1, 0.14 + r * 0.06, 0, r * 3);
+        }
+        for (const { x, z, r } of rimSpots(hex, 5)) {
+          const s = 0.8 + r * 0.5;
+          add('reed', cx + x, y, cz + z, s, s, s, (r - 0.5) * 0.3);
+        }
+        break;
+      case 'snow':
+        for (const { x, z, r } of rimSpots(hex, 3)) {
+          if (r > 0.5) {
+            const s = 0.8 + r * 0.3;
+            add('treeTrunk', cx + x, y, cz + z, s, s, s);
+            add('snowTree', cx + x, y, cz + z, s, s, s);
+          } else {
+            add('drift', cx + x, y, cz + z, 0.16 + r * 0.08, 0.06, 0.12);
+          }
+        }
+        break;
+      case 'spring':
+        add('pool', cx, y + 0.01, cz, 0.36, 1, 0.36);
+        for (const { x, z, r } of rimSpots(hex, 5)) {
+          const s = 0.05 + r * 0.04;
+          add('rock', cx + x * 0.72, y + s * 0.4, cz + z * 0.72, s, s * 0.8, s, r, r * 2);
         }
         break;
     }

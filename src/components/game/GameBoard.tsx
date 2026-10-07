@@ -6,6 +6,7 @@ import { GameState, Hex, HexCoordinates, PlayerType, Unit, UnitType } from '@/ty
 import { HexTile, HexHighlight } from './HexTile';
 import { UnitMesh, UnitBattle, OWNER_COLORS } from './UnitMesh';
 import { Castle } from './Castle';
+import { Camp } from './Camp';
 import { BoardDecorations } from './BoardDecorations';
 import { MovePath } from './MovePath';
 import {
@@ -17,7 +18,7 @@ import {
   findBaseHex,
   findTerrainPath,
   getActivePlayer,
-  getAttackRange,
+  getUnitAttackRange,
   getMovePath,
   getValidBaseLocations
 } from '@/lib/game/gameState';
@@ -29,7 +30,7 @@ import { playSound } from './utils/SoundPlayer';
 import { playBattleSound } from './utils/battleSounds';
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
-import { AttackIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon } from './icons';
+import { AttackIcon, CampIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon } from './icons';
 import type { UnitBadge } from './UnitMesh';
 
 const coordKey = (c: HexCoordinates) => `${c.q},${c.r}`;
@@ -310,8 +311,13 @@ const getTerrainBadges = (unit: Unit, hex: Hex | undefined): UnitBadge[] => {
   if (!hex) return [];
   const badges: UnitBadge[] = [];
 
-  if (TERRAIN_EFFECTS[hex.terrain].damageTakenMultiplier < 1) badges.push('cover');
-  if (hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) badges.push('attack');
+  const effect = TERRAIN_EFFECTS[hex.terrain];
+  if (effect.damageTakenMultiplier < 1) badges.push('cover');
+  if (effect.damageTakenMultiplier > 1) badges.push('exposed');
+  if ((hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) || (effect.damageDealtMultiplier ?? 1) > 1) {
+    badges.push('attack');
+  }
+  if (effect.healPerTurn) badges.push('heal');
   if (hex.isResourceHex) badges.push('gold');
   return badges;
 };
@@ -479,7 +485,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           if (!live) continue;
           // Defenders strike back at the nearest attacker they can reach
           const reachable = liveAttackers
-            .filter(a => getHexDistance(a.position, live.position) <= getAttackRange(live))
+            .filter(a => getHexDistance(a.position, live.position) <= getUnitAttackRange(gameState, live))
             .sort((a, b) => getHexDistance(a.position, live.position) - getHexDistance(b.position, live.position));
           battles.set(defender.id, { key, target: reachable[0] ? worldOf(reachable[0].position) : null });
         }
@@ -687,6 +693,18 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const playerCastlePosition = useMemo(() => playerBase ? surfacePosition(playerBase) : null, [playerBase]);
   const aiCastlePosition = useMemo(() => aiBase ? surfacePosition(aiBase) : null, [aiBase]);
 
+  const campSignature = hexGrid.filter(hex => hex.isCamp).map(hex => `${coordKey(hex.coordinates)}:${hex.owner ?? ''}`).join('|');
+  const campRenderData = useMemo(
+    () => hexGrid.filter(hex => hex.isCamp).map(hex => ({
+      key: coordKey(hex.coordinates),
+      owner: hex.owner ?? null,
+      position: surfacePosition(hex)
+    })),
+    // Only camps changing hands matters, not units moving around
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [campSignature]
+  );
+
   const showHoverPreview =
     assetsLoaded &&
     selectedUnitTypeForPurchase &&
@@ -752,6 +770,11 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           maxHealth={players.ai.maxBaseHealth ?? BASE_MAX_HEALTH}
         />
       )}
+
+      {/* Neutral camps, flying the colours of whoever holds them */}
+      {campRenderData.map(camp => (
+        <Camp key={camp.key} owner={camp.owner} position={camp.position} />
+      ))}
 
       {/* Units on the board */}
       {assetsLoaded && stableUnitRenderData.map(data => (
@@ -858,14 +881,18 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 // One-line description of the hovered hex: its terrain effect and what's standing on it
 const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
   const [x, y, z] = surfacePosition(hex);
-  const effect = hex.isResourceHex
-    ? `+${hex.resourceValue ?? 0} gold/round`
-    : TERRAIN_SHORT_EFFECTS[hex.terrain];
+  const effect = hex.isCamp
+    ? hex.owner === 'player' ? 'your camp: recruits deploy here' : `${hex.owner ? 'enemy' : 'neutral'} camp: move onto it to capture`
+    : hex.isResourceHex
+      ? `+${hex.resourceValue ?? 0} gold/turn`
+      : TERRAIN_SHORT_EFFECTS[hex.terrain];
 
   return (
     <Html position={[x, y + 0.2, z]} zIndexRange={[9, 0]} style={{ pointerEvents: 'none' }}>
       <div className="ml-5 -mt-5 whitespace-nowrap rounded-md bg-slate-900/90 px-2 py-1 text-[11px] text-slate-100 shadow-lg select-none">
-        <span className="font-bold"><TerrainIcon terrain={hex.terrain} /> {TERRAIN_EFFECTS[hex.terrain].name}</span>
+        <span className="font-bold">
+          {hex.isCamp ? <><CampIcon /> Camp</> : <><TerrainIcon terrain={hex.terrain} /> {TERRAIN_EFFECTS[hex.terrain].name}</>}
+        </span>
         <span className="text-slate-400"> · {effect}</span>
         {hex.unit && (
           <span className="ml-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>

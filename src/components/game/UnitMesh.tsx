@@ -47,8 +47,9 @@ export interface UnitBattle {
   target: [number, number, number] | null;
 }
 
-// Terrain effects shown on a unit's label: forest cover, Pikemen's forest attack bonus, a held gold mine
-export type UnitBadge = 'cover' | 'attack' | 'gold';
+// Terrain effects shown on a unit's label: cover, an attack bonus (Pikemen in forest, high ground),
+// being exposed in a swamp, healing at a spring, a held gold mine
+export type UnitBadge = 'cover' | 'attack' | 'exposed' | 'heal' | 'gold';
 
 interface UnitMeshProps {
   unit: Unit;
@@ -432,7 +433,9 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
               {terrainBadges.map(badge =>
                 badge === 'cover' ? <TerrainIcon key={badge} terrain="forest" />
                   : badge === 'attack' ? <AttackIcon key={badge} />
-                    : <GoldIcon key={badge} />
+                    : badge === 'exposed' ? <TerrainIcon key={badge} terrain="swamp" />
+                      : badge === 'heal' ? <TerrainIcon key={badge} terrain="spring" />
+                        : <GoldIcon key={badge} />
               )}
               {hasPlannedMove && <ArrowIcon />}
             </>

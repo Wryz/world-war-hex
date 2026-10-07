@@ -1,10 +1,14 @@
-export type TerrainType = 
+export type TerrainType =
   | 'plain'
   | 'mountain'
   | 'forest'
   | 'water'
   | 'desert'
-  | 'resource';
+  | 'resource'
+  | 'hills'
+  | 'swamp'
+  | 'snow'
+  | 'spring';
 
 export type PlayerType = 'player' | 'ai';
 
@@ -20,6 +24,9 @@ export interface Hex {
   isBase?: boolean;
   isResourceHex?: boolean;
   resourceValue?: number; // Points generated per turn if controlled
+  // Neutral camp: whoever holds it can deploy recruits around it
+  isCamp?: boolean;
+  // Side owning this castle or camp (camps start without an owner)
   owner?: PlayerType;
   unit?: Unit;
   baseHealth?: number; // Health of base if this is a base hex
@@ -80,6 +87,8 @@ export interface GameState {
   selectedUnitTypeForPurchase?: UnitType | null;
   // Recent game events shown to the player (newest last)
   log?: GameLogEntry[];
+  // Name of the map's theme, e.g. "Frozen Pass"
+  mapName?: string;
 }
 
 export interface GameLogEntry {
@@ -121,6 +130,5 @@ export interface GameSettings {
   gridSize: number;
   planningPhaseTime: number;
   aiDifficulty: 'easy' | 'medium' | 'hard';
-  terrainDistribution: Record<TerrainType, number>;
   resourceHexCount: number;
 } 

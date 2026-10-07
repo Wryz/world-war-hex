@@ -2,7 +2,7 @@ import { GameState } from '@/types/game';
 
 const SAVE_KEY = 'hexStrategyGameSave';
 // Bump when the saved state's shape changes so old saves are ignored instead of breaking the game
-const SAVE_VERSION = 2;
+const SAVE_VERSION = 3;
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 

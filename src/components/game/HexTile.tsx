@@ -18,7 +18,11 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   forest: '#5cc45a',
   water: '#48c6ef',
   desert: '#ffd97a',
-  resource: '#ffc94d'
+  resource: '#ffc94d',
+  hills: '#c3d97a',
+  swamp: '#7fa36b',
+  snow: '#eef6fc',
+  spring: '#8ee8c8'
 };
 
 // Tiles are drawn slightly smaller than their cell so thin gaps outline every hex

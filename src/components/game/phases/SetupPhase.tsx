@@ -5,12 +5,15 @@ import { CrownIcon } from '../icons';
 interface SetupPhaseProps {
   isConfirmMode?: boolean;
   selectedHexValid?: boolean;
+  // Name of this map's theme
+  mapName?: string;
 }
 
 // Prompt for choosing where to build the player's castle
 export const SetupPhase: React.FC<SetupPhaseProps> = ({
   isConfirmMode = false,
-  selectedHexValid = false
+  selectedHexValid = false,
+  mapName
 }) => {
   const message = !isConfirmMode
     ? 'Click a green hex on the edge of the map'
@@ -21,6 +24,7 @@ export const SetupPhase: React.FC<SetupPhaseProps> = ({
   return (
     <div className="fixed top-3 inset-x-0 z-20 flex justify-center pointer-events-none">
       <div className={`${PANEL_CLASS} px-5 py-3 text-center`}>
+        {mapName && <div className="text-xs font-bold uppercase tracking-wider text-amber-300">{mapName}</div>}
         <div className="font-display flex items-center justify-center gap-2 text-lg"><CrownIcon /> Place your castle</div>
         <div className={`mt-1 text-sm ${isConfirmMode && !selectedHexValid ? 'text-red-300' : 'text-slate-300'}`}>
           {message}

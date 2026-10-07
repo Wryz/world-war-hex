@@ -25,14 +25,6 @@ export const DEFAULT_SETTINGS: GameSettings = {
   gridSize: 6, // Hexes from the centre to the edge: 13 hexes across, 127 in total
   planningPhaseTime: 60, // 60 seconds planning phase
   aiDifficulty: 'medium',
-  terrainDistribution: {
-    plain: 0.45,
-    mountain: 0.15,
-    forest: 0.20,
-    water: 0.10,
-    desert: 0.10,
-    resource: 0.0, // Resource hexes are placed separately
-  },
   resourceHexCount: 5
 };
 
@@ -107,6 +99,12 @@ export interface TerrainEffect {
   moveCost: number | null;
   // Multiplier applied to damage taken by a unit standing on this terrain
   damageTakenMultiplier: number;
+  // Multiplier applied to damage dealt by a unit standing on this terrain
+  damageDealtMultiplier?: number;
+  // Extra reach for ranged units standing on this terrain
+  rangedRangeBonus?: number;
+  // Health restored to a unit standing here at the end of its side's turn
+  healPerTurn?: number;
   description: string;
 }
 
@@ -147,6 +145,33 @@ export const TERRAIN_EFFECTS: Record<TerrainType, TerrainEffect> = {
     moveCost: null,
     damageTakenMultiplier: 1,
     description: 'Impassable.'
+  },
+  hills: {
+    name: 'Hills',
+    moveCost: 2,
+    damageTakenMultiplier: 1,
+    damageDealtMultiplier: 1.25,
+    rangedRangeBonus: 1,
+    description: 'High ground: units here deal 25% more damage and Archers reach 3 hexes. Costs 2 movement to enter.'
+  },
+  swamp: {
+    name: 'Swamp',
+    moveCost: 2,
+    damageTakenMultiplier: 1.25,
+    description: 'Bogged down: units here take 25% more damage. Costs 2 movement to enter.'
+  },
+  snow: {
+    name: 'Snow',
+    moveCost: 3,
+    damageTakenMultiplier: 1,
+    description: 'Deep snow: costs 3 movement to enter.'
+  },
+  spring: {
+    name: 'Spring',
+    moveCost: 1,
+    damageTakenMultiplier: 1,
+    healPerTurn: 2,
+    description: 'Healing waters: a unit here recovers 2 health at the end of each of its turns.'
   }
 };
 
@@ -162,8 +187,8 @@ export const SIEGE_PLUNDER_PER_DAMAGE = 0.5;
 
 // Initialize a new game state
 export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS): GameState => {
-  // Create the hexagonal grid
-  const hexGrid = createHexagonalGrid(settings);
+  // Create the hexagonal grid with a randomly themed terrain mix
+  const { hexGrid, theme } = createHexagonalGrid(settings);
 
   // Initialize players
   const players: Record<PlayerType, Player> = {
@@ -191,7 +216,8 @@ export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS): 
     pendingMoves: [],
     pendingPurchases: [],
     combats: [],
-    settings
+    settings,
+    mapName: theme.name
   };
 };
 
@@ -297,6 +323,59 @@ export const getValidBaseLocations = (state: GameState): Hex[] => {
 };
 
 // Place the player's base and an AI base as far away as possible, then start the first turn
+// Neutral camps placed between the castles, and how close to a castle they may be
+const CAMP_COUNT = 2;
+const MIN_CAMP_CASTLE_DISTANCE = 3;
+
+// Put the neutral camps where both sides have an equally long march to them, one on each flank:
+// hexes the same distance from both castles, as far apart from each other as possible.
+// The camp hex becomes open ground with room around it to deploy recruits.
+const placeCamps = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoordinates): void => {
+  const gridSize = getSettings(state).gridSize;
+  const center = { q: 0, r: 0 };
+
+  const candidatesWithin = (tolerance: number) => state.hexGrid.filter(hex => {
+    if (hex.isBase || hex.isResourceHex || isImpassable(hex)) return false;
+    const toPlayer = getHexDistance(hex.coordinates, playerBase);
+    const toAi = getHexDistance(hex.coordinates, aiBase);
+    return Math.abs(toPlayer - toAi) <= tolerance &&
+      Math.min(toPlayer, toAi) >= MIN_CAMP_CASTLE_DISTANCE &&
+      // Off the outer ring so camps can be approached from every side
+      getHexDistance(hex.coordinates, center) < gridSize;
+  });
+
+  let candidates = candidatesWithin(0);
+  if (candidates.length < CAMP_COUNT) candidates = candidatesWithin(1);
+  if (candidates.length < CAMP_COUNT) return;
+
+  // The pair furthest apart (one per flank); more open ground breaks ties
+  let best: [Hex, Hex] | null = null;
+  let bestScore = -Infinity;
+  for (let i = 0; i < candidates.length; i++) {
+    for (let j = i + 1; j < candidates.length; j++) {
+      const a = candidates[i];
+      const b = candidates[j];
+      const score = getHexDistance(a.coordinates, b.coordinates) * 10 +
+        countOpenNeighbors(state.hexGrid, a.coordinates) + countOpenNeighbors(state.hexGrid, b.coordinates);
+      if (score > bestScore) {
+        bestScore = score;
+        best = [a, b];
+      }
+    }
+  }
+  if (!best) return;
+
+  for (const camp of best) {
+    updateHex(state, camp.coordinates, { isCamp: true, terrain: 'plain', owner: undefined });
+    // Clear blocked neighbours until there is room to deploy around the camp
+    for (const neighbor of getNeighbors(camp.coordinates)) {
+      if (countOpenNeighbors(state.hexGrid, camp.coordinates) >= MIN_OPEN_BASE_NEIGHBORS) break;
+      const hex = findHexByCoordinates(state.hexGrid, neighbor);
+      if (hex && isImpassable(hex)) updateHex(state, neighbor, { terrain: 'plain' });
+    }
+  }
+};
+
 export const placeBases = (state: GameState, coordinates: HexCoordinates): GameState => {
   if (state.currentPhase !== 'setup') return state;
 
@@ -334,6 +413,7 @@ export const placeBases = (state: GameState, coordinates: HexCoordinates): GameS
       maxBaseHealth: BASE_MAX_HEALTH
     };
   }
+  placeCamps(newState, playerHex.coordinates, aiHex.coordinates);
 
   const startedState: GameState = {
     ...newState,
@@ -355,19 +435,33 @@ export const placeBases = (state: GameState, coordinates: HexCoordinates): GameS
 const canGiveOrders = (state: GameState, player: Player) =>
   state.currentPhase === 'planning' && player.type === getActivePlayer(state);
 
-// Hexes next to a player's base where newly purchased units can be deployed this turn.
+// Camps currently held by a side
+export const getOwnedCamps = (state: GameState, playerType: PlayerType): Hex[] =>
+  state.hexGrid.filter(hex => hex.isCamp && hex.owner === playerType);
+
+// Where a side's recruits may appear: next to its castle, and on or next to any camp it holds
+const getDeploymentSpots = (state: GameState, playerType: PlayerType): HexCoordinates[] => {
+  const baseHex = findBaseHex(state, playerType);
+  const spots = baseHex ? getNeighbors(baseHex.coordinates) : [];
+  for (const camp of getOwnedCamps(state, playerType)) {
+    spots.push(camp.coordinates, ...getNeighbors(camp.coordinates));
+  }
+  return [...new Map(spots.map(c => [coordKey(c), c])).values()];
+};
+
+const isDeploymentSpot = (state: GameState, playerType: PlayerType, coordinates: HexCoordinates) =>
+  getDeploymentSpots(state, playerType).some(c => coordsEqual(c, coordinates));
+
+// Hexes where a side's newly purchased units can be deployed this turn.
 // A hex whose unit has a queued move away counts as free: moves are carried out before recruits arrive.
 export const getDeploymentHexes = (state: GameState, playerType: PlayerType): Hex[] => {
-  const baseHex = findBaseHex(state, playerType);
-  if (!baseHex) return [];
-
   const reserved = new Set([
     ...state.pendingPurchases.map(p => coordKey(p.position)),
     ...state.pendingMoves.map(m => coordKey(m.to))
   ]);
   const leaving = new Set(state.pendingMoves.map(m => m.unitId));
 
-  return getNeighbors(baseHex.coordinates)
+  return getDeploymentSpots(state, playerType)
     .map(coord => findHexByCoordinates(state.hexGrid, coord))
     .filter((hex): hex is Hex =>
       !!hex &&
@@ -499,10 +593,18 @@ const buildPath = (reached: Map<string, ReachableHex>, to: HexCoordinates): HexC
 };
 
 // Where a unit can walk this turn: it can't cross water or mountains, can pass through
-// friendly units but not enemy units, and desert costs extra movement.
+// friendly units but not enemy units, and rough terrain costs extra movement.
+// A unit can always take a single step onto a neighbouring hex, however rough, using all its movement.
 const getReachableHexes = (state: GameState, unit: Unit) =>
-  searchPaths(state.hexGrid, unit.position, unit.movementRange, hex =>
-    !isImpassable(hex) && !(hex.unit && hex.unit.owner !== unit.owner)
+  searchPaths(
+    state.hexGrid,
+    unit.position,
+    unit.movementRange,
+    hex => !isImpassable(hex) && !(hex.unit && hex.unit.owner !== unit.owner),
+    (from, to) => {
+      const cost = enterCost(from, to);
+      return coordsEqual(from.coordinates, unit.position) ? Math.min(cost, unit.movementRange) : cost;
+    }
   );
 
 // All hexes a unit can legally be ordered to move to this turn.
@@ -641,6 +743,18 @@ export const executeMoves = (state: GameState): GameState => {
     movedCount++;
   }
 
+  // Units ending their move on a camp claim it
+  for (const side of ['player', 'ai'] as const) {
+    for (const unit of newState.players[side].units) {
+      const hex = findHexByCoordinates(newState.hexGrid, unit.position);
+      if (!hex?.isCamp || hex.owner === side) continue;
+      addLog(newState, side, hex.owner
+        ? `${unitLabel(unit)} seized ${side === 'player' ? 'an enemy camp' : 'your camp'}!`
+        : `${unitLabel(unit)} captured a camp. Recruits can now deploy there.`);
+      updateHex(newState, unit.position, { owner: side });
+    }
+  }
+
   // Then spawn purchased units
   for (const purchase of state.pendingPurchases) {
     const player = findPlayerById(newState, purchase.playerId);
@@ -648,15 +762,13 @@ export const executeMoves = (state: GameState): GameState => {
 
     const unitInfo = UNITS[purchase.unitType];
     const hex = findHexByCoordinates(newState.hexGrid, purchase.position);
-    const baseHex = findBaseHex(newState, player.type);
 
     const isValidPlacement =
       hex &&
-      baseHex &&
       !hex.isBase &&
       !isImpassable(hex) &&
       !occupied.has(coordKey(purchase.position)) &&
-      getHexDistance(hex.coordinates, baseHex.coordinates) === 1;
+      isDeploymentSpot(newState, player.type, hex.coordinates);
 
     if (!isValidPlacement) {
       // Refund purchases that can no longer be placed, e.g. the hex is still occupied
@@ -723,21 +835,29 @@ export const executeMoves = (state: GameState): GameState => {
   return finishTurn(newState);
 };
 
-// How far a unit can strike: archers (ranged attack) reach 2 hexes, everyone else 1
-export const getAttackRange = (unit: Unit): number =>
-  unit.abilities.includes('rangedAttack') ? RANGED_ATTACK_RANGE : 1;
-
-const isInAttackRange = (attacker: Unit, target: Unit) =>
-  getHexDistance(attacker.position, target.position) <= getAttackRange(attacker);
+// How far a unit can strike from the terrain it stands on: archers (ranged attack) reach 2 hexes,
+// or 3 from high ground; everyone else 1
+export const getAttackRange = (unit: Unit, terrain: TerrainType = 'plain'): number =>
+  unit.abilities.includes('rangedAttack')
+    ? RANGED_ATTACK_RANGE + (TERRAIN_EFFECTS[terrain].rangedRangeBonus ?? 0)
+    : 1;
 
 const terrainUnder = (state: GameState, unit: Unit): TerrainType =>
   findHexByCoordinates(state.hexGrid, unit.position)?.terrain ?? 'plain';
 
-// Attack power after terrain bonuses: pikemen (terrainBonus) strike harder from a forest
-const getEffectivePower = (unit: Unit, terrain: TerrainType): number =>
-  unit.abilities.includes('terrainBonus') && terrain === 'forest'
-    ? unit.attackPower * TERRAIN_BONUS_ATTACK_MULTIPLIER
-    : unit.attackPower;
+// A unit's reach where it stands right now
+export const getUnitAttackRange = (state: GameState, unit: Unit): number =>
+  getAttackRange(unit, terrainUnder(state, unit));
+
+const isInAttackRange = (state: GameState, attacker: Unit, target: Unit) =>
+  getHexDistance(attacker.position, target.position) <= getUnitAttackRange(state, attacker);
+
+// Attack power after terrain bonuses: pikemen (terrainBonus) strike harder from a forest,
+// and everyone hits harder from high ground
+const getEffectivePower = (unit: Unit, terrain: TerrainType): number => {
+  const forestBonus = unit.abilities.includes('terrainBonus') && terrain === 'forest' ? TERRAIN_BONUS_ATTACK_MULTIPLIER : 1;
+  return unit.attackPower * forestBonus * (TERRAIN_EFFECTS[terrain].damageDealtMultiplier ?? 1);
+};
 
 // Damage that `power` worth of attacks deals to one unit standing on `terrain`.
 // Cover reduces it, but an attack that connects always deals at least 1.
@@ -775,7 +895,7 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
   const attackerUnits = state.players[attackerSide].units;
 
   const choices = attackerUnits
-    .map(unit => ({ unit, targets: enemies.filter(enemy => isInAttackRange(unit, enemy)) }))
+    .map(unit => ({ unit, targets: enemies.filter(enemy => isInAttackRange(state, unit, enemy)) }))
     .filter(choice => choice.targets.length > 0)
     // Units with fewer options pick first, leaving the flexible ones to cover the rest
     .sort((a, b) => a.targets.length - b.targets.length || compareIds(a.unit, b.unit));
@@ -868,14 +988,20 @@ const finishTurn = (state: GameState): GameState => {
     pendingPurchases: []
   };
 
+  // The side that just played recovers health at healing springs
+  let healed = 0;
   for (const side of ['player', 'ai'] as const) {
-    newState.players[side].units = newState.players[side].units.map(unit => ({
-      ...unit,
-      hasMoved: false,
-      isEngagedInCombat: false
-    }));
+    newState.players[side].units = newState.players[side].units.map(unit => {
+      const heal = side === activePlayer ? TERRAIN_EFFECTS[terrainUnder(newState, unit)].healPerTurn ?? 0 : 0;
+      const lifespan = Math.min(unit.maxLifespan, unit.lifespan + heal);
+      healed += lifespan - unit.lifespan;
+      return { ...unit, lifespan, hasMoved: false, isEngagedInCombat: false };
+    });
   }
   syncHexUnits(newState);
+  if (healed > 0) {
+    addLog(newState, activePlayer, `${activePlayer === 'player' ? 'Your' : 'Enemy'} troops recover ${healed} health at the springs.`);
+  }
 
   processDamageToBase(newState, activePlayer);
   const mineIncome = collectResources(newState, activePlayer);
@@ -989,13 +1115,19 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     const modifiers: string[] = [];
     const power = getEffectivePower(unit, terrain);
 
-    if (power > unit.attackPower) {
+    const effect = TERRAIN_EFFECTS[terrain];
+    if (unit.abilities.includes('terrainBonus') && terrain === 'forest') {
       modifiers.push(`+${Math.round((TERRAIN_BONUS_ATTACK_MULTIPLIER - 1) * 100)}% attack (fighting from forest)`);
     }
+    if ((effect.damageDealtMultiplier ?? 1) > 1) {
+      modifiers.push(`+${Math.round(((effect.damageDealtMultiplier ?? 1) - 1) * 100)}% attack (high ground)`);
+    }
 
-    const damageMultiplier = TERRAIN_EFFECTS[terrain].damageTakenMultiplier;
+    const damageMultiplier = effect.damageTakenMultiplier;
     if (damageMultiplier < 1) {
-      modifiers.push(`${Math.round((1 - damageMultiplier) * 100)}% less damage (${TERRAIN_EFFECTS[terrain].name.toLowerCase()} cover)`);
+      modifiers.push(`${Math.round((1 - damageMultiplier) * 100)}% less damage (${effect.name.toLowerCase()} cover)`);
+    } else if (damageMultiplier > 1) {
+      modifiers.push(`${Math.round((damageMultiplier - 1) * 100)}% more damage (bogged down in ${effect.name.toLowerCase()})`);
     }
 
     return { unit, terrain, power, damageMultiplier, modifiers };
@@ -1004,7 +1136,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
   const defenders = describe(combat.defenders.map(getLiveUnit).filter((u): u is Unit => !!u));
   const attackers = describe(combat.attackers.map(getLiveUnit).filter((u): u is Unit => !!u)).map(entry => {
     // Defenders can only strike back at attackers within their own reach
-    const canBeHitBack = defenders.some(d => isInAttackRange(d.unit, entry.unit));
+    const canBeHitBack = defenders.some(d => isInAttackRange(state, d.unit, entry.unit));
     if (!canBeHitBack) entry.modifiers.push('out of reach - takes no damage');
     return { ...entry, canBeHitBack };
   });

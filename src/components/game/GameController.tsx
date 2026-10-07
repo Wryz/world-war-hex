@@ -129,6 +129,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
       {currentPhase === 'setup' && (
         <SetupPhase
+          mapName={gameState.mapName}
           isConfirmMode={!!selectedHex}
           selectedHexValid={!!selectedHex && validMoves.some(
             coords => coords.q === selectedHex.coordinates.q && coords.r === selectedHex.coordinates.r
@@ -154,7 +155,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           {/* Capped above the battle card and action bar so panels never run under them */}
           <div className="fixed right-3 top-16 z-20 hidden max-h-[calc(100vh-15rem)] w-64 flex-col gap-2 overflow-y-auto pointer-events-none sm:flex">
             <EventFeed log={gameState.log ?? []} />
-            <HelpPanel />
+            <HelpPanel hexGrid={gameState.hexGrid} mapName={gameState.mapName} />
           </div>
           <TurnBanner phase={currentPhase} activePlayer={activePlayer} turnNumber={gameState.turnNumber} />
         </>

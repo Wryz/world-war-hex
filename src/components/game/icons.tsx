@@ -20,7 +20,12 @@ import {
   GiDeathSkull,
   GiSandsOfTime,
   GiCastle,
-  GiCheckedShield
+  GiCheckedShield,
+  GiCampingTent,
+  GiHills,
+  GiSwamp,
+  GiSnowflake1,
+  GiFountain
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuChevronDown, LuRotateCcw, LuTriangleAlert,
@@ -44,7 +49,11 @@ export const TERRAIN_ICON_COMPONENTS: Record<TerrainType, IconType> = {
   desert: GiCactus,
   resource: GiGoldMine,
   mountain: GiMountains,
-  water: GiWaves
+  water: GiWaves,
+  hills: GiHills,
+  swamp: GiSwamp,
+  snow: GiSnowflake1,
+  spring: GiFountain
 };
 
 // Colours that make each terrain icon recognisable at a glance
@@ -54,7 +63,11 @@ export const TERRAIN_ICON_COLORS: Record<TerrainType, string> = {
   desert: '#fcd34d',
   resource: '#fbbf24',
   mountain: '#cbd5e1',
-  water: '#38bdf8'
+  water: '#38bdf8',
+  hills: '#bef264',
+  swamp: '#86a873',
+  snow: '#e0f2fe',
+  spring: '#5eead4'
 };
 
 interface IconProps {
@@ -104,6 +117,7 @@ export const SkullIcon = icon(GiDeathSkull, '#f1f5f9');
 export const WaitIcon = icon(GiSandsOfTime, '#e2e8f0');
 export const CastleIcon = icon(GiCastle);
 export const ShieldIcon = icon(GiCheckedShield, '#4ade80');
+export const CampIcon = icon(GiCampingTent, '#facc15');
 export const SaveIcon = icon(LuSave);
 export const HelpIcon = icon(LuCircleHelp);
 export const LogIcon = icon(LuScrollText);

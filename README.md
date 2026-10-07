@@ -14,6 +14,7 @@ The game is organized into modular components for better maintainability:
 - `BoardDecorations`: Instanced trees, peaks, dunes and gold that show each hex's terrain
 - `UnitMesh`: Animated unit that walks along its route, faces its opponent and shows its health and terrain bonuses
 - `Castle`: Each side's castle, topped with a crown
+- `Camp`: Neutral camp with a banner in the colour of whoever holds it
 - `MovePath`: Dashed route with an arrow showing where a unit will walk
 
 ### HUD
@@ -65,7 +66,7 @@ The game is organized into modular components for better maintainability:
 
 - `src/lib/game/`
   - `gameState.ts`: Rules engine: setup, purchases, movement, combat, economy and win conditions (pure functions)
-  - `mapGenerator.ts`: Seeded natural map generation (noise-based terrain, connected regions, gold mines)
+  - `mapGenerator.ts`: Seeded natural map generation: a random theme (Green Valley, Frozen Pass, Marshlands, Desert Frontier, Highlands, Riverlands) picks which terrain appears, then noise shapes it into lakes, ranges and forests, keeps every walkable hex connected and scatters gold mines and springs
   - `hexUtils.ts`: Hex grid maths (neighbours, distances)
 
 ### AI Player
@@ -93,9 +94,24 @@ The game is organized into modular components for better maintainability:
    - **Camera:** click and drag to rotate the view around the map (drag up/down to tilt), and scroll or pinch to zoom in on any part of it. The view swings to whoever's turn it is.
    - **Menu:** the buttons next to your gold save the game, mute the sound and return to the main menu. The game also saves itself at the start of each of your turns, and the turn timer pauses while the tab is in the background.
 3. **Combat.** When a side ends its turn, each of its units automatically attacks one enemy in range - adjacent for most units, up to 2 hexes for Archers - preferring one it can finish off, otherwise the weakest. A unit attacked by several enemies splits its strike-back between the attackers it can reach, so Archers firing from 2 hexes take no damage.
-4. **Terrain matters.** Forests give cover (units there take 40% less damage, and Pikemen attack 50% harder from them), desert costs 2 movement to cross, gold mines pay out every round, and water and mountains are impassable. Hover any hex to see its effect.
-5. **Economy.** At the end of each of its turns a side earns 5 gold, plus the value of any gold mines (resource hexes) its units stand on. Destroying an enemy unit pays a bounty of half its cost, and damaging the enemy castle plunders gold (1 per 2 damage).
-6. **Win** by moving a unit onto the enemy castle, or by wearing it down. At the end of each of your turns, each of your units within 3 hexes of the enemy castle deals damage equal to its attack power (and the enemy does the same at the end of theirs).
+4. **Terrain matters.** Every map has its own theme and only some of the terrain types below; the Guide panel lists the ones on the current map. Hover any hex to see its effect.
+
+   | Terrain | Effect |
+   |---|---|
+   | Plains | No effect |
+   | Forest | Units take 40% less damage; Pikemen attack 50% harder |
+   | Hills | High ground: units deal 25% more damage and Archers reach 3 hexes; costs 2 movement |
+   | Desert | Costs 2 movement |
+   | Swamp | Units take 25% more damage; costs 2 movement |
+   | Snow | Costs 3 movement |
+   | Spring | Units here heal 2 health at the end of each of their turns |
+   | Gold Mine | Pays its gold at the end of each of your turns while one of your units holds it |
+   | Mountains, Water | Impassable |
+
+   A unit can always step onto one neighbouring hex, however rough, even if that takes all of its movement.
+5. **Camps.** Two neutral camps sit between the castles, the same distance from each. Move a unit onto a camp to capture it: from then on you can deploy recruits on and around it as well as next to your castle. The enemy can take it back the same way.
+6. **Economy.** At the end of each of its turns a side earns 5 gold, plus the value of any gold mines (resource hexes) its units stand on. Destroying an enemy unit pays a bounty of half its cost, and damaging the enemy castle plunders gold (1 per 2 damage).
+7. **Win** by moving a unit onto the enemy castle, or by wearing it down. At the end of each of your turns, each of your units within 3 hexes of the enemy castle deals damage equal to its attack power (and the enemy does the same at the end of theirs).
 
 ## Getting Started
 

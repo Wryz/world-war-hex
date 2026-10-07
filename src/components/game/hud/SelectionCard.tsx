@@ -4,7 +4,7 @@ import { BASE_MAX_HEALTH, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS } fro
 import { getUnitTypeName } from '../utils/UnitHelpers';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
 import { TERRAIN_SHORT_EFFECTS } from './terrainInfo';
-import { AttackIcon, CrownIcon, MoveIcon, TerrainIcon, UnitIcon } from '../icons';
+import { AttackIcon, CampIcon, CrownIcon, MoveIcon, TerrainIcon, UnitIcon } from '../icons';
 
 interface SelectionCardProps {
   gameState: GameState;
@@ -35,17 +35,24 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
   ) ?? selectedHex;
   const unit = hex.unit ?? selectedUnit ?? null;
 
-  // Plain hexes are described by the hover tooltip; the card is only for units and castles
-  if (!unit && !hex.isBase) return null;
+  // Plain hexes are described by the hover tooltip; the card is only for units, castles and camps
+  if (!unit && !hex.isBase && !hex.isCamp) return null;
 
   const effect = TERRAIN_EFFECTS[hex.terrain];
   const terrainBonuses: string[] = [];
   if (unit && effect.damageTakenMultiplier < 1) {
     terrainBonuses.push(`-${Math.round((1 - effect.damageTakenMultiplier) * 100)}% dmg`);
   }
+  if (unit && effect.damageTakenMultiplier > 1) {
+    terrainBonuses.push(`+${Math.round((effect.damageTakenMultiplier - 1) * 100)}% dmg taken`);
+  }
   if (unit && hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) {
     terrainBonuses.push(`+${Math.round((TERRAIN_BONUS_ATTACK_MULTIPLIER - 1) * 100)}% atk`);
   }
+  if (unit && (effect.damageDealtMultiplier ?? 1) > 1) {
+    terrainBonuses.push(`+${Math.round(((effect.damageDealtMultiplier ?? 1) - 1) * 100)}% atk`);
+  }
+  if (unit && effect.healPerTurn) terrainBonuses.push(`+${effect.healPerTurn} HP/turn`);
   if (hex.isResourceHex) terrainBonuses.push(`+${hex.resourceValue ?? 0} gold`);
 
   return (
@@ -72,6 +79,18 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
           {unit.owner === 'player' && unit.hasMoved && gameState.currentPhase === 'planning' && (
             <div className="mt-2 text-slate-400">Just deployed · moves next turn</div>
           )}
+        </>
+      ) : hex.isCamp ? (
+        <>
+          <div className="flex items-center gap-1.5 text-sm font-bold">
+            <CampIcon color={hex.owner ? SIDE_COLORS[hex.owner] : SIDE_COLORS.neutral} />
+            {hex.owner === 'player' ? 'Your camp' : hex.owner === 'ai' ? 'Enemy camp' : 'Neutral camp'}
+          </div>
+          <div className="mt-2 text-slate-400">
+            {hex.owner === 'player'
+              ? 'Recruits can deploy on and around it'
+              : 'Move a unit onto it to capture it and deploy recruits there'}
+          </div>
         </>
       ) : (
         <>
