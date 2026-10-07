@@ -10,6 +10,7 @@ import { BoardDecorations } from './BoardDecorations';
 import { MovePath } from './MovePath';
 import {
   UNITS,
+  DEFAULT_SETTINGS,
   BASE_MAX_HEALTH,
   TERRAIN_EFFECTS,
   getKillBounty,
@@ -21,7 +22,7 @@ import {
   getValidBaseLocations
 } from '@/lib/game/gameState';
 import { getHexDistance } from '@/lib/game/hexUtils';
-import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
+import { HEX_SIZE, axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
 import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
 import { playSound } from './utils/SoundPlayer';
@@ -36,10 +37,11 @@ const coordKey = (c: HexCoordinates) => `${c.q},${c.r}`;
 // Camera framing: a fixed, almost top-down view from behind the active side's castle
 const CAMERA_ELEVATION = THREE.MathUtils.degToRad(68);
 const CAMERA_FOV = 45;
-// Radius of the playing field in world units, plus a margin for the HUD
-const BOARD_VIEW_RADIUS = 16.5;
+// How much of the board's radius the camera frames, beyond the outermost hexes, at zoom 1
+const BOARD_VIEW_MARGIN = 1.11;
 // Look slightly towards the viewing side's castle so it stays clear of the bottom HUD
-const CAMERA_TARGET_OFFSET = 6;
+// (as a fraction of the framed radius)
+const CAMERA_TARGET_OFFSET = 0.36;
 const CAMERA_TURN_SPEED = 2.2;
 // Zoom levels as a fraction of the distance at which the whole board fits on screen
 const CAMERA_DEFAULT_ZOOM = 0.8;
@@ -55,8 +57,8 @@ const CAMERA_DRAG_TILT_SPEED = 0.004;
 const CAMERA_MIN_ELEVATION = THREE.MathUtils.degToRad(45);
 const CAMERA_MAX_ELEVATION = THREE.MathUtils.degToRad(85);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
-// Furthest the view can be panned from the centre of the board (world units)
-const CAMERA_MAX_PAN = 12;
+// Furthest the view can be panned from the centre of the board (fraction of the framed radius)
+const CAMERA_MAX_PAN = 0.73;
 
 interface GameBoardProps {
   gameState: GameState;
@@ -123,6 +125,12 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
 
   const viewSide: PlayerType = gameState.currentPhase === 'setup' ? 'player' : getActivePlayer(gameState);
 
+  // Radius (world units) the camera frames at zoom 1: the board out to its edge hexes plus a margin
+  const gridSize = gameState.settings?.gridSize ?? DEFAULT_SETTINGS.gridSize;
+  const viewRadius = (gridSize * Math.sqrt(3) + HEX_SIZE) * BOARD_VIEW_MARGIN;
+  const viewRadiusRef = useRef(viewRadius);
+  viewRadiusRef.current = viewRadius;
+
   const targetAzimuth = useMemo(() => {
     const base = findBaseHex(gameState, viewSide);
     if (!base) return 0;
@@ -135,8 +143,11 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
 
   // Default overview: look across the board from just in front of the active side's castle
   const defaultLookAt = useMemo(
-    () => new THREE.Vector3(Math.sin(targetAzimuth) * CAMERA_TARGET_OFFSET, 0, Math.cos(targetAzimuth) * CAMERA_TARGET_OFFSET),
-    [targetAzimuth]
+    () => {
+      const offset = viewRadius * CAMERA_TARGET_OFFSET;
+      return new THREE.Vector3(Math.sin(targetAzimuth) * offset, 0, Math.cos(targetAzimuth) * offset);
+    },
+    [targetAzimuth, viewRadius]
   );
 
   // New turn (or castles placed): swing to the active side's default view
@@ -226,7 +237,8 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
         desiredLookAt.y = 0;
         // Keep the view over the battlefield
         const horizontal = Math.hypot(desiredLookAt.x, desiredLookAt.z);
-        if (horizontal > CAMERA_MAX_PAN) desiredLookAt.multiplyScalar(CAMERA_MAX_PAN / horizontal);
+        const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
+        if (horizontal > maxPan) desiredLookAt.multiplyScalar(maxPan / horizontal);
       }
       desiredZoomRef.current = nextZoom;
     };
@@ -262,8 +274,8 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
     const halfFov = THREE.MathUtils.degToRad(perspective.fov / 2);
     const aspect = size.width / Math.max(size.height, 1);
     const distance = Math.max(
-      BOARD_VIEW_RADIUS / Math.tan(halfFov),
-      BOARD_VIEW_RADIUS / (Math.tan(halfFov) * aspect)
+      viewRadius / Math.tan(halfFov),
+      viewRadius / (Math.tan(halfFov) * aspect)
     ) * zoomRef.current;
 
     const lookAt = lookAtRef.current;

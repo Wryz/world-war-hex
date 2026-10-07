@@ -22,7 +22,7 @@ import { createHexagonalGrid } from './mapGenerator';
 
 // Default game settings
 export const DEFAULT_SETTINGS: GameSettings = {
-  gridSize: 8, // Reduced grid size (8 gives approximately a 12x12 grid)
+  gridSize: 6, // Hexes from the centre to the edge: 13 hexes across, 127 in total
   planningPhaseTime: 60, // 60 seconds planning phase
   aiDifficulty: 'medium',
   terrainDistribution: {
@@ -33,7 +33,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
     desert: 0.10,
     resource: 0.0, // Resource hexes are placed separately
   },
-  resourceHexCount: 8
+  resourceHexCount: 5
 };
 
 // Unit definitions
