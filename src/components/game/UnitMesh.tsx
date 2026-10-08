@@ -67,6 +67,8 @@ export interface UnitBattle {
   incoming?: { times: number[]; damage: number };
   // How many blows this unit strikes (each of them landing some damage); unlimited if not set
   strikes?: number;
+  // Seconds between its strikes in this battle, when not its usual attack speed (a castle attack)
+  interval?: number;
   // When this unit, and the enemy it strikes at, fall in the battle (null if they survive it)
   diesAt?: number | null;
   targetDiesAt?: number | null;
@@ -376,7 +378,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   const isRanged = unit.abilities.includes('rangedAttack');
   const projectile = getProjectile(unit.type);
   const isMagicShot = projectile !== 'arrow' && projectile !== 'rock';
-  const attackInterval = getAttackInterval(unit.type);
+  const attackInterval = battle?.interval ?? getAttackInterval(unit.type);
   const arrowRef = useRef<THREE.Group>(null);
   // When the current battle started (clock time) and which strike was last played
   const battleClockRef = useRef<{ key: string; start: number; lastStrike: number; lastImpact: number } | null>(null);

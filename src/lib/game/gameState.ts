@@ -912,7 +912,8 @@ export const isInEnemyZone = (state: GameState, side: PlayerType, coordinates: H
 
 // All hexes a unit can legally be ordered to move to this turn.
 // Units can't end on an occupied hex, impassable ground, their own base, an enemy castle whose walls
-// still stand, or a hex another order already reserved.
+// still stand, or a hex another order already reserved. A hex one of its own side's troops has been
+// ordered to leave counts as free: that troop moves out first.
 export const getValidMoveTargets = (state: GameState, unit: Unit): HexCoordinates[] => {
   if (unit.hasMoved) return [];
 
@@ -920,6 +921,22 @@ export const getValidMoveTargets = (state: GameState, unit: Unit): HexCoordinate
     ...state.pendingPurchases.map(p => coordKey(p.position)),
     ...state.pendingMoves.filter(m => m.unitId !== unit.id).map(m => coordKey(m.to))
   ]);
+  // Troops of its side ordered away, unless following their moves leads back to this unit's hex (two
+  // troops can't swap places: neither could go first)
+  const moveOf = new Map(state.pendingMoves.filter(m => m.unitId !== unit.id).map(m => [m.unitId, m]));
+  const ownAt = new Map(state.players[unit.owner].units.map(u => [coordKey(u.position), u]));
+  const leadsBack = (leaverId: string): boolean => {
+    const seen = new Set<string>();
+    for (let id: string | undefined = leaverId; id && !seen.has(id);) {
+      seen.add(id);
+      const move = moveOf.get(id);
+      if (!move) return false;
+      if (coordsEqual(move.to, unit.position)) return true;
+      id = ownAt.get(coordKey(move.to))?.id;
+    }
+    return false;
+  };
+  const leaving = new Set([...moveOf.keys()].filter(id => !leadsBack(id)));
   const hexByKey = new Map(state.hexGrid.map(hex => [coordKey(hex.coordinates), hex]));
 
   const targets: HexCoordinates[] = [];
@@ -927,10 +944,11 @@ export const getValidMoveTargets = (state: GameState, unit: Unit): HexCoordinate
     const hex = hexByKey.get(key);
     if (!hex || entry.cost === 0 || isImpassable(hex)) continue;
 
-    if (hex.unit && hex.unit.owner === unit.owner) continue;
+    const occupant = hex.unit && !(hex.unit.owner === unit.owner && leaving.has(hex.unit.id)) ? hex.unit : undefined;
+    if (occupant && occupant.owner === unit.owner) continue;
     const isOwnBase = hex.isBase && hex.owner === unit.owner;
     const isIntactCastle = hex.isBase && hex.owner !== unit.owner && !canStormCastle(state, unit.owner);
-    if (!(hex.unit && isUnitVisibleTo(state, unit.owner, hex.unit)) && !isOwnBase && !isIntactCastle && !reserved.has(key)) {
+    if (!(occupant && isUnitVisibleTo(state, unit.owner, occupant)) && !isOwnBase && !isIntactCastle && !reserved.has(key)) {
       targets.push(hex.coordinates);
     }
   }
@@ -1002,8 +1020,8 @@ export const addPendingMove = (
   };
 };
 
-// Cancel a unit's queued move. The unit now stays put, so a recruit queued on its hex
-// (allowed because the unit was leaving) is cancelled and refunded as well.
+// Cancel a unit's queued move. The unit now stays put, so a recruit queued on its hex, or another
+// troop ordered onto it (allowed because the unit was leaving), is cancelled as well.
 export const cancelPendingMove = (state: GameState, unitId: string): GameState => {
   const move = state.pendingMoves.find(m => m.unitId === unitId);
   if (!move) return state;
@@ -1012,7 +1030,9 @@ export const cancelPendingMove = (state: GameState, unitId: string): GameState =
     ...state,
     pendingMoves: state.pendingMoves.filter(m => m !== move)
   };
-  return cancelPendingPurchase(withoutMove, move.playerId, move.from);
+  const following = withoutMove.pendingMoves.find(m => coordsEqual(m.to, move.from));
+  const settled = following ? cancelPendingMove(withoutMove, following.unitId) : withoutMove;
+  return cancelPendingPurchase(settled, move.playerId, move.from);
 };
 
 // ---------------------------------------------------------------------------
@@ -1037,7 +1057,19 @@ export const executeMoves = (state: GameState): GameState => {
   // Move units first, so recruits can be deployed on the hexes they leave. Each walks the route its
   // side planned; in the fog it may run into enemies it couldn't see, which stops it short (an ambush).
   let movedCount = 0;
-  for (const move of state.pendingMoves) {
+  // A troop moving onto a hex another is leaving goes after it: moves run in passes, each taking the
+  // moves whose destination is free by then (if the troop ahead is stopped short, it backs off)
+  const ordered: Move[] = [];
+  let remaining = [...state.pendingMoves];
+  const plannedAt = new Map([...newState.players.player.units, ...newState.players.ai.units].map(u => [u.id, coordKey(u.position)]));
+  while (remaining.length > 0) {
+    const stillThere = new Set(remaining.map(m => plannedAt.get(m.unitId)));
+    const ready = remaining.filter(m => !stillThere.has(coordKey(m.to)) || plannedAt.get(m.unitId) === coordKey(m.to));
+    const batch = ready.length > 0 ? ready : remaining;
+    ordered.push(...batch);
+    remaining = remaining.filter(m => !batch.includes(m));
+  }
+  for (const move of ordered) {
     const player = findPlayerById(newState, move.playerId);
     if (!player) continue;
 

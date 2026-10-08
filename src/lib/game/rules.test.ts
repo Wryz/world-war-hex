@@ -4,7 +4,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Ability, GameState, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
 import {
-  DEFAULT_SETTINGS, createBattle, executeMoves, findBaseHex, getCombatPreview, getHeightDifference, getHeightMultiplier, getStarScore,
+  DEFAULT_SETTINGS, addPendingMove, cancelPendingMove, createBattle, executeMoves, findBaseHex, getCombatPreview, getHeightDifference, getHeightMultiplier, getStarScore, getValidMoveTargets,
   getTimeScore, resolveAllCombats
 } from './gameState';
 import { getHexDistance } from './hexUtils';
@@ -228,4 +228,28 @@ test('a troop that falls in its own attack stays dead, even with strike-backs st
   assert.equal(after.players.player.units.some(unit => unit.id === yours.id), false);
   assert.equal(after.hexGrid.some(hex => hex.unit?.id === yours.id), false);
   assert.equal(after.battleStats!.player.lost, 1);
+});
+
+test('a troop can be sent onto a hex another of yours is leaving, but two troops cannot swap', () => {
+  const { state, centre } = makeBattle('player');
+  const leader = makeUnit('player', centre, { movementRange: 3 });
+  const follower = makeUnit('player', at(centre, 0, 1), { movementRange: 3 });
+  place(state, leader, follower);
+  const id = state.players.player.id;
+  const canGo = (s: GameState, unit: Unit, to: HexCoordinates) =>
+    getValidMoveTargets(s, unit).some(c => c.q === to.q && c.r === to.r);
+  assert.equal(canGo(state, follower, centre), false, 'occupied until its troop is ordered away');
+  const ordered = addPendingMove(state, leader.id, id, at(centre, 0, -2));
+  assert.equal(canGo(ordered, follower, centre), true, 'free once its troop is leaving');
+  const both = addPendingMove(ordered, follower.id, id, centre);
+  assert.equal(both.pendingMoves.length, 2);
+  // The leader can't then be sent onto the follower's hex: they would swap
+  assert.equal(canGo(both, leader, at(centre, 0, 1)), false);
+  const after = executeMoves(both);
+  const where = (unit: Unit) => after.players.player.units.find(u => u.id === unit.id)!.position;
+  assert.deepEqual(where(leader), at(centre, 0, -2));
+  assert.deepEqual(where(follower), centre);
+  // Calling off the leader's move calls off the follower's too
+  const cancelled = cancelPendingMove(both, leader.id);
+  assert.equal(cancelled.pendingMoves.length, 0);
 });
