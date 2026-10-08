@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { DynaPuff, Fredoka } from "next/font/google";
 import "./globals.css";
 import { AppBoot } from "@/components/shared/AppBoot";
+import { DevPanel } from "@/components/shared/DevPanel";
 
 // Playful display font for titles, buttons and big numbers
 const dynaPuff = DynaPuff({
@@ -32,6 +33,7 @@ export default function RootLayout({
       >
         <AppBoot />
         {children}
+        <DevPanel />
       </body>
     </html>
   );

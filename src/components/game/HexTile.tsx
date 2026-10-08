@@ -54,12 +54,13 @@ const SELECTION_RING_BOB = 0.02;
 export const DRAG_CLICK_TOLERANCE = 5;
 
 // What kind of highlight a tile shows
-export type HexHighlight = 'none' | 'move' | 'deploy' | 'base';
+export type HexHighlight = 'none' | 'move' | 'deploy' | 'base' | 'tactic';
 
 const HIGHLIGHT_COLORS: Record<Exclude<HexHighlight, 'none'>, string> = {
   move: '#ffffff',
   deploy: '#7dd3fc',
-  base: '#86efac'
+  base: '#86efac',
+  tactic: '#f0abfc'
 };
 
 interface HexTileProps {
@@ -77,6 +78,8 @@ interface HexTileProps {
   fogged?: boolean;
   // How dangerous the hex is next turn (0 = safe, 1 = deadly), shown as a red wash
   threat?: number;
+  // Under a Smoke Screen
+  smoked?: boolean;
   // The map's decor style, which recolours some ground
   decor?: MapDecor;
 }
@@ -123,6 +126,7 @@ const HexTileComponent: React.FC<HexTileProps> = ({
   onHexHoverEnd,
   fogged = false,
   threat = 0,
+  smoked = false,
   decor
 }) => {
   const liftRef = useRef<THREE.Group>(null);
@@ -247,6 +251,13 @@ const HexTileComponent: React.FC<HexTileProps> = ({
         {threat > 0 && (
           <mesh geometry={fillGeometry} position={[0, surfaceHeight + 0.016, 0]} renderOrder={1}>
             <meshBasicMaterial color="#ef4444" transparent opacity={0.12 + 0.33 * Math.min(1, threat)} depthWrite={false} />
+          </mesh>
+        )}
+
+        {/* Smoke Screen: a pale haze */}
+        {smoked && (
+          <mesh geometry={fillGeometry} position={[0, surfaceHeight + 0.018, 0]} renderOrder={1}>
+            <meshBasicMaterial color="#e2e8f0" transparent opacity={0.45} depthWrite={false} />
           </mesh>
         )}
 

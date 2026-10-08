@@ -6,6 +6,9 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 
 - **Cards.** Your troops are playing cards. You start with four and bring four into every battle, picked before each fight (the pre-battle screen marks the cards that counter that enemy, and Auto-pick chooses a strong set). In battle, tap a card, then a glowing hex next to your castle (or a camp you hold) to deploy it.
 - **Bonds.** Twelve pairs of cards fight better together - Swordsmen and Pikemen form a Shield Wall (+15% health each), Archers and Longbowmen a Volley (+15% attack each), War Clerics give Berserkers Regenerates, and so on. Bring both cards of a bond into a battle and its bonuses apply to every troop you recruit from them; the pre-battle screen and the Army screen show which bonds you have and which are one card away.
+- **Signature abilities.** Every Kingdom card has its own ability that only works when its condition is met: Swordsmen hit harder beside friends, Rogues alone, Archers when they hold still, Knights after a long charge; Pikemen brace on the enemy's turn, Mages ward the troops beside them, Shieldbearers pull enemies in, Berserkers heal on a kill, Longbowmen pierce cover, War Clerics smite the undead and demons, Siege Sappers dig out the ground around them, Pegasus Knights strafe whatever they fly past, and the Archmage strikes harder far from the enemy. It wakes at card level 2 and grows stronger every two levels (rank I to VII).
+- **Tactic cards.** Bring three tactic cards into battle - Rally, Mend, Volley, Forced March, Bulwark, Sabotage, Smoke Screen, Earthworks, Shadowstep, Call to Arms and Sinkhole. From round 2, every second round each side draws one of its own at random (holding up to three) and plays it on its turn, aimed at a troop or a hex where it needs one. The enemy's factions bring their own. Tactic cards unlock as the campaign goes on and level up to 10 in the Army.
+- **Choose your castle.** Before the first turn, pick one of a few sites on your edge of the map for your castle; the enemy builds across the map from it.
 - **Campaign.** 150 battles across 15 regions - Greenvale Meadows, Goblin Woods, Howling Hills, Mirefen Marsh, Sunscorch Desert, Frostpeak Pass, Gravemoor, Ironfang Badlands, Emberforge Wastes and Dragonspire Peaks, then five rematch regions where old foes return with allies: the King's Road (villages whose houses give cover and block arrows), haunted Hallowmere, the Underkeep's treasure vaults, frozen Rimeholt and the Last Bastion, where every army marches at once. The campaign map draws each region as its own island - grass and farmland, pine woods, desert dunes, snowfields, gloomy moors and scorched badlands - with the road winding past its ten levels. Each region has its own battle theme, terrain and enemy faction, an elite battle (a champion guards the castle) and a boss battle. Win to unlock the next level, and earn up to three stars per level: one for winning, and two and three for winning with enough points - the gold value of enemy troops destroyed, half the gold you earned, 15 for every camp you hold and 10 for every round left (the bars rise with the level's recommended power).
 - **50 monsters.** Ten factions of five - bandits, goblins, beasts, swamp folk, the sand court, the frostborn, the undead, orcs, the infernal legion and the dragonkin - each with four troops the enemy recruits and a boss.
 - **Bestiary.** Every monster you meet is added to the Bestiary on the main menu, with its lore, abilities, kill count and a 3D model to inspect.
@@ -24,7 +27,7 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 
 ## How to Play
 
-1. **Pick a battle.** Open the campaign map, pick the next level, choose the four cards to bring, compare your power with the recommended power, then press **Fight!**
+1. **Pick a battle.** Open the campaign map, pick the next level, choose the four cards and three tactic cards to bring, compare your power with the recommended power, then press **Fight!** Then tap one of the glowing sites to build your castle.
 2. **Play cards.** Tap a card in your hand, then a glowing hex next to your castle or a camp you hold. Its gold cost comes out of your treasury. Tap a troop you queued this turn to take it back.
 3. **Move.** Tap one of your troops, then a highlighted hex. Rough ground costs more movement; water and mountains block the way (flyers pass over them).
 4. **End your turn.** Troops arrive and move, then every troop in range attacks one enemy it can reach automatically - preferring one it can finish off, then one it is strong against. A defender splits its strike-back between the attackers it can reach, so archers shooting from 2 hexes and sneak attacks take no damage. The other side's troops strike back too: any troop of theirs that can reach an attacker (and isn't in a fight of its own) hits it, and the attacker, busy with its own target, can't hit back. The battle card shows every modifier, and health bars count down blow by blow. Then the enemy takes its turn.
@@ -92,6 +95,9 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 - `game/gameState.ts`: Rules engine (pure functions): battle setup, the card hand, purchases, movement, combat (height, line of sight, counters, abilities), terrain, economy and upkeep, round limit and win conditions
 - `game/mapGenerator.ts`: Seeded, themed map generation, including the campaign's region themes
 - `game/hexUtils.ts`: Hex grid maths
+- `game/signatures.ts`: Each Kingdom card's signature ability, its condition and its numbers by rank
+- `game/tactics.ts` and `game/battleTactics.ts`: Tactic cards (their numbers by level, the factions' sets) and playing them in battle
+- `ai/aiTactics.ts`: How the AI values and plays its tactic cards
 - `ai/aiPlayer.ts`: The AI: scores every move on the fight it offers, the danger it walks into, the ground and its goal; recruits counters from whatever roster it has; plays either side, with selectable doctrines for simulations
 - `campaign/levels.ts`: The 15 regions and 150 levels: enemy rosters and scaling, bosses, star goals and rewards
 - `campaign/battleSetup.ts`: Builds a battle from a campaign level (or a quick battle) and the player's deck
@@ -123,6 +129,14 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 - `utils/creatures`: Procedural low-poly monsters (wolves, spiders, slimes, golems, wisps, dragons...)
 - `storage/GameStorage`: Save and resume the battle in progress
 
+### Dev tools
+
+On the dev server (`npm run dev`), or any copy of the game served from localhost, a pink **DEV** button (bottom left of the menus) opens shortcuts: coins (+10,000, max, zero, or infinite - topped back up after every purchase), unlock or lock every campaign level, own every card and tactic card, set them all to one level, reset them to the starter set, or reset all progress. Each card in the Army also gets − and + buttons to set its level for free. None of it appears on the live site (`src/lib/meta/devTools.ts`, `src/components/shared/DevPanel.tsx`).
+
+### Card art
+
+Every card shows a portrait of its troop's own 3D model on its faction's home ground, against a backdrop in the faction's colours (`src/components/game/cards/cardArt.ts`). The portraits in `public/cards/` are rendered from the dev page `/dev/card-art?type=<troop>`: with the dev server running, `node scripts/render-card-art.mjs [troop ...]` photographs them (it needs Playwright: `npm i --no-save playwright && npx playwright install chromium`). Re-run it after changing a troop's model.
+
 ### Balance
 
 `npm run simulate` plays AI-vs-AI battles in which one side uses the deck the progression model expects at each level, and reports win rates and battle lengths. `npm run simulate -- --tune 20 1 2 3` searches for the enemy strength at which that deck wins its level's target share of battles: 90% on level 1, easing to 65% from level 16 on (`targetWinRate` in `levels.ts`). The constants in `src/lib/campaign/levels.ts` were tuned with it.
@@ -130,6 +144,18 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 ## Analytics
 
 The game can send anonymous gameplay events to [PostHog](https://posthog.com) - battles started, won, lost and abandoned (with level, deck, bonds and duration), cards bought and upgraded, cosmetics bought, tutorial completion and save exports - to show where players get stuck in the campaign. Nothing is sent unless `NEXT_PUBLIC_POSTHOG_KEY` is set at build time (and optionally `NEXT_PUBLIC_POSTHOG_HOST`, default `https://us.i.posthog.com`). Session recording and autocapture are off, Do Not Track is respected, and players can switch it off in Settings. Events are defined in `src/lib/analytics.ts`.
+
+The same events, plus page views, can also go to Google Analytics 4: set `NEXT_PUBLIC_GA_MEASUREMENT_ID` (the `G-...` ID of a GA4 web stream) at build time. Google signals and ad personalisation are off for it, and the Settings switch turns it off too.
+
+## Ads
+
+The web version can show ads through [Google H5 Games Ads](https://developers.google.com/ad-placement) (AdSense's Ad Placement API), in `src/lib/ads.ts`:
+
+- **Rewarded ad.** When an ad is ready, the results screen offers "Watch an ad for +N coins", half the battle's reward again (`AD_BONUS_FRACTION` in `src/lib/meta/economy.ts`). Players who skip it progress at the normal pace.
+- **Break ad.** Leaving the results screen (Next Level, Map or Army) may play an ad first. Never during a battle, not in a player's first three battles, and not within 90 seconds of another ad.
+- The game's music and sounds go quiet while an ad plays.
+
+Nothing loads unless `NEXT_PUBLIC_ADSENSE_CLIENT` (your `ca-pub-...` publisher ID) is set at build time, so a build without it (such as a paid desktop version) has no ads. `/ads.txt` is generated from the same ID. Set `NEXT_PUBLIC_ADS_TEST=1` as well to get Google's test ads while trying it out. Ads only serve once the site is approved in AdSense and enrolled in H5 Games Ads, and players in the EEA, UK and Switzerland must be shown a Google-certified consent message, which AdSense's Privacy & messaging page can set up without code changes.
 
 ## Credits
 

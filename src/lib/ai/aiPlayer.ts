@@ -1,4 +1,5 @@
-import { getHeightAt } from '../game/hexHeight';
+import { getHexHeightOf } from '../game/hexHeight';
+import { planTactics } from './aiTactics';
 import {
   GameState,
   Player,
@@ -40,7 +41,10 @@ import {
   findBaseHex,
   getSideView,
   getSiegeDamage,
-  getTimeScore
+  getTimeScore,
+  getSituationalMultiplier,
+  getDamageTakenMultiplier,
+  isSmoked
 } from '../game/gameState';
 import { TroopClass, getTroopClass } from '../game/troops';
 
@@ -240,6 +244,8 @@ const mirrorSides = (state: GameState): GameState => {
     winner: flipSide(state.winner),
     rosters: state.rosters && { player: state.rosters.ai, ai: state.rosters.player },
     battleStats: state.battleStats && { player: state.battleStats.ai, ai: state.battleStats.player },
+    tactics: state.tactics && { player: state.tactics.ai, ai: state.tactics.player },
+    effects: state.effects?.map(effect => ({ ...effect, side: flipSide(effect.side) })),
     // The deck only limits the real player's recruits; the planner is told which cards it holds instead
     deck: undefined,
     // A campaign enemy's income bonus doesn't belong to the side being planned for
@@ -257,9 +263,11 @@ const mirrorSides = (state: GameState): GameState => {
  * Returns the game state with the side's pending purchases and moves added.
  * The game calls this with no options (the 'ai' side, balanced doctrine).
  */
-export const planAITurn = (state: GameState, options: AIPlanOptions = {}): GameState => {
+export const planAITurn = (initial: GameState, options: AIPlanOptions = {}): GameState => {
   const doctrine = options.doctrine ?? 'balanced';
   const side = options.side ?? 'ai';
+  // Tactic cards first: they change the board the moves are planned on
+  const state = planTactics(initial, side, options.difficulty ?? initial.settings?.aiDifficulty);
   // In the fog of war the planner only knows about the enemy troops its side can see, and remembers
   // where it last saw the others
   const view = getSideView(state, side, true);
@@ -465,13 +473,21 @@ const isRanged = (unit: Unit) => getAttackRange(unit) > 1;
 const canStrikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, at: HexCoordinates): boolean => {
   const distance = getHexDistance(from, at);
   if (distance > getAttackRange(attacker, terrainAt(planner, from))) return false;
-  if (distance <= 1 || attacker.abilities.includes('magic')) return true;
-  return hasLineOfSight(planner.state.hexGrid, from, at);
+  if (distance <= 1) return true;
+  if (isSmoked(planner.state, at)) return false;
+  return attacker.abilities.includes('magic') || hasLineOfSight(planner.state.hexGrid, from, at);
 };
 
+const heightAt = (planner: Planner, position: HexCoordinates) =>
+  getHexHeightOf(planner.hexes.get(key(position)) ?? { coordinates: position, terrain: 'plain' });
+
+// A strike from one hex on a target at another, with the attacker's signature bonuses as they would
+// be there (having walked from where it stands) and whatever shields the target
 const strikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, target: Unit, at: HexCoordinates) =>
   getStrikePowerOnTerrain(attacker, terrainAt(planner, from), target, terrainAt(planner, at), getHexDistance(from, at),
-    getHeightAt(from, terrainAt(planner, from)) - getHeightAt(at, terrainAt(planner, at)));
+    heightAt(planner, from) - heightAt(planner, at)) *
+  getSituationalMultiplier(planner.state, attacker, from, getHexDistance(attacker.position, from)) *
+  getDamageTakenMultiplier(planner.state, target, at);
 
 const remainingHealth = (planner: Planner, enemy: Unit) =>
   enemy.lifespan - (planner.plannedDamage.get(enemy.id) ?? 0);

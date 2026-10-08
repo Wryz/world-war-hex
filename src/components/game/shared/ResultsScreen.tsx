@@ -2,14 +2,16 @@ import React, { useEffect, useRef, useState } from 'react';
 import { SideStats, WinReason } from '@/types/game';
 import type { LevelDef } from '@/lib/campaign/levels';
 import { starThresholds } from '@/lib/campaign/levels';
-import type { BattleRecordResult } from '@/lib/meta/profile';
+import { grantBonusCoins, type BattleRecordResult } from '@/lib/meta/profile';
+import { adBonusCoins } from '@/lib/meta/economy';
+import { useRewardedAd } from '@/lib/ads';
 import { TROOPS } from '@/lib/game/troops';
 import { playStinger } from '@/lib/audio/music';
 import { SPEED_POINTS_PER_ROUND, StarScore, TIME_SCORE_WEIGHTS } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
 import { emitCoins } from '../effects/effects';
 import {
-  ArrowIcon, CardsIcon, CoinIcon, FilledStarIcon, LaurelIcon, MapIcon, PowerIcon, ResumeIcon, ShareIcon, SkullIcon, StarIcon
+  ArrowIcon, CardsIcon, CoinIcon, FilledStarIcon, LaurelIcon, MapIcon, PlayIcon, PowerIcon, ResumeIcon, ShareIcon, SkullIcon, StarIcon
 } from '../icons';
 
 interface ResultsScreenProps {
@@ -100,9 +102,21 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
 }) => {
   const rewardDelay = won ? 600 + stars * STAR_DELAY : 600;
   const coins = useCountUp(record.reward.coins, 900, rewardDelay);
-  const shownTotal = coinsTotal - record.reward.coins + coins;
   const [copied, setCopied] = useState(false);
   const rewardRef = useRef<HTMLDivElement>(null);
+
+  // An optional ad adds a coin bonus (only offered when an ad is ready, and once per battle)
+  const bonus = adBonusCoins(record.reward);
+  const [bonusClaimed, setBonusClaimed] = useState(false);
+  const rewardedAd = useRewardedAd('battle_bonus', () => {
+    grantBonusCoins(bonus);
+    setBonusClaimed(true);
+    const rect = rewardRef.current?.getBoundingClientRect();
+    if (rect) emitCoins({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, Math.min(14, 4 + Math.round(bonus / 20)), 'coins');
+  });
+  // The purse as the screen opened (the profile already has this battle's reward, but not a bonus yet)
+  const [startTotal] = useState(coinsTotal);
+  const shownTotal = startTotal - record.reward.coins + coins + (bonusClaimed ? bonus : 0);
 
   // Stars stamp in one by one, then the coins fly into the purse
   useEffect(() => {
@@ -208,9 +222,10 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
         <div ref={rewardRef} className="mt-4 flex items-center justify-between rounded-xl bg-slate-800 px-4 py-3">
           <div>
             <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Reward</div>
-            <div className="font-display flex items-center gap-1.5 text-3xl text-yellow-300"><CoinIcon />+{coins}</div>
+            <div className="font-display flex items-center gap-1.5 text-3xl text-yellow-300"><CoinIcon />+{coins + (bonusClaimed ? bonus : 0)}</div>
             <div className="text-sm text-slate-300">
-              {record.reward.breakdown.map(item => `${item.label} ${item.coins}`).join(' · ')}
+              {[...record.reward.breakdown, ...(bonusClaimed ? [{ label: 'Ad bonus', coins: bonus }] : [])]
+                .map(item => `${item.label} ${item.coins}`).join(' · ')}
             </div>
           </div>
           <div className="text-right">
@@ -218,6 +233,15 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
             <div id="hud-coins" className="font-display flex items-center justify-end gap-1 text-xl text-yellow-200"><CoinIcon />{shownTotal}</div>
           </div>
         </div>
+
+        {rewardedAd.ready && !bonusClaimed && (
+          <button
+            onClick={rewardedAd.show}
+            className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 font-bold shadow-[0_4px_0_#047857] transition-transform hover:-translate-y-0.5 hover:bg-emerald-500 active:translate-y-1"
+          >
+            <PlayIcon /> Watch an ad for +{bonus} <CoinIcon />
+          </button>
+        )}
 
         {/* Battle stats */}
         <div className="mt-3 grid grid-cols-4 gap-2 text-center">

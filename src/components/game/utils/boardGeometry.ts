@@ -1,5 +1,5 @@
 import { Hex, HexCoordinates } from '@/types/game';
-import { getHeightAt } from '@/lib/game/hexHeight';
+import { getHexHeightOf } from '@/lib/game/hexHeight';
 
 // Shared board geometry so tiles, units and markers all agree on positions and heights
 
@@ -7,7 +7,7 @@ export const HEX_SIZE = 1.0;
 export const BEVEL_THICKNESS = 0.05;
 
 // Extrusion depth of a hex tile: how tall the hex stands (see lib/game/hexHeight)
-export const getHexHeight = (hex: Hex): number => getHeightAt(hex.coordinates, hex.terrain);
+export const getHexHeight = (hex: Hex): number => getHexHeightOf(hex);
 
 export const getHexSurfaceHeight = (hex: Hex): number => getHexHeight(hex) + BEVEL_THICKNESS * 2;
 

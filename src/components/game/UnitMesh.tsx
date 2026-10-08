@@ -17,7 +17,7 @@ import { MELEE_IMPACT_POINT, PROJECTILE_FLIGHT_TIME, RANGED_RELEASE_POINT, WALK_
 import { playBattleSound, BattleSound } from './utils/battleSounds';
 import { DRAG_CLICK_TOLERANCE } from './HexTile';
 import { instantiateUnitModel, findAnimationClip, disposeUnitModel, UnitModelInstance } from './utils/unitModelCache';
-import { ArrowIcon, AttackIcon, BondIcon, CrownIcon, GoldIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
+import { ArrowIcon, AttackIcon, BondIcon, CrownIcon, GoldIcon, ShieldIcon, SignatureIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
 
 // Small lift so the unit's indicator doesn't z-fight with the tile surface
 const UNIT_ELEVATION = 0.02;
@@ -115,7 +115,7 @@ const DustPuff: React.FC<{ delay: number }> = ({ delay }) => {
 export interface UnitBuff {
   id: string;
   terrain?: TerrainType;
-  icon?: 'bond' | 'gold' | 'attack';
+  icon?: 'bond' | 'gold' | 'attack' | 'signature' | 'shield';
   label: string;
   value: string;
   good: boolean;
@@ -125,7 +125,8 @@ const NO_BUFFS: UnitBuff[] = [];
 
 const BuffIcon: React.FC<{ buff: UnitBuff }> = ({ buff }) =>
   buff.icon === 'bond' ? <BondIcon /> : buff.icon === 'gold' ? <GoldIcon /> : buff.icon === 'attack' ? <AttackIcon />
-    : <TerrainIcon terrain={buff.terrain ?? 'plain'} />;
+    : buff.icon === 'signature' ? <SignatureIcon /> : buff.icon === 'shield' ? <ShieldIcon />
+      : <TerrainIcon terrain={buff.terrain ?? 'plain'} />;
 
 // A unit's buffs as a row of icons; tapping it opens each one's name and numbers
 // Only the icons take clicks: the open details let clicks through to the board, and close on the
@@ -189,6 +190,8 @@ interface UnitMeshProps {
   buffs?: UnitBuff[];
   // Decorative use (e.g. the menu's island): no label and no battle sounds
   decorative?: boolean;
+  // Leave out the ring in its side's colour (card portraits)
+  hideRing?: boolean;
   // The unit has just been destroyed: play its death and sink into the ground
   dying?: boolean;
   // ...having already fallen in the battle that destroyed it, so it only sinks away
@@ -215,6 +218,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   battle = null,
   buffs = NO_BUFFS,
   decorative = false,
+  hideRing = false,
   dying = false,
   fallen = false
 }) => {
@@ -747,7 +751,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       )}
 
       {/* Owner ring so it's always clear which side a unit belongs to */}
-      <mesh visible={!dying && !killed} position={[0, RING_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh visible={!dying && !killed && !hideRing} position={[0, RING_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.42, isSelected ? 0.62 : 0.54, 32]} />
         <meshBasicMaterial
           color={isSelected ? '#facc15' : ownerColor}

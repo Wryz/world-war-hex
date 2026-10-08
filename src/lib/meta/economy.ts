@@ -1,4 +1,5 @@
 import { BASE_MAX_CARD_LEVEL, MAX_CARD_LEVEL, PLAYER_CARD_IDS, Rarity, TroopId, cardPower, getTroop } from '../game/troops';
+import { MAX_TACTIC_LEVEL, TacticId } from '../game/tactics';
 
 // The campaign economy: coins earned from battles, card prices and upgrade costs, and the
 // progression model that sets each level's recommended power.
@@ -47,6 +48,10 @@ export const quickBattleReward = (won: boolean, highestCleared: number): BattleR
   return { coins, breakdown: [{ label: won ? 'Skirmish won' : 'Skirmish fought', coins }] };
 };
 
+// Watching the optional ad on the results screen adds half the battle's reward again
+export const AD_BONUS_FRACTION = 0.5;
+export const adBonusCoins = (reward: BattleReward) => Math.max(5, Math.round(reward.coins * AD_BONUS_FRACTION));
+
 // --- Shop ----------------------------------------------------------------------------------
 
 const CARD_PRICES: Record<Rarity, number> = { common: 120, rare: 300, epic: 700, legendary: 1500, boss: 0 };
@@ -87,6 +92,30 @@ export const CARD_UNLOCK_LEVEL: Partial<Record<TroopId, number>> = {
 export const STARTER_CARDS: TroopId[] = ['infantry', 'artillery', 'tank', 'rogue'];
 // Cards brought into a battle: the player picks them before every fight
 export const MAX_DECK_SIZE = 4;
+
+// --- Tactic cards --------------------------------------------------------------------------
+
+// Campaign level that must be cleared before a tactic card appears in the shop (starters are owned)
+export const TACTIC_UNLOCK_LEVEL: Partial<Record<TacticId, number>> = {
+  forcedMarch: 8,
+  bulwark: 15,
+  sabotage: 22,
+  smoke: 30,
+  earthworks: 40,
+  shadowstep: 50,
+  callToArms: 60,
+  sinkhole: 70
+};
+
+// Later tactics cost more
+export const tacticPrice = (id: TacticId) => Math.round((100 + 4 * (TACTIC_UNLOCK_LEVEL[id] ?? 0)) / 10) * 10;
+
+const TACTIC_UPGRADE_BASE = 25;
+const TACTIC_UPGRADE_GROWTH = 1.45;
+
+// Coins to raise a tactic card from `level` to `level + 1`, or null at its max level
+export const tacticUpgradeCost = (level: number): number | null =>
+  level >= MAX_TACTIC_LEVEL ? null : Math.round(TACTIC_UPGRADE_BASE * TACTIC_UPGRADE_GROWTH ** (level - 1) / 5) * 5;
 
 // --- Power ---------------------------------------------------------------------------------
 

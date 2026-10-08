@@ -1,7 +1,8 @@
-import type { HexCoordinates, TerrainType } from '@/types/game';
+import type { Hex, HexCoordinates, TerrainType } from '@/types/game';
 
-// How tall each hex stands: its terrain's height plus a small, fixed per-hex variation. The board
-// draws hexes this tall and shows the number, and the height advantage in a fight comes from it.
+// How tall each hex stands: its terrain's height plus a small, fixed per-hex variation, and any
+// digging or earthworks during the battle. The board draws hexes this tall and shows the number,
+// and the height advantage in a fight comes from it.
 
 const BASE_HEIGHT = 1.0;
 
@@ -37,3 +38,16 @@ export const getHeightAt = (coordinates: HexCoordinates, terrain: TerrainType): 
 
 // A terrain's typical height, for when the exact hex isn't known
 export const getTerrainHeight = (terrain: TerrainType): number => (TERRAIN_HEIGHTS[terrain] ?? BASE_HEIGHT) + HEIGHT_VARIATION / 2;
+
+// Ground raised or dug out during a battle stays within this much of its natural height, and never
+// sinks below the lowest ground
+export const MAX_HEIGHT_OFFSET = 1.2;
+const MIN_HEIGHT = 0.1;
+
+// A hex's height as it stands now, earthworks and digging included
+export const getHexHeightOf = (hex: Pick<Hex, 'coordinates' | 'terrain' | 'heightOffset'>): number =>
+  Math.max(MIN_HEIGHT, getHeightAt(hex.coordinates, hex.terrain) + (hex.heightOffset ?? 0));
+
+// The height offset after raising (or, negative, lowering) a hex's ground by `change`
+export const shiftHeightOffset = (offset: number | undefined, change: number): number =>
+  Math.round(Math.max(-MAX_HEIGHT_OFFSET, Math.min(MAX_HEIGHT_OFFSET, (offset ?? 0) + change)) * 100) / 100;

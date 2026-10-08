@@ -23,7 +23,10 @@ if (typeof window !== 'undefined') {
   }
 }
 
-export const isMuted = () => muted;
+// Silenced while an ad plays, without touching the player's own mute setting
+let pausedForAd = false;
+
+export const isMuted = () => muted || pausedForAd;
 
 export const setMuted = (value: boolean) => {
   muted = value;
@@ -35,13 +38,19 @@ export const setMuted = (value: boolean) => {
   muteListeners.forEach(listener => listener());
 };
 
+export const setPausedForAd = (value: boolean) => {
+  if (pausedForAd === value) return;
+  pausedForAd = value;
+  muteListeners.forEach(listener => listener());
+};
+
 export const subscribeToMute = (listener: () => void) => {
   muteListeners.add(listener);
   return () => muteListeners.delete(listener);
 };
 
 // Current mute state for React components
-export const useMuted = () => useSyncExternalStore(subscribeToMute, isMuted, () => false);
+export const useMuted = () => useSyncExternalStore(subscribeToMute, () => muted, () => false);
 
 // Volume of the sound effects (clicks, swords, arrows...), 0 to 1, shared with the battle sounds
 const SFX_VOLUME_STORAGE_KEY = 'wwhSfxVolume';
@@ -93,7 +102,7 @@ export const preloadSound = (url: string, id: string): void => {
  * Plays a preloaded sound
  */
 export const playSound = (id: string, volume = 0.5): void => {
-  if (muted || sfxVolume <= 0) return;
+  if (isMuted() || sfxVolume <= 0) return;
 
   const pool = soundPools.get(id);
   if (!pool) return;
