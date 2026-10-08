@@ -3,7 +3,7 @@ import { GameState } from '@/types/game';
 import { BASE_MAX_HEALTH, getCastleMaxHealth, getIncome, getMaxRounds, getTimeScore, isFogOfWar } from '@/lib/game/gameState';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
 import { CrownIcon, FogIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon } from '../icons';
-import { setGameSpeed, useGameSpeed } from '../effects/effects';
+import { setGameSpeed, useCastleShownDamage, useGameSpeed } from '../effects/effects';
 
 // The time-up points show for this many final rounds
 const POINTS_SHOWN_ROUNDS = 3;
@@ -50,6 +50,10 @@ export const TopBar: React.FC<TopBarProps> = ({
   gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit, showThreats, onToggleThreats
 }) => {
   const { players, turnNumber } = gameState;
+  // Hits landing on a castle in the battle being fought, ahead of its result
+  const castleHits = useCastleShownDamage();
+  // (only while the attack is being fought, so it never counts twice once its result is in)
+  const shownDamage = gameState.currentPhase === 'combat' && gameState.siege ? castleHits : { player: 0, ai: 0 };
   const maxRounds = getMaxRounds(gameState);
   const isFinalRound = turnNumber >= maxRounds;
   const speed = useGameSpeed();
@@ -98,14 +102,14 @@ export const TopBar: React.FC<TopBarProps> = ({
       <div className={`${PANEL_CLASS} pointer-events-auto hidden md:flex items-center gap-3 px-3 py-2`}>
         <CastleHealth
           title="Your castle"
-          health={players.player.baseHealth ?? BASE_MAX_HEALTH}
+          health={Math.max(0, (players.player.baseHealth ?? BASE_MAX_HEALTH) - shownDamage.player)}
           max={getCastleMaxHealth(gameState, 'player')}
           color={SIDE_COLORS.player}
         />
         <span className="text-xs font-bold text-slate-500">VS</span>
         <CastleHealth
           title="Enemy castle"
-          health={players.ai.baseHealth ?? BASE_MAX_HEALTH}
+          health={Math.max(0, (players.ai.baseHealth ?? BASE_MAX_HEALTH) - shownDamage.ai)}
           max={getCastleMaxHealth(gameState, 'ai')}
           color={SIDE_COLORS.ai}
           alignRight
