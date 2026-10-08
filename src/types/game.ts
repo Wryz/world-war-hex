@@ -42,7 +42,18 @@ export interface Hex {
   // How far the ground here has been raised (positive) or dug out (negative) during the battle,
   // on top of its natural height (see lib/game/hexHeight)
   heightOffset?: number;
+  // Something standing or lying on the hex (see lib/game/battlefield): a great tree that can be
+  // felled, the log one left when it fell, or that log lying across water as a bridge
+  feature?: HexFeature;
+  // Where the tree that left this log (or bridge) stood, so it lies the way it fell
+  fellFrom?: HexCoordinates;
+  // Fire: smouldering embers (it catches next turn) or burning, with the turns it has left
+  fire?: { stage: 'smoulder' | 'burning'; turnsLeft: number };
+  // Burnt out by a fire (the ground is blackened)
+  scorched?: boolean;
 }
+
+export type HexFeature = 'greatTree' | 'log' | 'logBridge';
 
 export interface Unit {
   id: string;
@@ -173,6 +184,8 @@ export interface GameState {
   pendingGuards?: { type: UnitType; stats: TroopStats; isBoss?: boolean }[];
   // Seeds the battle's chance events (fires flaring up around lava)
   battleSeed?: number;
+  // The tree felled most recently, for the board to show it falling (serial counts fellings)
+  lastFell?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
 }
 
 export interface Sighting {

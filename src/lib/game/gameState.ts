@@ -26,6 +26,10 @@ import {
   getNeighbors
 } from './hexUtils';
 import { createHexagonalGrid } from './mapGenerator';
+import {
+  BURN_TURNS, FELL_DAMAGE, FIRE_DAMAGE, LAVA_FLARE_CHANCE, MAX_FIRES, SPREAD_CHANCE, featureMoveCost, featureSightHeight,
+  fellLandingHex, isBlockedByFeature, isFlammable, pickGreatTrees
+} from './battlefield';
 import { getHexHeightOf, getTerrainHeight, shiftHeightOffset } from './hexHeight';
 import { cardStats, getClassCounter, getTroop, getTroopClass } from './troops';
 import {
@@ -289,8 +293,12 @@ export const defaultRoster = (): Roster =>
 
 // Initialize a new game state (castles not yet placed)
 export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS, setup?: BattleSetup): GameState => {
-  // Create the hexagonal grid with a themed terrain mix
+  // Create the hexagonal grid with a themed terrain mix, and grow its great trees
   const { hexGrid, theme } = createHexagonalGrid(settings, settings.seed, settings.themeName);
+  const battleSeed = Math.floor(Math.random() * 2 ** 31);
+  let draws = 0;
+  const trees = new Set(pickGreatTrees(hexGrid, settings.gridSize, () => seededRandom(battleSeed + 7 * draws++)).map(coordKey));
+  for (const hex of hexGrid) if (trees.has(coordKey(hex.coordinates))) hex.feature = 'greatTree';
   const startingGold = settings.startingGold ?? DEFAULT_SETTINGS.startingGold!;
 
   // Initialize players
@@ -326,7 +334,7 @@ export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS, s
     bonds: setup?.bonds,
     levelId: setup?.levelId,
     battleStats: { player: emptySideStats(), ai: emptySideStats() },
-    battleSeed: Math.floor(Math.random() * 2 ** 31)
+    battleSeed
   };
 };
 
@@ -363,7 +371,12 @@ export const getCastleMaxHealth = (state: GameState, side: PlayerType): number =
   state.players[side].maxBaseHealth ?? getSettings(state).castleHealth ?? BASE_MAX_HEALTH;
 
 // Water and mountains can't be entered by units
-export const isImpassable = (hex: Hex) => TERRAIN_EFFECTS[hex.terrain].moveCost === null;
+// Movement points needed to enter a hex, or null if nothing on foot can enter it (its terrain, a
+// great tree or fallen trunk on it, or flames)
+export const hexMoveCost = (hex: Hex): number | null =>
+  isBlockedByFeature(hex) ? null : featureMoveCost(hex) ?? TERRAIN_EFFECTS[hex.terrain].moveCost;
+
+export const isImpassable = (hex: Hex) => hexMoveCost(hex) === null;
 
 const findPlayerById = (state: GameState, playerId: string): Player | undefined =>
   Object.values(state.players).find(p => p.id === playerId);
@@ -583,7 +596,7 @@ const placeCamps = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoo
     for (const neighbor of getNeighbors(camp.coordinates)) {
       if (countOpenNeighbors(state.hexGrid, camp.coordinates) >= MIN_OPEN_BASE_NEIGHBORS) break;
       const hex = findHexByCoordinates(state.hexGrid, neighbor);
-      if (hex && isImpassable(hex)) updateHex(state, neighbor, { terrain: 'plain' });
+      if (hex && isImpassable(hex)) updateHex(state, neighbor, { terrain: 'plain', feature: undefined });
     }
   }
 };
@@ -765,7 +778,7 @@ export const getDeploymentHexes = (state: GameState, playerType: PlayerType): He
     ...state.pendingPurchases.map(p => coordKey(p.position)),
     ...state.pendingMoves.map(m => coordKey(m.to))
   ]);
-  const leaving = new Set(state.pendingMoves.map(m => m.unitId));
+  const leaving = new Set(state.pendingMoves.filter(m => !isFellOrder(state, m)).map(m => m.unitId));
 
   return getDeploymentSpots(state, playerType)
     .map(coord => findHexByCoordinates(state.hexGrid, coord))
@@ -866,16 +879,16 @@ interface ReachableHex {
 
 // Movement points needed to step from one hex into a neighbouring one
 type StepCost = (from: Hex, to: Hex) => number;
-const enterCost: StepCost = (_from, to) => TERRAIN_EFFECTS[to.terrain].moveCost ?? Infinity;
+const enterCost: StepCost = (_from, to) => hexMoveCost(to) ?? Infinity;
 
 // What it costs a particular unit to enter a hex: flyers pay 1 for anything (even water and
 // mountains, which they can cross but not stop on), pathfinders pay 1 for rough ground
 export const unitEnterCost = (unit: { abilities: Ability[] }, hex: Hex): number => {
   if (hasAbility(unit, 'flying')) return 1;
-  const effect = TERRAIN_EFFECTS[hex.terrain];
-  if (effect.moveCost === null) return Infinity;
-  if (effect.isRough && hasAbility(unit, 'pathfinder')) return 1;
-  return effect.moveCost;
+  const cost = hexMoveCost(hex);
+  if (cost === null) return Infinity;
+  if (TERRAIN_EFFECTS[hex.terrain].isRough && featureMoveCost(hex) === undefined && hasAbility(unit, 'pathfinder')) return 1;
+  return cost;
 };
 
 // Cheapest-path search over the board. By default entering a hex costs its terrain's movement cost.
@@ -978,7 +991,8 @@ export const getValidMoveTargets = (state: GameState, unit: Unit): HexCoordinate
   ]);
   // Troops of its side ordered away, unless following their moves leads back to this unit's hex (two
   // troops can't swap places: neither could go first)
-  const moveOf = new Map(state.pendingMoves.filter(m => m.unitId !== unit.id).map(m => [m.unitId, m]));
+  // (a troop felling a tree stays where it is)
+  const moveOf = new Map(state.pendingMoves.filter(m => m.unitId !== unit.id && !isFellOrder(state, m)).map(m => [m.unitId, m]));
   const ownAt = new Map(state.players[unit.owner].units.map(u => [coordKey(u.position), u]));
   const leadsBack = (leaverId: string): boolean => {
     const seen = new Set<string>();
@@ -1013,6 +1027,29 @@ export const getValidMoveTargets = (state: GameState, unit: Unit): HexCoordinate
 export const getMovePath = (state: GameState, unit: Unit, to: HexCoordinates): HexCoordinates[] | null =>
   buildPath(getReachableHexes(state, unit), to);
 
+// --- Felling great trees ---------------------------------------------------------------------
+
+// The great trees a unit can chop down this turn: next to it, with a hex to fall onto, and not
+// already being felled by another troop. Anything but a flyer can swing an axe.
+export const getFellTargets = (state: GameState, unit: Unit): HexCoordinates[] => {
+  if (unit.hasMoved || hasAbility(unit, 'flying')) return [];
+  const hexByKey = new Map(state.hexGrid.map(hex => [coordKey(hex.coordinates), hex]));
+  const claimed = new Set(state.pendingMoves.filter(m => m.unitId !== unit.id).map(m => coordKey(m.to)));
+  return getNeighbors(unit.position)
+    .map(c => hexByKey.get(coordKey(c)))
+    .filter((hex): hex is Hex => hex?.feature === 'greatTree' && !claimed.has(coordKey(hex.coordinates)) &&
+      !!fellLandingHex(hexByKey, unit.position, hex.coordinates))
+    .map(hex => hex.coordinates);
+};
+
+// Whether a queued order is to fell a tree rather than to move (an order onto a great tree)
+export const isFellOrder = (state: GameState, move: Move): boolean =>
+  findHexByCoordinates(state.hexGrid, move.to)?.feature === 'greatTree';
+
+// Where a tree felled by a troop standing at `from` would land, if it can fall that way
+export const getFellLanding = (state: GameState, from: HexCoordinates, tree: HexCoordinates): HexCoordinates | null =>
+  fellLandingHex(new Map(state.hexGrid.map(hex => [coordKey(hex.coordinates), hex])), from, tree)?.coordinates ?? null;
+
 // Route between two hexes, ignoring units (used to animate movement). Flyers go straight over obstacles.
 export const findTerrainPath = (hexGrid: Hex[], from: HexCoordinates, to: HexCoordinates, flying = false): HexCoordinates[] => {
   const reached = searchPaths(hexGrid, from, Infinity, hex => flying || !isImpassable(hex), flying ? () => 1 : enterCost);
@@ -1030,7 +1067,7 @@ export const getTerrainDistanceMap = (hexGrid: Hex[], goal: HexCoordinates): Map
     goal,
     Infinity,
     hex => !isImpassable(hex),
-    from => TERRAIN_EFFECTS[from.terrain].moveCost ?? Infinity
+    from => hexMoveCost(from) ?? Infinity
   );
   return new Map([...reached].map(([key, entry]) => [key, entry.cost]));
 };
@@ -1057,7 +1094,7 @@ export const addPendingMove = (
     pendingMoves: state.pendingMoves.filter(m => m.unitId !== unitId)
   };
 
-  const isValid = getValidMoveTargets(withoutMove, unit).some(c => coordsEqual(c, to));
+  const isValid = [...getValidMoveTargets(withoutMove, unit), ...getFellTargets(withoutMove, unit)].some(c => coordsEqual(c, to));
   if (!isValid) return state;
 
   const move: Move = {
@@ -1078,6 +1115,8 @@ export const addPendingMove = (
 export const cancelPendingMove = (state: GameState, unitId: string): GameState => {
   const move = state.pendingMoves.find(m => m.unitId === unitId);
   if (!move) return state;
+  // A troop that was going to fell a tree never meant to leave its hex
+  if (isFellOrder(state, move)) return { ...state, pendingMoves: state.pendingMoves.filter(m => m !== move) };
 
   const withoutMove: GameState = {
     ...state,
@@ -1094,6 +1133,31 @@ export const cancelPendingMove = (state: GameState, unitId: string): GameState =
 
 const endGame = (state: GameState, winner: PlayerType, reason: WinReason): GameState =>
   ({ ...state, winner, winReason: reason, currentPhase: 'gameOver', combats: [], siege: undefined });
+
+// A troop chops down the great tree next to it: the tree falls away from it onto the next hex,
+// crushing whatever stands there (friend or foe), and its trunk lies there as a barrier - or, across
+// water, as a bridge. On mountains it just splinters. Works on a cloned state.
+const fellTree = (state: GameState, order: Move): void => {
+  const side = findPlayerById(state, order.playerId)?.type;
+  const unit = side && state.players[side].units.find(u => u.id === order.unitId);
+  const tree = findHexByCoordinates(state.hexGrid, order.to);
+  if (!side || !unit || unit.hasMoved || tree?.feature !== 'greatTree' || getHexDistance(unit.position, tree.coordinates) !== 1) return;
+  const landingAt = getFellLanding(state, unit.position, tree.coordinates);
+  const landing = landingAt && findHexByCoordinates(state.hexGrid, landingAt);
+  if (!landing) return;
+
+  unit.hasMoved = true;
+  updateHex(state, tree.coordinates, { feature: undefined });
+  const victim = [...state.players.player.units, ...state.players.ai.units].find(u => coordsEqual(u.position, landing.coordinates));
+  if (landing.terrain === 'water') updateHex(state, landing.coordinates, { feature: 'logBridge', fellFrom: tree.coordinates });
+  else if (landing.terrain !== 'mountain') updateHex(state, landing.coordinates, { feature: 'log', fellFrom: tree.coordinates, fire: undefined });
+  state.lastFell = { side, from: tree.coordinates, to: landing.coordinates, serial: (state.lastFell?.serial ?? 0) + 1 };
+
+  const crushed = victim && inflictDamage(state, victim, FELL_DAMAGE, side);
+  addLog(state, side, `${unitLabel(unit)} felled a great tree` + (victim && crushed
+    ? ` - it crushed ${victim.owner === side ? 'their own' : 'the'} ${getTroopName(victim.type)} (-${crushed.damage}${crushed.destroyed ? ', destroyed' : ''})!`
+    : landing.terrain === 'water' ? ' across the water: a bridge!' : '.'));
+};
 
 // Execute all pending moves and then purchases, then either start combat or end the turn
 export const executeMoves = (state: GameState): GameState => {
@@ -1115,7 +1179,9 @@ export const executeMoves = (state: GameState): GameState => {
   // A troop moving onto a hex another is leaving goes after it: moves run in passes, each taking the
   // moves whose destination is free by then (if the troop ahead is stopped short, it backs off)
   const ordered: Move[] = [];
-  let remaining = [...state.pendingMoves];
+  // Orders to fell a tree are carried out once everyone has moved
+  const fellOrders = state.pendingMoves.filter(m => isFellOrder(state, m));
+  let remaining = state.pendingMoves.filter(m => !fellOrders.includes(m));
   const plannedAt = new Map([...newState.players.player.units, ...newState.players.ai.units].map(u => [u.id, coordKey(u.position)]));
   while (remaining.length > 0) {
     const stillThere = new Set(remaining.map(m => plannedAt.get(m.unitId)));
@@ -1197,6 +1263,9 @@ export const executeMoves = (state: GameState): GameState => {
     addLog(newState, unit.owner, `${unitLabel(unit)} strafed ${passed.length} ${passed.length === 1 ? 'enemy' : 'enemies'} on the way` +
       ` (${strafeDamage(rank)} damage each${destroyed > 0 ? `, ${destroyed} destroyed` : ''}).`);
   }
+
+  // Trees fall
+  for (const order of fellOrders) fellTree(newState, order);
 
   // Units ending their move on a camp claim it
   for (const side of ['player', 'ai'] as const) {
@@ -1332,7 +1401,7 @@ export const hasLineOfSight = (hexGrid: Hex[], from: HexCoordinates, to: HexCoor
     const hex = findHexByCoordinates(hexGrid, c);
     if (!hex) return 0;
     const effect = TERRAIN_EFFECTS[hex.terrain];
-    return effect.sightHeight ?? effect.elevation;
+    return Math.max(effect.sightHeight ?? effect.elevation, featureSightHeight(hex));
   };
   const endHeight = (c: HexCoordinates) => {
     const hex = findHexByCoordinates(hexGrid, c);
@@ -1826,6 +1895,8 @@ const turnEndHealthChange = (state: GameState, unit: Unit, healers: Unit[]): { s
     healer.id !== unit.id && getHexDistance(healer.position, unit.position) === 1
   ).length;
   let terrain = hasAbility(unit, 'regenerate') ? REGENERATE_AMOUNT : 0;
+  // Caught in a fire
+  if (findHexByCoordinates(state.hexGrid, unit.position)?.fire?.stage === 'burning' && !hasAbility(unit, 'fireborn')) terrain -= FIRE_DAMAGE;
   const scorch = effect.damagePerTurn ?? 0;
   if (scorch > 0) {
     const isCursed = terrainUnder(state, unit) === 'cursed';
@@ -1833,6 +1904,62 @@ const turnEndHealthChange = (state: GameState, unit: Unit, healers: Unit[]): { s
     else if (!(terrainUnder(state, unit) === 'lava' && hasAbility(unit, 'fireborn'))) terrain -= scorch;
   }
   return { spring, mages, terrain };
+};
+
+// Fires move on at the end of every turn: burning hexes burn down (and burn out at last, leaving
+// scorched open ground - a forest loses its trees), smouldering ones catch, and the flames spread to
+// dry ground next to them. At the end of each round (`roundEnds`) the lava fields may set new hexes
+// smouldering. Chance comes from the battle's seed, so a replayed turn burns the same way.
+export const advanceFires = (state: GameState, roundEnds: boolean, random: (salt: number) => number = salt =>
+  seededRandom((state.battleSeed ?? 0) + state.turnNumber * 7919 + (roundEnds ? 104729 : 0) + salt * 31)): void => {
+  const hexByKey = new Map(state.hexGrid.map(hex => [coordKey(hex.coordinates), hex]));
+  const burning = state.hexGrid.filter(hex => hex.fire?.stage === 'burning');
+  const smouldering = state.hexGrid.filter(hex => hex.fire?.stage === 'smoulder');
+  let salt = 0;
+  let burntOut = 0;
+
+  for (const hex of burning) {
+    const turnsLeft = hex.fire!.turnsLeft - 1;
+    if (turnsLeft > 0) {
+      updateHex(state, hex.coordinates, { fire: { stage: 'burning', turnsLeft } });
+      continue;
+    }
+    burntOut++;
+    updateHex(state, hex.coordinates, {
+      fire: undefined, scorched: true,
+      terrain: hex.terrain === 'forest' ? 'plain' : hex.terrain,
+      feature: hex.feature === 'logBridge' ? hex.feature : undefined
+    });
+  }
+  for (const hex of smouldering) updateHex(state, hex.coordinates, { fire: { stage: 'burning', turnsLeft: BURN_TURNS } });
+
+  let fires = state.hexGrid.filter(hex => hex.fire).length;
+  const ignite = (c: HexCoordinates) => {
+    if (fires >= MAX_FIRES) return false;
+    updateHex(state, c, { fire: { stage: 'smoulder', turnsLeft: 1 } });
+    fires++;
+    return true;
+  };
+  // Spreading from the hexes that were already burning
+  for (const hex of burning) {
+    for (const c of getNeighbors(hex.coordinates)) {
+      const next = hexByKey.get(coordKey(c));
+      const chance = next && isFlammable(next) ? SPREAD_CHANCE[next.terrain] ?? 0 : 0;
+      if (chance > 0 && random(salt++) < chance) ignite(c);
+    }
+  }
+  // New fires from the lava
+  let flared = 0;
+  if (roundEnds) {
+    for (const lava of state.hexGrid.filter(hex => hex.terrain === 'lava')) {
+      if (random(salt++) >= LAVA_FLARE_CHANCE) continue;
+      const dry = getNeighbors(lava.coordinates).map(c => hexByKey.get(coordKey(c))).filter((hex): hex is Hex => !!hex && isFlammable(hex));
+      if (dry.length > 0 && ignite(dry[Math.floor(random(salt++) * dry.length)].coordinates)) flared++;
+    }
+  }
+  if (flared > 0) addLog(state, 'neutral', `Embers from the lava: ${flared === 1 ? 'a fire is' : `${flared} fires are`} about to break out.`);
+  if (smouldering.length > 0) addLog(state, 'neutral', `${smouldering.length === 1 ? 'A fire breaks' : `${smouldering.length} fires break`} out!`);
+  if (burntOut > 0) addLog(state, 'neutral', `${burntOut === 1 ? 'A fire has' : `${burntOut} fires have`} burned out.`);
 };
 
 // Wrap up the active side's turn and hand control to the other side.
@@ -1875,11 +2002,14 @@ const finishTurn = (state: GameState): GameState => {
       return updated;
     });
   }
-  // Units worn down by lava or cursed ground fall
+  // Units worn down by lava, cursed ground or fire fall
   for (const unit of burned) {
     newState.players[unit.owner].units = newState.players[unit.owner].units.filter(u => u.id !== unit.id);
     sideStats(newState, unit.owner).lost++;
-    addLog(newState, unit.owner, `${unitLabel(unit)} perished on the ${TERRAIN_EFFECTS[terrainUnder(newState, unit)].name.toLowerCase()}.`);
+    const inFire = findHexByCoordinates(newState.hexGrid, unit.position)?.fire?.stage === 'burning';
+    addLog(newState, unit.owner, inFire
+      ? `${unitLabel(unit)} perished in the flames.`
+      : `${unitLabel(unit)} perished on the ${TERRAIN_EFFECTS[terrainUnder(newState, unit)].name.toLowerCase()}.`);
   }
   syncHexUnits(newState);
   const sideTroops = activePlayer === 'player' ? 'Your' : 'Enemy';
@@ -1889,6 +2019,7 @@ const finishTurn = (state: GameState): GameState => {
   if (healedByMages > 0) {
     addLog(newState, activePlayer, `${sideTroops} healers mend ${healedByMages} health.`);
   }
+  advanceFires(newState, activePlayer === 'ai');
   applyChallenges(newState, activePlayer);
   undermine(newState, diggers.filter(digger => newState.players[activePlayer].units.some(unit => unit.id === digger.id)));
 
@@ -2365,9 +2496,10 @@ const creditKill = (state: GameState, unit: Unit, killer: PlayerType): void => {
   sideStats(state, unit.owner).lost++;
 };
 
-// Damage dealt outside a fight (Pegasus Knights' Strafe), softened by armour and Ward as in a fight.
-// A unit it destroys is removed and pays its bounty to `by`. Works on a state the caller has cloned.
-export const inflictDamage = (state: GameState, unit: Unit, amount: number, by: PlayerType): { damage: number; destroyed: boolean } => {
+// Damage dealt outside a fight (Pegasus Knights' Strafe, a falling tree, fire), softened by armour
+// and Ward as in a fight. A unit it destroys is removed and pays its bounty to `by` - unless nobody
+// (null) or its own side (a tree felled onto a friend) did it. Works on a state the caller has cloned.
+export const inflictDamage = (state: GameState, unit: Unit, amount: number, by: PlayerType | null): { damage: number; destroyed: boolean } => {
   const live = state.players[unit.owner].units.find(u => u.id === unit.id);
   if (!live || amount <= 0) return { damage: 0, destroyed: false };
   const damage = applyArmor(live, Math.max(1, Math.round(amount * getDamageTakenMultiplier(state, live))));
@@ -2378,7 +2510,11 @@ export const inflictDamage = (state: GameState, unit: Unit, amount: number, by: 
     return { damage, destroyed: false };
   }
   removeUnit(state, live);
-  creditKill(state, live, by);
-  earnGold(state, by, getKillBounty(live));
+  if (by && by !== live.owner) {
+    creditKill(state, live, by);
+    earnGold(state, by, getKillBounty(live));
+  } else {
+    sideStats(state, live.owner).lost++;
+  }
   return { damage, destroyed: true };
 };

@@ -8,6 +8,7 @@ import { UnitMesh, UnitBattle, OWNER_COLORS, DEATH_DURATION } from './UnitMesh';
 import { Castle, CastleIncoming } from './Castle';
 import { Camp } from './Camp';
 import { BoardDecorations } from './BoardDecorations';
+import { BattlefieldObjects } from './BattlefieldObjects';
 import { MovePath } from './MovePath';
 import {
   DEFAULT_SETTINGS,
@@ -24,6 +25,7 @@ import {
   getRememberedEnemies,
   isFogOfWar,
   getMovePath,
+  getFellLanding,
   getValidBaseLocations,
   getSiegeDamage,
   getCombatEffects,
@@ -50,7 +52,8 @@ import { getBattleStartDelay, getDeathTime, getImpactTimes, getImpactTimesUntil 
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale, getGameSpeed } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
-import { CampIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
+import { CampIcon, EmbersIcon, FallenLogIcon, FellIcon, FireIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
+import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
 import type { UnitBuff } from './UnitMesh';
 import { describeBonus, getBond } from '@/lib/game/bonds';
 import type { TroopId } from '@/lib/game/troops';
@@ -699,6 +702,13 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
     buffs.push({ id: 'berserk', icon: 'attack', label: 'Berserk', value: `+${pct(BERSERK_ATTACK_MULTIPLIER - 1)} attack`, good: true });
   }
   // Hazards
+  if (hex.fire?.stage === 'burning') {
+    buffs.push(unit.abilities.includes('fireborn')
+      ? { id: 'fire', icon: 'fire', label: 'On fire', value: 'Unharmed', good: true }
+      : { id: 'fire', icon: 'fire', label: 'On fire', value: `-${FIRE_DAMAGE} health/turn`, good: false });
+  } else if (hex.fire?.stage === 'smoulder' && !unit.abilities.includes('fireborn')) {
+    buffs.push({ id: 'embers', icon: 'fire', label: 'Embers', value: 'Catches fire next turn', good: false });
+  }
   if (effect.damagePerTurn) {
     const immune = (hex.terrain === 'lava' && unit.abilities.includes('fireborn')) || (hex.terrain === 'cursed' && unit.abilities.includes('undead'));
     buffs.push(immune
@@ -794,6 +804,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const getHighlight = (key: string): HexHighlight => {
     if (isSetupPhase) return validBaseKeys.has(key) ? 'base' : 'none';
     if (!validMoveKeys.has(key)) return 'none';
+    if (hexByKey.get(key)?.feature === 'greatTree') return 'fell';
     return selectedUnitTypeForPurchase ? 'deploy' : 'move';
   };
 
@@ -1151,7 +1162,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   const plannedPaths = useMemo(() => pendingMoves.flatMap(move => {
     const unit = allUnits.find(u => u.id === move.unitId);
-    if (!unit) return [];
+    // (orders to fell a tree show where it will land instead)
+    if (!unit || hexByKey.get(coordKey(move.to))?.feature === 'greatTree') return [];
 
     const stateWithoutMove = { ...gameState, pendingMoves: pendingMoves.filter(m => m !== move) };
     const route = getMovePath(stateWithoutMove, unit, move.to) ?? [unit.position, move.to];
@@ -1163,6 +1175,24 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     return [{ id: move.unitId, points, color: OWNER_COLORS[unit.owner] }];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [pendingMoves, allUnits, hexByKey]);
+
+  // Trees about to fall: the ones ordered felled, and the one the selected troop is pointing at
+  const fellMarkers = useMemo(() => {
+    const orders = pendingMoves
+      .filter(move => hexByKey.get(coordKey(move.to))?.feature === 'greatTree')
+      .map(move => ({ unit: allUnits.find(u => u.id === move.unitId), tree: move.to }));
+    const hovered = hoveredKey && hexByKey.get(hoveredKey);
+    if (selectedUnit && hovered && hovered.feature === 'greatTree' && validMoveKeys.has(hoveredKey) &&
+      !orders.some(order => coordKey(order.tree) === hoveredKey)) {
+      orders.push({ unit: selectedUnit, tree: hovered.coordinates });
+    }
+    return orders.flatMap(({ unit, tree }) => {
+      const landing = unit && getFellLanding(gameState, unit.position, tree);
+      const hex = landing && hexByKey.get(coordKey(landing));
+      return hex ? [{ key: coordKey(tree), hex, crushes: !!hex.unit }] : [];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMoves, allUnits, hexByKey, hoveredKey, selectedUnit, validMoveKeys]);
 
   // Preview the route to the hovered hex while a unit is selected
   const hoverPreviewPath = useMemo(() => {
@@ -1406,6 +1436,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
       {/* Trees, peaks, dunes and gold that show each hex's terrain */}
       <BoardDecorations hexGrid={hexGrid} decor={decor} />
+      {/* Great trees, felled trunks and fires */}
+      <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} visibleKeys={visibleKeys} />
 
       {/* Castles */}
       {playerCastlePosition && (
@@ -1467,6 +1499,18 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         />
       ))}
 
+      {/* Where felled trees will land */}
+      {fellMarkers.map(marker => (
+        <Html key={`fell-${marker.key}`} position={labelPosition(marker.hex)} center zIndexRange={[6, 0]} style={{ pointerEvents: 'none' }}>
+          <span
+            className={`flex items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[0.6875rem] font-bold shadow select-none ${marker.crushes ? 'bg-rose-600 text-white' : 'bg-slate-900/85 text-amber-200'}`}
+            title={`The tree lands here${marker.crushes ? `: -${FELL_DAMAGE} to the troop on it` : ', leaving its trunk across the hex'}`}
+          >
+            <FellIcon color="currentColor" />{marker.crushes ? `-${FELL_DAMAGE}` : <FallenLogIcon color="currentColor" />}
+          </span>
+        </Html>
+      ))}
+
       {/* Planned routes */}
       {assetsLoaded && plannedPaths.map(path => (
         <MovePath key={path.id} points={path.points} color={path.color} />
@@ -1525,6 +1569,18 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
     : hex.isResourceHex
       ? `+${hex.resourceValue ?? 0} gold/turn`
       : TERRAIN_SHORT_EFFECTS[hex.terrain];
+  // What is on the hex, which matters more than its ground
+  const object = hex.fire?.stage === 'burning'
+    ? <><FireIcon /> On fire: impassable, -{FIRE_DAMAGE} health/turn to troops caught in it</>
+    : hex.fire?.stage === 'smoulder'
+      ? <><EmbersIcon /> Embers: catches fire next turn</>
+      : hex.feature === 'greatTree'
+        ? <><FellIcon /> Great tree: blocks the way and arrows. Chop it from a hex next to it: it falls away from you (-{FELL_DAMAGE})</>
+        : hex.feature === 'log'
+          ? <><FallenLogIcon /> Fallen trunk: blocks the way</>
+          : hex.feature === 'logBridge'
+            ? <><FallenLogIcon /> Log bridge: troops can cross</>
+            : null;
 
   return (
     <Html position={[x, y + 0.2, z]} zIndexRange={[9, 0]} style={{ pointerEvents: 'none' }}>
@@ -1533,7 +1589,7 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
           {hex.isCamp ? <><CampIcon /> Camp</> : <><TerrainIcon terrain={hex.terrain} /> {TERRAIN_EFFECTS[hex.terrain].name}</>}
         </span>
         <span className="text-slate-400"> · height {getHexHeight(hex).toFixed(1)}</span>
-        <span className="text-slate-400"> · {effect}</span>
+        {object ? <span className="text-amber-200"> · {object}</span> : <span className="text-slate-400"> · {effect}</span>}
         {hex.unit && (
           <span className="ml-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>
             · {getUnitTypeName(hex.unit.type)} <HealthIcon /> {hex.unit.lifespan}

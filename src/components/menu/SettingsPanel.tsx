@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
 import {
   CAMP_INCOME, FLANK_BONUS, HEIGHT_DAMAGE_PER_UNIT, MAX_HEIGHT_BONUS, FREE_UPKEEP_UNITS, MAX_FLANKERS, SIGHT_RANGE,
   SPEED_POINTS_PER_ROUND, TERRAIN_EFFECTS, TIME_SCORE_WEIGHTS, TURN_INCOME, UPKEEP_PER_UNIT
@@ -14,7 +15,7 @@ import { TERRAIN_ORDER, TERRAIN_SHORT_EFFECTS } from '../game/hud/terrainInfo';
 import { CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
 import {
   AttackIcon, BondIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
-  SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon
+  SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon, FellIcon
 } from '../game/icons';
 import type { Difficulty } from '../game/storage/GameStorage';
 import { UI_SIZES, setUiSize, useUiSize } from '@/lib/uiSize';
@@ -227,6 +228,18 @@ const GuideTab: React.FC = () => (
         <li><b>Height:</b> every 1.0 of height (the number on each hex) you stand above your target adds +{Math.round(HEIGHT_DAMAGE_PER_UNIT * 100)}% damage, rounded to a whole percent and up to +{Math.round(MAX_HEIGHT_BONUS * 100)}%; attacking uphill loses the same. Ridges and forests block arrows from below.</li>
         <li><b>Threat preview:</b> press <kbd className="rounded bg-slate-700 px-1">T</kbd> in battle (or the crosshair) to see where enemies can strike next turn, and how much a selected troop would take.</li>
       </ul>
+    </GuideSection>
+    <GuideSection title="The battlefield" icon={<FellIcon />}>
+      <p>
+        <b>Great trees</b> tower over some forests: nothing walks through one, and they block arrows. Move a troop next to one,
+        then tap the tree (it glows gold) to chop it down. It falls away from your troop onto the hex beyond, dealing {FELL_DAMAGE} damage
+        to whoever stands there, friend or foe, and its trunk blocks that hex for the rest of the battle. Felled across water, it makes a bridge.
+      </p>
+      <p>
+        <b>Wildfire</b>: lava sets the grass and woods around it alight now and then. Glowing embers warn you a turn ahead; then the hex
+        burns for a round and a half: nothing can enter it, its smoke blocks arrows, and troops caught in it lose {FIRE_DAMAGE} health a turn.
+        Fire spreads through forest and burns it down to open ground - cover can go up in smoke.
+      </p>
     </GuideSection>
     <GuideSection title="Fog of war" icon={<FogIcon />}>
       <p>

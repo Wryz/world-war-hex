@@ -19,9 +19,12 @@ import {
   getRosterStats,
   getTroopName,
   getValidMoveTargets,
+  getFellTargets,
+  isImpassable,
   TERRAIN_EFFECTS,
   resolveAllCombats
 } from '@/lib/game/gameState';
+import { getHexDistance } from '@/lib/game/hexUtils';
 import { planAITurn } from '@/lib/ai/aiPlayer';
 import { trackEvent } from '@/lib/analytics';
 import { buildBattle } from '@/lib/campaign/battleSetup';
@@ -42,7 +45,16 @@ const describeInvalidMove = (state: GameState, unit: Unit, hex: Hex): string => 
   const name = getTroopName(unit.type);
   if (unit.hasMoved) return `${name} just arrived and can't move until next turn`;
   if (coordsEqual(unit.position, hex.coordinates)) return `${name} is already here`;
-  if (TERRAIN_EFFECTS[hex.terrain].moveCost === null) {
+  if (hex.feature === 'greatTree') {
+    return unit.abilities.includes('flying')
+      ? `${name} can't swing an axe - send a troop on foot next to the tree`
+      : getHexDistance(unit.position, hex.coordinates) === 1
+        ? "The tree can't fall that way - chop it from another side"
+        : `Move ${name} next to the great tree to chop it down`;
+  }
+  if (hex.feature === 'log') return 'A fallen trunk blocks that hex';
+  if (hex.fire?.stage === 'burning') return "That hex is on fire - wait for it to burn out";
+  if (isImpassable(hex)) {
     return `${name} can't stop on ${TERRAIN_EFFECTS[hex.terrain].name.toLowerCase()} - pick another hex`;
   }
   if (hex.unit) return 'An enemy holds that hex - move next to it to attack';
@@ -398,7 +410,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
       }
 
       setSelectedUnit(hex.unit);
-      setValidMoves(getValidMoveTargets(current, hex.unit));
+      setValidMoves([...getValidMoveTargets(current, hex.unit), ...getFellTargets(current, hex.unit)]);
       return;
     }
 
