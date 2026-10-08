@@ -20,7 +20,7 @@ const LOADING_TIPS = [
   'Hold gold mines with a unit to earn extra gold every turn.',
   'Water and mountains are impassable - look for the passes.',
   'Only troops that attack the enemy castle damage it - get next to it, or bring archers within range.',
-  'Troops guarding your castle block the way in - but a raider that reaches the walls will strike them.',
+  'Troops beside your castle strike any raider attacking it - and it can\'t hit back.',
   'At half health a castle\'s walls break - then a single unit can storm it.',
   'Archers hit from 2 hexes away, where melee units can\'t strike back.',
   'Destroying an enemy unit pays a bounty of half its cost.',
