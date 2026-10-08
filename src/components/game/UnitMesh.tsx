@@ -128,11 +128,24 @@ const BuffIcon: React.FC<{ buff: UnitBuff }> = ({ buff }) =>
     : <TerrainIcon terrain={buff.terrain ?? 'plain'} />;
 
 // A unit's buffs as a row of icons; tapping it opens each one's name and numbers
+// Only the icons take clicks: the open details let clicks through to the board, and close on the
+// next click anywhere else
 const BuffRow: React.FC<{ buffs: UnitBuff[]; open: boolean; setOpen: (update: (open: boolean) => boolean) => void }> = ({ buffs, open, setOpen }) => {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: PointerEvent) => {
+      if (!buttonRef.current?.contains(event.target as Node)) setOpen(() => false);
+    };
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [open, setOpen]);
   return (
-    <div className="flex flex-col items-center gap-0.5" style={{ pointerEvents: 'auto' }}>
+    <div className="flex flex-col items-center gap-0.5">
       <button
+        ref={buttonRef}
         type="button"
+        style={{ pointerEvents: 'auto' }}
         onClick={() => setOpen(value => !value)}
         aria-expanded={open}
         title="Buffs - tap for details"
