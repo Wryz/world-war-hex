@@ -262,11 +262,10 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
 
     setSelectedUnitTypeForPurchase(unitType);
     setSelectedUnit(null);
+    // The glowing deployment hexes show where it can go; nothing is selected, so the camera stays
+    // on whichever of your castle or camps it is looking at
     setValidMoves(deploymentHexes.map(hex => ({ ...hex.coordinates })));
-
-    // Select the base hex to make it visually clear where units will be deployed
-    const playerBase = current.hexGrid.find(h => h.isBase && h.owner === 'player');
-    setSelectedHex(playerBase ?? null);
+    setSelectedHex(null);
   };
 
   // Play the selected card onto a hex
