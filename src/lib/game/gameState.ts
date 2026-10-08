@@ -14,6 +14,7 @@ import {
   UnitType,
   Move,
   Purchase,
+  Sighting,
   Combat,
   GameSettings,
   WinReason
@@ -68,6 +69,8 @@ export interface TerrainEffect {
   damagePerTurn?: number;
   // Pathfinders cross this rough ground for 1 movement
   isRough?: boolean;
+  // Troops here can only be seen from the next hex (in the fog of war)
+  conceals?: boolean;
   description: string;
 }
 
@@ -86,7 +89,8 @@ export const TERRAIN_EFFECTS: Record<TerrainType, TerrainEffect> = {
     elevation: 1,
     sightHeight: 2,
     damageTakenMultiplier: 0.6,
-    description: 'Cover: units here take 40% less damage, and the trees block arrows unless shot from higher ground. Pikemen attack 50% harder from here.'
+    conceals: true,
+    description: 'Cover: units here take 40% less damage, and the trees block arrows unless shot from higher ground. In the fog of war, troops here can only be spotted from the next hex. Pikemen attack 50% harder from here.'
   },
   desert: {
     name: 'Desert',
@@ -213,6 +217,21 @@ export const ELEVATION_DAMAGE_STEP = 0.25;
 const MAX_ELEVATION_STEPS = 2;
 // Ranged units standing at least this high (hills, snow) reach one hex further
 export const HIGH_GROUND_ELEVATION = 2;
+
+// Zones of control: stepping next to an enemy ends a troop's move, unless it flies. Flanking: every other troop of the attacker's side next to the target adds this much
+// damage, counting at most MAX_FLANKERS of them.
+export const FLANK_BONUS = 0.25;
+export const MAX_FLANKERS = 2;
+
+// Fog of war: how far troops see, more from high ground and for scouts (skirmishers and flyers);
+// castles and camps watch the hexes around them
+export const SIGHT_RANGE = 2;
+export const SCOUT_SIGHT_BONUS = 1;
+export const HIGH_GROUND_SIGHT_BONUS = 1;
+const CASTLE_SIGHT = 2;
+const CAMP_SIGHT = 1;
+// Enemies that slip out of sight are remembered where they were last seen for this many rounds
+export const SIGHTING_MEMORY_ROUNDS = 2;
 
 // Economy: every side earns TURN_INCOME each turn, plus its gold mines and camps, but armies larger
 // than FREE_UPKEEP_UNITS cost upkeep - a bigger army isn't automatically a better one
@@ -390,14 +409,34 @@ const syncHexUnits = (state: GameState): void => {
   });
 };
 
-// Remember which enemy troop types each side has now met on the battlefield
+// Remember which enemy troop types each side has now met on the battlefield, and (in the fog) where
+// each side last saw each enemy troop
 const noteSightings = (state: GameState): void => {
+  const fog = isFogOfWar(state);
+  const sightings = { player: [...(state.sightings?.player ?? [])], ai: [...(state.sightings?.ai ?? [])] };
   for (const side of ['player', 'ai'] as const) {
     const stats = sideStats(state, side);
-    for (const enemy of state.players[getOpponent(side)].units) {
+    const visible = getVisibleEnemies(state, side);
+    for (const enemy of visible) {
       if (!stats.seen.includes(enemy.type)) stats.seen.push(enemy.type);
     }
+    if (!fog) continue;
+    const alive = new Set(state.players[getOpponent(side)].units.map(unit => unit.id));
+    const seenNow = new Set(visible.map(unit => unit.id));
+    sightings[side] = [
+      ...visible.map(unit => ({ unit: { ...unit }, turn: state.turnNumber })),
+      ...sightings[side].filter(sighting =>
+        !seenNow.has(sighting.unit.id) && alive.has(sighting.unit.id) && state.turnNumber - sighting.turn <= SIGHTING_MEMORY_ROUNDS)
+    ];
   }
+  if (fog) state.sightings = sightings;
+};
+
+// Enemy troops a side remembers but can't see right now, where it last saw them
+export const getRememberedEnemies = (state: GameState, side: PlayerType): Sighting[] => {
+  if (!isFogOfWar(state)) return [];
+  const visible = new Set(getVisibleEnemies(state, side).map(unit => unit.id));
+  return (state.sightings?.[side] ?? []).filter(sighting => !visible.has(sighting.unit.id));
 };
 
 const updateHex = (state: GameState, coordinates: HexCoordinates, patch: Partial<Hex>): void => {
@@ -781,7 +820,9 @@ const searchPaths = (
   start: HexCoordinates,
   maxCost: number,
   canEnter: (hex: Hex) => boolean,
-  stepCost: StepCost = enterCost
+  stepCost: StepCost = enterCost,
+  // Whether a unit may carry on from a hex it reached (zones of control stop it)
+  canLeave: (hex: Hex) => boolean = () => true
 ): Map<string, ReachableHex> => {
   const hexByKey = new Map(hexGrid.map(hex => [coordKey(hex.coordinates), hex]));
   const reached = new Map<string, ReachableHex>([
@@ -796,6 +837,7 @@ const searchPaths = (
     const currentKey = coordKey(current.coordinates);
     if (current.cost > (reached.get(currentKey)?.cost ?? Infinity)) continue;
     const currentHex = hexByKey.get(currentKey);
+    if (current.previous !== null && currentHex && !canLeave(currentHex)) continue;
 
     for (const neighbor of getNeighbors(current.coordinates)) {
       const key = coordKey(neighbor);
@@ -826,20 +868,37 @@ const buildPath = (reached: Map<string, ReachableHex>, to: HexCoordinates): HexC
   return path;
 };
 
-// Where a unit can walk this turn: it can't cross water or mountains (unless it flies), can pass
-// through friendly units but not enemy units, and rough terrain costs extra movement.
-// A unit can always take a single step onto a neighbouring hex, however rough, using all its movement.
-const getReachableHexes = (state: GameState, unit: Unit) =>
-  searchPaths(
+// Flyers pass over enemy lines; everyone else stops when they step next to an enemy
+export const ignoresZoneOfControl = (unit: { abilities: Ability[] }) => hasAbility(unit, 'flying');
+
+// Hexes next to any of these units
+const zoneOfControl = (units: Unit[]): Set<string> =>
+  new Set(units.flatMap(unit => getNeighbors(unit.position).map(coordKey)));
+
+// Where a unit can walk this turn, as far as its side can tell: it can't cross water or mountains
+// (unless it flies), can pass through friendly units but not the enemy units it can see, stops when
+// it steps next to one of them, and rough terrain costs extra movement. A unit can always take a
+// single step onto a neighbouring hex, however rough, using all its movement.
+const getReachableHexes = (state: GameState, unit: Unit) => {
+  const enemies = getVisibleEnemies(state, unit.owner);
+  const enemyHexes = new Set(enemies.map(enemy => coordKey(enemy.position)));
+  const zone = ignoresZoneOfControl(unit) ? new Set<string>() : zoneOfControl(enemies);
+  return searchPaths(
     state.hexGrid,
     unit.position,
     unit.movementRange,
-    hex => (hasAbility(unit, 'flying') || !isImpassable(hex)) && !(hex.unit && hex.unit.owner !== unit.owner),
+    hex => (hasAbility(unit, 'flying') || !isImpassable(hex)) && !enemyHexes.has(coordKey(hex.coordinates)),
     (from, to) => {
       const cost = unitEnterCost(unit, to);
       return coordsEqual(from.coordinates, unit.position) ? Math.min(cost, unit.movementRange) : cost;
-    }
+    },
+    hex => !zone.has(coordKey(hex.coordinates))
   );
+};
+
+// Whether a hex is next to one of the enemy units this side can see (a troop stepping there stops)
+export const isInEnemyZone = (state: GameState, side: PlayerType, coordinates: HexCoordinates): boolean =>
+  getVisibleEnemies(state, side).some(enemy => getHexDistance(enemy.position, coordinates) === 1);
 
 // All hexes a unit can legally be ordered to move to this turn.
 // Units can't end on an occupied hex, impassable ground, their own base, an enemy castle whose walls
@@ -858,9 +917,10 @@ export const getValidMoveTargets = (state: GameState, unit: Unit): HexCoordinate
     const hex = hexByKey.get(key);
     if (!hex || entry.cost === 0 || isImpassable(hex)) continue;
 
+    if (hex.unit && hex.unit.owner === unit.owner) continue;
     const isOwnBase = hex.isBase && hex.owner === unit.owner;
     const isIntactCastle = hex.isBase && hex.owner !== unit.owner && !canStormCastle(state, unit.owner);
-    if (!hex.unit && !isOwnBase && !isIntactCastle && !reserved.has(key)) {
+    if (!(hex.unit && isUnitVisibleTo(state, unit.owner, hex.unit)) && !isOwnBase && !isIntactCastle && !reserved.has(key)) {
       targets.push(hex.coordinates);
     }
   }
@@ -963,7 +1023,8 @@ export const executeMoves = (state: GameState): GameState => {
   );
   const recruited: Unit[] = [];
 
-  // Move units first, so recruits can be deployed on the hexes they leave
+  // Move units first, so recruits can be deployed on the hexes they leave. Each walks the route its
+  // side planned; in the fog it may run into enemies it couldn't see, which stops it short (an ambush).
   let movedCount = 0;
   for (const move of state.pendingMoves) {
     const player = findPlayerById(newState, move.playerId);
@@ -972,12 +1033,48 @@ export const executeMoves = (state: GameState): GameState => {
     const unit = newState.players[player.type].units.find(u => u.id === move.unitId);
     if (!unit || unit.hasMoved) continue;
 
-    const toHex = findHexByCoordinates(newState.hexGrid, move.to);
-    if (!toHex || isImpassable(toHex) || occupied.has(coordKey(move.to))) continue;
+    const planned = state.players[player.type].units.find(u => u.id === unit.id);
+    const route = (planned && getMovePath(state, planned, move.to)) ?? [unit.position, move.to];
+    const enemies = newState.players[getOpponent(player.type)].units;
+    const enemyAt = new Map(enemies.map(enemy => [coordKey(enemy.position), enemy]));
+    const zone = ignoresZoneOfControl(unit) ? new Set<string>() : zoneOfControl(enemies);
+
+    let stop = route.length - 1;
+    let ambusher: Unit | undefined;
+    for (let step = 1; step < route.length; step++) {
+      const key = coordKey(route[step]);
+      if (enemyAt.has(key)) {
+        stop = step - 1;
+        ambusher = enemyAt.get(key);
+        break;
+      }
+      if (zone.has(key) && step < route.length - 1) {
+        stop = step;
+        ambusher = enemies.find(enemy => getHexDistance(enemy.position, route[step]) === 1);
+        break;
+      }
+    }
+    // Back off along the route to a hex the unit can stand on (only the planned destination may be
+    // the enemy castle, which the plan already checked could be stormed)
+    const canEndAt = (index: number) => {
+      const hex = findHexByCoordinates(newState.hexGrid, route[index]);
+      if (!hex || isImpassable(hex) || occupied.has(coordKey(route[index]))) return false;
+      return !hex.isBase || (index === route.length - 1 && !ambusher);
+    };
+    while (stop > 0 && !canEndAt(stop)) stop--;
+    if (ambusher) {
+      ambusher.revealed = true;
+      sideStats(newState, player.type).ambushed = (sideStats(newState, player.type).ambushed ?? 0) + 1;
+      addLog(newState, getOpponent(player.type), player.type === 'player'
+        ? `Ambush! Your ${getTroopName(unit.type)} ran into a hidden ${getTroopName(ambusher.type)}.`
+        : `The enemy ${getTroopName(unit.type)} stumbled onto your hidden ${getTroopName(ambusher.type)}.`);
+    }
+    const destination = route[stop];
+    if (stop === 0 || coordsEqual(destination, unit.position)) continue;
 
     occupied.delete(coordKey(unit.position));
-    occupied.add(coordKey(move.to));
-    unit.position = move.to;
+    occupied.add(coordKey(destination));
+    unit.position = destination;
     unit.hasMoved = true;
     movedCount++;
   }
@@ -1136,6 +1233,96 @@ export const canStrike = (state: GameState, attacker: Unit, target: Unit): boole
   return hasLineOfSight(state.hexGrid, attacker.position, target.position);
 };
 
+// ---------------------------------------------------------------------------
+// Fog of war
+// ---------------------------------------------------------------------------
+
+export const isFogOfWar = (state: GameState) => !!getSettings(state).fogOfWar;
+
+// How far a unit sees: scouts (skirmishers and flyers) and anything on high ground see further
+export const getSightRange = (state: GameState, unit: Unit): number =>
+  SIGHT_RANGE +
+  (getTroopClass(unit.type) === 'skirmisher' || hasAbility(unit, 'flying') ? SCOUT_SIGHT_BONUS : 0) +
+  (getElevation(terrainUnder(state, unit)) >= HIGH_GROUND_ELEVATION ? HIGH_GROUND_SIGHT_BONUS : 0);
+
+// Everything that keeps watch for a side: its troops, its castle and the camps it holds
+const lookoutsOf = (state: GameState, side: PlayerType): { position: HexCoordinates; range: number }[] => {
+  const castle = findBaseHex(state, side);
+  return [
+    ...state.players[side].units.map(unit => ({ position: unit.position, range: getSightRange(state, unit) })),
+    ...(castle ? [{ position: castle.coordinates, range: CASTLE_SIGHT }] : []),
+    ...getOwnedCamps(state, side).map(camp => ({ position: camp.coordinates, range: CAMP_SIGHT }))
+  ];
+};
+
+// Whether a lookout can see a troop standing on a hex: within its sight and line of sight, and
+// right next to it if the hex hides troops (forest)
+const canSpot = (state: GameState, from: HexCoordinates, range: number, target: HexCoordinates): boolean => {
+  const distance = getHexDistance(from, target);
+  if (distance <= 1) return true;
+  if (distance > range) return false;
+  const hex = findHexByCoordinates(state.hexGrid, target);
+  if (hex && TERRAIN_EFFECTS[hex.terrain].conceals) return false;
+  return hasLineOfSight(state.hexGrid, from, target);
+};
+
+// Whether a side can see a unit: always its own, and enemies its lookouts spot (or that gave
+// themselves away this turn)
+export const isUnitVisibleTo = (state: GameState, side: PlayerType, unit: Unit): boolean =>
+  unit.owner === side || !isFogOfWar(state) || !!unit.revealed ||
+  lookoutsOf(state, side).some(lookout => canSpot(state, lookout.position, lookout.range, unit.position));
+
+export const getVisibleEnemies = (state: GameState, side: PlayerType): Unit[] => {
+  const enemies = state.players[getOpponent(side)].units;
+  if (!isFogOfWar(state)) return enemies;
+  const lookouts = lookoutsOf(state, side);
+  return enemies.filter(unit =>
+    unit.revealed || lookouts.some(lookout => canSpot(state, lookout.position, lookout.range, unit.position)));
+};
+
+// The hexes where a side would spot an enemy troop (everything, without fog)
+export const getVisibleHexKeys = (state: GameState, side: PlayerType): Set<string> => {
+  if (!isFogOfWar(state)) return new Set(state.hexGrid.map(hex => coordKey(hex.coordinates)));
+  const lookouts = lookoutsOf(state, side);
+  return new Set(state.hexGrid
+    .filter(hex => lookouts.some(lookout => canSpot(state, lookout.position, lookout.range, hex.coordinates)))
+    .map(hex => coordKey(hex.coordinates)));
+};
+
+// The board as one side knows it: enemy troops it can't see are left out, or - with `remember` - shown
+// where it last saw them. The AI plans on this (remembering), so it plays by the same fog as the player.
+export const getSideView = (state: GameState, side: PlayerType, remember = false): GameState => {
+  if (!isFogOfWar(state)) return state;
+  const opponent = getOpponent(side);
+  const visible = getVisibleEnemies(state, side);
+  const occupied = new Set([...state.players[side].units, ...visible].map(unit => coordKey(unit.position)));
+  const remembered = remember
+    ? getRememberedEnemies(state, side).map(sighting => sighting.unit).filter(unit => {
+      const free = !occupied.has(coordKey(unit.position));
+      occupied.add(coordKey(unit.position));
+      return free;
+    })
+    : [];
+  if (visible.length === state.players[opponent].units.length && remembered.length === 0) return state;
+  const units = [...visible, ...remembered];
+  const at = new Map(units.map(unit => [coordKey(unit.position), unit]));
+  return {
+    ...state,
+    players: { ...state.players, [opponent]: { ...state.players[opponent], units } },
+    hexGrid: state.hexGrid.map(hex => {
+      const key = coordKey(hex.coordinates);
+      if (hex.unit && hex.unit.owner === side) return hex;
+      const unit = at.get(key);
+      return hex.unit === unit ? hex : { ...hex, unit };
+    })
+  };
+};
+
+// Every troop of the attacker's side (other than the attacker) next to the target, up to MAX_FLANKERS
+export const getFlankers = (state: GameState, attacker: Unit, target: Unit): number =>
+  Math.min(MAX_FLANKERS, state.players[attacker.owner].units.filter(unit =>
+    unit.id !== attacker.id && getHexDistance(unit.position, target.position) === 1).length);
+
 const isEnraged = (unit: Unit) => hasAbility(unit, 'berserk') && unit.lifespan * 2 <= unit.maxLifespan;
 
 // Attack power before the matchup: Pikemen (terrainBonus) strike harder from a forest, berserkers
@@ -1180,11 +1367,12 @@ export const getStrikePowerOnTerrain = (
   getCoverMultiplier(attacker, targetTerrain) *
   getPointBlankMultiplier(attacker, distance);
 
+// A strike where the two units actually stand, including flanking
 const getStrikePower = (state: GameState, attacker: Unit, target: Unit): number =>
   getStrikePowerOnTerrain(
     attacker, terrainUnder(state, attacker), target, terrainUnder(state, target),
     getHexDistance(attacker.position, target.position)
-  );
+  ) * (1 + FLANK_BONUS * getFlankers(state, attacker, target));
 
 // Split one unit's attack between the enemy units it can reach (each share already scaled for that
 // enemy's height, counters and cover), then round the total and hand it out so the shares add up to it
@@ -1222,7 +1410,7 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
   const attackerUnits = state.players[attackerSide].units;
 
   const choices = attackerUnits
-    .map(unit => ({ unit, targets: enemies.filter(enemy => canStrike(state, unit, enemy)) }))
+    .map(unit => ({ unit, targets: enemies.filter(enemy => canStrike(state, unit, enemy) && isUnitVisibleTo(state, attackerSide, enemy)) }))
     .filter(choice => choice.targets.length > 0)
     // Units with fewer options pick first, leaving the flexible ones to cover the rest
     .sort((a, b) => a.targets.length - b.targets.length || compareIds(a.unit, b.unit));
@@ -1276,10 +1464,14 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
   }
 
   if (combats.length > 0) {
+    // Everyone in a fight gives away their position
     const engaged = new Set(combats.flatMap(c => [...c.attackers, ...c.defenders].map(u => u.id)));
     for (const side of ['player', 'ai'] as const) {
       for (const unit of state.players[side].units) {
-        if (engaged.has(unit.id)) unit.isEngagedInCombat = true;
+        if (engaged.has(unit.id)) {
+          unit.isEngagedInCombat = true;
+          unit.revealed = true;
+        }
       }
     }
     syncHexUnits(state);
@@ -1374,7 +1566,8 @@ const finishTurn = (state: GameState): GameState => {
         healedByMages += mended - springed;
         lifespan = Math.max(0, Math.min(unit.maxLifespan, mended + change.terrain));
       }
-      const updated = { ...unit, lifespan, hasMoved: false, isEngagedInCombat: false };
+      // A side's troops slip back into the fog when its own turn comes round again
+      const updated = { ...unit, lifespan, hasMoved: false, isEngagedInCombat: false, revealed: side === activePlayer ? unit.revealed : false };
       if (lifespan <= 0) burned.push(updated);
       return updated;
     });
@@ -1424,6 +1617,7 @@ const finishTurn = (state: GameState): GameState => {
     return endGame(newState, timeWinner, 'timeout');
   }
 
+  noteSightings(newState);
   return {
     ...newState,
     activePlayer: getOpponent(activePlayer),
@@ -1447,9 +1641,10 @@ const processDamageToBase = (state: GameState, besieger: PlayerType): void => {
     getHexDistance(unit.position, baseHex.coordinates) <= BASE_ATTACK_RANGE
   );
 
-  // Each unit in range deals damage equal to its attack power (double for siege troops)
+  // Each unit in range deals damage equal to its attack power (double for siege troops), and is seen doing it
   const totalDamage = Math.round(besiegers.reduce((sum, unit) => sum + getSiegeDamage(unit), 0));
   if (totalDamage === 0) return;
+  for (const unit of besiegers) unit.revealed = true;
 
   const currentHealth = state.players[side].baseHealth ?? BASE_MAX_HEALTH;
   const newHealth = Math.max(0, currentHealth - totalDamage);
@@ -1546,6 +1741,8 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     if (hasAbility(unit, 'magic') && TERRAIN_EFFECTS[targetTerrain].damageTakenMultiplier < 1) {
       modifiers.push('spells ignore cover');
     }
+    const flankers = getFlankers(state, unit, target);
+    if (flankers > 0) modifiers.push(`+${Math.round(FLANK_BONUS * flankers * 100)}% attack (flanking)`);
     return modifiers;
   };
   const describeDefence = (unit: Unit): string[] => {

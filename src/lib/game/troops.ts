@@ -448,7 +448,7 @@ export const ABILITIES: Record<Ability, AbilityInfo> = {
   terrainBonus: { name: 'Forest fighter', description: 'Attacks 50% harder from a forest.', power: 0.5 },
   rapidMovement: { name: 'Swift', description: 'Mounted: covers ground quickly.', power: 0 },
   stealth: { name: 'Sneak attack', description: 'Enemies it attacks can\'t strike back.', power: 1 },
-  flying: { name: 'Flying', description: 'Flies over water and mountains; all ground costs 1 movement.', power: 1.2 },
+  flying: { name: 'Flying', description: 'Flies over water, mountains and enemy lines; all ground costs 1 movement.', power: 1.2 },
   regenerate: { name: 'Regenerates', description: 'Heals 2 health at the end of each of its turns.', power: 1 },
   armored: { name: 'Armored', description: 'Takes 2 less damage in every fight.', power: 1.5 },
   siege: { name: 'Siege', description: 'Deals double damage to castles.', power: 0.8 },

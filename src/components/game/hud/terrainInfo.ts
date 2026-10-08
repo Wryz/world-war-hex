@@ -3,7 +3,7 @@ import { TerrainType } from '@/types/game';
 // One-line summary of what each terrain does
 export const TERRAIN_SHORT_EFFECTS: Record<TerrainType, string> = {
   plain: 'No effect',
-  forest: '-40% dmg, blocks arrows',
+  forest: '-40% dmg, blocks arrows, hides troops',
   desert: 'Costs 2 movement',
   resource: 'Gold every turn',
   mountain: 'Impassable, blocks sight',

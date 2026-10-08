@@ -46,7 +46,7 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
 
   const owned = PLAYER_CARD_IDS.filter(id => profile.cards[id] !== undefined);
   const averageLevel = Math.max(1, Math.round(owned.reduce((sum, id) => sum + (profile.cards[id] ?? 1), 0) / Math.max(1, owned.length)));
-  return createBattle({ ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty }, {
+  return createBattle({ ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy' }, {
     rosters: {
       player: playerRoster(profile),
       ai: Object.fromEntries(QUICK_RIVAL_CARDS.map(id => [id, cardStats(id, averageLevel)]))

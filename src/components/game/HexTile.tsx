@@ -63,6 +63,10 @@ interface HexTileProps {
   onHexDoubleClick?: (hex: Hex) => void;
   onHexHover: (hex: Hex) => void;
   onHexHoverEnd: (hex: Hex) => void;
+  // Out of your troops' sight in the fog of war: enemy troops here are hidden
+  fogged?: boolean;
+  // How dangerous the hex is next turn (0 = safe, 1 = deadly), shown as a red wash
+  threat?: number;
 }
 
 const createHexShape = (size: number) => {
@@ -78,6 +82,13 @@ const createHexShape = (size: number) => {
   shape.closePath();
   return shape;
 };
+
+// Filled hexagon for washes laid over a tile (fog, threat)
+const fillGeometry = (() => {
+  const geometry = new THREE.ShapeGeometry(createHexShape(HEX_SIZE * TILE_SCALE));
+  geometry.rotateX(-Math.PI / 2);
+  return geometry;
+})();
 
 // Outline ring geometry shared by every tile
 const ringGeometry = (() => {
@@ -97,7 +108,9 @@ const HexTileComponent: React.FC<HexTileProps> = ({
   onHexClick,
   onHexDoubleClick,
   onHexHover,
-  onHexHoverEnd
+  onHexHoverEnd,
+  fogged = false,
+  threat = 0
 }) => {
   const liftRef = useRef<THREE.Group>(null);
   const selectionRingRef = useRef<THREE.Mesh>(null);
@@ -210,6 +223,19 @@ const HexTileComponent: React.FC<HexTileProps> = ({
             flatShading
           />
         </mesh>
+
+        {/* Fog: hexes your troops can't see are shaded */}
+        {fogged && (
+          <mesh geometry={fillGeometry} position={[0, surfaceHeight + 0.012, 0]} renderOrder={1}>
+            <meshBasicMaterial color="#1e293b" transparent opacity={0.32} depthWrite={false} />
+          </mesh>
+        )}
+        {/* Threat preview: hexes enemies can strike next turn */}
+        {threat > 0 && (
+          <mesh geometry={fillGeometry} position={[0, surfaceHeight + 0.016, 0]} renderOrder={1}>
+            <meshBasicMaterial color="#ef4444" transparent opacity={0.18 + 0.4 * Math.min(1, threat)} depthWrite={false} />
+          </mesh>
+        )}
 
         {/* Highlight outline for tiles that can be chosen */}
         {highlightColor && (

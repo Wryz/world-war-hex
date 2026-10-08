@@ -138,6 +138,8 @@ const BOSS_ADJUST: Partial<Record<TroopId, number>> = {
   orc_warlord: 1.3, demon_lord: 0.5, elder_dragon: 0.8
 };
 const CHAMPION_STRENGTH = 0.55;
+// First level fought in the fog of war
+export const FOG_FROM_LEVEL = 11;
 
 const regularsOf = (faction: Faction): TroopId[] =>
   MOB_IDS.filter(id => TROOPS[id].faction === faction && !TROOPS[id].isBoss);
@@ -208,6 +210,8 @@ export const getLevel = (levelId: number): LevelDef => {
     startingGold: 30,
     aiIncomeBonus: isTutorial ? -2 : Math.floor((id - 1) / 25),
     maxRounds,
+    // The fog of war rolls in from the second region, once the basics are learned
+    fogOfWar: id >= FOG_FROM_LEVEL,
     themeName: region.theme,
     seed: 7919 * id + 104729
   };

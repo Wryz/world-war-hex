@@ -13,7 +13,7 @@ import {
   GiFountain, GiLava, GiIceCube, GiBrokenWall, GiTombstone, GiCrownCoin, GiSwordsPower, GiPadlock, GiPokerHand,
   GiTreasureMap, GiFastForwardButton, GiUpgrade, GiTrophy, GiPodium, GiOpenBook, GiTargetArrows, GiHeartPlus,
   GiAngelWings, GiRegeneration, GiChestArmor, GiSiegeRam, GiAngryEyes, GiRaiseSkeleton, GiWingfoot, GiFireRing,
-  GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush
+  GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuChevronDown, LuRotateCcw, LuTriangleAlert,
@@ -161,6 +161,9 @@ export const ShieldIcon = icon(GiCheckedShield, '#4ade80');
 export const CampIcon = icon(GiCampingTent, '#facc15');
 export const LockIcon = icon(GiPadlock, '#94a3b8');
 export const CardsIcon = icon(GiPokerHand, '#93c5fd');
+// Threat preview toggle, and the fog of war
+export const ThreatIcon = icon(GiCrosshair, '#f87171');
+export const FogIcon = icon(GiFog, '#cbd5e1');
 // Bonds between cards
 export const BondIcon = icon(GiLinkedRings, '#fbbf24');
 // Cosmetics: card frames and castle styles

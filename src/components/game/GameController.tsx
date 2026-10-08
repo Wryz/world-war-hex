@@ -21,9 +21,9 @@ import { TurnBanner } from './hud/TurnBanner';
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { WarningIcon } from './icons';
 import { EffectsLayer } from './effects/EffectsLayer';
-import { resetEffects } from './effects/effects';
+import { emitMoment, resetEffects } from './effects/effects';
 import { useBattleMoments } from './effects/useBattleMoments';
-import { castleHealthRatio, getMaxRounds } from '@/lib/game/gameState';
+import { castleHealthRatio, getMaxRounds, getSideView, isFogOfWar } from '@/lib/game/gameState';
 import { getLevel, starsForWin, LEVEL_COUNT } from '@/lib/campaign/levels';
 import { battleTroopTypes } from '@/lib/campaign/battleSetup';
 import {
@@ -96,6 +96,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   useEffect(() => {
     if (!isReady || startedRef.current) return;
     startedRef.current = true;
+    if (isFogOfWar(gameState)) {
+      setTimeout(() => emitMoment({ title: 'Fog of War', subtitle: 'You only see what your troops can see', tone: 'purple' }), 1200);
+    }
     if (shouldContinueGame && gameState.turnNumber > 1) return;
     const profile = getProfile();
     trackEvent('battle_started', {
@@ -224,6 +227,24 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const isPlayerPlanning = currentPhase === 'planning' && !isAITurn;
   const deckTypes = useMemo(() => gameState.deck ?? [], [gameState.deck]);
 
+  // What the player knows: in the fog of war, enemy troops they can't see are left off the board and HUD
+  const viewState = useMemo(() => getSideView(gameState, 'player'), [gameState]);
+  // Every unit really on the board, so the board can tell a fallen troop from one that slipped into the fog
+  const unitIds = useMemo(
+    () => new Set([...gameState.players.player.units, ...gameState.players.ai.units].map(unit => unit.id)),
+    [gameState.players]
+  );
+
+  // The threat preview (T toggles it)
+  const [showThreats, setShowThreats] = useState(false);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.key === 't' || event.key === 'T') && !(event.target instanceof HTMLInputElement)) setShowThreats(value => !value);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
   // Short instruction while the player is in the middle of an action
   const hint = selectedUnitTypeForPurchase
     ? `Tap a glowing hex to deploy ${getUnitTypeName(selectedUnitTypeForPurchase)} · Esc to cancel`
@@ -236,7 +257,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   return (
     <div className="relative w-full h-full">
       <GameBoard
-        gameState={gameState}
+        gameState={viewState}
+        unitIds={unitIds}
+        showThreats={showThreats && isPlayerPlanning}
         selectedHex={selectedHex ?? undefined}
         selectedUnit={selectedUnit}
         validMoves={validMoves}
@@ -249,7 +272,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       {(currentPhase === 'planning' || currentPhase === 'combat') && (
         <>
           <TopBar
-            gameState={gameState}
+            gameState={viewState}
+            showThreats={showThreats}
+            onToggleThreats={() => setShowThreats(value => !value)}
             isAITurn={isAITurn}
             timer={timer}
             showTimer={isPlayerPlanning}
@@ -259,12 +284,12 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
             onQuit={handleQuit}
           />
           <div className="fixed left-3 top-16 z-20 pointer-events-none">
-            <SelectionCard gameState={gameState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
+            <SelectionCard gameState={viewState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
           </div>
           {/* Capped above the battle card and the hand so panels never run under them */}
           <div className="fixed right-3 top-16 z-20 hidden max-h-[calc(100vh-17rem)] w-64 flex-col gap-2 overflow-y-auto pointer-events-none sm:flex">
             <EventFeed log={gameState.log ?? []} />
-            <HelpPanel hexGrid={gameState.hexGrid} mapName={level ? `${level.id}. ${level.name}` : gameState.mapName} />
+            <HelpPanel hexGrid={gameState.hexGrid} mapName={level ? `${level.id}. ${level.name}` : gameState.mapName} fog={isFogOfWar(gameState)} />
           </div>
           <TurnBanner phase={currentPhase} activePlayer={activePlayer} turnNumber={gameState.turnNumber} maxRounds={getMaxRounds(gameState)} />
         </>
@@ -281,7 +306,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         />
       )}
 
-      {currentPhase === 'combat' && <CombatResolver gameState={gameState} />}
+      {currentPhase === 'combat' && <CombatResolver gameState={viewState} />}
 
       {showTutorial && isReady && currentPhase !== 'gameOver' && (
         <TutorialCoach

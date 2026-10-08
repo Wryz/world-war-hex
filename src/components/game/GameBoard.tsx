@@ -20,11 +20,15 @@ import {
   getActivePlayer,
   canStrike,
   getCombatPreview,
+  getVisibleHexKeys,
+  getRememberedEnemies,
+  isFogOfWar,
   getMovePath,
   getValidBaseLocations,
   HIGH_GROUND_ELEVATION
 } from '@/lib/game/gameState';
 import { getHexDistance } from '@/lib/game/hexUtils';
+import { estimateDamage, getThreatLevels, getThreats } from '@/lib/game/threats';
 import { HEX_SIZE, axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
 import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
@@ -36,7 +40,7 @@ import { getBattleStartDelay, getDeathTime, getImpactTimesUntil } from './utils/
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
-import { AttackIcon, CampIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon } from './icons';
+import { AttackIcon, CampIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
 import type { UnitBadge } from './UnitMesh';
 
 const coordKey = (c: HexCoordinates) => `${c.q},${c.r}`;
@@ -83,6 +87,10 @@ interface GameBoardProps {
   selectedUnit?: Unit | null;
   validMoves?: HexCoordinates[];
   selectedUnitTypeForPurchase?: UnitType | null;
+  // Every unit really on the board (the state shown may leave out enemies hidden in the fog)
+  unitIds?: Set<string>;
+  // Tint the hexes enemies can strike next turn, and label damage for the selected troop
+  showThreats?: boolean;
 }
 
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
@@ -361,6 +369,12 @@ interface BoardSceneProps extends GameBoardProps {
   assetsLoaded: boolean;
 }
 
+// Just above a hex's tile, for labels lying on it
+const labelPosition = (hex: Hex): [number, number, number] => {
+  const [x, y, z] = surfacePosition(hex);
+  return [x, y + 0.15, z];
+};
+
 // World position on top of a hex's tile
 const surfacePosition = (hex: Hex): [number, number, number] => {
   const [x, , z] = axialToWorld(hex.coordinates);
@@ -405,9 +419,13 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   selectedUnit = null,
   validMoves = [],
   assetsLoaded,
-  selectedUnitTypeForPurchase = null
+  selectedUnitTypeForPurchase = null,
+  unitIds,
+  showThreats = false
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
+  const unitIdsRef = useRef(unitIds);
+  unitIdsRef.current = unitIds;
   const [popups, setPopups] = useState<DamagePopup[]>([]);
   // Your castle wears the style you picked
   const playerCastleStyle = getCastleStyle(useProfile().cosmetics.castleStyle);
@@ -437,6 +455,41 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   };
 
   const selectedKey = selectedHex ? coordKey(selectedHex.coordinates) : null;
+
+  // --- Fog and threats ------------------------------------------------------------------------
+
+  // Hexes the player's troops can see (null without fog)
+  const visibleKeys = useMemo(
+    () => (isFogOfWar(gameState) ? getVisibleHexKeys(gameState, 'player') : null),
+    // Sight only changes when units move or camps change hands
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [players, hexGrid]
+  );
+  const threats = useMemo(
+    () => (showThreats ? getThreats(gameState, 'player') : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [showThreats, players, hexGrid]
+  );
+  const threatLevels = useMemo(() => (threats ? getThreatLevels(threats) : null), [threats]);
+  // Enemy troops that slipped back into the fog, marked where they were last seen
+  const lastSeen = useMemo(() => {
+    const occupied = new Set([...players.player.units, ...players.ai.units].map(unit => coordKey(unit.position)));
+    return getRememberedEnemies(gameState, 'player').flatMap(sighting => {
+      const hex = hexByKey.get(coordKey(sighting.unit.position));
+      return hex && !occupied.has(coordKey(hex.coordinates)) ? [{ ...sighting, hex }] : [];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [players, hexByKey, gameState.sightings]);
+  // With a troop selected: the most damage it could take next turn on each hex it can move to
+  const damageLabels = useMemo(() => {
+    if (!threats || !selectedUnit || selectedUnit.owner !== 'player') return [];
+    return [selectedUnit.position, ...validMoves].flatMap(coordinates => {
+      const hex = hexByKey.get(coordKey(coordinates));
+      const damage = estimateDamage(gameState, selectedUnit, coordinates, threats.get(coordKey(coordinates)));
+      return hex && damage > 0 ? [{ key: coordKey(coordinates), hex, damage, lethal: damage >= selectedUnit.lifespan }] : [];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [threats, selectedUnit, validMoves, hexByKey]);
 
   // --- Interaction -----------------------------------------------------------------------
 
@@ -738,7 +791,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     }
     const fallen: { unit: Unit; position: [number, number, number]; fallen: boolean }[] = [];
     for (const [id, before] of previous) {
-      if (!next.has(id)) {
+      // A troop that slipped into the fog isn't dead - it just isn't drawn
+      if (!next.has(id) && !unitIdsRef.current?.has(id)) {
         const bounty = getKillBounty(before.unit);
         created.push({
           id: ++popupIdRef.current,
@@ -842,9 +896,41 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             onHexClick={stableHexClick}
             onHexHover={handleHexHover}
             onHexHoverEnd={handleHexHoverEnd}
+            fogged={!!visibleKeys && !visibleKeys.has(key)}
+            threat={threatLevels?.get(key) ?? 0}
           />
         );
       })}
+
+      {/* Threat preview: the most damage the selected troop could take on each hex it can reach */}
+      {damageLabels.map(label => (
+        <Html
+          key={`threat-${label.key}`}
+          position={labelPosition(label.hex)}
+          center
+          zIndexRange={[4, 0]}
+          style={{ pointerEvents: 'none' }}
+        >
+          <span
+            className={`font-display whitespace-nowrap rounded-full px-1.5 py-0.5 text-xs shadow ${label.lethal ? 'bg-rose-700 text-white' : 'bg-slate-900/85 text-rose-300'}`}
+            title={label.lethal ? 'Enemies could destroy this troop here' : 'Most damage enemies could deal here next turn'}
+          >
+            {label.lethal ? '☠ ' : ''}-{label.damage}
+          </span>
+        </Html>
+      ))}
+
+      {/* Last-seen markers for enemies hidden in the fog */}
+      {lastSeen.map(({ unit, turn, hex }) => (
+        <Html key={`seen-${unit.id}`} position={labelPosition(hex)} center zIndexRange={[3, 0]} style={{ pointerEvents: 'none' }}>
+          <span
+            className="flex items-center gap-0.5 whitespace-nowrap rounded-full border-2 border-dashed border-red-400/70 bg-slate-900/60 px-1.5 py-0.5 text-[11px] font-bold text-red-200 opacity-80"
+            title={`${getUnitTypeName(unit.type)} last seen here ${turnNumber - turn <= 0 ? 'this round' : `${turnNumber - turn} round${turnNumber - turn === 1 ? '' : 's'} ago`}`}
+          >
+            <UnitIcon type={unit.type} className="text-[13px]" />?
+          </span>
+        </Html>
+      ))}
 
       {/* Trees, peaks, dunes and gold that show each hex's terrain */}
       <BoardDecorations hexGrid={hexGrid} />

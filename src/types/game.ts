@@ -56,6 +56,9 @@ export interface Unit {
   level?: number;
   // A boss guarding the enemy castle
   isBoss?: boolean;
+  // Seen by the enemy through the fog after attacking, besieging or springing an ambush, until its
+  // side's next turn
+  revealed?: boolean;
 }
 
 // Every troop - the player's cards and the campaign's monsters - is identified by its troop id
@@ -109,6 +112,8 @@ export interface SideStats {
   goldEarned: number;
   campsCaptured: number;
   bossesSlain: number;
+  // Times this side's troops walked into a hidden enemy
+  ambushed?: number;
   // Enemy troop types this side has met on the battlefield
   seen: UnitType[];
   // Enemy troop types this side has destroyed, with counts
@@ -144,9 +149,16 @@ export interface GameState {
   deck?: UnitType[];
   // Bonds the player's cards complete this battle (already applied to their roster)
   bonds?: BondId[];
+  // In the fog of war: the enemy troops each side has seen, as last seen, and the round it saw them
+  sightings?: Record<PlayerType, Sighting[]>;
   battleStats?: Record<PlayerType, SideStats>;
   // Campaign level being played, if any
   levelId?: number;
+}
+
+export interface Sighting {
+  unit: Unit;
+  turn: number;
 }
 
 export interface GameLogEntry {
@@ -197,6 +209,8 @@ export interface GameSettings {
   aiIncomeBonus?: number;
   // The battle ends after this many rounds; the side whose castle is in better shape wins
   maxRounds?: number;
+  // Each side only sees enemy troops its own troops can see
+  fogOfWar?: boolean;
   // Map theme to use instead of a random one, and a fixed seed for the map
   themeName?: string;
   seed?: number;

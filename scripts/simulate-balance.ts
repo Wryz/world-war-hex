@@ -16,6 +16,9 @@ import { deckRoster } from '@/lib/campaign/battleSetup';
 import { TROOPS, cardStats, scaleTroop } from '@/lib/game/troops';
 
 const args = process.argv.slice(2);
+// --no-fog plays every battle without the fog of war, to see what the fog changes
+const noFog = args.includes('--no-fog');
+if (noFog) args.splice(args.indexOf('--no-fog'), 1);
 const tune = args[0] === '--tune';
 if (tune) args.shift();
 const TARGET_WIN_RATE = 0.65;
@@ -47,7 +50,7 @@ const playBattle = (levelId: number, strength = 1): GameState => {
     ...guard,
     stats: { ...guard.stats, attackPower: guard.stats.attackPower * strength, maxLifespan: Math.round(guard.stats.maxLifespan * strength) }
   }));
-  let state = createBattle({ ...level.settings, seed: Math.floor(Math.random() * 1e9) }, {
+  let state = createBattle({ ...level.settings, fogOfWar: level.settings.fogOfWar && !noFog, seed: Math.floor(Math.random() * 1e9) }, {
     rosters: {
       player: deckRoster(deck, cardLevels),
       ai: enemy
@@ -84,7 +87,7 @@ if (tune) {
   for (const levelId of levels) {
     // Win rate falls as strength rises: bisect on a log scale
     let low = 0.3;
-    let high = 1.6;
+    let high = 2.6;
     for (let step = 0; step < 7; step++) {
       const mid = Math.sqrt(low * high);
       if (winRate(levelId, mid, battlesPerLevel) > TARGET_WIN_RATE) low = mid;

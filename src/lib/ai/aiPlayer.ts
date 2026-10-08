@@ -36,7 +36,8 @@ import {
   getRosterStats,
   getRosterTypes,
   findBaseHex,
-  canStormCastle
+  canStormCastle,
+  getSideView
 } from '../game/gameState';
 import { TroopClass, getTroopClass } from '../game/troops';
 
@@ -253,11 +254,25 @@ const mirrorSides = (state: GameState): GameState => {
  */
 export const planAITurn = (state: GameState, options: AIPlanOptions = {}): GameState => {
   const doctrine = options.doctrine ?? 'balanced';
-  if ((options.side ?? 'ai') === 'ai') return planTurn(state, doctrine, getRosterTypes(state, 'ai'), options.difficulty);
+  const side = options.side ?? 'ai';
+  // In the fog of war the planner only knows about the enemy troops its side can see, and remembers
+  // where it last saw the others
+  const view = getSideView(state, side, true);
+  if (side === 'ai') {
+    const planned = planTurn(view, doctrine, getRosterTypes(state, 'ai'), options.difficulty);
+    if (view === state) return planned;
+    // Carry the orders (and the gold they cost) back onto the real board
+    return {
+      ...state,
+      pendingMoves: planned.pendingMoves,
+      pendingPurchases: planned.pendingPurchases,
+      players: { ...state.players, ai: { ...state.players.ai, points: planned.players.ai.points } }
+    };
+  }
 
   // Plan the player's side by swapping sides (a player with a deck may only play the cards in hand),
   // then give the same orders on the real board so gold, the deck and every rule apply as normal
-  const planned = planTurn(mirrorSides(state), doctrine, getHand(state), options.difficulty);
+  const planned = planTurn(mirrorSides(view), doctrine, getHand(state), options.difficulty);
   let result = state;
   for (const move of planned.pendingMoves) {
     result = addPendingMove(result, move.unitId, state.players.player.id, move.to);

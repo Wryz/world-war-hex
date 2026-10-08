@@ -3,13 +3,14 @@ import { GameState, Hex, Unit, UnitType } from '@/types/game';
 import { ABILITIES, TROOP_CLASSES, getTroopClass, strongAgainst, weakAgainst } from '@/lib/game/troops';
 import {
   BASE_ATTACK_RANGE, BASE_MAX_HEALTH, HIGH_GROUND_ELEVATION, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS, canStormCastle,
+  getSightRange, isFogOfWar,
   getCastleMaxHealth
 } from '@/lib/game/gameState';
 import { getUnitTypeName } from '../utils/UnitHelpers';
 import { describeBonus, getBond } from '@/lib/game/bonds';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
 import { TERRAIN_SHORT_EFFECTS } from './terrainInfo';
-import { AbilityIcon, AttackIcon, CampIcon, CrownIcon, MoveIcon, TerrainIcon, UnitIcon, BondIcon } from '../icons';
+import { AbilityIcon, AttackIcon, CampIcon, CrownIcon, MoveIcon, TerrainIcon, UnitIcon, BondIcon, FogIcon } from '../icons';
 
 interface SelectionCardProps {
   gameState: GameState;
@@ -106,6 +107,14 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
                 <li key={ability} className="flex gap-1"><AbilityIcon ability={ability} className="mt-0.5" /><span><b>{ABILITIES[ability].name}:</b> {ABILITIES[ability].description}</span></li>
               ))}
             </ul>
+          )}
+          {isFogOfWar(gameState) && (
+            <div className="mt-1.5 flex items-center gap-1 text-[11px] text-slate-400">
+              <FogIcon />
+              {unit.owner === 'player'
+                ? <>Sees {getSightRange(gameState, unit)} hexes{TERRAIN_EFFECTS[hex.terrain].conceals && !unit.revealed ? ' · hidden in the trees' : unit.revealed ? ' · spotted by the enemy' : ''}</>
+                : unit.revealed ? 'Gave its position away' : 'In sight of your troops'}
+            </div>
           )}
           {unit.owner === 'player' && (gameState.bonds ?? []).map(getBond).filter(bond => bond.bonuses[unit.type]).map(bond => (
             <div key={bond.id} className="mt-1.5 flex items-center gap-1 text-[11px] text-amber-200">

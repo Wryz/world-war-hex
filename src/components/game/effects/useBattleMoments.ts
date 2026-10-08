@@ -65,6 +65,15 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
       emitMoment({ title: 'Boss Defeated!', subtitle: 'Its army is shaken', tone: 'gold', big: true });
     }
 
+    // Ambushes in the fog of war
+    if ((after.player.ambushed ?? 0) > (before.player.ambushed ?? 0)) {
+      shakeScreen(0.35);
+      emitMoment({ title: 'Ambush!', subtitle: 'Hidden enemies stopped your troops', tone: 'red' });
+    }
+    if ((after.ai.ambushed ?? 0) > (before.ai.ambushed ?? 0)) {
+      emitMoment({ title: 'Ambush Sprung!', subtitle: 'The enemy walked into your hidden troops', tone: 'gold' });
+    }
+
     if (after.player.campsCaptured > before.player.campsCaptured) {
       playBattleSound('bounty', 0.7);
       emitMoment({ title: 'Camp Captured!', subtitle: 'Deploy your cards there now', tone: 'green' });

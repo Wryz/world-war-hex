@@ -14,7 +14,7 @@ import { BondList } from '../game/cards/BondList';
 import { activeBonds } from '@/lib/game/bonds';
 import { CARD_CLASS, PRIMARY_BUTTON, SECONDARY_BUTTON } from './MenuShell';
 import {
-  AttackIcon, BossIcon, CardsIcon, CloseIcon, CoinIcon, PowerIcon, ShieldIcon, StarIcon, TerrainIcon, BondIcon
+  AttackIcon, BossIcon, CardsIcon, CloseIcon, CoinIcon, PowerIcon, ShieldIcon, StarIcon, TerrainIcon, BondIcon, FogIcon
 } from '../game/icons';
 import { TerrainType } from '@/types/game';
 
@@ -202,7 +202,14 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
               </span>
             ))}
           </div>
-          <div className="mt-1.5 text-xs text-slate-400">{level.settings.maxRounds} rounds · {level.settings.planningPhaseTime}s per turn</div>
+          <div className="mt-1.5 text-xs text-slate-400">
+            {level.settings.maxRounds} rounds · {level.settings.planningPhaseTime}s per turn
+            {level.settings.fogOfWar && (
+              <span className="ml-1 inline-flex items-center gap-1 font-bold text-slate-200" title="You only see enemy troops your own troops can see; forests hide troops unless you're right next to them">
+                · <FogIcon /> Fog of war
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Stars and reward */}

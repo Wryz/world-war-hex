@@ -1,8 +1,8 @@
 import React from 'react';
 import { GameState } from '@/types/game';
-import { BASE_MAX_HEALTH, getCastleMaxHealth, getIncome, getMaxRounds } from '@/lib/game/gameState';
+import { BASE_MAX_HEALTH, getCastleMaxHealth, getIncome, getMaxRounds, isFogOfWar } from '@/lib/game/gameState';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
-import { CrownIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon } from '../icons';
+import { CrownIcon, FogIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon } from '../icons';
 import { setGameSpeed, useGameSpeed } from '../effects/effects';
 
 interface TopBarProps {
@@ -14,6 +14,9 @@ interface TopBarProps {
   isMuted: boolean;
   onToggleMute: () => void;
   onQuit: () => void;
+  // The threat preview: hexes enemies can strike next turn
+  showThreats: boolean;
+  onToggleThreats: () => void;
 }
 
 const ICON_BUTTON_CLASS = 'rounded-md p-1 text-slate-300 hover:bg-slate-700 hover:text-white';
@@ -40,7 +43,9 @@ const CastleHealth: React.FC<{ title: string; health: number; max: number; color
 };
 
 // Compact status bar: whose turn it is, both castles' health, and the player's gold
-export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit }) => {
+export const TopBar: React.FC<TopBarProps> = ({
+  gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit, showThreats, onToggleThreats
+}) => {
   const { players, turnNumber } = gameState;
   const maxRounds = getMaxRounds(gameState);
   const isFinalRound = turnNumber >= maxRounds;
@@ -100,6 +105,20 @@ export const TopBar: React.FC<TopBarProps> = ({ gameState, isAITurn, timer, show
           </span>
         </span>
         <span className="mx-0.5 h-5 w-px bg-slate-700" />
+        <button
+          onClick={onToggleThreats}
+          title={showThreats ? 'Hide enemy threats (T)' : 'Show where enemies can strike next turn (T)'}
+          aria-label="Show enemy threats"
+          aria-pressed={showThreats}
+          className={`${ICON_BUTTON_CLASS} ${showThreats ? 'bg-rose-900/60 text-rose-200' : ''}`}
+        >
+          <ThreatIcon className="text-base" />
+        </button>
+        {isFogOfWar(gameState) && (
+          <span className="text-slate-400" title="Fog of war: you only see enemy troops your own troops can see. Forests hide troops unless you're right next to them.">
+            <FogIcon className="text-base" />
+          </span>
+        )}
         <button
           onClick={() => setGameSpeed(speed === 1 ? 2 : 1)}
           title={speed === 1 ? 'Speed up battles' : 'Normal speed'}

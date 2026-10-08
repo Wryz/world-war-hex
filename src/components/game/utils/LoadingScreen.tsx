@@ -9,6 +9,12 @@ interface LoadingScreenProps {
 
 const LOADING_TIPS = [
   'Units standing in a forest take 40% less damage.',
+  'Stepping next to an enemy ends your move - form a line to stop raiders getting through.',
+  'Surround an enemy: every extra ally next to it adds 25% damage.',
+  'Press T in battle to see every hex the enemy can strike next turn.',
+  'In the fog, forests hide troops unless you are right next to them - perfect for ambushes.',
+  'Fliers pass over enemy lines; everyone else stops when they meet the enemy.',
+  'Rogues and other skirmishers see one hex further - send them ahead to scout the fog.',
   'Pikemen attack 50% harder when fighting from a forest.',
   'Desert costs 2 movement to cross - plan your routes around it.',
   'Hold gold mines with a unit to earn extra gold every turn.',

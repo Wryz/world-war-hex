@@ -28,6 +28,13 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 5. **Win** by wearing the enemy castle down: at the end of your turn every troop within 3 hexes of it deals its attack as damage. Once its walls are breached (half health or less), march a troop onto it to storm it and win at once. When the last round ends, the castle in better shape wins.
 6. **Earn gold** each turn: 5, plus any gold mines your troops hold and 2 for each camp you hold. Troops are expensive and tough, so a battle is fought with a handful of them: armies larger than 4 troops cost 2 gold upkeep per extra troop, and holding mines and camps beats massing troops. Destroying an enemy pays a bounty of half its cost, and damaging the enemy castle plunders gold. Your income per turn is shown next to your gold.
 
+### Tactics
+
+- **Zones of control.** Stepping next to an enemy ends a troop's move, so a line of troops really does hold a pass, and raiders have to fight their way through. Fliers pass over enemy lines.
+- **Flanking.** Every other troop of yours next to the enemy you attack adds +25% damage, up to +50% - pin an enemy with one troop and hit it with the rest.
+- **Threat preview.** Press **T** (or the crosshair in the top bar) to tint every hex the enemies you can see could strike next turn. With a troop selected, each hex it can move to shows the most damage it could take there (a skull means it could be destroyed).
+- **Fog of war** (from level 11, and in medium and hard quick battles). You only see enemy troops your own troops, castle and camps can see: 2 hexes, 3 from hills and snow, and one more for scouts (Rogues and other skirmishers, and fliers). Forests hide troops from anyone not right next to them, and ridges and woods block sight. A troop that attacks or besieges gives its position away until its side's next turn. Marching into a hidden enemy stops your troop short - an ambush. Enemies that slip back into the fog are marked where you last saw them, and the AI plays by the same rules.
+
 ### Counters
 
 Every troop belongs to a class, and each class hits some others 50% harder (spears hit cavalry twice as hard), so no single army beats them all:
