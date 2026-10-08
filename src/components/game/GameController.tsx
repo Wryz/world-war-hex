@@ -23,9 +23,6 @@ import { EffectsLayer } from './effects/EffectsLayer';
 import { emitMoment, resetEffects } from './effects/effects';
 import { useBattleMoments } from './effects/useBattleMoments';
 import { castleHealthRatio, getMaxRounds, getSideView, getStarScore, isFogOfWar } from '@/lib/game/gameState';
-import { FieldBuffs } from './hud/FieldBuffs';
-import type { HexCoordinates } from '@/types/game';
-import { useIsNarrow } from '../shared/useIsNarrow';
 import { getLevel, starsForWin, LEVEL_COUNT } from '@/lib/campaign/levels';
 import { battleTroopTypes } from '@/lib/campaign/battleSetup';
 import {
@@ -239,9 +236,6 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   // The threat preview (T toggles it)
   const [showThreats, setShowThreats] = useState(false);
-  // Hexes outlined for the field buff opened on the left
-  const [buffHexes, setBuffHexes] = useState<HexCoordinates[] | null>(null);
-  const isNarrow = useIsNarrow();
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if ((event.key === 't' || event.key === 'T') && !(event.target instanceof HTMLInputElement)) setShowThreats(value => !value);
@@ -272,7 +266,6 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         onHexClick={onBoardHexClick}
         onUnitClick={onBoardUnitClick}
         onUnitPurchase={onBoardUnitPurchase}
-        buffHexes={buffHexes ?? undefined}
       />
 
       {(currentPhase === 'planning' || currentPhase === 'combat') && (
@@ -289,10 +282,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
             onToggleMute={() => setMuted(!isMuted)}
             onQuit={handleQuit}
           />
-          {/* Left: what's selected, then the advantages on the field */}
-          <div className="fixed left-3 top-16 z-20 flex max-h-[calc(100vh-17rem)] flex-col gap-2 overflow-y-auto pointer-events-none">
+          <div className="fixed left-3 top-16 z-20 pointer-events-none">
             <SelectionCard gameState={viewState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
-            <FieldBuffs gameState={viewState} onShowHexes={setBuffHexes} defaultOpen={!isNarrow} />
           </div>
           {/* Capped above the battle card and the hand so panels never run under them */}
           <div className="fixed right-3 top-16 z-20 hidden max-h-[calc(100vh-17rem)] w-64 flex-col gap-2 overflow-y-auto pointer-events-none sm:flex">

@@ -27,7 +27,10 @@ import {
   getValidBaseLocations,
   getSiegeDamage,
   getCombatEffects,
-  HIGH_GROUND_ELEVATION
+  HIGH_GROUND_ELEVATION,
+  ELEVATION_DAMAGE_STEP,
+  BERSERK_ATTACK_MULTIPLIER,
+  TERRAIN_BONUS_ATTACK_MULTIPLIER
 } from '@/lib/game/gameState';
 import { getHexDistance } from '@/lib/game/hexUtils';
 import { estimateDamage, getThreatLevels, getThreats } from '@/lib/game/threats';
@@ -42,8 +45,13 @@ import { getBattleStartDelay, getDeathTime, getImpactTimes, getImpactTimesUntil 
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale, getGameSpeed } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
-import { AttackIcon, CampIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
-import type { UnitBadge } from './UnitMesh';
+import { CampIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
+import type { UnitBuff } from './UnitMesh';
+import { describeBonus, getBond } from '@/lib/game/bonds';
+import type { TroopId } from '@/lib/game/troops';
+
+// Identity of a unit's buffs, to keep its props stable while they don't change
+const buffKey = (buffs: UnitBuff[]) => buffs.map(buff => `${buff.id}:${buff.value}`).join('|');
 
 const coordKey = (c: HexCoordinates) => `${c.q},${c.r}`;
 
@@ -100,8 +108,6 @@ interface GameBoardProps {
   unitIds?: Set<string>;
   // Tint the hexes enemies can strike next turn, and label damage for the selected troop
   showThreats?: boolean;
-  // Hexes to outline for the field buff opened in the HUD
-  buffHexes?: HexCoordinates[];
 }
 
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
@@ -595,22 +601,50 @@ const surfacePosition = (hex: Hex): [number, number, number] => {
 
 const toVector = ([x, y, z]: [number, number, number]) => new THREE.Vector3(x, y, z);
 
-// Terrain effects that currently help a unit, shown as small icons on its label
-const getTerrainBadges = (unit: Unit, hex: Hex | undefined): UnitBadge[] => {
+// The buffs (and the odd drawback) working on a unit right now, shown under its health tag: cover,
+// height, healing, a held gold mine, berserk fury and the bonds it fights with
+const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitBuff[] => {
   if (!hex) return [];
-  const badges: UnitBadge[] = [];
-
+  const buffs: UnitBuff[] = [];
   const effect = TERRAIN_EFFECTS[hex.terrain];
-  if (effect.damageTakenMultiplier < 1) badges.push('cover');
-  // Low ground: anyone attacking from above hits harder
-  if (effect.elevation < 1) badges.push('exposed');
-  // High ground, or Pikemen fighting from a forest
-  if ((hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) || effect.elevation >= HIGH_GROUND_ELEVATION) {
-    badges.push('attack');
+  const pct = (value: number) => `${Math.round(value * 100)}%`;
+  const ranged = unit.abilities.includes('rangedAttack');
+
+  if (effect.damageTakenMultiplier < 1) {
+    buffs.push({ id: 'cover', terrain: hex.terrain, label: `${effect.name} cover`, value: `-${pct(1 - effect.damageTakenMultiplier)} damage taken`, good: true });
   }
-  if (effect.healPerTurn) badges.push('heal');
-  if (hex.isResourceHex) badges.push('gold');
-  return badges;
+  if (effect.elevation >= HIGH_GROUND_ELEVATION) {
+    buffs.push({ id: 'high', terrain: hex.terrain, label: 'High ground', value: `+${pct(ELEVATION_DAMAGE_STEP)} attack vs lower ground${ranged ? ', +1 range' : ''}`, good: true });
+  }
+  if (effect.elevation < 1) {
+    buffs.push({ id: 'low', terrain: hex.terrain, label: 'Low ground', value: `+${pct(ELEVATION_DAMAGE_STEP)} damage from higher ground`, good: false });
+  }
+  if (hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) {
+    buffs.push({ id: 'pikes', icon: 'attack', label: 'Forest pikes', value: `+${pct(TERRAIN_BONUS_ATTACK_MULTIPLIER - 1)} attack`, good: true });
+  }
+  if (effect.healPerTurn) {
+    buffs.push({ id: 'heal', terrain: hex.terrain, label: effect.name, value: `+${effect.healPerTurn} health per turn`, good: true });
+  }
+  if (effect.damagePerTurn) {
+    const immune = (hex.terrain === 'lava' && unit.abilities.includes('fireborn')) || (hex.terrain === 'cursed' && unit.abilities.includes('undead'));
+    buffs.push(immune
+      ? { id: 'scorch', terrain: hex.terrain, label: effect.name, value: hex.terrain === 'cursed' ? `+${effect.damagePerTurn} health per turn` : 'Unharmed', good: true }
+      : { id: 'scorch', terrain: hex.terrain, label: effect.name, value: `-${effect.damagePerTurn} health per turn`, good: false });
+  }
+  if (hex.isResourceHex) {
+    buffs.push({ id: 'gold', icon: 'gold', label: 'Gold mine', value: `+${hex.resourceValue ?? 0} gold per turn`, good: true });
+  }
+  if (unit.abilities.includes('berserk') && unit.lifespan * 2 <= unit.maxLifespan) {
+    buffs.push({ id: 'berserk', icon: 'attack', label: 'Berserk', value: `+${pct(BERSERK_ATTACK_MULTIPLIER - 1)} attack`, good: true });
+  }
+  if (unit.owner === 'player') {
+    for (const bondId of state.bonds ?? []) {
+      const bond = getBond(bondId);
+      const bonus = bond.bonuses[unit.type as TroopId];
+      if (bonus) buffs.push({ id: `bond-${bond.id}`, icon: 'bond', label: bond.name, value: describeBonus(unit.type as TroopId, bonus), good: true });
+    }
+  }
+  return buffs;
 };
 
 interface DamagePopup {
@@ -633,8 +667,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   assetsLoaded,
   selectedUnitTypeForPurchase = null,
   unitIds,
-  showThreats = false,
-  buffHexes
+  showThreats = false
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const unitIdsRef = useRef(unitIds);
@@ -661,10 +694,9 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     [isSetupPhase, hexGrid]
   );
 
-  const buffKeys = useMemo(() => new Set((buffHexes ?? []).map(coordKey)), [buffHexes]);
   const getHighlight = (key: string): HexHighlight => {
     if (isSetupPhase) return validBaseKeys.has(key) ? 'base' : 'none';
-    if (!validMoveKeys.has(key)) return buffKeys.has(key) ? 'buff' : 'none';
+    if (!validMoveKeys.has(key)) return 'none';
     return selectedUnitTypeForPurchase ? 'deploy' : 'move';
   };
 
@@ -926,7 +958,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         facingTarget,
         battle: battles.get(unit.id) ?? null,
         hasPlannedMove: plannedUnitIds.has(unit.id),
-        terrainBadges: getTerrainBadges(unit, hex)
+        buffs: getUnitBuffs(gameState, unit, hex)
       };
     });
     // gameState is only used to find the bases
@@ -945,7 +977,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         ...data,
         position: sameArray(previous.position, data.position) ? previous.position : data.position,
         facingTarget: sameArray(previous.facingTarget, data.facingTarget) ? previous.facingTarget : data.facingTarget,
-        terrainBadges: sameArray(previous.terrainBadges, data.terrainBadges) ? previous.terrainBadges : data.terrainBadges,
+        buffs: buffKey(previous.buffs) === buffKey(data.buffs) ? previous.buffs : data.buffs,
         battle: previous.battle && data.battle && previous.battle.key === data.battle.key &&
           sameArray(previous.battle.target, data.battle.target) ? previous.battle : data.battle
       } : data;
@@ -1111,7 +1143,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const shadowExtent = boardRadius + 2;
   const shadowFar = SHADOW_LIGHT_DISTANCE + boardRadius + 10;
 
-  const unresolvedCombats = currentPhase === 'combat' ? combats.filter(c => !c.resolved) : [];
   const playerBase = findBaseHex(gameState, 'player');
   const aiBase = findBaseHex(gameState, 'ai');
   const playerCastlePosition = useMemo(() => playerBase ? surfacePosition(playerBase) : null, [playerBase]);
@@ -1227,8 +1258,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
                   <span
                     className="font-display flex items-center px-2 py-0.5"
                     style={{
-                      background: helpsYou === null ? 'rgba(180, 83, 9, 0.95)' : helpsYou ? 'rgba(4, 120, 87, 0.95)' : 'rgba(190, 18, 60, 0.95)',
-                      color: '#ffffff'
+                      background: helpsYou === null ? '#fbbf24' : helpsYou ? '#34d399' : '#fb7185',
+                      color: '#0f172a'
                     }}
                   >
                     {effect.label}
@@ -1295,7 +1326,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           isSelected={selectedUnit?.id === data.unit.id}
           hasPlannedMove={data.hasPlannedMove}
           battle={data.battle}
-          terrainBadges={data.terrainBadges}
+          buffs={data.buffs}
         />
       ))}
 
@@ -1332,20 +1363,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           isPlaced={false}
         />
       )}
-
-      {/* Battle markers */}
-      {unresolvedCombats.map(combat => {
-        const hex = hexByKey.get(coordKey(combat.hexCoordinates));
-        if (!hex) return null;
-        const [x, y, z] = surfacePosition(hex);
-        return (
-          <Html key={coordKey(combat.hexCoordinates)} position={[x, y + 2.2, z]} center zIndexRange={[7, 0]} style={{ pointerEvents: 'none' }}>
-            <div className="select-none rounded-full bg-slate-900/80 p-1 text-2xl animate-bounce">
-              <AttackIcon />
-            </div>
-          </Html>
-        );
-      })}
 
       {/* Damage numbers */}
       {popups.map(popup => (

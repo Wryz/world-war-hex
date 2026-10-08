@@ -2,7 +2,7 @@ import { memo, useMemo, useRef, useEffect, useLayoutEffect, useState } from 'rea
 import { Html } from '@react-three/drei';
 import { useFrame, ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
-import { HexCoordinates, Unit } from '@/types/game';
+import { HexCoordinates, TerrainType, Unit } from '@/types/game';
 import {
   getAttackInterval,
   getUnitLook,
@@ -17,7 +17,7 @@ import { MELEE_IMPACT_POINT, PROJECTILE_FLIGHT_TIME, RANGED_RELEASE_POINT, WALK_
 import { playBattleSound, BattleSound } from './utils/battleSounds';
 import { DRAG_CLICK_TOLERANCE } from './HexTile';
 import { instantiateUnitModel, findAnimationClip, disposeUnitModel, UnitModelInstance } from './utils/unitModelCache';
-import { ArrowIcon, AttackIcon, CrownIcon, GoldIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
+import { ArrowIcon, AttackIcon, BondIcon, CrownIcon, GoldIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
 
 // Small lift so the unit's indicator doesn't z-fight with the tile surface
 const UNIT_ELEVATION = 0.02;
@@ -110,9 +110,53 @@ const DustPuff: React.FC<{ delay: number }> = ({ delay }) => {
   );
 };
 
-// Terrain effects shown on a unit's label: cover, an attack bonus (Pikemen in forest, high ground),
-// being exposed in a swamp, healing at a spring, a held gold mine
-export type UnitBadge = 'cover' | 'attack' | 'exposed' | 'heal' | 'gold';
+// A buff (or drawback) working on a unit, shown under its health tag: its icon (a terrain, or a
+// bond, gold or attack symbol), name and what it does in numbers
+export interface UnitBuff {
+  id: string;
+  terrain?: TerrainType;
+  icon?: 'bond' | 'gold' | 'attack';
+  label: string;
+  value: string;
+  good: boolean;
+}
+
+const NO_BUFFS: UnitBuff[] = [];
+
+const BuffIcon: React.FC<{ buff: UnitBuff }> = ({ buff }) =>
+  buff.icon === 'bond' ? <BondIcon /> : buff.icon === 'gold' ? <GoldIcon /> : buff.icon === 'attack' ? <AttackIcon />
+    : <TerrainIcon terrain={buff.terrain ?? 'plain'} />;
+
+// A unit's buffs as a row of icons; tapping it opens each one's name and numbers
+const BuffRow: React.FC<{ buffs: UnitBuff[] }> = ({ buffs }) => {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="flex flex-col items-center gap-0.5" style={{ pointerEvents: 'auto' }}>
+      <button
+        type="button"
+        onClick={() => setOpen(value => !value)}
+        aria-expanded={open}
+        title="Buffs - tap for details"
+        className="flex items-center gap-0.5 rounded-full bg-slate-900/75 px-1 py-px text-[11px] leading-none shadow hover:bg-slate-800"
+      >
+        {buffs.map(buff => (
+          <span key={buff.id} className={buff.good ? '' : 'opacity-80 grayscale-[30%]'}><BuffIcon buff={buff} /></span>
+        ))}
+      </button>
+      {open && (
+        <div className="flex flex-col gap-0.5 rounded-lg bg-slate-900/90 px-2 py-1 text-[10px] leading-tight shadow-lg">
+          {buffs.map(buff => (
+            <div key={buff.id} className="flex items-center gap-1 whitespace-nowrap">
+              <BuffIcon buff={buff} />
+              <b className="text-slate-100">{buff.label}</b>
+              <span className={buff.good ? 'text-emerald-300' : 'text-rose-300'}>{buff.value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface UnitMeshProps {
   unit: Unit;
@@ -127,8 +171,8 @@ interface UnitMeshProps {
   isSelected?: boolean;
   hasPlannedMove?: boolean;
   battle?: UnitBattle | null;
-  // Short labels for terrain effects currently helping this unit
-  terrainBadges?: UnitBadge[];
+  // Buffs (and drawbacks) working on this unit now
+  buffs?: UnitBuff[];
   // Decorative use (e.g. the menu's island): no label and no battle sounds
   decorative?: boolean;
   // The unit has just been destroyed: play its death and sink into the ground
@@ -155,7 +199,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   isSelected = false,
   hasPlannedMove = false,
   battle = null,
-  terrainBadges = [],
+  buffs = NO_BUFFS,
   decorative = false,
   dying = false,
   fallen = false
@@ -697,7 +741,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
         />
       </mesh>
 
-      {/* Compact unit label: type, health and terrain bonuses */}
+      {/* Compact unit label: type and health, with its buffs underneath */}
       {!decorative && !dying && !killed && (
         <Html
           position={[0, look.labelHeight, 0]}
@@ -705,6 +749,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
           zIndexRange={[5, 0]}
           style={{ pointerEvents: 'none' }}
         >
+          <div className="flex flex-col items-center gap-0.5">
           <div
             className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] leading-none font-bold text-white whitespace-nowrap shadow select-none"
             style={{
@@ -727,17 +772,14 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
                 </span>
                 {/* Health as a number while fighting, so each blow is easy to follow */}
                 {battle && <span className="tabular-nums">{shownHealth}</span>}
-                {/* Terrain bonuses as icons only - details are in the selection card */}
-                {terrainBadges.map(badge =>
-                  badge === 'cover' ? <TerrainIcon key={badge} terrain="forest" />
-                    : badge === 'attack' ? <AttackIcon key={badge} />
-                      : badge === 'exposed' ? <TerrainIcon key={badge} terrain="swamp" />
-                        : badge === 'heal' ? <TerrainIcon key={badge} terrain="spring" />
-                          : <GoldIcon key={badge} />
-                )}
-                {hasPlannedMove && <ArrowIcon />}
+                 {hasPlannedMove && <ArrowIcon />}
               </>
             )}
+          </div>
+          {/* Buffs under the health tag: tap for what each one does */}
+          {!isPendingPurchase && buffs.length > 0 && (
+            <BuffRow buffs={buffs} />
+          )}
           </div>
         </Html>
       )}
