@@ -3,12 +3,12 @@ import { TroopStats, UnitType } from '@/types/game';
 import { ABILITIES, FACTIONS, Rarity, TROOPS, TROOP_CLASSES, cardStats } from '@/lib/game/troops';
 import { AbilityIcon, AttackIcon, GoldIcon, HealthIcon, LockIcon, MoveIcon, SignatureIcon, UnitIcon } from '../icons';
 import { ROMAN, SIGNATURE_UNLOCK_LEVEL, getSignature, signatureRank } from '@/lib/game/signatures';
-import { backdropCss, cardArtUrl } from './cardArt';
+import { cardArtUrl } from './cardArt';
 import { CardSkinId, getCardSkin } from '@/lib/meta/cosmetics';
 import { useProfile } from '@/lib/meta/profile';
 
-// A troop as a playing card: cost gem, level badge, a portrait of the troop on its home ground, its
-// signature (SIG) badge, name banner, stats and abilities.
+// A troop as a playing card: cost gem, level badge, a picture of the troop's own model over its
+// faction's colour and the card frame's pattern, its signature (SIG) badge, name banner, stats and abilities.
 // Used for the hand in battle, the army and shop, and the bestiary.
 
 export type CardSize = 'xs' | 'xm' | 'sm' | 'md' | 'lg';
@@ -121,18 +121,22 @@ export const TroopCard: React.FC<TroopCardProps> = ({
         className={`relative flex h-full flex-col overflow-hidden rounded-[9px] ${dims.pad}`}
         style={{ background: hidden ? '#0f172a' : face.face, boxShadow: hidden ? undefined : `inset 0 0 0 1px ${face.trim}` }}
       >
-        {/* Art: the troop's portrait over its faction's backdrop */}
+        {/* Art: the troop's picture over its faction's colour and the frame's pattern */}
         <div
           className="relative flex flex-1 items-center justify-center overflow-hidden rounded-md"
-          style={{
-            background: hidden ? '#1e293b' : artFailed ? `color-mix(in srgb, ${faction.color} 55%, #0f172a)` : backdropCss(troop.faction)
-          }}
+          style={{ background: hidden ? '#1e293b' : `color-mix(in srgb, ${faction.color} 62%, #0f172a)` }}
         >
+          <div
+            className={`absolute inset-0 ${face.animated && !hidden ? 'card-holo' : ''}`}
+            style={{
+              background: hidden ? getCardSkin('classic').pattern : face.pattern,
+              opacity: hidden ? 0.15 : Math.max(0.2, face.patternOpacity)
+            }}
+          />
+          {/* A soft light behind the troop */}
+          {!hidden && <div className="absolute inset-0" style={{ background: 'radial-gradient(ellipse 60% 55% at 50% 55%, rgba(255,255,255,0.22), transparent 70%)' }} />}
           {hidden ? (
-            <>
-              <div className="absolute inset-0" style={{ background: getCardSkin('classic').pattern, opacity: 0.15 }} />
-              <span className={`font-display ${dims.icon} text-slate-500`}>?</span>
-            </>
+            <span className={`font-display ${dims.icon} text-slate-500`}>?</span>
           ) : artFailed ? (
             <UnitIcon type={type} color="#fff" className={`${dims.icon} drop-shadow-[0_3px_0_rgba(15,23,42,0.6)] transition-transform group-hover:scale-110`} />
           ) : (
@@ -146,8 +150,6 @@ export const TroopCard: React.FC<TroopCardProps> = ({
               className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
             />
           )}
-          {/* Foil frames shimmer over the picture too */}
-          {face.animated && !hidden && <div className="card-holo absolute inset-0 mix-blend-overlay" style={{ background: face.pattern, opacity: 0.35 }} />}
           {/* Signature (SIG) badge */}
           {signature && !hidden && !locked && (
             <span

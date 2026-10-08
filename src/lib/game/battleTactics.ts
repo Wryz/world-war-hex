@@ -3,13 +3,17 @@ import { findHexByCoordinates, getHexDistance, getHexesInRange, getNeighbors } f
 import { shiftHeightOffset } from './hexHeight';
 import {
   addLog, canGiveOrders, cloneState, coordsEqual, createUnit, findBaseHex, getOpponent, getOwnedCamps, getRosterStats,
-  getRosterTypes, getTroopName, getVisibleEnemies, getVisibleHexKeys, inflictDamage, isImpassable, sideStats,
+  getRosterTypes, getTroopName, getVisibleEnemies, getVisibleHexKeys, isImpassable, sideStats,
   syncHexUnits, unitLabel, updateHex
 } from './gameState';
 import {
-  TACTICS, TACTIC_REACH, TacticId, bulwarkReduction, callToArmsHealth, earthworksRaise, marchBonus, mendHeal, rallyBonus,
-  sabotageGold, shadowstepBonus, sinkholeDepth, smokeRadius, volleyDamage
+  TACTICS, TACTIC_REACH, TacticId, barricadeRaise, bulwarkReduction, callToArmsHealth, earthworksRaise, marchBonus, mendHeal,
+  pitDepth, rallyBonus, shadowstepBonus, sinkholeDepth, smokeRadius
 } from './tactics';
+import type { TerrainType } from '@/types/game';
+
+// Barricades go up on open ground only (not over woods, hills, villages or water)
+const BARRICADE_GROUND: TerrainType[] = ['plain', 'desert'];
 
 // Playing tactic cards: where each can be aimed, and what it does to the battle when played.
 
@@ -61,8 +65,21 @@ export const getTacticTargets = (state: GameState, side: PlayerType, id: TacticI
     case 'bulwark':
     case 'shadowstep':
       return own.map(unit => unit.position);
-    case 'volley':
-      return getVisibleEnemies(state, side).filter(enemy => inReach(state, side, enemy.position)).map(enemy => enemy.position);
+    case 'pitTrap': {
+      // Any ground in sight and reach - enemy-held hexes included - but not a castle
+      const visible = getVisibleHexKeys(state, side);
+      return state.hexGrid
+        .filter(hex => !isImpassable(hex) && !hex.isBase && visible.has(key(hex.coordinates)) && inReach(state, side, hex.coordinates))
+        .map(hex => hex.coordinates);
+    }
+    case 'barricade': {
+      // Open plains or desert, empty or held by one of the side's own troops
+      const enemyAt = new Set(getVisibleEnemies(state, side).map(unit => key(unit.position)));
+      return state.hexGrid
+        .filter(hex => BARRICADE_GROUND.includes(hex.terrain) && !hex.isBase && !hex.isCamp && !hex.isResourceHex &&
+          !enemyAt.has(key(hex.coordinates)) && inReach(state, side, hex.coordinates))
+        .map(hex => hex.coordinates);
+    }
     case 'earthworks': {
       // (only the enemies it can see: a hidden one doesn't give itself away by blocking the card)
       const enemyAt = new Set(getVisibleEnemies(state, side).map(unit => key(unit.position)));
@@ -90,7 +107,6 @@ export const canPlayTactic = (state: GameState, side: PlayerType, id: TacticId):
   if (!canGiveOrders(state, state.players[side])) return false;
   if (needsTarget(id)) return getTacticTargets(state, side, id).length > 0;
   if (id === 'callToArms') return !!callToArmsType(state, side) && freeCastleHexes(state, side).length > 0;
-  if (id === 'sabotage') return state.players[getOpponent(side)].points > 0;
   return true;
 };
 
@@ -99,9 +115,8 @@ export const whyCantPlay = (state: GameState, side: PlayerType, id: TacticId): s
   switch (id) {
     case 'mend': return 'None of your troops is wounded';
     case 'forcedMarch': return 'All your troops have already moved';
-    case 'volley': return `No enemy troop in sight within ${TACTIC_REACH} hexes of your army`;
+    case 'barricade': return `No open plains or desert within ${TACTIC_REACH} hexes of your army`;
     case 'callToArms': return 'No free hex next to your castle';
-    case 'sabotage': return 'The enemy has no gold to burn';
     default: return `${TACTICS[id].name} can't be played right now`;
   }
 };
@@ -139,10 +154,13 @@ export const playTactic = (state: GameState, side: PlayerType, uid: string, targ
       addLog(next, side, `${who} Mend: ${unitLabel(unit)} recovers ${healed} health.`);
       break;
     }
-    case 'volley': {
-      const enemy = next.players[enemySide].units.find(unit => coordsEqual(unit.position, target!))!;
-      const result = inflictDamage(next, enemy, volleyDamage(level), side);
-      addLog(next, side, `${who} Volley: ${unitLabel(enemy)} takes ${result.damage} damage${result.destroyed ? ' and falls' : ''}.`);
+    case 'pitTrap': {
+      const hex = findHexByCoordinates(next.hexGrid, target!)!;
+      updateHex(next, target!, { heightOffset: shiftHeightOffset(hex.heightOffset, -pitDepth(level)) });
+      syncHexUnits(next);
+      const trapped = [...next.players.player.units, ...next.players.ai.units].find(unit => coordsEqual(unit.position, target!));
+      addLog(next, side, `${who} Pit Trap: the ground drops ${pitDepth(level).toFixed(2)}` +
+        (trapped ? ` under ${unitLabel(trapped)}.` : '.'));
       break;
     }
     case 'forcedMarch': {
@@ -165,10 +183,11 @@ export const playTactic = (state: GameState, side: PlayerType, uid: string, targ
       addLog(next, side, `${who} Shadowstep: ${unitLabel(unit)}'s target can't strike back this turn.`);
       break;
     }
-    case 'sabotage': {
-      const lost = Math.min(next.players[enemySide].points, sabotageGold(level));
-      next.players[enemySide] = { ...next.players[enemySide], points: next.players[enemySide].points - lost };
-      addLog(next, side, `${who} Sabotage: ${enemySide === 'player' ? 'you lose' : 'the enemy loses'} ${lost} gold.`);
+    case 'barricade': {
+      const hex = findHexByCoordinates(next.hexGrid, target!)!;
+      updateHex(next, target!, { terrain: 'ruins', heightOffset: shiftHeightOffset(hex.heightOffset, barricadeRaise(level)) });
+      syncHexUnits(next);
+      addLog(next, side, `${who} Barricade: walls go up - cover and a screen against arrows.`);
       break;
     }
     case 'smoke': {

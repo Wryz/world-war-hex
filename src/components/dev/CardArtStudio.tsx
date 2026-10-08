@@ -3,14 +3,10 @@
 import React, { useMemo, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { Hex, Unit } from '@/types/game';
+import type { Unit } from '@/types/game';
 import { TROOPS, TroopId, cardStats } from '@/lib/game/troops';
 import { UnitMesh } from '../game/UnitMesh';
-import { HexTile } from '../game/HexTile';
-import { getHexSurfaceHeight } from '../game/utils/boardGeometry';
-import { CARD_ART_HEIGHT, CARD_ART_WIDTH, FACTION_BACKDROPS, backdropCss } from '../game/cards/cardArt';
-
-const noop = () => {};
+import { CARD_ART_HEIGHT, CARD_ART_SCALE, CARD_ART_WIDTH } from '../game/cards/cardArt';
 // Where the camera looks from: in front, a little to the right and above
 const VIEW_DIRECTION = new THREE.Vector3(0.45, 0.42, 1).normalize();
 const FOV = 30;
@@ -39,9 +35,9 @@ const visibleBox = (root: THREE.Object3D): THREE.Box3 => {
 };
 
 // How much of the picture the troop should fill, and where its middle should sit (from the top)
-const FILL_HEIGHT = 0.74;
-const FILL_WIDTH = 0.82;
-const CENTRE_FROM_TOP = 0.46;
+const FILL_HEIGHT = 0.8;
+const FILL_WIDTH = 0.86;
+const CENTRE_FROM_TOP = 0.5;
 // Rounds of measuring the rendered troop and re-aiming the camera
 const MEASURE_ROUNDS = 3;
 const FRAMES_PER_ROUND = 4;
@@ -72,15 +68,14 @@ const measureDrawn = (gl: THREE.WebGLRenderer) => {
   };
 };
 
-// Once the troop's model has loaded: aim the camera at it from its bounding box, then (with the
-// ground hidden) measure what is actually drawn and zoom and re-centre until it fills the picture.
-// Then bring the ground back and flag the page ready.
-const FrameTroop: React.FC<{ target: React.RefObject<THREE.Group | null>; ground: React.RefObject<THREE.Group | null> }> = ({ target, ground }) => {
+// Once the troop's model has loaded: aim the camera at it from its bounding box, then measure what is
+// actually drawn and zoom and re-centre until it fills the picture. Then flag the page ready.
+const FrameTroop: React.FC<{ target: React.RefObject<THREE.Group | null> }> = ({ target }) => {
   const { camera, size, gl } = useThree();
   const state = useRef({ stable: 0, aimed: false, round: 0, frames: 0, done: false, settled: 0, distance: 0, focus: new THREE.Vector3() });
   useFrame(() => {
     const s = state.current;
-    if (!target.current || !ground.current) return;
+    if (!target.current) return;
     const vertical = THREE.MathUtils.degToRad(FOV) / 2;
     const place = () => {
       camera.position.copy(s.focus).addScaledVector(VIEW_DIRECTION, s.distance);
@@ -106,7 +101,6 @@ const FrameTroop: React.FC<{ target: React.RefObject<THREE.Group | null>; ground
       const horizontal = Math.atan(Math.tan(vertical) * (size.width / size.height));
       s.focus.copy(box.getCenter(new THREE.Vector3()));
       s.distance = Math.max(dimensions.y / 2 / Math.tan(vertical), Math.max(dimensions.x, dimensions.z) / 2 / Math.tan(horizontal)) * 1.4;
-      ground.current.visible = false;
       place();
       s.aimed = true;
       return;
@@ -126,20 +120,15 @@ const FrameTroop: React.FC<{ target: React.RefObject<THREE.Group | null>; ground
       s.distance *= Math.max(drawn.height / FILL_HEIGHT, drawn.width / FILL_WIDTH);
       place();
     }
-    if (++s.round >= MEASURE_ROUNDS) {
-      ground.current.visible = true;
-      s.done = true;
-    }
+    if (++s.round >= MEASURE_ROUNDS) s.done = true;
   });
   return null;
 };
 
-// One troop on its faction's home ground, in front of its faction's backdrop, at the card picture's size
+// One troop on its own, lit but casting no shadows, on a transparent background at the card picture's
+// size (the card draws its own background behind it)
 const CardArtStudio: React.FC<{ type: TroopId }> = ({ type }) => {
-  const troop = TROOPS[type];
-  const owner = troop.faction === 'kingdom' ? 'player' : 'ai';
-  const pedestal = useMemo<Hex>(() => ({ id: 'pedestal', coordinates: { q: 0, r: 0 }, terrain: FACTION_BACKDROPS[troop.faction].terrain }), [troop.faction]);
-  const surface = getHexSurfaceHeight(pedestal);
+  const owner = TROOPS[type].faction === 'kingdom' ? 'player' : 'ai';
   const unit = useMemo<Unit>(() => {
     const stats = cardStats(type, 1);
     return {
@@ -149,26 +138,17 @@ const CardArtStudio: React.FC<{ type: TroopId }> = ({ type }) => {
     };
   }, [type, owner]);
   const troopRef = useRef<THREE.Group>(null);
-  const groundRef = useRef<THREE.Group>(null);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-800">
-      <div
-        id="card-art"
-        style={{ width: CARD_ART_WIDTH, height: CARD_ART_HEIGHT, background: backdropCss(troop.faction) }}
-      >
-        <Canvas shadows flat gl={{ preserveDrawingBuffer: true, alpha: true }} camera={{ position: [0, 3, 6], fov: FOV }}>
-          <hemisphereLight args={['#ffffff', '#9ccfe8', 1.7]} />
-          <directionalLight position={[3, 7, 6]} intensity={1.6} castShadow />
-          <group position={[0, -surface, 0]}>
-            <group ref={groundRef}>
-              <HexTile hex={pedestal} onHexClick={noop} onHexHover={noop} onHexHoverEnd={noop} />
-            </group>
-            <group ref={troopRef}>
-              <UnitMesh unit={unit} position={[0, surface, 0]} facingTarget={[2.2, 2.6]} battle={null} decorative hideRing />
-            </group>
+    <div className="flex min-h-screen items-center justify-center bg-slate-700">
+      <div id="card-art" style={{ width: CARD_ART_WIDTH, height: CARD_ART_HEIGHT }}>
+        <Canvas flat dpr={CARD_ART_SCALE} gl={{ preserveDrawingBuffer: true, alpha: true }} camera={{ position: [0, 3, 6], fov: FOV }}>
+          <hemisphereLight args={['#ffffff', '#c7d2fe', 1.8]} />
+          <directionalLight position={[3, 7, 6]} intensity={1.5} />
+          <group ref={troopRef}>
+            <UnitMesh unit={unit} position={[0, 0, 0]} facingTarget={[2.2, 2.6]} battle={null} decorative hideRing />
           </group>
-          <FrameTroop target={troopRef} ground={groundRef} />
+          <FrameTroop target={troopRef} />
         </Canvas>
       </div>
     </div>

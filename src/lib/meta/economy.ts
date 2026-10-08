@@ -99,7 +99,7 @@ export const MAX_DECK_SIZE = 4;
 export const TACTIC_UNLOCK_LEVEL: Partial<Record<TacticId, number>> = {
   forcedMarch: 8,
   bulwark: 15,
-  sabotage: 22,
+  barricade: 22,
   smoke: 30,
   earthworks: 40,
   shadowstep: 50,

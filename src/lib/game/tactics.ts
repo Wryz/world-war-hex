@@ -1,15 +1,16 @@
 import type { Faction } from './troops';
 
-// Tactic cards: one-off orders played during a battle. Each side brings three. From round 2, every
+// Tactic cards: one-off orders played during a battle. They never strike the enemy directly: they rally
+// and shield your own troops or reshape the battlefield (pits, earthworks, barricades, smoke). Each side brings three. From round 2, every
 // second round each side draws one of its three at random (it can hold three at most), and plays
 // them on its own turn. Cards level up to 10 in the Army and grow stronger as they do.
 
 export type TacticId =
-  | 'rally' | 'mend' | 'volley' | 'forcedMarch' | 'bulwark' | 'sabotage' | 'smoke' | 'earthworks'
+  | 'rally' | 'mend' | 'pitTrap' | 'forcedMarch' | 'bulwark' | 'barricade' | 'smoke' | 'earthworks'
   | 'shadowstep' | 'callToArms' | 'sinkhole';
 
-// What a card is played on: nothing (it works at once), one of your troops, an enemy troop, or a hex
-export type TacticTarget = 'none' | 'ownUnit' | 'enemyUnit' | 'hex';
+// What a card is played on: nothing (it works at once), one of your troops, or a hex
+export type TacticTarget = 'none' | 'ownUnit' | 'hex';
 
 export interface TacticDef {
   id: TacticId;
@@ -39,10 +40,10 @@ const round2 = (value: number) => Math.round(value * 100) / 100;
 
 export const rallyBonus = (level: number) => round2(0.1 + 0.02 * (level - 1));
 export const mendHeal = (level: number) => 5 + level;
-export const volleyDamage = (level: number) => 2 + level;
+export const pitDepth = (level: number) => round2(0.6 + 0.06 * (level - 1));
 export const marchBonus = (level: number) => (level >= 6 ? 3 : 2);
 export const bulwarkReduction = (level: number) => round2(0.25 + 0.03 * (level - 1));
-export const sabotageGold = (level: number) => 3 + level;
+export const barricadeRaise = (level: number) => round2(0.04 * (level - 1));
 export const smokeRadius = (level: number) => (level >= 6 ? 2 : 1);
 export const earthworksRaise = (level: number) => round2(0.4 + 0.06 * (level - 1));
 export const shadowstepBonus = (level: number) => round2(0.05 + 0.03 * (level - 1));
@@ -60,10 +61,10 @@ export const TACTICS: Record<TacticId, TacticDef> = {
     describe: level => `Heal one of your troops ${mendHeal(level)} health.`,
     flavor: 'Bandages, salves and a stiff drink.'
   },
-  volley: {
-    id: 'volley', name: 'Volley', target: 'enemyUnit',
-    describe: level => `Arrows rain on an enemy troop you can see within ${TACTIC_REACH} hexes of your army: ${volleyDamage(level)} damage.`,
-    flavor: 'Every bow on the field, one target.'
+  pitTrap: {
+    id: 'pitTrap', name: 'Pit Trap', target: 'hex',
+    describe: level => `Dig a deep pit in one hex - even under an enemy: its ground drops ${pitDepth(level).toFixed(2)} for the rest of the battle, so whoever stands in it fights uphill and is hit harder from above.`,
+    flavor: 'Sharpened stakes optional.'
   },
   forcedMarch: {
     id: 'forcedMarch', name: 'Forced March', target: 'ownUnit',
@@ -75,10 +76,11 @@ export const TACTICS: Record<TacticId, TacticDef> = {
     describe: level => `One of your troops takes ${pct(bulwarkReduction(level))} less damage until your next turn.`,
     flavor: 'Shields locked, heads down.'
   },
-  sabotage: {
-    id: 'sabotage', name: 'Sabotage', target: 'none',
-    describe: level => `Spies burn the enemy's stores: they lose ${sabotageGold(level)} gold.`,
-    flavor: 'A spark in the right granary.'
+  barricade: {
+    id: 'barricade', name: 'Barricade', target: 'hex',
+    describe: level => `Wall in a hex of open plains or desert (empty, or held by your troop): it becomes ruins - 25% less damage and walls that block arrows from lower ground` +
+      (barricadeRaise(level) > 0 ? `, ${barricadeRaise(level).toFixed(2)} higher.` : '.'),
+    flavor: 'Carts, crates and anything else that stops an arrow.'
   },
   smoke: {
     id: 'smoke', name: 'Smoke Screen', target: 'hex',
@@ -113,21 +115,21 @@ export const TACTIC_IDS = Object.keys(TACTICS) as TacticId[];
 export const isTacticId = (value: unknown): value is TacticId => typeof value === 'string' && value in TACTICS;
 
 // Cards every player starts with
-export const STARTER_TACTICS: TacticId[] = ['rally', 'mend', 'volley'];
+export const STARTER_TACTICS: TacticId[] = ['rally', 'mend', 'pitTrap'];
 
 // The tactics each enemy faction brings into battle: two all-rounders and one in its own style
 export const FACTION_TACTICS: Record<Faction, TacticId[]> = {
-  kingdom: ['rally', 'volley', 'bulwark'],
-  bandits: ['volley', 'rally', 'shadowstep'],
-  goblins: ['volley', 'callToArms', 'sabotage'],
+  kingdom: ['rally', 'barricade', 'bulwark'],
+  bandits: ['pitTrap', 'rally', 'shadowstep'],
+  goblins: ['pitTrap', 'callToArms', 'sinkhole'],
   beasts: ['rally', 'mend', 'forcedMarch'],
-  swamp: ['mend', 'volley', 'smoke'],
-  desert: ['volley', 'bulwark', 'earthworks'],
+  swamp: ['mend', 'pitTrap', 'smoke'],
+  desert: ['barricade', 'bulwark', 'earthworks'],
   frost: ['bulwark', 'mend', 'sinkhole'],
   undead: ['callToArms', 'mend', 'smoke'],
-  orcs: ['rally', 'callToArms', 'volley'],
-  infernal: ['volley', 'rally', 'sinkhole'],
-  dragons: ['volley', 'rally', 'earthworks']
+  orcs: ['rally', 'callToArms', 'barricade'],
+  infernal: ['pitTrap', 'rally', 'sinkhole'],
+  dragons: ['rally', 'earthworks', 'pitTrap']
 };
 
 // Level of the enemy's tactic cards on a campaign level: they grow with the campaign

@@ -2414,7 +2414,7 @@ const creditKill = (state: GameState, unit: Unit, killer: PlayerType): void => {
   sideStats(state, unit.owner).lost++;
 };
 
-// Damage dealt outside a fight (Strafe, Volley), softened by armour and Ward or Bulwark as in a fight.
+// Damage dealt outside a fight (Pegasus Knights' Strafe), softened by armour and Ward or Bulwark as in a fight.
 // A unit it destroys is removed and pays its bounty to `by`. Works on a state the caller has cloned.
 export const inflictDamage = (state: GameState, unit: Unit, amount: number, by: PlayerType): { damage: number; destroyed: boolean } => {
   const live = state.players[unit.owner].units.find(u => u.id === unit.id);

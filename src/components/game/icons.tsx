@@ -14,7 +14,7 @@ import {
   GiTreasureMap, GiFastForwardButton, GiUpgrade, GiTrophy, GiPodium, GiOpenBook, GiTargetArrows, GiHeartPlus,
   GiAngelWings, GiRegeneration, GiChestArmor, GiSiegeRam, GiAngryEyes, GiRaiseSkeleton, GiWingfoot, GiFireRing,
   GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog,
-  GiRallyTheTroops, GiFirstAidKit, GiFlamingArrow, GiRunningShoe, GiShieldReflect, GiFireBomb, GiSmokeBomb, GiSpade,
+  GiRallyTheTroops, GiFirstAidKit, GiHole, GiRunningShoe, GiShieldReflect, GiBarricade, GiSmokeBomb, GiSpade,
   GiCloakDagger, GiPitchfork, GiEarthCrack, GiSparkles, GiCardRandom
 } from 'react-icons/gi';
 import {
@@ -210,10 +210,10 @@ export const PlayIcon = icon(LuPlay);
 export const TACTIC_ICON_COMPONENTS: Record<TacticId, IconType> = {
   rally: GiRallyTheTroops,
   mend: GiFirstAidKit,
-  volley: GiFlamingArrow,
+  pitTrap: GiHole,
   forcedMarch: GiRunningShoe,
   bulwark: GiShieldReflect,
-  sabotage: GiFireBomb,
+  barricade: GiBarricade,
   smoke: GiSmokeBomb,
   earthworks: GiSpade,
   shadowstep: GiCloakDagger,
@@ -224,10 +224,10 @@ export const TACTIC_ICON_COMPONENTS: Record<TacticId, IconType> = {
 export const TACTIC_COLORS: Record<TacticId, string> = {
   rally: '#f97316',
   mend: '#22c55e',
-  volley: '#ef4444',
+  pitTrap: '#57534e',
   forcedMarch: '#0ea5e9',
   bulwark: '#64748b',
-  sabotage: '#eab308',
+  barricade: '#b45309',
   smoke: '#94a3b8',
   earthworks: '#a16207',
   shadowstep: '#7c3aed',
