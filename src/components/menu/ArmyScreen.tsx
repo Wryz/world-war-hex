@@ -8,8 +8,18 @@ import {
   toggleTacticLoadout, upgradeCard, upgradeTactic, useHasHydrated, useProfile
 } from '@/lib/meta/profile';
 import { ROMAN, getSignature, signatureRank } from '@/lib/game/signatures';
-import { TACTICS, TACTIC_IDS, TACTIC_LOADOUT_SIZE, TacticId } from '@/lib/game/tactics';
+import { MAX_TACTIC_LEVEL, TACTICS, TACTIC_IDS, TACTIC_LOADOUT_SIZE, TacticId } from '@/lib/game/tactics';
 import { TacticCard } from '../game/cards/TacticCard';
+import { devSetCardLevel, devSetTacticLevel, useDevMode } from '@/lib/meta/devTools';
+
+// Dev tools only: step a card's level down or up for free
+const DevLevelControls: React.FC<{ level: number; max: number; onSet: (level: number) => void }> = ({ level, max, onSet }) => (
+  <div className="flex w-full items-center justify-center gap-2 rounded-lg bg-fuchsia-900/70 px-2 py-1 text-xs font-bold text-fuchsia-100" title="Dev tools: set the level for free">
+    <button onClick={() => onSet(level - 1)} disabled={level <= 1} className="rounded bg-fuchsia-700 px-2 disabled:opacity-40">−</button>
+    <span>DEV Lv{level}</span>
+    <button onClick={() => onSet(level + 1)} disabled={level >= max} className="rounded bg-fuchsia-700 px-2 disabled:opacity-40">+</button>
+  </div>
+);
 import { playStinger, useMusic } from '@/lib/audio/music';
 import { getLevel } from '@/lib/campaign/levels';
 import { TroopCard, RARITY_STYLES } from '../game/cards/TroopCard';
@@ -36,6 +46,7 @@ export const ArmyScreen: React.FC = () => {
   const hydrated = useHasHydrated();
   const [flash, setFlash] = useState<{ id: TroopId | TacticId; text: string } | null>(null);
   const isNarrow = useIsNarrow();
+  const devMode = useDevMode();
   useMusic('menu');
 
   const announce = (id: TroopId | TacticId, text: string) => {
@@ -160,6 +171,7 @@ export const ArmyScreen: React.FC = () => {
                     <span className="font-display w-full rounded-xl bg-amber-500 px-3 py-2 text-center text-base text-slate-900">Max level</span>
                   )
                 )}
+                {devMode && <DevLevelControls level={level} max={MAX_CARD_LEVEL} onSet={next => devSetCardLevel(id, next)} />}
               </div>
             );
           })}
@@ -243,6 +255,7 @@ const TacticSection: React.FC<{
   onUpgrade: (id: TacticId) => void;
 }> = ({ flash, onBuy, onUpgrade }) => {
   const profile = useProfile();
+  const devMode = useDevMode();
   const owned = ownedTactics(profile);
   const forSale = TACTIC_IDS.filter(id => profile.tactics[id] === undefined && isTacticAvailable(profile, id));
   const locked = TACTIC_IDS.filter(id => profile.tactics[id] === undefined && !isTacticAvailable(profile, id));
@@ -285,6 +298,7 @@ const TacticSection: React.FC<{
               ) : (
                 <span className="font-display w-full rounded-xl bg-amber-500 px-3 py-2 text-center text-base text-slate-900">Max level</span>
               )}
+              {devMode && <DevLevelControls level={level} max={MAX_TACTIC_LEVEL} onSet={next => devSetTacticLevel(id, next)} />}
             </div>
           );
         })}

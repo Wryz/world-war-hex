@@ -190,6 +190,8 @@ interface UnitMeshProps {
   buffs?: UnitBuff[];
   // Decorative use (e.g. the menu's island): no label and no battle sounds
   decorative?: boolean;
+  // Leave out the ring in its side's colour (card portraits)
+  hideRing?: boolean;
   // The unit has just been destroyed: play its death and sink into the ground
   dying?: boolean;
   // ...having already fallen in the battle that destroyed it, so it only sinks away
@@ -216,6 +218,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   battle = null,
   buffs = NO_BUFFS,
   decorative = false,
+  hideRing = false,
   dying = false,
   fallen = false
 }) => {
@@ -748,7 +751,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       )}
 
       {/* Owner ring so it's always clear which side a unit belongs to */}
-      <mesh visible={!dying && !killed} position={[0, RING_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh visible={!dying && !killed && !hideRing} position={[0, RING_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.42, isSelected ? 0.62 : 0.54, 32]} />
         <meshBasicMaterial
           color={isSelected ? '#facc15' : ownerColor}

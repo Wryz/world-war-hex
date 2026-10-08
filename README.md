@@ -129,6 +129,14 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 - `utils/creatures`: Procedural low-poly monsters (wolves, spiders, slimes, golems, wisps, dragons...)
 - `storage/GameStorage`: Save and resume the battle in progress
 
+### Dev tools
+
+On the dev server (`npm run dev`), or any copy of the game served from localhost, a pink **DEV** button (bottom left of the menus) opens shortcuts: coins (+10,000, max, zero, or infinite - topped back up after every purchase), unlock or lock every campaign level, own every card and tactic card, set them all to one level, reset them to the starter set, or reset all progress. Each card in the Army also gets − and + buttons to set its level for free. None of it appears on the live site (`src/lib/meta/devTools.ts`, `src/components/shared/DevPanel.tsx`).
+
+### Card art
+
+Every card shows a portrait of its troop's own 3D model on its faction's home ground, against a backdrop in the faction's colours (`src/components/game/cards/cardArt.ts`). The portraits in `public/cards/` are rendered from the dev page `/dev/card-art?type=<troop>`: with the dev server running, `node scripts/render-card-art.mjs [troop ...]` photographs them (it needs Playwright: `npm i --no-save playwright && npx playwright install chromium`). Re-run it after changing a troop's model.
+
 ### Balance
 
 `npm run simulate` plays AI-vs-AI battles in which one side uses the deck the progression model expects at each level, and reports win rates and battle lengths. `npm run simulate -- --tune 20 1 2 3` searches for the enemy strength at which that deck wins its level's target share of battles: 90% on level 1, easing to 65% from level 16 on (`targetWinRate` in `levels.ts`). The constants in `src/lib/campaign/levels.ts` were tuned with it.

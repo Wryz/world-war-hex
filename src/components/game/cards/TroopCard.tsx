@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { TroopStats, UnitType } from '@/types/game';
 import { ABILITIES, FACTIONS, Rarity, TROOPS, TROOP_CLASSES, cardStats } from '@/lib/game/troops';
 import { AbilityIcon, AttackIcon, GoldIcon, HealthIcon, LockIcon, MoveIcon, SignatureIcon, UnitIcon } from '../icons';
 import { ROMAN, SIGNATURE_UNLOCK_LEVEL, getSignature, signatureRank } from '@/lib/game/signatures';
+import { backdropCss, cardArtUrl } from './cardArt';
 import { CardSkinId, getCardSkin } from '@/lib/meta/cosmetics';
 import { useProfile } from '@/lib/meta/profile';
 
-// A troop as a playing card: cost gem, level badge, art, name banner, stats and abilities.
+// A troop as a playing card: cost gem, level badge, a portrait of the troop on its home ground, its
+// signature (SIG) badge, name banner, stats and abilities.
 // Used for the hand in battle, the army and shop, and the bestiary.
 
 export type CardSize = 'xs' | 'xm' | 'sm' | 'md' | 'lg';
@@ -83,6 +85,9 @@ export const TroopCard: React.FC<TroopCardProps> = ({
   const dims = SIZES[size];
   const isInteractive = !!onClick && !disabled;
   const Tag = onClick ? 'button' : 'div';
+  // The portrait (public/cards); the troop's icon stands in if it can't be loaded
+  const [artFailed, setArtFailed] = useState(false);
+  const isSmall = size === 'xs' || size === 'xm';
   // The card's signature ability (Kingdom cards), awake from level 2
   const signature = getSignature(type);
   const rank = signatureRank(level);
@@ -116,22 +121,48 @@ export const TroopCard: React.FC<TroopCardProps> = ({
         className={`relative flex h-full flex-col overflow-hidden rounded-[9px] ${dims.pad}`}
         style={{ background: hidden ? '#0f172a' : face.face, boxShadow: hidden ? undefined : `inset 0 0 0 1px ${face.trim}` }}
       >
-        {/* Art */}
+        {/* Art: the troop's portrait over its faction's backdrop */}
         <div
           className="relative flex flex-1 items-center justify-center overflow-hidden rounded-md"
           style={{
-            background: hidden ? '#1e293b' : `color-mix(in srgb, ${faction.color} 55%, #0f172a)`
+            background: hidden ? '#1e293b' : artFailed ? `color-mix(in srgb, ${faction.color} 55%, #0f172a)` : backdropCss(troop.faction)
           }}
         >
-          {/* Faint diagonal pattern so the art area reads as a printed card */}
-          <div
-            className={`absolute inset-0 ${face.animated && !hidden ? 'card-holo' : ''}`}
-            style={{ background: hidden ? getCardSkin('classic').pattern : face.pattern, opacity: hidden ? 0.15 : face.patternOpacity }}
-          />
           {hidden ? (
-            <span className={`font-display ${dims.icon} text-slate-500`}>?</span>
-          ) : (
+            <>
+              <div className="absolute inset-0" style={{ background: getCardSkin('classic').pattern, opacity: 0.15 }} />
+              <span className={`font-display ${dims.icon} text-slate-500`}>?</span>
+            </>
+          ) : artFailed ? (
             <UnitIcon type={type} color="#fff" className={`${dims.icon} drop-shadow-[0_3px_0_rgba(15,23,42,0.6)] transition-transform group-hover:scale-110`} />
+          ) : (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={cardArtUrl(type)}
+              alt=""
+              loading="lazy"
+              draggable={false}
+              onError={() => setArtFailed(true)}
+              className="absolute inset-0 h-full w-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          )}
+          {/* Foil frames shimmer over the picture too */}
+          {face.animated && !hidden && <div className="card-holo absolute inset-0 mix-blend-overlay" style={{ background: face.pattern, opacity: 0.35 }} />}
+          {/* Signature (SIG) badge */}
+          {signature && !hidden && !locked && (
+            <span
+              className={`absolute bottom-0.5 left-0.5 flex items-center gap-0.5 rounded-full px-1 font-bold leading-none shadow ${
+                rank > 0 ? 'bg-fuchsia-600/95 text-white ring-1 ring-fuchsia-200/80' : 'bg-slate-900/80 text-slate-400'
+              } ${isSmall ? 'py-px text-[0.5rem]' : size === 'lg' ? 'py-1 text-xs' : 'py-0.5 text-[0.5625rem]'}`}
+              title={signatureText}
+            >
+              <SignatureIcon color={rank > 0 ? '#fff' : '#94a3b8'} />
+              {isSmall
+                ? (rank > 0 ? ROMAN[rank] : '')
+                : size === 'lg'
+                  ? `${signature.name} ${rank > 0 ? ROMAN[rank] : `· Lv${SIGNATURE_UNLOCK_LEVEL}`}`
+                  : `SIG ${rank > 0 ? ROMAN[rank] : `Lv${SIGNATURE_UNLOCK_LEVEL}`}`}
+            </span>
           )}
           {locked && (
             <div className="absolute inset-0 flex items-center justify-center bg-slate-950/55">
@@ -165,11 +196,6 @@ export const TroopCard: React.FC<TroopCardProps> = ({
                 <AbilityIcon ability={ability} className={size === 'lg' ? 'text-base' : 'text-[0.6875rem]'} />
               </span>
             ))}
-            {signature && size !== 'lg' && (
-              <span title={signatureText} className={rank > 0 ? '' : 'opacity-40 grayscale'}>
-                <SignatureIcon className="text-[0.6875rem]" />
-              </span>
-            )}
           </div>
         )}
         {size === 'lg' && !hidden && (
