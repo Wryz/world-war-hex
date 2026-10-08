@@ -122,7 +122,7 @@ const ENEMY_STRENGTH = 0.835;
 // Factions whose troops are cheaper or trickier than their power suggests (goblin swarms, undead
 // healed by cursed ground) are toned down; the simulator measured these
 const FACTION_STRENGTH: Partial<Record<Faction, number>> = {
-  bandits: 0.78, goblins: 0.75, beasts: 1.04, swamp: 0.92, desert: 1.02, frost: 1.15, undead: 0.82, orcs: 0.85, infernal: 0.93, dragons: 1.12
+  bandits: 0.88, goblins: 0.78, beasts: 1.02, swamp: 0.86, desert: 0.9, frost: 1.08, undead: 0.8, orcs: 0.89, infernal: 0.86, dragons: 1.16
 };
 // Later levels in a region are a little harder than earlier ones; the first meets a new enemy, so it is gentler
 const IN_REGION_RAMP = 0.012;
@@ -198,7 +198,7 @@ export const getLevel = (levelId: number): LevelDef => {
   ) / 100;
   const enemyTier = Math.max(1, Math.round((enemyScale - 1) / 0.1) + 1);
   const gridSize = region.id < 2 ? 4 : 5;
-  const maxRounds = gridSize === 4 ? 10 : 12;
+  const maxRounds = gridSize === 4 ? 12 : 14;
 
   const guards: GuardSpec[] = [];
   if (isBoss) {

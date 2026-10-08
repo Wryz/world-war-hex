@@ -37,7 +37,8 @@ import {
   findBaseHex,
   canStormCastle,
   getSideView,
-  getSiegeDamage
+  getSiegeDamage,
+  getTimeScore
 } from '../game/gameState';
 import { TroopClass, getTroopClass } from '../game/troops';
 
@@ -312,6 +313,9 @@ interface Planner {
   anchors: Map<string, HexCoordinates>;
   // Units sent to stop enemies raiding the castle, and the raider each one is after
   interceptors: Map<string, Unit>;
+  // In the last rounds: whether the AI is behind or ahead on the points that decide the battle if
+  // time runs out (null before then, or level)
+  endgame: 'behind' | 'ahead' | null;
 }
 
 const planTurn = (state: GameState, doctrine: AIDoctrine, recruitTypes: UnitType[], difficulty?: AIPlanOptions['difficulty']): GameState => {
@@ -336,7 +340,8 @@ const planTurn = (state: GameState, doctrine: AIDoctrine, recruitTypes: UnitType
     destinations: new Map(state.players.ai.units.map(unit => [unit.id, unit.position])),
     objectives: new Map(),
     anchors: new Map(),
-    interceptors: new Map()
+    interceptors: new Map(),
+    endgame: endgameStanding(state)
   };
   planner.isPushing = isPushing(planner);
   planner.interceptors = assignInterceptors(planner);
@@ -379,10 +384,23 @@ const planTurn = (state: GameState, doctrine: AIDoctrine, recruitTypes: UnitType
   return planner.state;
 };
 
+// In the last rounds, how the AI stands on the points that decide the battle when time runs out
+const ENDGAME_ROUNDS = 3;
+const endgameStanding = (state: GameState): Planner['endgame'] => {
+  if (state.turnNumber <= getMaxRounds(state) - ENDGAME_ROUNDS) return null;
+  const lead = getTimeScore(state, 'ai').total - getTimeScore(state, 'player').total;
+  return lead > 0 ? 'ahead' : lead < 0 ? 'behind' : null;
+};
+// Behind on points: fight harder for kills. Ahead: keep troops safe to hold the lead.
+const ENDGAME_ATTACK_BOOST = 1.4;
+const ENDGAME_CAUTION_BOOST = 1.6;
+
 // The AI goes all in on the enemy castle once the battle nears its round limit (or the doctrine's
-// own push round), or when it clearly has the bigger army
+// own push round), or when it clearly has the bigger army - unless it is ahead on points near the
+// end, when it holds what it has (still storming a breached castle)
 const isPushing = (planner: Planner): boolean => {
   const { state, profile } = planner;
+  if (planner.endgame === 'ahead' && !canStormCastle(state, 'ai')) return false;
   const mine = state.players.ai.units;
   const theirs = state.players.player.units;
   const pushRound = Math.min(profile.pushAfterRound, Math.ceil(getMaxRounds(state) * PUSH_ROUND_SHARE));
@@ -733,8 +751,9 @@ const chooseGoal = (planner: Planner, unit: Unit): UnitGoal => {
   const { profile, settings, myBase, enemyBase } = planner;
   const healthRatio = unit.lifespan / unit.maxLifespan;
   const standingOn = planner.hexes.get(key(unit.position));
+  const cautionScale = planner.endgame === 'ahead' ? ENDGAME_CAUTION_BOOST : 1;
   const goal = (position: HexCoordinates | null, weight: number, holdValue = 0, caution = profile.caution): UnitGoal =>
-    ({ position, weight, holdValue, caution });
+    ({ position, weight, holdValue, caution: caution * cautionScale });
 
   // An enemy that could storm or besiege the castle is met by enough units to stop it
   const raider = planner.interceptors.get(unit.id);
@@ -828,8 +847,21 @@ const attackValueFrom = (planner: Planner, unit: Unit, position: HexCoordinates)
     if (value > best.value) best = { value, target: enemy, damage };
   }
 
+  // Every other enemy troop in reach strikes back at an attacker, which can't hit them back
+  if (best.target) best.value -= healthValue(unit, strikeBackDamage(planner, unit, position, best.target.id));
   return best;
 };
+
+// Damage the enemy troops able to reach a hex would deal a unit attacking from it (they strike
+// back at any attacker in their reach), leaving out its own target
+const strikeBackDamage = (planner: Planner, unit: Unit, position: HexCoordinates, targetId?: string): number => {
+  const self = { ...unit, position };
+  return planner.enemies
+    .filter(enemy => enemy.id !== targetId && remainingHealth(planner, enemy) > 0 && canStrikeFrom(planner, enemy, enemy.position, position))
+    .reduce((sum, enemy) => sum + strikeFrom(planner, enemy, enemy.position, self, position), 0) * STRIKE_BACK_WEIGHT;
+};
+// Not every enemy that could strike back will (some will be busy with fights of their own)
+const STRIKE_BACK_WEIGHT = 0.7;
 
 // Count this unit's expected strike against the enemy it will most likely hit, so other units
 // pick other targets (or help finish this one) and don't fear an enemy that is about to fall
@@ -856,7 +888,8 @@ const decideUnitMove = (planner: Planner, unit: Unit): HexCoordinates | null => 
     let value = 0;
 
     if (enemiesNear) {
-      value += attackValueFrom(planner, unit, position).value * (0.6 + settings.attackAggressiveness * 0.8);
+      value += attackValueFrom(planner, unit, position).value * (0.6 + settings.attackAggressiveness * 0.8) *
+        (planner.endgame === 'behind' ? ENDGAME_ATTACK_BOOST : 1);
       const danger = dangerAt(planner, unit, position);
       value -= healthValue(unit, danger) * goal.caution;
     }
@@ -882,6 +915,8 @@ const decideUnitMove = (planner: Planner, unit: Unit): HexCoordinates | null => 
     if (coordsMatch(position, planner.enemyBase.coordinates)) value += 1000;
     else if (canStrikeCastleFrom(planner, unit, position, hex?.terrain ?? 'plain')) {
       value += getSiegeDamage(unit) * (planner.isPushing ? SIEGE_VALUE.pushing : SIEGE_VALUE.normal);
+      // Enemy troops in reach strike back at a castle attacker
+      value -= healthValue(unit, strikeBackDamage(planner, unit, position));
     }
 
     // Recruits appear next to the castle, so don't park there unless defending it

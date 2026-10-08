@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { PlayerType } from '@/types/game';
 import { OWNER_COLORS } from './UnitMesh';
 import { CrownIcon } from './icons';
-import { getTimeScale } from './effects/effects';
+import { getTimeScale, setCastleShownDamage } from './effects/effects';
 import { CastleStyle, getCastleStyle } from '@/lib/meta/cosmetics';
 
 // Blows landing on a castle during a battle: when each lands (seconds after the battle starts, once
@@ -202,6 +202,10 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
     setShownDamage(0);
     tallyRef.current = null;
   }, [incomingKey]);
+  // Share it with the top bar (only the battle's real castles have an owner's label)
+  useEffect(() => {
+    if (!hideLabel) setCastleShownDamage(owner, incoming ? shownDamage : 0);
+  }, [owner, hideLabel, incoming, shownDamage]);
   const showHit = (amount: number) => {
     const id = Date.now() + Math.random();
     setHitNumbers(current => [...current, { id, amount }]);

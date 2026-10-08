@@ -5,23 +5,34 @@ import { ArrowIcon, CloseIcon } from '../icons';
 // A short interactive tutorial for the first battle: each step points at what to do next and
 // moves on as soon as the player does it
 
-type Step = 'playCard' | 'deploy' | 'endTurn' | 'waitForTurn' | 'move' | 'fight' | 'win';
+type Step = 'playCard' | 'deploy' | 'endTurn' | 'waitForTurn' | 'move' | 'fight' | 'buffs' | 'win' | 'points';
 
 const STEPS: Record<Step, { text: string; target?: string; manual?: boolean }> = {
   playCard: { text: 'Your troops are cards. Tap one to play it.', target: 'first-card' },
   deploy: { text: 'Tap a glowing hex to deploy it.' },
   endTurn: { text: 'Press End Turn.', target: 'end-turn' },
-  waitForTurn: { text: 'Enemy turn. Troops in range fight automatically.' },
+  waitForTurn: { text: 'Enemy turn. Troops fight anything in reach - and strike any enemy that attacks near them.' },
   move: { text: 'Tap a troop, then a hex to march it.' },
   fight: {
     text: 'Capture tents to deploy closer to the front. Forests give cover, hills give height.',
     manual: true
   },
+  buffs: {
+    text: 'The icons under a troop\'s health are its buffs. Tap them to see what they do.',
+    manual: true
+  },
   win: {
     text: 'Attack the enemy castle. At half health, step onto it to win!',
     manual: true
+  },
+  points: {
+    text: 'Out of time? Kills, gold and camps decide it. Win fast with lots of points for 3 stars.',
+    manual: true
   }
 };
+
+// The manual steps, in order
+const MANUAL_ORDER: Step[] = ['fight', 'buffs', 'win', 'points'];
 
 interface TutorialCoachProps {
   gameState: GameState;
@@ -66,7 +77,11 @@ export const TutorialCoach: React.FC<TutorialCoachProps> = ({ gameState, selecte
   }, [target, isPlayerPlanning]);
 
   const { text, manual } = STEPS[step];
-  const next = () => (step === 'fight' ? setStep('win') : onDone());
+  const next = () => {
+    const following = MANUAL_ORDER[MANUAL_ORDER.indexOf(step) + 1];
+    if (following) setStep(following);
+    else onDone();
+  };
 
   return (
     <>
@@ -81,7 +96,7 @@ export const TutorialCoach: React.FC<TutorialCoachProps> = ({ gameState, selecte
           <p className="flex-1 font-semibold leading-snug">{text}</p>
           {manual ? (
             <button onClick={next} className="font-display shrink-0 rounded-lg bg-amber-500 px-3 py-1 text-slate-900 hover:bg-amber-400">
-              <span className="flex items-center gap-1">{step === 'win' ? 'Got it' : 'Next'} <ArrowIcon /></span>
+              <span className="flex items-center gap-1">{step === MANUAL_ORDER[MANUAL_ORDER.length - 1] ? 'Got it' : 'Next'} <ArrowIcon /></span>
             </button>
           ) : (
             <button onClick={onDone} title="Skip tutorial" aria-label="Skip tutorial" className="shrink-0 rounded-md p-1 text-slate-400 hover:bg-slate-700 hover:text-white">

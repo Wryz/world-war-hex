@@ -128,8 +128,7 @@ const BuffIcon: React.FC<{ buff: UnitBuff }> = ({ buff }) =>
     : <TerrainIcon terrain={buff.terrain ?? 'plain'} />;
 
 // A unit's buffs as a row of icons; tapping it opens each one's name and numbers
-const BuffRow: React.FC<{ buffs: UnitBuff[] }> = ({ buffs }) => {
-  const [open, setOpen] = useState(false);
+const BuffRow: React.FC<{ buffs: UnitBuff[]; open: boolean; setOpen: (update: (open: boolean) => boolean) => void }> = ({ buffs, open, setOpen }) => {
   return (
     <div className="flex flex-col items-center gap-0.5" style={{ pointerEvents: 'auto' }}>
       <button
@@ -228,6 +227,8 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
 
   // Damage shown so far in the current battle, and floating numbers for recent hits
   const [shownDamage, setShownDamage] = useState(0);
+  // The buff list under the label is open (drawn above every other label while it is)
+  const [buffsOpen, setBuffsOpen] = useState(false);
   const [hitNumbers, setHitNumbers] = useState<{ id: number; amount: number }[]>([]);
   const battleProgressRef = useRef<{ key: string; landed: number; shown: number } | null>(null);
   // Seconds since the current battle began, following the game speed and slow motion
@@ -746,7 +747,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
         <Html
           position={[0, look.labelHeight, 0]}
           center
-          zIndexRange={[5, 0]}
+          zIndexRange={buffsOpen ? [60, 50] : [5, 0]}
           style={{ pointerEvents: 'none' }}
         >
           <div className="flex flex-col items-center gap-0.5">
@@ -778,7 +779,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
           </div>
           {/* Buffs under the health tag: tap for what each one does */}
           {!isPendingPurchase && buffs.length > 0 && (
-            <BuffRow buffs={buffs} />
+            <BuffRow buffs={buffs} open={buffsOpen} setOpen={setBuffsOpen} />
           )}
           </div>
         </Html>
