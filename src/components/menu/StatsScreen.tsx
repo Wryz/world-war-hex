@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { trackEvent } from '@/lib/analytics';
 import { isStoragePersisted } from '@/lib/offline';
-import { TroopId, MOB_IDS, TROOPS } from '@/lib/game/troops';
+import { TroopId, MOB_IDS } from '@/lib/game/troops';
 import { LEVEL_COUNT } from '@/lib/campaign/levels';
 import {
   exportSave, highestCleared, parseSave, profilePower, replaceProfile, resetProfile, totalStars, useHasHydrated, useProfile
