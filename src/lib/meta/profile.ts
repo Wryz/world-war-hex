@@ -188,7 +188,7 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
 
   return {
     ...base,
-    coins: toCount(raw.coins),
+    coins: toCount(raw.coins) + retiredTacticRefund(raw.tactics),
     cards,
     deck: deck.length > 0 ? deck : [...STARTER_CARDS],
     levels,
@@ -326,6 +326,29 @@ export const setDeck = (deck: TroopId[]): boolean => {
   if (next.length === 0) return false;
   setProfile({ ...profile, deck: next });
   return true;
+};
+
+// --- Retired tactic cards ------------------------------------------------------------------
+
+// Tactic cards were bought and upgraded with coins for a short while before the battlefield's own
+// objects replaced them. A profile that still lists them gets back every coin spent on them - the
+// price of each one bought (the three starters were free) and each upgrade - the next time it loads.
+// The cards themselves are dropped, so once the profile is saved again there is nothing left to refund.
+const RETIRED_TACTIC_UNLOCK: Record<string, number> = {
+  forcedMarch: 8, bulwark: 15, sabotage: 22, barricade: 22, smoke: 30, earthworks: 40, shadowstep: 50, callToArms: 60, sinkhole: 70
+};
+const RETIRED_TACTIC_MAX_LEVEL = 10;
+
+export const retiredTacticRefund = (tactics: unknown): number => {
+  if (!isRecord(tactics)) return 0;
+  let coins = 0;
+  for (const [id, value] of Object.entries(tactics)) {
+    const level = Math.min(RETIRED_TACTIC_MAX_LEVEL, Math.max(1, toCount(value)));
+    const unlockAt = RETIRED_TACTIC_UNLOCK[id];
+    if (unlockAt !== undefined) coins += Math.round((100 + 4 * unlockAt) / 10) * 10;
+    for (let from = 1; from < level; from++) coins += Math.round(25 * 1.45 ** (from - 1) / 5) * 5;
+  }
+  return coins;
 };
 
 // --- Cosmetics -----------------------------------------------------------------------------
