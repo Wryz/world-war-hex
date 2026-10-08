@@ -85,6 +85,25 @@ test('an attacked troop strikes back at an attacker in its reach', () => {
   assert.ok(health(after, defender) < 20, 'defender took the attack');
 });
 
+test('flanking needs two attackers on the same enemy, not just a troop standing beside it', () => {
+  const blow = (attackerCount: number, bystander: boolean) => {
+    const { state, centre } = makeBattle();
+    const target = makeUnit('player', centre, { lifespan: 100, maxLifespan: 100, attackPower: 0 });
+    // Attackers beside the target; a bystander beside it too, busy finishing off a wounded troop
+    const attackers = [at(centre, 1, 0), at(centre, -1, 0), at(centre, 0, 1)].slice(0, attackerCount)
+      .map(position => makeUnit('ai', position, { attackPower: 8 }));
+    const extra = bystander
+      ? [makeUnit('ai', at(centre, 0, -1), { attackPower: 8 }), makeUnit('player', at(centre, 0, -2), { lifespan: 1, attackPower: 0 })]
+      : [];
+    place(state, target, ...attackers, ...extra);
+    const after = resolveAllCombats(executeMoves(state));
+    return 100 - health(after, target);
+  };
+  assert.equal(blow(1, true), blow(1, false), 'a troop that only stands beside the target adds nothing');
+  const alone = blow(1, false);
+  assert.equal(blow(2, false), Math.round(2 * alone * 1.25), 'two attackers flank each other');
+});
+
 test('a sneak attack gets no strike-back, except from another sneak attacker', () => {
   const sneaky = (state: ReturnType<typeof makeBattle>, defenderAbilities: Ability[]) => {
     const rogue = makeUnit('ai', state.centre, { type: 'rogue' as UnitType, abilities: ['stealth'] });
@@ -177,4 +196,20 @@ test('every campaign level builds, with a known, distinct enemy roster', () => {
     assert.equal(new Set(level.enemyRoster).size, level.enemyRoster.length, `level ${id} roster has no repeats`);
     assert.ok(Number.isFinite(level.enemyScale) && level.enemyScale > 0, `level ${id} scale`);
   }
+});
+
+test('a troop that falls in its own attack stays dead, even with strike-backs still aimed at it', () => {
+  const { state, centre } = makeBattle('player');
+  // Your weak troop attacks a strong enemy that kills it striking back; another enemy in reach strikes
+  // at it too
+  const yours = makeUnit('player', centre, { lifespan: 3, attackPower: 2 });
+  const enemy = makeUnit('ai', at(centre, 1, 0), { lifespan: 30, maxLifespan: 30, attackPower: 10 });
+  const guard = makeUnit('ai', at(centre, -1, 0), { lifespan: 30, maxLifespan: 30, attackPower: 10 });
+  place(state, yours, enemy, guard);
+  const fought = executeMoves(state);
+  assert.ok(fought.combats.some(combat => combat.intercept), 'the second enemy strikes back as well');
+  const after = resolveAllCombats(fought);
+  assert.equal(after.players.player.units.some(unit => unit.id === yours.id), false);
+  assert.equal(after.hexGrid.some(hex => hex.unit?.id === yours.id), false);
+  assert.equal(after.battleStats!.player.lost, 1);
 });

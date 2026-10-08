@@ -34,7 +34,7 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 ### Tactics
 
 - **Zones of control.** Stepping next to an enemy ends a troop's move, so a line of troops really does hold a pass, and raiders have to fight their way through. Fliers pass over enemy lines.
-- **Flanking.** Every other troop of yours next to the enemy you attack adds +25% damage, up to +50% - pin an enemy with one troop and hit it with the rest.
+- **Flanking.** When two or more of your troops attack the same enemy together, each extra attacker adds +25% damage, up to +50%; a lone attacker gets no bonus - gang up on one enemy rather than spreading out.
 - **Threat preview.** Press **T** (or the crosshair in the top bar) to tint every hex the enemies you can see could strike next turn. With a troop selected, each hex it can move to shows the most damage it could take there (a skull means it could be destroyed).
 - **Fog of war** (from level 11, and in medium and hard quick battles). You only see enemy troops your own troops, castle and camps can see: 2 hexes, 3 from hills and snow, and one more for scouts (Rogues and other skirmishers, and fliers). Forests hide troops from anyone not right next to them, and ridges and woods block sight. A troop that attacks or besieges gives its position away until its side's next turn. Marching into a hidden enemy stops your troop short - an ambush. Enemies that slip back into the fog are marked where you last saw them, and the AI plays by the same rules.
 

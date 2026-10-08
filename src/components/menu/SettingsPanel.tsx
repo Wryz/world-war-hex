@@ -201,7 +201,7 @@ const GuideTab: React.FC = () => (
     <GuideSection title="Tactics" icon={<ThreatIcon />}>
       <ul className="ml-5 list-disc space-y-1.5">
         <li><b>Zones of control:</b> stepping next to an enemy ends a troop&apos;s move. Fliers pass over enemy lines.</li>
-        <li><b>Flanking:</b> each other troop of yours next to the enemy you attack adds +{Math.round(FLANK_BONUS * 100)}% damage, up to +{Math.round(FLANK_BONUS * MAX_FLANKERS * 100)}%.</li>
+        <li><b>Flanking:</b> when two or more of your troops attack the same enemy, each extra attacker adds +{Math.round(FLANK_BONUS * 100)}% damage, up to +{Math.round(FLANK_BONUS * MAX_FLANKERS * 100)}%. A lone attacker gets no bonus.</li>
         <li><b>Height:</b> attacking downhill hits 25% harder per level, uphill 25% weaker. Ridges and forests block arrows from below.</li>
         <li><b>Threat preview:</b> press <kbd className="rounded bg-slate-700 px-1">T</kbd> in battle (or the crosshair) to see where enemies can strike next turn, and how much a selected troop would take.</li>
       </ul>

@@ -40,11 +40,11 @@ const Cloud: React.FC<{ className: string; delay: string; duration: string }> = 
 );
 
 const MenuTile: React.FC<{ href: string; icon: React.ReactNode; title: string; detail: string }> = ({ href, icon, title, detail }) => (
-  <Link href={href} className={`${CARD_CLASS} group flex items-center gap-3 px-3 py-3 transition-transform hover:-translate-y-1`}>
-    <span className="text-3xl transition-transform group-hover:scale-110">{icon}</span>
+  <Link href={href} className={`${CARD_CLASS} group flex items-center gap-3 px-4 py-3.5 transition-transform hover:-translate-y-1 sm:gap-4 sm:py-4`}>
+    <span className="text-3xl transition-transform group-hover:scale-110 sm:text-4xl">{icon}</span>
     <span className="min-w-0">
-      <span className="font-display block text-lg leading-tight">{title}</span>
-      <span className="block truncate text-[11px] text-slate-400">{detail}</span>
+      <span className="font-display block text-lg leading-tight sm:text-2xl">{title}</span>
+      <span className="block truncate text-xs text-slate-300 sm:text-sm">{detail}</span>
     </span>
   </Link>
 );
@@ -70,13 +70,13 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
       <Cloud className="top-[70%] scale-90 opacity-70" delay="-22s" duration="80s" />
 
       {/* A living battlefield made of the game's own pieces */}
-      <div className="relative order-2 h-[40vh] min-h-[260px] lg:absolute lg:inset-y-0 lg:left-[36%] lg:right-0 lg:h-auto">
+      <div className="relative order-2 h-[40vh] min-h-[260px] lg:absolute lg:inset-y-0 lg:left-[40%] lg:right-0 lg:h-auto">
         <IslandDiorama onThemeChange={setThemeName} />
         {themeName && (
           <div className="pointer-events-none absolute bottom-4 right-4 lg:bottom-8 lg:right-8">
-            <div key={themeName} className={`${CARD_CLASS} animate-fadeIn px-4 py-2 text-right`}>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{LEVEL_COUNT} battles across</div>
-              <div className="font-display text-lg text-amber-300">{themeName}</div>
+            <div key={themeName} className={`${CARD_CLASS} animate-fadeIn px-5 py-2.5 text-right`}>
+              <div className="text-xs font-bold uppercase tracking-widest text-slate-300">{LEVEL_COUNT} battles across</div>
+              <div className="font-display text-2xl text-amber-300">{themeName}</div>
             </div>
           </div>
         )}
@@ -87,7 +87,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
         <ResourceBadges />
         <button
           onClick={() => setMuted(!isMuted)}
-          className={`${CARD_CLASS} p-2.5`}
+          className={`${CARD_CLASS} p-3 text-xl`}
           aria-label={isMuted ? 'Turn sound on' : 'Mute sound'}
           aria-pressed={isMuted}
         >
@@ -95,7 +95,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
         </button>
         <button
           onClick={() => setSettingsTab('sound')}
-          className={`${CARD_CLASS} p-2.5`}
+          className={`${CARD_CLASS} p-3 text-xl`}
           aria-label="Settings"
           title="Settings: sound, gameplay, quick battles and the guide"
         >
@@ -104,7 +104,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
       </div>
       {settingsTab && <SettingsPanel initialTab={settingsTab} onClose={() => setSettingsTab(null)} onStartQuickBattle={onStartQuickBattle} />}
 
-      <main className="relative z-10 order-1 flex flex-col justify-center px-4 pt-16 pb-4 sm:px-8 lg:min-h-screen lg:max-w-[40rem] lg:px-14 lg:py-10 pointer-events-none">
+      <main className="relative z-10 order-1 flex flex-col justify-center px-4 pt-16 pb-4 sm:px-8 lg:min-h-screen lg:max-w-[46rem] lg:px-14 lg:py-10 pointer-events-none">
         <div className="pointer-events-auto">
           {/* Wordmark */}
           <div className="flex items-center gap-4">
@@ -113,50 +113,50 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
               alt=""
               width={112}
               height={112}
-              className="animate-bob h-20 w-20 drop-shadow-[0_6px_0_rgba(15,23,42,0.35)] sm:h-28 sm:w-28"
+              className="animate-bob h-20 w-20 drop-shadow-[0_6px_0_rgba(15,23,42,0.35)] sm:h-32 sm:w-32"
               priority
             />
             <h1 className="font-display leading-[0.85]">
-              <span className="block text-2xl text-slate-800 sm:text-3xl">World War</span>
+              <span className="block text-2xl text-slate-800 sm:text-4xl">World War</span>
               <span
-                className="block text-6xl text-amber-400 sm:text-8xl"
+                className="block text-6xl text-amber-400 sm:text-9xl"
                 style={{ WebkitTextStroke: '3px #0f172a', paintOrder: 'stroke fill', textShadow: '0 6px 0 #0f172a' }}
               >
                 HEX
               </span>
             </h1>
           </div>
-          <p className="mt-3 max-w-lg text-lg font-semibold text-slate-700">
+          <p className="mt-3 max-w-xl text-xl font-semibold text-slate-700 sm:text-2xl">
             Play your cards, read the land, topple the castle.
           </p>
 
           {/* Campaign */}
-          <div className={`${CARD_CLASS} mt-5 max-w-lg p-4 sm:p-5`}>
+          <div className={`${CARD_CLASS} mt-6 max-w-2xl p-5 sm:p-6`}>
             <div className="flex items-start gap-3">
               <div className="min-w-0 flex-1">
-                <div className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                <div className="text-sm font-bold uppercase tracking-widest text-slate-300">
                   {campaignDone ? 'Campaign complete!' : `Campaign · ${nextLevel.region.name}`}
                 </div>
-                <div className="font-display mt-0.5 flex items-center gap-1.5 text-2xl">
+                <div className="font-display mt-1 flex items-center gap-1.5 text-3xl sm:text-4xl">
                   {nextLevel.isBoss && <BossIcon />}Level {nextLevel.id}: {nextLevel.name}
                 </div>
-                <div className="mt-1 flex items-center gap-1 text-xs text-slate-400">
+                <div className="mt-1.5 flex items-center gap-1.5 text-base text-slate-300">
                   <StarIcon /> {cleared}/{LEVEL_COUNT} levels cleared · vs {FACTIONS[nextLevel.region.faction].title}
                 </div>
               </div>
               <div className="hidden shrink-0 sm:block">
-                <TroopCard type={nextLevel.isBoss ? nextLevel.region.boss : nextLevel.enemyRoster[0]} size="xs" hideLevel hidden={!nextLevel.isBoss && hydrated && !(profile.bestiary[nextLevel.enemyRoster[0]]?.seen)} />
+                <TroopCard type={nextLevel.isBoss ? nextLevel.region.boss : nextLevel.enemyRoster[0]} size="sm" hideLevel hidden={!nextLevel.isBoss && hydrated && !(profile.bestiary[nextLevel.enemyRoster[0]]?.seen)} />
               </div>
             </div>
 
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <Link href={`/campaign?level=${nextLevel.id}`} className={`${PRIMARY_BUTTON} flex-1 text-center`}>
+              <Link href={`/campaign?level=${nextLevel.id}`} className={`${PRIMARY_BUTTON} flex-1 py-4 text-center text-2xl sm:text-3xl`}>
                 <span className="inline-flex items-center gap-2"><AttackIcon color="currentColor" /> {cleared === 0 ? 'Start Campaign' : 'Battle!'}</span>
               </Link>
               {savedBattle && onContinueBattle && (
                 <button
                   onClick={onContinueBattle}
-                  className="font-display rounded-xl bg-slate-700 px-5 py-3 text-lg text-slate-100 shadow-[0_5px_0_#020617] transition-transform hover:-translate-y-0.5 hover:bg-slate-600 active:translate-y-1"
+                  className="font-display rounded-xl bg-slate-700 px-6 py-4 text-2xl text-slate-100 shadow-[0_5px_0_#020617] transition-transform hover:-translate-y-0.5 hover:bg-slate-600 active:translate-y-1"
                   title={savedLevel ? `Continue level ${savedLevel.id}: ${savedLevel.name}` : 'Continue your skirmish'}
                 >
                   <span className="inline-flex items-center gap-2"><ResumeIcon /> Continue</span>
@@ -166,7 +166,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
           </div>
 
           {/* Everything else */}
-          <div className="mt-4 grid max-w-lg grid-cols-2 gap-2">
+          <div className="mt-5 grid max-w-2xl grid-cols-2 gap-3">
             <MenuTile href="/campaign" icon={<MapIcon />} title="World Map" detail={`${REGIONS.length} regions · ${LEVEL_COUNT} battles`} />
             <MenuTile href="/army" icon={<CardsIcon />} title="Army" detail="Build your deck, upgrade cards" />
             <MenuTile href="/bestiary" icon={<BookIcon />} title="Bestiary" detail={`${hydrated ? discovered : 0}/${MOB_IDS.length} monsters discovered`} />
@@ -175,12 +175,12 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
             <button
               type="button"
               onClick={() => setSettingsTab('guide')}
-              className={`${CARD_CLASS} group flex items-center gap-3 px-3 py-3 text-left transition-transform hover:-translate-y-1`}
+              className={`${CARD_CLASS} group flex items-center gap-3 px-4 py-3.5 text-left transition-transform hover:-translate-y-1 sm:gap-4 sm:py-4`}
             >
-              <span className="text-3xl transition-transform group-hover:scale-110"><GuideIcon /></span>
+              <span className="text-3xl transition-transform group-hover:scale-110 sm:text-4xl"><GuideIcon /></span>
               <span className="min-w-0">
-                <span className="font-display block text-lg leading-tight">How to play</span>
-                <span className="block truncate text-[11px] text-slate-400">Rules, terrain, tactics</span>
+                <span className="font-display block text-lg leading-tight sm:text-2xl">How to play</span>
+                <span className="block truncate text-xs text-slate-300 sm:text-sm">Rules, terrain, tactics</span>
               </span>
             </button>
           </div>

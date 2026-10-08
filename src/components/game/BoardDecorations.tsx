@@ -290,9 +290,11 @@ const buildPropMatrices = (hexes: Hex[], decor?: MapDecor): Map<string, THREE.Ma
   const result = new Map<string, THREE.Matrix4[]>();
   const quaternion = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
+  // Many models stand on a flat base; a hair above the hex top so the two never flicker through each other
+  const LIFT = 0.006;
   const add = (model: string, x: number, y: number, z: number, scale: number, turn = 0) => {
     quaternion.setFromAxisAngle(up, turn);
-    const matrix = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), quaternion, new THREE.Vector3(scale, scale, scale));
+    const matrix = new THREE.Matrix4().compose(new THREE.Vector3(x, y + LIFT, z), quaternion, new THREE.Vector3(scale, scale, scale));
     const list = result.get(model);
     if (list) list.push(matrix);
     else result.set(model, [matrix]);
@@ -319,18 +321,20 @@ const buildPropMatrices = (hexes: Hex[], decor?: MapDecor): Map<string, THREE.Ma
         }
         break;
       case 'village': {
-        // Two or three buildings around the edge, with the middle left clear for troops
-        const spots = rimSpots(hex, 3);
+        // Two or three buildings evenly round the middle (kept clear for troops), small enough that
+        // they never overlap each other or the buildings of a neighbouring village
         const buildings = ['building_home_A_yellow', 'building_home_B_yellow', 'building_home_A_yellow', 'building_windmill_yellow',
           'building_well_yellow', 'building_market_yellow', 'building_church_yellow', 'building_home_B_yellow'];
-        for (const [i, { x, z, r }] of spots.entries()) {
-          if (i === 2 && r < 0.4) {
-            add('fence_wood_straight', cx + x * 0.2, y, cz + z * 0.2, 0.5, facing(x, z));
-            continue;
-          }
+        const scales: Record<string, number> = { building_market_yellow: 0.32, building_church_yellow: 0.4, building_windmill_yellow: 0.44 };
+        const first = seededRandom(hex, 29) * Math.PI * 2;
+        for (let i = 0; i < 3; i++) {
+          // The third spot is sometimes left open
+          if (i === 2 && seededRandom(hex, 33) < 0.35) continue;
           const model = pick(buildings, seededRandom(hex, i + 30));
-          const scale = model === 'building_market_yellow' ? 0.42 : model === 'building_church_yellow' ? 0.5 : 0.58;
-          add(model, cx + x * 1.05, y, cz + z * 1.05, scale, facing(x, z));
+          const angle = first + i * Math.PI * 2 / 3;
+          const x = Math.cos(angle) * 0.48;
+          const z = Math.sin(angle) * 0.48;
+          add(model, cx + x, y, cz + z, scales[model] ?? 0.46, facing(x, z));
         }
         break;
       }

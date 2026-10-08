@@ -839,6 +839,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     if (currentPhase === 'combat') {
       // Every battle of the turn is fought at the same time, once the troops walking into them arrive
       const startDelay = getBattleStartDelay();
+      // Whom each fighter strikes, so they all stand down once that unit falls (to any fight)
+      const targetOfFighter = new Map<string, string>();
       combats.forEach((combat, index) => {
         if (combat.resolved) return;
         for (const defender of combat.defenders) {
@@ -893,6 +895,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
         const defenderAt = liveDefenders.find(d => coordKey(d.position) === coordKey(combat.hexCoordinates)) ?? liveDefenders[0];
         for (const attacker of liveAttackers) {
+          if (defenderAt) targetOfFighter.set(attacker.id, defenderAt.id);
           battles.set(attacker.id, {
             key,
             target: worldOf(combat.hexCoordinates),
@@ -908,12 +911,23 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           // blows on top of any from that fight
           const prior = combat.intercept ? battles.get(live.id) : undefined;
           if (prior) {
-            const times = [...(prior.incoming?.times ?? []), ...blowsOn(live, diesAt)].sort((a, b) => a - b);
             const damage = (prior.incoming?.damage ?? 0) + (damageTo.get(live.id) ?? 0);
-            battles.set(live.id, { ...prior, incoming: { times, damage }, diesAt: getDeathTime(times, damage, live.lifespan) });
+            const allTimes = [...(prior.incoming?.times ?? []), ...blowsOn(live, diesAt)].sort((a, b) => a - b);
+            const fallsAt = getDeathTime(allTimes, damage, live.lifespan);
+            // Once it falls (to either fight), nobody strikes it again and no more blows land on it
+            const times = fallsAt === null ? allTimes : allTimes.filter(time => time <= fallsAt);
+            battles.set(live.id, { ...prior, incoming: { times, damage }, diesAt: fallsAt });
+            if (fallsAt !== null) {
+              for (const [id, targetId] of targetOfFighter) {
+                const record = battles.get(id);
+                if (targetId !== live.id || !record) continue;
+                battles.set(id, { ...record, targetDiesAt: record.targetDiesAt == null ? fallsAt : Math.min(record.targetDiesAt, fallsAt) });
+              }
+            }
             continue;
           }
           const target = defenderTarget.get(live.id) ?? null;
+          if (target) targetOfFighter.set(live.id, target.id);
           battles.set(live.id, {
             key,
             target: target ? worldOf(target.position) : null,

@@ -21,13 +21,13 @@ export const ResourceBadges: React.FC<{ className?: string }> = ({ className = '
   if (!hydrated) return <div className={className} />;
   return (
     <div className={`flex flex-wrap items-center gap-2 ${className}`}>
-      <span id="hud-coins" className={`${CARD_CLASS} font-display flex items-center gap-1.5 px-3 py-1.5 text-lg text-yellow-300`} title="Coins: spend them on cards and upgrades">
+      <span id="hud-coins" className={`${CARD_CLASS} font-display flex items-center gap-1.5 px-3 py-1.5 text-lg text-yellow-300 sm:px-4 sm:py-2 sm:text-2xl`} title="Coins: spend them on cards and upgrades">
         <CoinIcon /> {profile.coins}
       </span>
-      <span className={`${CARD_CLASS} font-display flex items-center gap-1.5 px-3 py-1.5 text-lg text-orange-300`} title="Army power: the strength of your deck">
+      <span className={`${CARD_CLASS} font-display flex items-center gap-1.5 px-3 py-1.5 text-lg text-orange-300 sm:px-4 sm:py-2 sm:text-2xl`} title="Army power: the strength of your deck">
         <PowerIcon /> {profilePower(profile)}
       </span>
-      <span className={`${CARD_CLASS} font-display hidden items-center gap-1.5 px-3 py-1.5 text-lg text-amber-200 sm:flex`} title="Campaign stars">
+      <span className={`${CARD_CLASS} font-display hidden items-center gap-1.5 px-3 py-1.5 text-lg text-amber-200 sm:flex sm:px-4 sm:py-2 sm:text-2xl`} title="Campaign stars">
         <StarIcon /> {totalStars(profile)}
       </span>
     </div>

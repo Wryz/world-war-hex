@@ -225,8 +225,9 @@ const MAX_ELEVATION_STEPS = 2;
 // Ranged units standing at least this high (hills, snow) reach one hex further
 export const HIGH_GROUND_ELEVATION = 2;
 
-// Zones of control: stepping next to an enemy ends a troop's move, unless it flies. Flanking: every other troop of the attacker's side next to the target adds this much
-// damage, counting at most MAX_FLANKERS of them.
+// Zones of control: stepping next to an enemy ends a troop's move, unless it flies. Flanking: when
+// several troops attack the same enemy together, every other attacker adds this much damage to each
+// one's strike, counting at most MAX_FLANKERS of them. A lone attacker gets no flanking bonus.
 export const FLANK_BONUS = 0.25;
 export const MAX_FLANKERS = 2;
 
@@ -1334,10 +1335,10 @@ export const getSideView = (state: GameState, side: PlayerType, remember = false
   };
 };
 
-// Every troop of the attacker's side (other than the attacker) next to the target, up to MAX_FLANKERS
-export const getFlankers = (state: GameState, attacker: Unit, target: Unit): number =>
-  Math.min(MAX_FLANKERS, state.players[attacker.owner].units.filter(unit =>
-    unit.id !== attacker.id && getHexDistance(unit.position, target.position) === 1).length);
+// The other troops attacking the same enemy alongside an attacker, up to MAX_FLANKERS: flanking
+// needs at least two attackers on one target
+export const getFlankers = (attackersOnTarget: number): number =>
+  Math.min(MAX_FLANKERS, Math.max(0, attackersOnTarget - 1));
 
 const isEnraged = (unit: Unit) => hasAbility(unit, 'berserk') && unit.lifespan * 2 <= unit.maxLifespan;
 
@@ -1383,12 +1384,13 @@ export const getStrikePowerOnTerrain = (
   getCoverMultiplier(attacker, targetTerrain) *
   getPointBlankMultiplier(attacker, distance);
 
-// A strike where the two units actually stand, including flanking
-const getStrikePower = (state: GameState, attacker: Unit, target: Unit): number =>
+// A strike where the two units actually stand, including flanking when `attackersOnTarget` troops
+// (this one included) attack the target together
+const getStrikePower = (state: GameState, attacker: Unit, target: Unit, attackersOnTarget = 1): number =>
   getStrikePowerOnTerrain(
     attacker, terrainUnder(state, attacker), target, terrainUnder(state, target),
     getHexDistance(attacker.position, target.position)
-  ) * (1 + FLANK_BONUS * getFlankers(state, attacker, target));
+  ) * (1 + FLANK_BONUS * getFlankers(attackersOnTarget));
 
 // Split one unit's attack between the enemy units it can reach (each share already scaled for that
 // enemy's height, counters and cover), then round the total and hand it out so the shares add up to it
@@ -1435,12 +1437,14 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
   // Damage already heading for each enemy from the attackers that picked it
   const assignedDamage = new Map<string, number>();
   const targetOf = new Map<string, string>();
+  // How many attackers already picked each enemy (joining them flanks it)
+  const attackersOn = new Map<string, number>();
   const dealt = (target: Unit, damage: number) => applyArmor(target, damage > 0 ? Math.max(1, Math.round(damage)) : 0);
 
   for (const { unit, targets } of choices) {
     const options = targets.map(target => {
       const assigned = assignedDamage.get(target.id) ?? 0;
-      const strike = getStrikePower(state, unit, target);
+      const strike = getStrikePower(state, unit, target, (attackersOn.get(target.id) ?? 0) + 1);
       const healthLeft = target.lifespan - dealt(target, assigned);
       return {
         target,
@@ -1468,6 +1472,7 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
 
     const { target, strike } = options[0];
     targetOf.set(unit.id, target.id);
+    attackersOn.set(target.id, (attackersOn.get(target.id) ?? 0) + 1);
     assignedDamage.set(target.id, (assignedDamage.get(target.id) ?? 0) + strike);
   }
 
@@ -1542,7 +1547,7 @@ const detectIntercepts = (state: GameState, attackerSide: PlayerType, siege: Gam
     .sort((a, b) => a.targets.length - b.targets.length || compareIds(a.guard, b.guard));
   for (const { guard, targets } of guards) {
     const options = targets.map(target => {
-      const strike = getStrikePower(state, guard, target);
+      const strike = getStrikePower(state, guard, target, (assigned.get(target.id)?.length ?? 0) + 1);
       const before = damageOn.get(target.id) ?? 0;
       const kills = applyArmor(target, Math.max(1, Math.round(before))) < target.lifespan &&
         applyArmor(target, Math.max(1, Math.round(before + strike))) >= target.lifespan;
@@ -1839,7 +1844,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
   const percent = (multiplier: number) => `${multiplier > 1 ? '+' : '-'}${Math.round(Math.abs(multiplier - 1) * 100)}%`;
 
   // Modifiers that apply when `unit` strikes `target`, in words
-  const describeStrike = (unit: Unit, target: Unit): string[] => {
+  const describeStrike = (unit: Unit, target: Unit, attackersOnTarget = 1): string[] => {
     const terrain = terrainUnder(state, unit);
     const targetTerrain = terrainUnder(state, target);
     const modifiers: string[] = [];
@@ -1857,7 +1862,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     if (hasAbility(unit, 'magic') && TERRAIN_EFFECTS[targetTerrain].damageTakenMultiplier < 1) {
       modifiers.push('spells ignore cover');
     }
-    const flankers = getFlankers(state, unit, target);
+    const flankers = getFlankers(attackersOnTarget);
     if (flankers > 0) modifiers.push(`+${Math.round(FLANK_BONUS * flankers * 100)}% attack (flanking)`);
     return modifiers;
   };
@@ -1879,7 +1884,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     // Sneak attackers can't catch each other unawares
     const isSneakAttack = hasAbility(unit, 'stealth') && !defenderUnits.some(defender => hasAbility(defender, 'stealth'));
     const canBeHitBack = !combat.intercept && !isSneakAttack && defenderUnits.some(defender => canStrike(state, defender, unit));
-    const modifiers = defenderUnits[0] ? describeStrike(unit, defenderUnits[0]) : [];
+    const modifiers = defenderUnits[0] ? describeStrike(unit, defenderUnits[0], attackerUnits.length) : [];
     if (canBeHitBack) modifiers.push(...describeDefence(unit));
     if (combat.intercept) modifiers.push('its target is busy with its own attack - takes no damage');
     else if (isSneakAttack) modifiers.push('sneak attack - takes no damage');
@@ -1899,7 +1904,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
 
   // Each defender takes the attackers' combined strikes (one defender per combat)
   const defenderDamage = defenders.map(defender =>
-    distributeDamage([attackers.reduce((sum, a) => sum + getStrikePower(state, a.unit, defender.unit), 0)])[0]
+    distributeDamage([attackers.reduce((sum, a) => sum + getStrikePower(state, a.unit, defender.unit, attackers.length), 0)])[0]
   );
   // The defender's strike-back is split between the attackers it can reach
   const attackerDamage = defenders.length > 0
@@ -1955,7 +1960,7 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     if (!combat.intercept && hasAbility(unit, 'stealth')) {
       add(hasAbility(target, 'stealth') ? 'Sneak attack spotted' : 'Sneak attack!', hasAbility(target, 'stealth') ? 'neutral' : 'good');
     }
-    const flankers = getFlankers(state, unit, target);
+    const flankers = getFlankers(attackers.length);
     if (flankers > 0) add('Flanked', 'good', `+${Math.round(FLANK_BONUS * flankers * 100)}%`);
     const height = getHeightMultiplier(terrain, targetTerrain);
     if (height > 1) add('High ground', 'good', `+${pct(height)}`);
