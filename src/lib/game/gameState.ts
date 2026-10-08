@@ -38,7 +38,7 @@ export const DEFAULT_SETTINGS: GameSettings = {
   castleHealth: 26,
   startingGold: 30,
   aiIncomeBonus: 0,
-  maxRounds: 12
+  maxRounds: 14
 };
 
 // Default castle health (each battle's settings may change it)
