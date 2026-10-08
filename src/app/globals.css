@@ -229,3 +229,13 @@ body {
     animation: none;
   }
 }
+
+/* The UI size setting (lib/uiSize): everything is sized in rem, so the root font size scales it all.
+   Phones grow a little less, and not at all in battle, where a full hand of cards must fit across. */
+html[data-ui-size="large"] { font-size: 112.5%; }
+html[data-ui-size="xl"] { font-size: 125%; }
+@media (max-width: 640px) {
+  html[data-ui-size="large"] { font-size: 106.25%; }
+  html[data-ui-size="xl"] { font-size: 112.5%; }
+  html[data-screen="battle"] { font-size: 100%; }
+}

@@ -63,7 +63,7 @@ export const BondList: React.FC<{ deck: readonly TroopId[]; owned?: readonly Tro
     ? BONDS.filter(bond => !active.includes(bond) && bond.cards.some(card => deck.includes(card)) && bond.cards.every(card => owned.includes(card)))
     : [];
   if (active.length === 0 && nearby.length === 0) {
-    return compact || brief ? null : <p className="text-[11px] text-slate-400">No bonds yet: some cards fight better together.</p>;
+    return compact || brief ? null : <p className="text-[0.6875rem] text-slate-400">No bonds yet: some cards fight better together.</p>;
   }
   if (brief) return <BriefBondList deck={deck} active={active} nearby={nearby} />;
   return (

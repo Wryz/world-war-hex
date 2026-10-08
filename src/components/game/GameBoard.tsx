@@ -1352,10 +1352,10 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {lastSeen.map(({ unit, turn, hex }) => (
         <Html key={`seen-${unit.id}`} position={labelPosition(hex)} center zIndexRange={[3, 0]} style={{ pointerEvents: 'none' }}>
           <span
-            className="flex items-center gap-0.5 whitespace-nowrap rounded-full border-2 border-dashed border-red-400/70 bg-slate-900/60 px-1.5 py-0.5 text-[11px] font-bold text-red-200 opacity-80"
+            className="flex items-center gap-0.5 whitespace-nowrap rounded-full border-2 border-dashed border-red-400/70 bg-slate-900/60 px-1.5 py-0.5 text-[0.6875rem] font-bold text-red-200 opacity-80"
             title={`${getUnitTypeName(unit.type)} last seen here ${turnNumber - turn <= 0 ? 'this round' : `${turnNumber - turn} round${turnNumber - turn === 1 ? '' : 's'} ago`}`}
           >
-            <UnitIcon type={unit.type} className="text-[13px]" />?
+            <UnitIcon type={unit.type} className="text-[0.8125rem]" />?
           </span>
         </Html>
       ))}
@@ -1484,7 +1484,7 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
 
   return (
     <Html position={[x, y + 0.2, z]} zIndexRange={[9, 0]} style={{ pointerEvents: 'none' }}>
-      <div className="ml-5 -mt-5 whitespace-nowrap rounded-md bg-slate-900/90 px-2 py-1 text-[11px] text-slate-100 shadow-lg select-none">
+      <div className="ml-5 -mt-5 whitespace-nowrap rounded-md bg-slate-900/90 px-2 py-1 text-[0.6875rem] text-slate-100 shadow-lg select-none">
         <span className="font-bold">
           {hex.isCamp ? <><CampIcon /> Camp</> : <><TerrainIcon terrain={hex.terrain} /> {TERRAIN_EFFECTS[hex.terrain].name}</>}
         </span>

@@ -88,7 +88,7 @@ export const StyleScreen: React.FC = () => {
                   </span>
                 )}
                 <span className="font-display text-center text-sm text-slate-800">{skin.name}</span>
-                <span className="min-h-[2.5em] text-center text-[11px] font-semibold text-slate-700">{skin.description}</span>
+                <span className="min-h-[2.5em] text-center text-[0.6875rem] font-semibold text-slate-700">{skin.description}</span>
                 <CosmeticButton kind="cardSkin" id={skin.id} price={skin.price} equipped={equipped} onBought={() => announce(skin.id)} />
               </div>
             );
@@ -123,7 +123,7 @@ export const StyleScreen: React.FC = () => {
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="font-display block">{style.name}</span>
-                    <span className="block text-[11px] text-slate-400">{style.description}</span>
+                    <span className="block text-[0.6875rem] text-slate-400">{style.description}</span>
                   </span>
                   {flash === style.id && (
                     <span className="moment-pop font-display pointer-events-none absolute right-3 top-0 text-lg text-amber-300" style={{ WebkitTextStroke: '1.5px #0f172a', paintOrder: 'stroke fill' }}>

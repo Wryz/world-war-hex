@@ -31,7 +31,7 @@ const Combatant: React.FC<{ entry: CombatantPreview }> = ({ entry }) => (
       </span>
     </div>
     {entry.modifiers.length > 0 && (
-      <div className="mt-0.5 flex flex-col text-[10px] leading-tight">
+      <div className="mt-0.5 flex flex-col text-[0.625rem] leading-tight">
         {entry.modifiers.map(modifier => <span key={modifier} className={modifierTone(modifier)}>{modifier}</span>)}
       </div>
     )}
@@ -42,7 +42,7 @@ const Side: React.FC<{ label: string; color: string; power: number; entries: Com
   label, color, power, entries
 }) => (
   <div className="flex-1 min-w-0">
-    <div className="mb-1 flex items-center justify-between text-[11px] font-bold">
+    <div className="mb-1 flex items-center justify-between text-[0.6875rem] font-bold">
       <span style={{ color }}>{label}</span>
       <span className="flex items-center gap-1 text-slate-300">
         <AttackIcon />{Number.isInteger(power) ? power : power.toFixed(1)}

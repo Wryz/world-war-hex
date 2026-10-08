@@ -23,7 +23,7 @@ const formatTime = (seconds: number) => {
 const Stat: React.FC<{ label: string; value: React.ReactNode; accent?: string }> = ({ label, value, accent = '#f1f5f9' }) => (
   <div className="rounded-xl bg-slate-800/80 px-3 py-2">
     <div className="font-display text-2xl" style={{ color: accent }}>{value}</div>
-    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</div>
+    <div className="text-[0.625rem] font-bold uppercase tracking-wider text-slate-400">{label}</div>
   </div>
 );
 

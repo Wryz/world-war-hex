@@ -16,6 +16,7 @@ import {
   SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon
 } from '../game/icons';
 import type { Difficulty } from '../game/storage/GameStorage';
+import { UI_SIZES, setUiSize, useUiSize } from '@/lib/uiSize';
 
 export type SettingsTab = 'sound' | 'gameplay' | 'guide';
 type Tab = SettingsTab;
@@ -126,12 +127,32 @@ const QuickBattle: React.FC<{ onStart: (difficulty: Difficulty) => void }> = ({ 
 
 const GameplayTab: React.FC<{ onStartQuickBattle?: (difficulty: Difficulty) => void }> = ({ onStartQuickBattle }) => {
   const speed = useGameSpeed();
+  const uiSize = useUiSize();
   // Read in the browser only, so the server render matches
   const [analyticsOn, setAnalyticsOn] = useState(false);
   useEffect(() => setAnalyticsOn(isAnalyticsEnabled()), []);
   return (
     <div className="flex flex-col gap-4 text-sm">
       {onStartQuickBattle && <QuickBattle onStart={onStartQuickBattle} />}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span>
+          <b className="block text-slate-100">Text size</b>
+          <span className="text-xs text-slate-400">Makes text, buttons and cards bigger on every screen.</span>
+        </span>
+        <div className="flex shrink-0 gap-1" role="radiogroup" aria-label="Text size">
+          {UI_SIZES.map(option => (
+            <button
+              key={option.id}
+              role="radio"
+              aria-checked={uiSize === option.id}
+              onClick={() => setUiSize(option.id)}
+              className={`rounded-lg px-3 py-1.5 font-bold ${uiSize === option.id ? 'bg-amber-400 text-slate-900' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="flex items-center justify-between gap-3">
         <span>
           <b className="block text-slate-100">Battle speed</b>

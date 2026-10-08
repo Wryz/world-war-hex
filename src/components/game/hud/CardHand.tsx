@@ -65,7 +65,7 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
           {bonds.map(bond => (
             <span
               key={bond.id}
-              className="flex items-center gap-1 rounded-full bg-slate-900/85 px-2.5 py-1 text-[11px] font-bold text-amber-200 shadow ring-1 ring-amber-300/50"
+              className="flex items-center gap-1 rounded-full bg-slate-900/85 px-2.5 py-1 text-[0.6875rem] font-bold text-amber-200 shadow ring-1 ring-amber-300/50"
               title={`${bond.name}: ${describeBond(bond)}`}
             >
               <BondIcon /> {bond.name}
@@ -82,7 +82,7 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
       <div className="flex max-w-full items-end gap-1.5 sm:gap-3">
         {/* Treasury */}
         <div className={`${PANEL_CLASS} pointer-events-auto hidden flex-col items-center px-3 py-2 sm:flex`}>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Gold</span>
+          <span className="text-[0.625rem] font-bold uppercase tracking-widest text-slate-400">Gold</span>
           <span className="font-display flex items-center gap-1 text-2xl text-amber-300"><GoldIcon />{gold}</span>
         </div>
 
@@ -119,7 +119,7 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
           {/* The card that will be drawn next */}
           {nextCard && (
             <div className="hidden flex-col items-center opacity-80 md:flex" title="Next card">
-              <span className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-200 drop-shadow">Next</span>
+              <span className="mb-1 text-[0.5625rem] font-bold uppercase tracking-widest text-slate-200 drop-shadow">Next</span>
               <TroopCard type={nextCard} level={getRosterStats(gameState, 'player', nextCard)?.level ?? 1} size="xs" hideLevel />
             </div>
           )}

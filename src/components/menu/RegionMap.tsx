@@ -83,8 +83,8 @@ const LevelNode: React.FC<{
       {unlocked && (
         <span className="mt-0.5 flex gap-px rounded-full bg-slate-900/75 px-1 py-px">
           {[0, 1, 2].map(i => i < stars
-            ? <FilledStarIcon key={i} className="text-[9px] sm:text-[11px]" />
-            : <StarIcon key={i} className="text-[9px] sm:text-[11px]" color="#64748b" />)}
+            ? <FilledStarIcon key={i} className="text-[0.5625rem] sm:text-[0.6875rem]" />
+            : <StarIcon key={i} className="text-[0.5625rem] sm:text-[0.6875rem]" color="#64748b" />)}
         </span>
       )}
     </button>

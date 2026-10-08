@@ -145,8 +145,8 @@ export const ArmyScreen: React.FC = () => {
                 </span>
                 <span className="min-w-0">
                   <b className={active ? 'text-amber-200' : 'text-slate-100'}>{bond.name}</b>
-                  {active && <span className="ml-1.5 rounded-full bg-amber-400 px-1.5 text-[10px] font-bold text-slate-900">Active</span>}
-                  {!ready && <span className="ml-1.5 rounded-full bg-slate-700 px-1.5 text-[10px] font-bold text-slate-300">Need both cards</span>}
+                  {active && <span className="ml-1.5 rounded-full bg-amber-400 px-1.5 text-[0.625rem] font-bold text-slate-900">Active</span>}
+                  {!ready && <span className="ml-1.5 rounded-full bg-slate-700 px-1.5 text-[0.625rem] font-bold text-slate-300">Need both cards</span>}
                   <span className="block text-slate-300">{bond.cards.map(card => TROOPS[card].name).join(' + ')}: {describeBond(bond)}</span>
                   <span className="mt-0.5 block italic text-slate-400">{bond.flavor}</span>
                 </span>

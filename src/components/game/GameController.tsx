@@ -135,6 +135,12 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const onBoardUnitClick = useStableCallback(handleUnitSelect);
   const onBoardUnitPurchase = useStableCallback(handleUnitPurchase);
 
+  // Marks the page as a battle while it is open (phones keep the battle at normal size: see globals.css)
+  useEffect(() => {
+    document.documentElement.dataset.screen = 'battle';
+    return () => { delete document.documentElement.dataset.screen; };
+  }, []);
+
   // Escape cancels the current selection
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {

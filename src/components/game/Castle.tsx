@@ -389,7 +389,7 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
       {!hideLabel && !fallen && (
         <Html position={[0, 2.35, 0]} center zIndexRange={[6, 0]} style={{ pointerEvents: 'none' }}>
           <div
-            className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] leading-none font-bold text-white whitespace-nowrap shadow select-none"
+            className="flex items-center gap-1 rounded-full px-2 py-0.5 text-[0.6875rem] leading-none font-bold text-white whitespace-nowrap shadow select-none"
             style={{ background: 'rgba(15, 23, 42, 0.85)', border: `2px solid ${ownerColor}` }}
           >
             <CrownIcon />
