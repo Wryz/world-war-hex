@@ -9,7 +9,7 @@ import {
 import { getTacticTargets, playTactic } from './battleTactics';
 import { getHexDistance } from './hexUtils';
 import { MAX_SIGNATURE_RANK, signatureRank, strafeDamage } from './signatures';
-import { TACTIC_HAND_LIMIT, isTacticDrawRound, mendHeal, rallyBonus, volleyDamage } from './tactics';
+import { TACTICS, TACTIC_HAND_LIMIT, TACTIC_IDS, isTacticDrawRound, mendHeal, pitDepth, rallyBonus } from './tactics';
 import { at, find, health, makeBattle, makeUnit, place, playTurn } from './testUtils';
 
 // Damage the first defender would take if the attackers struck it now
@@ -125,7 +125,7 @@ test('Berserkers heal when they destroy an enemy', () => {
 
 // --- Tactic cards ---------------------------------------------------------------------------
 
-const LOADOUT: TacticCard[] = [{ id: 'mend', level: 1 }, { id: 'volley', level: 1 }, { id: 'rally', level: 1 }];
+const LOADOUT: TacticCard[] = [{ id: 'mend', level: 1 }, { id: 'pitTrap', level: 1 }, { id: 'rally', level: 1 }];
 
 const withHand = (state: GameState, ...cards: TacticCard[]): GameState => ({
   ...state,
@@ -158,17 +158,34 @@ test('the turn after round 1 ends, each side draws a tactic card', () => {
   assert.equal(afterAi.tactics!.player.hand.length, 1);
 });
 
-test('Mend heals, Volley hurts', () => {
+test('tactic cards never aim at enemy troops directly', () => {
+  assert.ok(TACTIC_IDS.every(id => ['none', 'ownUnit', 'hex'].includes(TACTICS[id].target)));
+});
+
+test('Mend heals, and a Pit Trap drops an enemy into low ground without hurting it', () => {
   const { state: base, centre } = makeBattle('player');
-  const state = withHand(base, { id: 'mend', level: 3 }, { id: 'volley', level: 3 });
+  const state = withHand(base, { id: 'mend', level: 3 }, { id: 'pitTrap', level: 3 });
   const wounded = makeUnit('player', centre, { lifespan: 5 });
   const enemy = makeUnit('ai', at(centre, 2, 0));
   place(state, wounded, enemy);
   const mended = playTactic(state, 'player', 'p0', centre);
   assert.equal(health(mended, wounded), 5 + mendHeal(3));
-  const volleyed = playTactic(mended, 'player', 'p1', enemy.position);
-  assert.equal(health(volleyed, enemy), 20 - volleyDamage(3));
-  assert.equal(volleyed.tactics!.player.hand.length, 0);
+  const before = getHeightOfHex(mended, enemy.position);
+  const trapped = playTactic(mended, 'player', 'p1', enemy.position);
+  assert.equal(health(trapped, enemy), 20, 'no damage');
+  assert.ok(Math.abs(getHeightOfHex(trapped, enemy.position) - (before - pitDepth(3))) < 1e-6);
+  assert.equal(trapped.tactics!.player.hand.length, 0);
+});
+
+test('troops strike harder down into a pit', () => {
+  const { state: base, centre } = makeBattle('player');
+  const state = withHand(base, { id: 'pitTrap', level: 10 });
+  const attacker = makeUnit('player', centre, { attackPower: 10 });
+  const enemy = makeUnit('ai', at(centre, 1, 0), { lifespan: 99, maxLifespan: 99 });
+  place(state, attacker, enemy);
+  const level = damageTo(state, [attacker], enemy);
+  const trapped = playTactic(state, 'player', 'p0', enemy.position);
+  assert.ok(damageTo(trapped, [attacker], enemy) > level);
 });
 
 test('a tactic card needs a valid target and the right turn', () => {
@@ -230,13 +247,24 @@ test('Earthworks raise the ground and Sinkhole lowers it', () => {
   assert.ok(getHeightOfHex(sunk, at(centre, 0, 1)) < getHeightOfHex(raised, at(centre, 0, 1)));
 });
 
-test('Sabotage burns enemy gold, and Call to Arms brings a free troop to the castle', () => {
+test('a Barricade turns open ground into cover that stops arrows', () => {
+  const { state: base, centre } = makeBattle('player');
+  const state = withHand(base, { id: 'barricade', level: 1 });
+  const archer = makeUnit('ai', at(centre, 2, 0), { abilities: ['rangedAttack'], attackPower: 10 });
+  const sword = makeUnit('ai', at(centre, 1, 0), { attackPower: 10 });
+  const defender = makeUnit('player', centre, { lifespan: 99, maxLifespan: 99 });
+  place(state, archer, sword, defender);
+  const open = damageTo(state, [sword], defender);
+  const walled = playTactic(state, 'player', 'p0', centre);
+  assert.equal(walled.hexGrid.find(hex => hex.coordinates.q === centre.q && hex.coordinates.r === centre.r)!.terrain, 'ruins');
+  assert.ok(damageTo(walled, [sword], defender) < open, 'cover');
+  assert.equal(getTacticTargets(walled, 'player', 'barricade').some(c => c.q === archer.position.q && c.r === archer.position.r), false, 'not under an enemy');
+});
+
+test('Call to Arms brings a free troop to the castle', () => {
   const { state: base } = makeBattle('player');
-  const state = withHand(base, { id: 'sabotage', level: 1 }, { id: 'callToArms', level: 1 });
-  state.players.ai.points = 20;
-  const sabotaged = playTactic(state, 'player', 'p0');
-  assert.ok(sabotaged.players.ai.points < 20);
-  const called = playTactic(sabotaged, 'player', 'p1');
+  const state = withHand(base, { id: 'callToArms', level: 1 });
+  const called = playTactic(state, 'player', 'p0');
   assert.equal(called.players.player.units.length, 1);
   const castle = findBaseHex(called, 'player')!;
   assert.equal(getHexDistance(called.players.player.units[0].position, castle.coordinates), 1);

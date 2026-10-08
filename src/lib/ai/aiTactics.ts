@@ -1,12 +1,12 @@
 import type { GameState, HeldTactic, HexCoordinates, PlayerType, Unit } from '@/types/game';
 import { getHexDistance } from '../game/hexUtils';
 import {
-  findBaseHex, getAttackRange, getKillBounty, getOpponent, getRosterStats, getRosterTypes, getVisibleEnemies
+  findBaseHex, getAttackRange, getOpponent, getRosterStats, getRosterTypes, getVisibleEnemies
 } from '../game/gameState';
 import { getTacticHand, getTacticTargets, canPlayTactic, playTactic } from '../game/battleTactics';
 import {
-  TACTIC_HAND_LIMIT, bulwarkReduction, earthworksRaise, mendHeal, rallyBonus, sabotageGold, shadowstepBonus,
-  sinkholeDepth, smokeRadius, volleyDamage
+  TACTIC_HAND_LIMIT, barricadeRaise, bulwarkReduction, earthworksRaise, mendHeal, pitDepth, rallyBonus, shadowstepBonus,
+  sinkholeDepth, smokeRadius
 } from '../game/tactics';
 
 // How the AI plays tactic cards: before moving, it values every card it holds on every target (in
@@ -44,10 +44,20 @@ const valueOf = (state: GameState, side: PlayerType, card: HeldTactic, target?: 
       const healed = Math.min(unit.maxLifespan - unit.lifespan, mendHeal(level));
       return healed / unit.maxLifespan * unit.cost * (threatsTo(unit, enemies).length > 0 ? 1.5 : 1);
     }
-    case 'volley': {
-      const enemy = unitAt(enemies, target!)!;
-      const damage = volleyDamage(level);
-      return damage >= enemy.lifespan ? enemy.cost + getKillBounty(enemy) : healthWorth(enemy, damage);
+    case 'pitTrap': {
+      // Sink an enemy that our troops can reach this turn, so they strike it from above
+      const enemy = unitAt(enemies, target!);
+      if (!enemy) return 0;
+      const attackers = own.filter(unit =>
+        getHexDistance(unit.position, enemy.position) <= (unit.hasMoved ? 0 : unit.movementRange) + getAttackRange(unit));
+      return attackers.length === 0 ? 0 : pitDepth(level) * 6 * Math.min(3, attackers.length) + enemy.cost * 0.05;
+    }
+    case 'barricade': {
+      // Cover for one of our troops under threat (archers most of all)
+      const unit = unitAt(own, target!);
+      if (!unit) return 0;
+      const danger = threatsTo(unit, enemies).reduce((sum, enemy) => sum + enemy.attackPower, 0);
+      return healthWorth(unit, danger * 0.25) * 1.2 + barricadeRaise(level) * 4 + (getAttackRange(unit) > 1 && danger > 0 ? 1.5 : 0);
     }
     case 'rally': {
       // Troops that will likely fight this turn
@@ -73,8 +83,6 @@ const valueOf = (state: GameState, side: PlayerType, card: HeldTactic, target?: 
       // Worth most to a fast troop still far from the enemy castle
       return castle ? Math.min(4, getHexDistance(unit.position, castle.coordinates) / 3) : 0;
     }
-    case 'sabotage':
-      return Math.min(state.players[getOpponent(side)].points, sabotageGold(level)) * 0.8;
     case 'smoke': {
       // Own troops under the smoke that enemy archers and mages could otherwise shoot
       const shooters = enemies.filter(enemy => getAttackRange(enemy) > 1);
