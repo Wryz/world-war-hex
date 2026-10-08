@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { Hex, TerrainType } from '@/types/game';
 import type { MapDecor } from '@/lib/game/mapGenerator';
 import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
-import { KAYKIT_HEX_SCALE, PropLibrary, usePropLibrary } from './utils/kaykitProps';
+import { KAYKIT_HEX_SCALE, PropLibrary, PropPack, usePropLibrary } from './utils/kaykitProps';
 
 // Terrain props (trees, peaks, dunes, gold) drawn with one instanced mesh per part,
 // so the whole board's decorations cost a handful of draw calls
@@ -428,7 +428,15 @@ const InstancedProp: React.FC<{ library: PropLibrary; model: string; matrices: T
 const NO_SKIP: ReadonlySet<TerrainType> = new Set();
 
 const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[]; decor?: MapDecor }> = ({ hexGrid, decor }) => {
-  const library = usePropLibrary();
+  // Only the packs this map's scenery uses download (Halloween bits for haunted ground, dungeon props
+  // for the Underkeep)
+  const hasCursed = hexGrid.some(hex => hex.terrain === 'cursed');
+  const packs = useMemo((): PropPack[] => [
+    'medieval',
+    ...(hasCursed || decor === 'haunted' ? ['halloween' as const] : []),
+    ...(decor === 'dungeon' ? ['dungeon' as const] : [])
+  ], [hasCursed, decor]);
+  const library = usePropLibrary(packs);
   // Decorations only depend on the terrain, not on units moving around
   const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}`).join('|');
   const hexesRef = useRef(hexGrid);
