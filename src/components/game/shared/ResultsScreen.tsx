@@ -5,7 +5,7 @@ import { starGoals } from '@/lib/campaign/levels';
 import type { BattleRecordResult } from '@/lib/meta/profile';
 import { TROOPS, TroopId } from '@/lib/game/troops';
 import { playStinger } from '@/lib/audio/music';
-import { TIME_SCORE_WEIGHTS, TimeScore } from '@/lib/game/gameState';
+import { SPEED_POINTS_PER_ROUND, StarScore, TIME_SCORE_WEIGHTS } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
 import { emitCoins } from '../effects/effects';
 import {
@@ -28,8 +28,9 @@ interface ResultsScreenProps {
   onRetry: () => void;
   onMap: () => void;
   onArmy: () => void;
-  // When time ran out: each side's points (kills, gold and camps)
-  points?: { you: TimeScore; enemy: TimeScore };
+  // Each side's points: kills, gold and camps (which decide a battle when time runs out) and the
+  // speed bonus (which counts towards stars)
+  points?: { you: StarScore; enemy: StarScore };
 }
 
 const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds) % 60).padStart(2, '0')}`;
@@ -119,8 +120,8 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           <p className="mt-1 text-sm text-slate-300">{subtitle}</p>
         </div>
 
-        {/* Points, when time ran out */}
-        {reason === 'timeout' && points && (
+        {/* Points: they decide a battle when time runs out, and (with the speed bonus) the stars */}
+        {points && (
           <div className="mt-4 rounded-xl bg-slate-800 p-3 text-sm">
             <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1">
               <span />
@@ -129,7 +130,8 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
               {([
                 ['Kills', 'kills', `Gold value of enemy troops destroyed (x${TIME_SCORE_WEIGHTS.kills})`],
                 ['Gold', 'gold', `Gold earned in the battle (x${TIME_SCORE_WEIGHTS.gold})`],
-                ['Camps', 'camps', `${TIME_SCORE_WEIGHTS.camps} per camp held at the end`]
+                ['Camps', 'camps', `${TIME_SCORE_WEIGHTS.camps} per camp held at the end`],
+                ['Speed', 'speed', `${SPEED_POINTS_PER_ROUND} for every round left (counts for stars, not when time runs out)`]
               ] as const).map(([label, field, detail]) => (
                 <React.Fragment key={field}>
                   <span className="text-slate-300" title={detail}>{label}</span>

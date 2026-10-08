@@ -578,7 +578,7 @@ interface BoardSceneProps extends GameBoardProps {
 // High above a hex, clear of the troops fighting on it
 const calloutPosition = (hex: Hex): [number, number, number] => {
   const [x, y, z] = surfacePosition(hex);
-  return [x, y + 2.3, z];
+  return [x, y + 3.4, z];
 };
 
 // Just above a hex's tile, for labels lying on it
@@ -1214,15 +1214,25 @@ const BoardScene: React.FC<BoardSceneProps> = ({
               return (
                 <span
                   key={effect.label}
-                  className="battle-callout font-display whitespace-nowrap rounded-full px-2 py-0.5 text-xs shadow-lg"
+                  className="battle-callout flex items-stretch overflow-hidden whitespace-nowrap rounded-full text-xs shadow-lg"
                   style={{
-                    background: helpsYou === null ? 'rgba(120, 53, 15, 0.92)' : helpsYou ? 'rgba(6, 95, 70, 0.92)' : 'rgba(136, 19, 55, 0.92)',
-                    color: helpsYou === null ? '#fde68a' : helpsYou ? '#a7f3d0' : '#fecdd3',
                     animationDelay: `${getBattleStartDelay() / getGameSpeed() + index * 0.18}s`,
                     animationDuration: `${2.6 / getGameSpeed()}s`
                   }}
                 >
-                  {effect.label}
+                  {/* The number (if it has one) on a light chip, then the effect's name */}
+                  {effect.value && (
+                    <span className="flex items-center bg-slate-100 px-1.5 font-bold tabular-nums text-slate-800">{effect.value}</span>
+                  )}
+                  <span
+                    className="font-display flex items-center px-2 py-0.5"
+                    style={{
+                      background: helpsYou === null ? 'rgba(180, 83, 9, 0.95)' : helpsYou ? 'rgba(4, 120, 87, 0.95)' : 'rgba(190, 18, 60, 0.95)',
+                      color: '#ffffff'
+                    }}
+                  >
+                    {effect.label}
+                  </span>
                 </span>
               );
             })}

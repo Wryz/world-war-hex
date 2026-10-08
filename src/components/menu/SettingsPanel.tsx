@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   CAMP_INCOME, FLANK_BONUS, FREE_UPKEEP_UNITS, MAX_FLANKERS, SIGHT_RANGE, STORM_BREACH_RATIO,
-  TERRAIN_EFFECTS, TIME_SCORE_WEIGHTS, TURN_INCOME, UPKEEP_PER_UNIT
+  SPEED_POINTS_PER_ROUND, TERRAIN_EFFECTS, TIME_SCORE_WEIGHTS, TURN_INCOME, UPKEEP_PER_UNIT
 } from '@/lib/game/gameState';
 import { TROOP_CLASSES, TroopClass, strongAgainst } from '@/lib/game/troops';
 import { FOG_FROM_LEVEL } from '@/lib/campaign/levels';
@@ -181,6 +181,7 @@ const GuideTab: React.FC = () => (
         any enemy that attacks within their reach - your castle or another troop - and it can&apos;t hit back. Once its walls are breached ({Math.round(STORM_BREACH_RATIO * 100)}% health or less), march a troop onto it to storm it and win at once.
         If the last round ends first, it is decided on points: the gold value of the enemy troops you destroyed, half the gold you
         earned, and {TIME_SCORE_WEIGHTS.camps} for every camp you hold.
+        The same points, plus {SPEED_POINTS_PER_ROUND} for every round left when you win, earn your second and third stars.
       </p>
     </GuideSection>
     <GuideSection title="Your turn" icon={<AttackIcon />}>

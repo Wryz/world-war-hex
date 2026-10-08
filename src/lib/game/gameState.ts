@@ -1605,6 +1605,17 @@ export const getTimeScore = (state: GameState, side: PlayerType): TimeScore => {
   return { kills, gold, camps, total: kills + gold + camps };
 };
 
+// Points for stars: the same as above, plus a bonus for every round left when the battle is won
+export const SPEED_POINTS_PER_ROUND = 10;
+export interface StarScore extends TimeScore {
+  speed: number;
+}
+export const getStarScore = (state: GameState, side: PlayerType): StarScore => {
+  const score = getTimeScore(state, side);
+  const speed = Math.max(0, getMaxRounds(state) - state.turnNumber) * SPEED_POINTS_PER_ROUND;
+  return { ...score, speed, total: score.total + speed };
+};
+
 // The higher score wins; a dead heat goes to the stronger army left standing, then to the defender
 const decideOnTime = (state: GameState): PlayerType => {
   const points = getTimeScore(state, 'player').total - getTimeScore(state, 'ai').total;
@@ -1907,9 +1918,13 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
 // log: sneak attacks, strike-backs, ambushes, flanking, height, counters, cover, armour and more
 export interface CombatEffect {
   label: string;
+  // How much it changes the fight (+25%, x1.5, -2), if it is a number
+  value?: string;
   // Helps the side attacking (good), hinders it (bad), or neither
   tone: 'good' | 'bad' | 'neutral';
 }
+
+export const describeEffect = (effect: CombatEffect) => (effect.value ? `${effect.label} ${effect.value}` : effect.label);
 
 export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect[] => {
   const live = (unit: Unit) => state.players[unit.owner].units.find(candidate => candidate.id === unit.id);
@@ -1917,8 +1932,8 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
   const target = combat.defenders.map(live).find((unit): unit is Unit => !!unit);
   if (!target || attackers.length === 0) return [];
   const effects: CombatEffect[] = [];
-  const add = (label: string, tone: CombatEffect['tone']) => {
-    if (!effects.some(effect => effect.label === label)) effects.push({ label, tone });
+  const add = (label: string, tone: CombatEffect['tone'], value?: string) => {
+    if (!effects.some(effect => effect.label === label)) effects.push({ label, tone, value });
   };
   const pct = (multiplier: number) => `${Math.round(Math.abs(multiplier - 1) * 100)}%`;
   const targetTerrain = terrainUnder(state, target);
@@ -1931,20 +1946,23 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
       add(hasAbility(target, 'stealth') ? 'Sneak attack spotted' : 'Sneak attack!', hasAbility(target, 'stealth') ? 'neutral' : 'good');
     }
     const flankers = getFlankers(state, unit, target);
-    if (flankers > 0) add(`Flanked +${Math.round(FLANK_BONUS * flankers * 100)}%`, 'good');
+    if (flankers > 0) add('Flanked', 'good', `+${Math.round(FLANK_BONUS * flankers * 100)}%`);
     const height = getHeightMultiplier(terrain, targetTerrain);
-    if (height > 1) add(`High ground +${pct(height)}`, 'good');
-    if (height < 1) add(`Uphill -${pct(height)}`, 'bad');
+    if (height > 1) add('High ground', 'good', `+${pct(height)}`);
+    if (height < 1) add('Uphill', 'bad', `-${pct(height)}`);
     const counter = getCounterMultiplier(unit.type, target.type);
-    if (counter > 1) add(`Counter x${counter}`, 'good');
-    if (counter < 1) add(`Bad matchup x${counter}`, 'bad');
-    if (hasAbility(unit, 'terrainBonus') && terrain === 'forest') add(`Forest pikes +${pct(TERRAIN_BONUS_ATTACK_MULTIPLIER)}`, 'good');
-    if (isEnraged(unit)) add(`Berserk +${pct(BERSERK_ATTACK_MULTIPLIER)}`, 'good');
-    if (getPointBlankMultiplier(unit, getHexDistance(unit.position, target.position)) < 1) add('Point blank', 'bad');
+    if (counter > 1) add('Counter', 'good', `x${counter}`);
+    if (counter < 1) add('Bad matchup', 'bad', `x${counter}`);
+    if (hasAbility(unit, 'terrainBonus') && terrain === 'forest') add('Forest pikes', 'good', `+${pct(TERRAIN_BONUS_ATTACK_MULTIPLIER)}`);
+    if (isEnraged(unit)) add('Berserk', 'good', `+${pct(BERSERK_ATTACK_MULTIPLIER)}`);
+    if (getPointBlankMultiplier(unit, getHexDistance(unit.position, target.position)) < 1) add('Point blank', 'bad', `-${pct(RANGED_POINT_BLANK_MULTIPLIER)}`);
     const cover = TERRAIN_EFFECTS[targetTerrain].damageTakenMultiplier;
-    if (cover < 1) add(hasAbility(unit, 'magic') ? 'Spells pierce cover' : `Cover -${pct(cover)}`, hasAbility(unit, 'magic') ? 'good' : 'bad');
+    if (cover < 1) {
+      if (hasAbility(unit, 'magic')) add('Spells pierce cover', 'good');
+      else add('Cover', 'bad', `-${pct(cover)}`);
+    }
   }
-  if (hasAbility(target, 'armored')) add(`Armored -${ARMOR_REDUCTION}`, 'bad');
+  if (hasAbility(target, 'armored')) add('Armored', 'bad', `-${ARMOR_REDUCTION}`);
   return effects;
 };
 
@@ -1994,7 +2012,7 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
         : `${preview.attackers.map(a => unitLabel(a.unit)).join(' & ')} attacked ${unitLabel(defender.unit)}: ` +
           `defender ${outcome(defender)}, attackers ${preview.attackers.map(outcome).join(', ')}.`) +
         (effects.filter(effect => effect.label !== 'Struck while attacking').length > 0
-          ? ` (${effects.filter(effect => effect.label !== 'Struck while attacking').map(effect => effect.label).join(', ')})`
+          ? ` (${effects.filter(effect => effect.label !== 'Struck while attacking').map(describeEffect).join(', ')})`
           : '')
     );
 

@@ -112,7 +112,6 @@ export interface LevelDef {
   guards: GuardSpec[];
   recommendedPower: number;
   // Rounds to win within for the third star
-  fastRounds: number;
   baseReward: number;
 }
 
@@ -239,7 +238,6 @@ export const getLevel = (levelId: number): LevelDef => {
     enemyTier,
     guards,
     recommendedPower: recommendedPower(id),
-    fastRounds: Math.ceil(maxRounds * 0.7),
     baseReward: baseLevelReward(id)
   };
   levelCache.set(id, level);
@@ -257,18 +255,31 @@ export const enemyRosterStats = (level: LevelDef): Roster =>
 export const levelEnemies = (level: LevelDef): TroopId[] =>
   [...new Set([...level.guards.map(g => g.type), ...level.enemyRoster])];
 
-export const starGoals = (level: LevelDef): string[] => [
-  'Win the battle',
-  'Win with your castle above half health',
-  `Win within ${level.fastRounds} rounds`
-];
+// Stars: one for winning, and two and three for winning with enough points - kills, gold earned,
+// camps held and a bonus for every round left (see getStarScore). The bars rise with the level's
+// recommended power; the balance simulator put a typical win near the second and a strong one
+// near the third.
+const TWO_STAR_SHARE = 0.35;
+const THREE_STAR_SHARE = 0.45;
+const roundTo5 = (value: number) => Math.round(value / 5) * 5;
+export const starThresholds = (level: LevelDef): [number, number] =>
+  [roundTo5(level.recommendedPower * TWO_STAR_SHARE), roundTo5(level.recommendedPower * THREE_STAR_SHARE)];
+
+export const starGoals = (level: LevelDef): string[] => {
+  const [two, three] = starThresholds(level);
+  return ['Win the battle', `Win with ${two}+ points`, `Win with ${three}+ points`];
+};
 
 // The same goals as short labels, with the full wording for a tooltip
 export const starGoalLabels = (level: LevelDef): { short: string; full: string }[] => {
   const full = starGoals(level);
-  return [`Win`, `Castle over ½`, `≤ ${level.fastRounds} rounds`].map((short, i) => ({ short, full: full[i] }));
+  const [two, three] = starThresholds(level);
+  const how = ' (kills, gold, camps, and a bonus for every round left)';
+  return [`Win`, `${two}+ pts`, `${three}+ pts`].map((short, i) => ({ short, full: i === 0 ? full[i] : full[i] + how }));
 };
 
-// Stars earned for a won battle
-export const starsForWin = (level: LevelDef, castleRatio: number, rounds: number): number =>
-  1 + (castleRatio > 0.5 ? 1 : 0) + (rounds <= level.fastRounds ? 1 : 0);
+// Stars earned for a won battle with this many points
+export const starsForWin = (level: LevelDef, points: number): number => {
+  const [two, three] = starThresholds(level);
+  return 1 + (points >= two ? 1 : 0) + (points >= three ? 1 : 0);
+};
