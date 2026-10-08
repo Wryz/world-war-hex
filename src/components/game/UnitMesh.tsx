@@ -65,6 +65,8 @@ export interface UnitBattle {
   // Blows this unit takes during the battle: when each lands (seconds after the battle starts) and the
   // total damage they add up to, so its health bar can drop hit by hit
   incoming?: { times: number[]; damage: number };
+  // How many blows this unit strikes (each of them landing some damage); unlimited if not set
+  strikes?: number;
   // When this unit, and the enemy it strikes at, fall in the battle (null if they survive it)
   diesAt?: number | null;
   targetDiesAt?: number | null;
@@ -503,7 +505,8 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
 
         // Its foe has fallen: finish the strike in hand, then stand down
         const targetDown = battle.targetDiesAt != null && now >= battle.targetDiesAt;
-        if (strikeNumber !== clock.lastStrike && !targetDown) {
+        const outOfBlows = battle.strikes !== undefined && strikeNumber >= battle.strikes;
+        if (strikeNumber !== clock.lastStrike && !targetDown && !outOfBlows) {
           clock.lastStrike = strikeNumber;
           strike();
           if (isRanged) playSfx(isMagicShot ? 'spellCast' : 'bowShot', 0.8);

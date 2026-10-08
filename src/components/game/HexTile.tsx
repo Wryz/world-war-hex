@@ -44,12 +44,14 @@ const SELECTION_RING_BOB = 0.02;
 export const DRAG_CLICK_TOLERANCE = 5;
 
 // What kind of highlight a tile shows
-export type HexHighlight = 'none' | 'move' | 'deploy' | 'base';
+export type HexHighlight = 'none' | 'move' | 'deploy' | 'base' | 'buff';
 
 const HIGHLIGHT_COLORS: Record<Exclude<HexHighlight, 'none'>, string> = {
   move: '#ffffff',
   deploy: '#7dd3fc',
-  base: '#86efac'
+  base: '#86efac',
+  // Where a field buff opened in the HUD applies
+  buff: '#fbbf24'
 };
 
 interface HexTileProps {

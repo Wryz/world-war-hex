@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { LevelDef, levelEnemies, starGoalLabels, enemyRosterStats } from '@/lib/campaign/levels';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
@@ -118,6 +118,8 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
   const reward = levelWinReward(level.id, 3, stars).coins;
   const roster = enemyRosterStats(level);
   const enemies = levelEnemies(level);
+  const terrains = themeTerrain(level.region.theme);
+  const [openTerrain, setOpenTerrain] = useState<TerrainType | null>(null);
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 backdrop-blur-[2px] sm:items-center" onClick={onClose}>
@@ -131,16 +133,47 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
           <CloseIcon className="text-lg" />
         </button>
 
-        <div className="text-xs font-bold uppercase tracking-widest" style={{ color: level.region.colors[0] }}>
-          {level.region.name} · Level {level.id}
+        {/* Title, with the battlefield's terrain opposite */}
+        <div className="flex items-start gap-3 pr-8">
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-bold uppercase tracking-widest" style={{ color: level.region.colors[0] }}>
+              {level.region.name} · Level {level.id} <span className="text-slate-400">· {level.settings.maxRounds} rounds</span>
+            </div>
+            <h2 className="font-display mt-0.5 flex items-center gap-2 text-3xl text-slate-50">
+              {level.isBoss && <BossIcon />}{level.isElite && <ShieldIcon color="#a78bfa" />}{level.name}
+            </h2>
+            {(level.isBoss || level.isElite) && (
+              <span className={`mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${level.isBoss ? 'bg-rose-500/20 text-rose-200' : 'bg-violet-500/20 text-violet-200'}`}>
+                {level.isBoss ? `Boss: ${TROOPS[level.region.boss].name}` : 'Elite: a champion guards the castle'}
+              </span>
+            )}
+          </div>
+          <div className="flex max-w-[45%] flex-col items-end gap-1.5 pt-0.5">
+            <div className="flex flex-wrap justify-end gap-1" aria-label="Battlefield terrain">
+              {terrains.map(terrain => (
+                <button
+                  key={terrain}
+                  type="button"
+                  onClick={() => setOpenTerrain(current => (current === terrain ? null : terrain))}
+                  aria-expanded={openTerrain === terrain}
+                  title={TERRAIN_EFFECTS[terrain].name}
+                  className={`rounded-full p-1 text-sm transition-colors hover:bg-slate-700 ${openTerrain === terrain ? 'bg-slate-700 ring-1 ring-amber-300' : 'bg-slate-800'}`}
+                >
+                  <TerrainIcon terrain={terrain} />
+                </button>
+              ))}
+            </div>
+            {level.settings.fogOfWar && (
+              <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-200" title="You only see enemies your troops can see">
+                <FogIcon /> Fog of war
+              </span>
+            )}
+          </div>
         </div>
-        <h2 className="font-display mt-0.5 flex items-center gap-2 text-3xl text-slate-50">
-          {level.isBoss && <BossIcon />}{level.isElite && <ShieldIcon color="#a78bfa" />}{level.name}
-        </h2>
-        {(level.isBoss || level.isElite) && (
-          <span className={`mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${level.isBoss ? 'bg-rose-500/20 text-rose-200' : 'bg-violet-500/20 text-violet-200'}`}>
-            {level.isBoss ? `Boss: ${TROOPS[level.region.boss].name}` : 'Elite: a champion guards the castle'}
-          </span>
+        {openTerrain && (
+          <div className="mt-2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-snug text-slate-300">
+            <b className="text-amber-200"><TerrainIcon terrain={openTerrain} /> {TERRAIN_EFFECTS[openTerrain].name}:</b> {TERRAIN_EFFECTS[openTerrain].description}
+          </div>
         )}
 
         {/* Power check */}
@@ -187,21 +220,8 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
         {/* Cards to bring */}
         <LoadoutPicker enemies={enemies} />
 
-        {/* The map, the stars and the reward */}
-        <div className="mt-4 flex flex-wrap items-center gap-1.5 text-xs">
-          {themeTerrain(level.region.theme).map(terrain => (
-            <span key={terrain} className="rounded-full bg-slate-800 p-1 text-sm" title={`${TERRAIN_EFFECTS[terrain].name}: ${TERRAIN_EFFECTS[terrain].description}`}>
-              <TerrainIcon terrain={terrain} />
-            </span>
-          ))}
-          <span className="ml-1 text-slate-400">{level.settings.maxRounds} rounds</span>
-          {level.settings.fogOfWar && (
-            <span className="inline-flex items-center gap-1 font-bold text-slate-200" title="You only see enemies your troops can see">
-              · <FogIcon /> Fog
-            </span>
-          )}
-        </div>
-        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+        {/* Stars and the reward */}
+        <div className="mt-4 flex flex-wrap items-center gap-1.5">
           {starGoalLabels(level).map(({ short, full }, i) => (
             <span key={short} title={full} className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${i < stars ? 'bg-amber-400/20 text-amber-100' : 'bg-slate-800 text-slate-400'}`}>
               <StarIcon color={i < stars ? '#facc15' : '#475569'} /> {short}

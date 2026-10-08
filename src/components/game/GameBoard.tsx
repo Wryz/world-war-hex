@@ -29,7 +29,7 @@ import {
 } from '@/lib/game/gameState';
 import { getHexDistance } from '@/lib/game/hexUtils';
 import { estimateDamage, getThreatLevels, getThreats } from '@/lib/game/threats';
-import { HEX_SIZE, axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
+import { HEX_SIZE, axialToWorld, getHexHeight, getHexSurfaceHeight } from './utils/boardGeometry';
 import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
 import { playSound } from './utils/SoundPlayer';
@@ -98,6 +98,8 @@ interface GameBoardProps {
   unitIds?: Set<string>;
   // Tint the hexes enemies can strike next turn, and label damage for the selected troop
   showThreats?: boolean;
+  // Hexes to outline for the field buff opened in the HUD
+  buffHexes?: HexCoordinates[];
 }
 
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
@@ -118,6 +120,7 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
           <CameraRig
             gameState={props.gameState}
             focus={props.selectedUnit?.position ?? (props.selectedHex && (props.selectedHex.isCamp || props.selectedHex.isBase) ? props.selectedHex.coordinates : null)}
+            focusIsOurs={props.selectedUnit ? props.selectedUnit.owner === 'player' : props.selectedHex?.owner === 'player'}
             deployingCard={props.selectedUnitTypeForPurchase}
           />
         </Suspense>
@@ -159,7 +162,9 @@ const nearestSide = (azimuth: number, castleAzimuth: number) => {
   return best;
 };
 
-const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; deployingCard?: UnitType | null }> = ({ gameState, focus, deployingCard }) => {
+const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; focusIsOurs?: boolean; deployingCard?: UnitType | null }> = ({
+  gameState, focus, focusIsOurs = true, deployingCard
+}) => {
   const { camera, size, gl } = useThree();
 
   // Let the HUD place things (flying coins) over points on the board
@@ -186,7 +191,8 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
   const elevationRef = useRef(CAMERA_ELEVATION);
   const desiredElevationRef = useRef(CAMERA_ELEVATION);
 
-  const viewSide: PlayerType = gameState.currentPhase === 'setup' ? 'player' : getActivePlayer(gameState);
+  // The camera always works from your side of the board, whoever's turn it is
+  const viewSide: PlayerType = 'player';
 
   // Radius (world units) the camera frames at zoom 1: the board out to its edge hexes plus a margin
   const gridSize = gameState.settings?.gridSize ?? DEFAULT_SETTINGS.gridSize;
@@ -248,9 +254,10 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
 
   // Set while the camera is looking down on a turn's battles (until it settles back on a side)
   const battleViewRef = useRef(false);
+  // A camp captured while the battles were being watched: settle on its side afterwards
+  const pendingSideRef = useRef<number | null>(null);
 
-  // New turn (or castles placed): swing to the active side's default view, unless the turn's
-  // battles are still being watched from above (the camera settles from there instead)
+  // Castles placed: start from your castle's side
   useEffect(() => {
     if (!battleViewRef.current) showSide(0);
   }, [showSide]);
@@ -262,14 +269,39 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
     if (Math.hypot(x, z) < viewRadiusRef.current * CAMERA_FOCUS_MIN_RADIUS) return null;
     return nearestSide(Math.atan2(x, z), targetAzimuth);
   }, [targetAzimuth]);
-  const currentSide = () => nearestSide(targetAzimuth + azimuthOffsetRef.current, targetAzimuth);
+  const currentSide = () => nearestSide(azimuthRef.current ?? targetAzimuth + azimuthOffsetRef.current, targetAzimuth);
 
-  // A selection on another side of the board: swing round to the side nearest it
+  // "Home" sides: those showing your castle or a camp you hold (null: one is near the middle, so
+  // every side shows it)
+  const homeSides = (): number[] | null => {
+    const sides = gameState.hexGrid
+      .filter(hex => hex.owner === viewSide && (hex.isBase || hex.isCamp))
+      .map(hex => (hex.isBase ? 0 : sideOf(hex.coordinates)));
+    return sides.includes(null) ? null : [...new Set(sides as number[])];
+  };
+  // The home side whose view is closest to a direction (an azimuth around the board)
+  const nearestHomeSide = (azimuth: number): number => {
+    const sides = homeSides();
+    if (!sides) return nearestSide(azimuth, targetAzimuth);
+    const away = (side: number) => Math.abs(angleDelta(azimuth, targetAzimuth + side * Math.PI / 2));
+    return sides.reduce((best, side) => (away(side) < away(best) ? side : best));
+  };
+  const goToSide = (side: number) => {
+    if (side !== currentSide()) showSide(side);
+  };
+
+  // A selection on another side of the board: swing round to the side nearest it - or, for the
+  // enemy's troops, castle and camps (and camps no one holds), to your own side closest to it
   const focusKey = focus ? `${focus.q},${focus.r}` : null;
   useEffect(() => {
     if (!focus || gameState.currentPhase !== 'planning') return;
     const side = sideOf(focus);
-    if (side !== null && side !== currentSide()) showSide(side);
+    if (side === null) return;
+    if (focusIsOurs) goToSide(side);
+    else {
+      const [x, , z] = axialToWorld(focus);
+      goToSide(nearestHomeSide(Math.atan2(x, z)));
+    }
     // Only reacts to a new selection
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey]);
@@ -278,26 +310,52 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
   // at, otherwise swing to the nearest side that does
   useEffect(() => {
     if (!deployingCard || gameState.currentPhase !== 'planning') return;
-    const spots = gameState.hexGrid.filter(hex => hex.owner === viewSide && (hex.isBase || hex.isCamp));
-    const sides = spots.map(hex => sideOf(hex.coordinates));
-    // A spot near the middle is in view whichever side the camera is on
-    if (sides.includes(null)) return;
-    const from = currentSide();
-    if (sides.includes(from)) return;
-    // Fewest quarter turns away (the castle's own side first on a tie)
-    const steps = (side: number) => Math.min((side - from + 4) % 4, (from - side + 4) % 4);
-    const best = (sides as number[]).reduce((a, b) => (steps(b) < steps(a) || (steps(b) === steps(a) && b === 0) ? b : a));
-    showSide(best);
+    const sides = homeSides();
+    if (!sides || sides.includes(currentSide())) return;
+    goToSide(nearestHomeSide(azimuthRef.current ?? targetAzimuth));
     // Only reacts to picking a card
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deployingCard]);
 
+  // Your turn begins: if the camera ended up somewhere with none of your castle or camps in view,
+  // come back to the nearest side that has some
+  const yourTurn = gameState.currentPhase === 'planning' && getActivePlayer(gameState) === 'player' ? gameState.turnNumber : null;
+  useEffect(() => {
+    if (yourTurn === null || battleViewRef.current) return;
+    const sides = homeSides();
+    if (sides && !sides.includes(currentSide())) goToSide(nearestHomeSide(azimuthRef.current ?? targetAzimuth));
+    // Only reacts to a new turn of yours
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [yourTurn]);
+
+  // A camp you've just captured: swing round to its side
+  const ownedCamps = gameState.hexGrid.filter(hex => hex.isCamp && hex.owner === viewSide).map(hex => coordKey(hex.coordinates)).sort().join(' ');
+  const ownedCampsRef = useRef(ownedCamps);
+  useEffect(() => {
+    const before = new Set(ownedCampsRef.current.split(' '));
+    ownedCampsRef.current = ownedCamps;
+    const captured = gameState.hexGrid.find(hex => hex.isCamp && hex.owner === viewSide && !before.has(coordKey(hex.coordinates)));
+    if (!captured || gameState.currentPhase === 'gameOver') return;
+    const side = sideOf(captured.coordinates);
+    if (side === null) return;
+    if (battleViewRef.current || gameState.currentPhase === 'combat') pendingSideRef.current = side;
+    else goToSide(side);
+    // Only reacts to camps changing hands
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownedCamps]);
+
   // Battles about to be fought: rise to a view from above that takes in every fight (and any castle
-  // under attack), then once they're over settle on whichever side the camera is nearest
-  const targetAzimuthRef = useRef(targetAzimuth);
-  targetAzimuthRef.current = targetAzimuth;
-  const battleKey = gameState.currentPhase === 'combat' ? `${gameState.turnNumber}-${viewSide}` : null;
+  // under attack), then once they're over settle on the nearest side showing your castle or a camp
+  // (or the side of a camp just captured)
+  const battleKey = gameState.currentPhase === 'combat' ? `${gameState.turnNumber}-${getActivePlayer(gameState)}` : null;
   const isGameOver = gameState.currentPhase === 'gameOver';
+  const settleRef = useRef<() => void>(() => {});
+  settleRef.current = () => {
+    battleViewRef.current = false;
+    const side = pendingSideRef.current ?? nearestHomeSide(azimuthRef.current ?? targetAzimuth);
+    pendingSideRef.current = null;
+    showSide(side);
+  };
   useEffect(() => {
     if (battleKey) {
       const points = gameState.combats.flatMap(combat => [combat.hexCoordinates, ...combat.attackers.map(unit => unit.position)]);
@@ -327,14 +385,11 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
     }
     if (!battleViewRef.current || isGameOver) {
       battleViewRef.current = false;
+      pendingSideRef.current = null;
       return;
     }
-    // Hold on the aftermath for a moment, then settle on the nearest side
-    const settle = setTimeout(() => {
-      battleViewRef.current = false;
-      const castleAzimuth = targetAzimuthRef.current;
-      showSide(nearestSide(azimuthRef.current ?? castleAzimuth, castleAzimuth));
-    }, BATTLE_VIEW_HOLD_MS / getGameSpeed());
+    // Hold on the aftermath for a moment, then settle
+    const settle = setTimeout(() => settleRef.current(), BATTLE_VIEW_HOLD_MS / getGameSpeed());
     return () => {
       clearTimeout(settle);
       battleViewRef.current = false;
@@ -546,7 +601,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   assetsLoaded,
   selectedUnitTypeForPurchase = null,
   unitIds,
-  showThreats = false
+  showThreats = false,
+  buffHexes
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const unitIdsRef = useRef(unitIds);
@@ -573,9 +629,10 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     [isSetupPhase, hexGrid]
   );
 
+  const buffKeys = useMemo(() => new Set((buffHexes ?? []).map(coordKey)), [buffHexes]);
   const getHighlight = (key: string): HexHighlight => {
     if (isSetupPhase) return validBaseKeys.has(key) ? 'base' : 'none';
-    if (!validMoveKeys.has(key)) return 'none';
+    if (!validMoveKeys.has(key)) return buffKeys.has(key) ? 'buff' : 'none';
     return selectedUnitTypeForPurchase ? 'deploy' : 'move';
   };
 
@@ -708,14 +765,24 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           .filter(a => canStrike(gameState, live, a))
           .sort((a, b) => getHexDistance(a.position, live.position) - getHexDistance(b.position, live.position))[0] ?? null]));
 
-        // When each blow lands, and so when each unit falls; a fallen unit strikes no more
-        const blowsOn = (unit: Unit, diesAt: Map<string, number | null>) => {
-          const strikers = liveAttackers.some(a => a.id === unit.id)
-            ? (hitBack.has(unit.id) ? liveDefenders : [])
-            : liveAttackers;
-          return strikers.flatMap(striker => getImpactTimesUntil(striker, diesAt.get(striker.id) ?? null)).sort((a, b) => a - b);
-        };
+        // Who strikes each unit: attackers are struck back by the defenders (if they can reach them),
+        // defenders by the attackers
+        const strikersOf = (unit: Unit) => liveAttackers.some(a => a.id === unit.id)
+          ? (hitBack.has(unit.id) ? liveDefenders : [])
+          : liveAttackers;
         const fighters = [...liveAttackers, ...liveDefenders];
+        // A striker lands no more blows than the damage it deals, so every blow visibly lands
+        const blowLimit = new Map<string, number>();
+        for (const unit of fighters) {
+          const strikers = strikersOf(unit);
+          const share = Math.max(1, Math.floor((damageTo.get(unit.id) ?? 0) / Math.max(1, strikers.length)));
+          for (const striker of strikers) blowLimit.set(striker.id, Math.min(blowLimit.get(striker.id) ?? Infinity, share));
+        }
+        // When a striker's blows land; a fallen unit strikes no more
+        const blowsBy = (striker: Unit, diesAt: Map<string, number | null>) =>
+          getImpactTimesUntil(striker, diesAt.get(striker.id) ?? null).slice(0, blowLimit.get(striker.id) ?? Infinity);
+        const blowsOn = (unit: Unit, diesAt: Map<string, number | null>) =>
+          strikersOf(unit).flatMap(striker => blowsBy(striker, diesAt)).sort((a, b) => a - b);
         const deathsOf = (diesAt: Map<string, number | null>) => new Map(fighters.map(unit =>
           [unit.id, getDeathTime(blowsOn(unit, diesAt), damageTo.get(unit.id) ?? 0, unit.lifespan)]));
         const firstGuess = deathsOf(new Map());
@@ -728,6 +795,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             target: worldOf(combat.hexCoordinates),
             startDelay,
             incoming: { times: blowsOn(attacker, diesAt), damage: damageTo.get(attacker.id) ?? 0 },
+            strikes: blowsBy(attacker, diesAt).length,
             diesAt: diesAt.get(attacker.id) ?? null,
             targetDiesAt: defenderAt ? diesAt.get(defenderAt.id) ?? null : null
           });
@@ -739,6 +807,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             target: target ? worldOf(target.position) : null,
             startDelay,
             incoming: { times: blowsOn(live, diesAt), damage: damageTo.get(live.id) ?? 0 },
+            strikes: target && hitBack.size > 0 ? blowsBy(live, diesAt).length : 0,
             diesAt: diesAt.get(live.id) ?? null,
             targetDiesAt: target ? diesAt.get(target.id) ?? null : null
           });
@@ -753,7 +822,15 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         const target = surfacePosition(castle);
         for (const id of gameState.siege.attackerIds) {
           combatFacing.set(id, castle.coordinates);
-          battles.set(id, { key: `${turnNumber}-${gameState.siege.side}-siege`, target, startDelay: getBattleStartDelay() });
+          // Guards may be striking it as it attacks: keep the blows it takes
+          const struck = battles.get(id);
+          battles.set(id, {
+            key: `${turnNumber}-${gameState.siege.side}-siege`,
+            target,
+            startDelay: getBattleStartDelay(),
+            incoming: struck?.incoming,
+            diesAt: struck?.diesAt ?? null
+          });
         }
       }
     }
@@ -1209,7 +1286,7 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
         <span className="font-bold">
           {hex.isCamp ? <><CampIcon /> Camp</> : <><TerrainIcon terrain={hex.terrain} /> {TERRAIN_EFFECTS[hex.terrain].name}</>}
         </span>
-        <span className="text-slate-400"> · height {TERRAIN_EFFECTS[hex.terrain].elevation}</span>
+        <span className="text-slate-400"> · height {getHexHeight(hex).toFixed(1)}</span>
         <span className="text-slate-400"> · {effect}</span>
         {hex.unit && (
           <span className="ml-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>

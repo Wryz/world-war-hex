@@ -1152,6 +1152,7 @@ export const executeMoves = (state: GameState): GameState => {
   // the enemy castle if they can reach it
   const combats = detectCombat(newState, activePlayer);
   const siege = detectSiege(newState, activePlayer, combats);
+  combats.push(...detectIntercepts(newState, siege, combats));
   if (combats.length > 0) {
     addLog(
       newState,
@@ -1508,6 +1509,34 @@ const detectSiege = (state: GameState, side: PlayerType, combats: Combat[]): Gam
   return attackers.length > 0 ? { side, attackerIds: attackers.map(unit => unit.id) } : undefined;
 };
 
+// Troops guarding a castle strike back at the enemies attacking it: each of the defending side's
+// troops not already in a fight attacks one castle attacker it can reach (the one with the fewest
+// other troops able to reach it first). The castle attacker can't hit back, and if it falls it does
+// no damage to the castle.
+const detectIntercepts = (state: GameState, siege: GameState['siege'], combats: Combat[]): Combat[] => {
+  if (!siege) return [];
+  const guardSide = getOpponent(siege.side);
+  const busy = new Set(combats.flatMap(combat => [...combat.attackers, ...combat.defenders].map(unit => unit.id)));
+  const raiders = siege.attackerIds
+    .map(id => state.players[siege.side].units.find(unit => unit.id === id))
+    .filter((unit): unit is Unit => !!unit);
+  const guardsFor = (raider: Unit) => state.players[guardSide].units.filter(guard =>
+    !busy.has(guard.id) && canStrike(state, guard, raider) && isUnitVisibleTo(state, guardSide, raider));
+  const intercepts: Combat[] = [];
+  for (const raider of [...raiders].sort((a, b) => guardsFor(a).length - guardsFor(b).length || compareIds(a, b))) {
+    const guards = guardsFor(raider);
+    if (guards.length === 0) continue;
+    for (const guard of guards) {
+      busy.add(guard.id);
+      guard.isEngagedInCombat = true;
+      guard.revealed = true;
+    }
+    raider.isEngagedInCombat = true;
+    intercepts.push({ hexCoordinates: raider.position, attackers: guards, defenders: [raider], resolved: false, intercept: true });
+  }
+  return intercepts;
+};
+
 // Whether `attacker` has breached the enemy castle's walls, so its troops may storm it
 export const canStormCastle = (state: GameState, attacker: PlayerType): boolean =>
   castleHealthRatio(state, attacker === 'player' ? 'ai' : 'player') <= STORM_BREACH_RATIO;
@@ -1790,10 +1819,11 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
   const attackers = attackerUnits.map(unit => {
     // Defenders can only strike back at attackers within their own reach, and never at a sneak attack
     const isSneakAttack = hasAbility(unit, 'stealth');
-    const canBeHitBack = !isSneakAttack && defenderUnits.some(defender => canStrike(state, defender, unit));
+    const canBeHitBack = !combat.intercept && !isSneakAttack && defenderUnits.some(defender => canStrike(state, defender, unit));
     const modifiers = defenderUnits[0] ? describeStrike(unit, defenderUnits[0]) : [];
     if (canBeHitBack) modifiers.push(...describeDefence(unit));
-    if (isSneakAttack) modifiers.push('sneak attack - takes no damage');
+    if (combat.intercept) modifiers.push('its target is busy attacking the castle - takes no damage');
+    else if (isSneakAttack) modifiers.push('sneak attack - takes no damage');
     else if (!canBeHitBack) modifiers.push('out of reach - takes no damage');
     const terrain = terrainUnder(state, unit);
     return { unit, terrain, power: getBasePower(unit, terrain), canBeHitBack, modifiers };

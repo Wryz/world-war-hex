@@ -196,6 +196,9 @@ export interface Combat {
   defenders: Unit[];
   resolved: boolean;
   retreating?: Unit[];
+  // Troops of the side not moving striking an enemy that is attacking their castle: it is busy with
+  // the walls, so it doesn't strike back
+  intercept?: boolean;
 }
 
 export interface GameSettings {
