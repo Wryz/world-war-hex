@@ -19,6 +19,10 @@ const args = process.argv.slice(2);
 // --no-fog plays every battle without the fog of war, to see what the fog changes
 const noFog = args.includes('--no-fog');
 if (noFog) args.splice(args.indexOf('--no-fog'), 1);
+// --strength x plays every battle with the enemy x times as strong as the level's setting
+const strengthAt = args.indexOf('--strength');
+const fixedStrength = strengthAt >= 0 ? Number(args[strengthAt + 1]) : 1;
+if (strengthAt >= 0) args.splice(strengthAt, 2);
 const tune = args[0] === '--tune';
 if (tune) args.shift();
 const TARGET_WIN_RATE = 0.65;
@@ -107,7 +111,7 @@ for (const levelId of levels) {
   let peak = 0;
   const reasons = { stormed: 0, destroyed: 0, timeout: 0 };
   for (let i = 0; i < battlesPerLevel; i++) {
-    const result = playBattle(levelId);
+    const result = playBattle(levelId, fixedStrength);
     if (result.winner === 'player') wins++;
     rounds += result.turnNumber;
     recruits += ((result.battleStats?.player.recruited ?? 0) + (result.battleStats?.ai.recruited ?? 0)) / 2;

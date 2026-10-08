@@ -233,7 +233,7 @@ const HexTileComponent: React.FC<HexTileProps> = ({
         {/* Threat preview: hexes enemies can strike next turn */}
         {threat > 0 && (
           <mesh geometry={fillGeometry} position={[0, surfaceHeight + 0.016, 0]} renderOrder={1}>
-            <meshBasicMaterial color="#ef4444" transparent opacity={0.18 + 0.4 * Math.min(1, threat)} depthWrite={false} />
+            <meshBasicMaterial color="#ef4444" transparent opacity={0.12 + 0.33 * Math.min(1, threat)} depthWrite={false} />
           </mesh>
         )}
 
