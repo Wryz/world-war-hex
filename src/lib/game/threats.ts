@@ -1,4 +1,5 @@
 import type { GameState, HexCoordinates, PlayerType, Unit } from '@/types/game';
+import { getHeightAt } from './hexHeight';
 import { getHexDistance, getHexesInRange, findHexByCoordinates } from './hexUtils';
 import {
   getAttackRange, getStrikePowerOnTerrain, getValidMoveTargets, getVisibleEnemies, hasLineOfSight, ARMOR_REDUCTION
@@ -51,7 +52,8 @@ export const estimateDamage = (state: GameState, unit: Unit, at: HexCoordinates,
   const targetTerrain = findHexByCoordinates(state.hexGrid, at)?.terrain ?? 'plain';
   const total = threats.reduce((sum, { enemy, from }) => sum + Math.max(...from.map(position => {
     const terrain = findHexByCoordinates(state.hexGrid, position)?.terrain ?? 'plain';
-    return getStrikePowerOnTerrain(enemy, terrain, unit, targetTerrain, getHexDistance(position, at));
+    return getStrikePowerOnTerrain(enemy, terrain, unit, targetTerrain, getHexDistance(position, at),
+      getHeightAt(position, terrain) - getHeightAt(at, targetTerrain));
   })), 0);
   const damage = Math.max(1, Math.round(total));
   return unit.abilities.includes('armored') ? Math.max(1, damage - ARMOR_REDUCTION * threats.length) : damage;

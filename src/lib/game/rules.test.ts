@@ -4,7 +4,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Ability, GameState, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
 import {
-  DEFAULT_SETTINGS, createBattle, executeMoves, findBaseHex, getCombatPreview, getStarScore, getTimeScore, resolveAllCombats
+  DEFAULT_SETTINGS, createBattle, executeMoves, findBaseHex, getCombatPreview, getHeightDifference, getHeightMultiplier, getStarScore,
+  getTimeScore, resolveAllCombats
 } from './gameState';
 import { getHexDistance } from './hexUtils';
 import { LEVEL_COUNT, getLevel, starThresholds, starsForWin } from '../campaign/levels';
@@ -86,12 +87,11 @@ test('an attacked troop strikes back at an attacker in its reach', () => {
 });
 
 test('flanking needs two attackers on the same enemy, not just a troop standing beside it', () => {
-  const blow = (attackerCount: number, bystander: boolean) => {
+  const blow = (spots: [number, number][], bystander = false) => {
     const { state, centre } = makeBattle();
     const target = makeUnit('player', centre, { lifespan: 100, maxLifespan: 100, attackPower: 0 });
     // Attackers beside the target; a bystander beside it too, busy finishing off a wounded troop
-    const attackers = [at(centre, 1, 0), at(centre, -1, 0), at(centre, 0, 1)].slice(0, attackerCount)
-      .map(position => makeUnit('ai', position, { attackPower: 8 }));
+    const attackers = spots.map(([dq, dr]) => makeUnit('ai', at(centre, dq, dr), { attackPower: 8 }));
     const extra = bystander
       ? [makeUnit('ai', at(centre, 0, -1), { attackPower: 8 }), makeUnit('player', at(centre, 0, -2), { lifespan: 1, attackPower: 0 })]
       : [];
@@ -99,9 +99,25 @@ test('flanking needs two attackers on the same enemy, not just a troop standing 
     const after = resolveAllCombats(executeMoves(state));
     return 100 - health(after, target);
   };
-  assert.equal(blow(1, true), blow(1, false), 'a troop that only stands beside the target adds nothing');
-  const alone = blow(1, false);
-  assert.equal(blow(2, false), Math.round(2 * alone * 1.25), 'two attackers flank each other');
+  assert.equal(blow([[1, 0]], true), blow([[1, 0]]), 'a troop that only stands beside the target adds nothing');
+  // (each hex stands a little higher or lower, so each attacker's own blow is measured from its hex)
+  const together = blow([[1, 0], [-1, 0]]);
+  const apart = blow([[1, 0]]) + blow([[-1, 0]]);
+  assert.ok(Math.abs(together - apart * 1.25) <= 1, `two attackers flank each other (${together} vs ${apart} x 1.25)`);
+});
+
+test('height advantage follows the decimal height of each hex, to a whole percent', () => {
+  assert.equal(getHeightMultiplier(0), 1);
+  assert.equal(getHeightMultiplier(0.3), 1.09);
+  assert.equal(getHeightMultiplier(-0.3), 0.91);
+  assert.equal(getHeightMultiplier(0.05), 1.02);
+  assert.equal(getHeightMultiplier(5), 1.5, 'capped');
+  // Two plains hexes of different heights: the taller one has the edge
+  const { state, centre } = makeBattle();
+  const neighbour = at(centre, 1, 0);
+  const difference = getHeightDifference(state, neighbour, centre);
+  assert.notEqual(difference, 0);
+  assert.equal(getHeightMultiplier(difference), 1 + Math.round(difference * 30) / 100);
 });
 
 test('a sneak attack gets no strike-back, except from another sneak attacker', () => {

@@ -10,7 +10,7 @@ interface LoadingScreenProps {
 const LOADING_TIPS = [
   'Units standing in a forest take 40% less damage.',
   'Stepping next to an enemy ends your move - form a line to stop raiders getting through.',
-  'Surround an enemy: every extra ally next to it adds 25% damage.',
+  'Gang up: every extra troop attacking the same enemy adds 25% damage.',
   'Press T in battle to see every hex the enemy can strike next turn.',
   'In the fog, forests hide troops unless you are right next to them - perfect for ambushes.',
   'Fliers pass over enemy lines; everyone else stops when they meet the enemy.',

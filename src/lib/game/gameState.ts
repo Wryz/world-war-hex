@@ -26,6 +26,7 @@ import {
   getNeighbors
 } from './hexUtils';
 import { createHexagonalGrid } from './mapGenerator';
+import { getHeightAt, getTerrainHeight } from './hexHeight';
 import { cardStats, getClassCounter, getTroop, getTroopClass } from './troops';
 
 // Default game settings: a small board and short turns so a battle takes a few minutes
@@ -125,7 +126,7 @@ export const TERRAIN_EFFECTS: Record<TerrainType, TerrainEffect> = {
     moveCost: 2,
     elevation: 2,
     damageTakenMultiplier: 1,
-    description: 'High ground: hit 25% harder against lower ground, ranged troops reach 1 hex further, and ridges block shots from below. Costs 2 movement to enter.'
+    description: 'High ground: hit harder against lower ground (+30% per 1.0 of height), ranged troops reach 1 hex further, and ridges block shots from below. Costs 2 movement to enter.'
   },
   swamp: {
     name: 'Swamp',
@@ -133,7 +134,7 @@ export const TERRAIN_EFFECTS: Record<TerrainType, TerrainEffect> = {
     elevation: 0,
     damageTakenMultiplier: 1,
     isRough: true,
-    description: 'Low, boggy ground: attackers on higher ground hit 25% harder, and it costs 2 movement to enter.'
+    description: 'Low, boggy ground: attackers on higher ground hit harder (+30% per 1.0 of height), and it costs 2 movement to enter.'
   },
   snow: {
     name: 'Snow',
@@ -218,10 +219,11 @@ export const REGENERATE_AMOUNT = 2;
 // Damage armored troops shrug off in every fight
 export const ARMOR_REDUCTION = 2;
 
-// Height: each level of ground an attacker stands above its target adds this much damage (and each
-// level below takes it away), counting at most two levels
-export const ELEVATION_DAMAGE_STEP = 0.25;
-const MAX_ELEVATION_STEPS = 2;
+// Height: every 1.0 of height an attacker's hex stands above its target's (the number shown on each
+// hex, decimals and all) adds this much damage, and every 1.0 below takes it away. The bonus is
+// rounded to a whole percent and capped at MAX_HEIGHT_BONUS either way.
+export const HEIGHT_DAMAGE_PER_UNIT = 0.3;
+export const MAX_HEIGHT_BONUS = 0.5;
 // Ranged units standing at least this high (hills, snow) reach one hex further
 export const HIGH_GROUND_ELEVATION = 2;
 
@@ -1349,11 +1351,19 @@ const getBasePower = (unit: Unit, terrain: TerrainType): number =>
   (hasAbility(unit, 'terrainBonus') && terrain === 'forest' ? TERRAIN_BONUS_ATTACK_MULTIPLIER : 1) *
   (isEnraged(unit) ? BERSERK_ATTACK_MULTIPLIER : 1);
 
-// Damage multiplier from standing higher (or lower) than the target
-export const getHeightMultiplier = (attackerTerrain: TerrainType, targetTerrain: TerrainType): number => {
-  const difference = getElevation(attackerTerrain) - getElevation(targetTerrain);
-  const steps = Math.max(-MAX_ELEVATION_STEPS, Math.min(MAX_ELEVATION_STEPS, difference));
-  return 1 + steps * ELEVATION_DAMAGE_STEP;
+// Damage multiplier from standing higher (or lower) than the target, by how much taller the
+// attacker's hex is (negative when it stands lower), to the nearest whole percent
+export const getHeightMultiplier = (heightDifference: number): number => {
+  const percent = Math.round(heightDifference * HEIGHT_DAMAGE_PER_UNIT * 100);
+  const capped = Math.max(-MAX_HEIGHT_BONUS * 100, Math.min(MAX_HEIGHT_BONUS * 100, percent));
+  return 1 + capped / 100;
+};
+
+// How much taller the hex at `from` stands than the hex at `to`
+export const getHeightDifference = (state: GameState, from: HexCoordinates, to: HexCoordinates): number => {
+  const fromHex = findHexByCoordinates(state.hexGrid, from);
+  const toHex = findHexByCoordinates(state.hexGrid, to);
+  return getHeightAt(from, fromHex?.terrain ?? 'plain') - getHeightAt(to, toHex?.terrain ?? 'plain');
 };
 
 // Counters: each troop class hits some others extra hard (see COUNTERS in troops.ts)
@@ -1371,15 +1381,18 @@ export const getPointBlankMultiplier = (attacker: Unit, distance: number): numbe
 // Damage one unit's attacks would deal to a particular target when the two stand on the given
 // terrain, before rounding: base power, height difference, counters, the target's cover and
 // point-blank range. Exported so the AI can weigh up fights from hexes the units haven't moved to yet.
+// `heightDifference` is how much taller the attacker's hex is; when the hexes aren't known it is
+// taken from the two terrains' typical heights.
 export const getStrikePowerOnTerrain = (
   attacker: Unit,
   attackerTerrain: TerrainType,
   target: Unit,
   targetTerrain: TerrainType,
-  distance: number
+  distance: number,
+  heightDifference = getTerrainHeight(attackerTerrain) - getTerrainHeight(targetTerrain)
 ): number =>
   getBasePower(attacker, attackerTerrain) *
-  getHeightMultiplier(attackerTerrain, targetTerrain) *
+  getHeightMultiplier(heightDifference) *
   getCounterMultiplier(attacker.type, target.type) *
   getCoverMultiplier(attacker, targetTerrain) *
   getPointBlankMultiplier(attacker, distance);
@@ -1389,7 +1402,7 @@ export const getStrikePowerOnTerrain = (
 const getStrikePower = (state: GameState, attacker: Unit, target: Unit, attackersOnTarget = 1): number =>
   getStrikePowerOnTerrain(
     attacker, terrainUnder(state, attacker), target, terrainUnder(state, target),
-    getHexDistance(attacker.position, target.position)
+    getHexDistance(attacker.position, target.position), getHeightDifference(state, attacker.position, target.position)
   ) * (1 + FLANK_BONUS * getFlankers(attackersOnTarget));
 
 // Split one unit's attack between the enemy units it can reach (each share already scaled for that
@@ -1852,7 +1865,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
       modifiers.push(`+${Math.round((TERRAIN_BONUS_ATTACK_MULTIPLIER - 1) * 100)}% attack (fighting from forest)`);
     }
     if (isEnraged(unit)) modifiers.push(`+${Math.round((BERSERK_ATTACK_MULTIPLIER - 1) * 100)}% attack (berserk)`);
-    const height = getHeightMultiplier(terrain, targetTerrain);
+    const height = getHeightMultiplier(getHeightDifference(state, unit.position, target.position));
     if (height !== 1) modifiers.push(`${percent(height)} attack (${height > 1 ? 'high ground' : 'attacking uphill'})`);
     const counter = getCounterMultiplier(unit.type, target.type);
     if (counter !== 1) modifiers.push(`x${counter} vs ${getTroopName(target.type)}`);
@@ -1962,7 +1975,7 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     }
     const flankers = getFlankers(attackers.length);
     if (flankers > 0) add('Flanked', 'good', `+${Math.round(FLANK_BONUS * flankers * 100)}%`);
-    const height = getHeightMultiplier(terrain, targetTerrain);
+    const height = getHeightMultiplier(getHeightDifference(state, unit.position, target.position));
     if (height > 1) add('High ground', 'good', `+${pct(height)}`);
     if (height < 1) add('Uphill', 'bad', `-${pct(height)}`);
     const counter = getCounterMultiplier(unit.type, target.type);

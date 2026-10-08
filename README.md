@@ -56,7 +56,7 @@ Ranged troops caught in close combat fight at half strength. Every card and unit
 
 ### Height and line of sight
 
-Each hex has a height level: water, swamp, ice and lava 0, most ground 1, hills and snow 2, mountains 3. Attacking down onto lower ground deals 25% more damage per level (up to two levels); attacking uphill deals 25% less. Ranged troops on high ground reach one hex further. Shots at range are blocked by any hex in between that stands higher than both the shooter and the target: mountains block everything, ridges hide units from archers below, and forest canopies, ruined walls and village houses count one level higher. Spells arc over anything.
+Every hex shows its height, a decimal number (water about 0.5, plains about 1.3, hills about 2.1, mountains about 2.7 - each hex varies a little). The height advantage comes from that number: every 1.0 of height the attacker stands above its target adds 30% damage, and every 1.0 below takes 30% away, rounded to a whole percent and capped at 50% either way - so even a small rise gives a small edge. Line of sight and ranged reach use height levels: water, swamp, ice and lava 0, most ground 1, hills and snow 2, mountains 3. Ranged troops on high ground reach one hex further. Shots at range are blocked by any hex in between that stands higher than both the shooter and the target: mountains block everything, ridges hide units from archers below, and forest canopies, ruined walls and village houses count one level higher. Spells arc over anything.
 
 ### Terrain
 

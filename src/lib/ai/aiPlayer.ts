@@ -1,3 +1,4 @@
+import { getHeightAt } from '../game/hexHeight';
 import {
   GameState,
   Player,
@@ -468,7 +469,8 @@ const canStrikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, a
 };
 
 const strikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, target: Unit, at: HexCoordinates) =>
-  getStrikePowerOnTerrain(attacker, terrainAt(planner, from), target, terrainAt(planner, at), getHexDistance(from, at));
+  getStrikePowerOnTerrain(attacker, terrainAt(planner, from), target, terrainAt(planner, at), getHexDistance(from, at),
+    getHeightAt(from, terrainAt(planner, from)) - getHeightAt(at, terrainAt(planner, at)));
 
 const remainingHealth = (planner: Planner, enemy: Unit) =>
   enemy.lifespan - (planner.plannedDamage.get(enemy.id) ?? 0);

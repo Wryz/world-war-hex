@@ -28,7 +28,7 @@ import {
   getSiegeDamage,
   getCombatEffects,
   HIGH_GROUND_ELEVATION,
-  ELEVATION_DAMAGE_STEP,
+  HEIGHT_DAMAGE_PER_UNIT,
   BERSERK_ATTACK_MULTIPLIER,
   TERRAIN_BONUS_ATTACK_MULTIPLIER
 } from '@/lib/game/gameState';
@@ -636,10 +636,10 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
     buffs.push({ id: 'cover', terrain: hex.terrain, label: `${effect.name} cover`, value: `-${pct(1 - effect.damageTakenMultiplier)} damage taken`, good: true });
   }
   if (effect.elevation >= HIGH_GROUND_ELEVATION) {
-    buffs.push({ id: 'high', terrain: hex.terrain, label: 'High ground', value: `+${pct(ELEVATION_DAMAGE_STEP)} attack vs lower ground${ranged ? ', +1 range' : ''}`, good: true });
+    buffs.push({ id: 'high', terrain: hex.terrain, label: 'High ground', value: `+${pct(HEIGHT_DAMAGE_PER_UNIT)} attack per 1.0 height above the target${ranged ? ', +1 range' : ''}`, good: true });
   }
   if (effect.elevation < 1) {
-    buffs.push({ id: 'low', terrain: hex.terrain, label: 'Low ground', value: `+${pct(ELEVATION_DAMAGE_STEP)} damage from higher ground`, good: false });
+    buffs.push({ id: 'low', terrain: hex.terrain, label: 'Low ground', value: `+${pct(HEIGHT_DAMAGE_PER_UNIT)} damage taken per 1.0 height an attacker stands above`, good: false });
   }
   if (hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) {
     buffs.push({ id: 'pikes', icon: 'attack', label: 'Forest pikes', value: `+${pct(TERRAIN_BONUS_ATTACK_MULTIPLIER - 1)} attack`, good: true });
