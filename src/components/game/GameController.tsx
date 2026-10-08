@@ -22,7 +22,7 @@ import { WarningIcon } from './icons';
 import { EffectsLayer } from './effects/EffectsLayer';
 import { emitMoment, resetEffects } from './effects/effects';
 import { useBattleMoments } from './effects/useBattleMoments';
-import { castleHealthRatio, getMaxRounds, getSideView, isFogOfWar } from '@/lib/game/gameState';
+import { castleHealthRatio, getMaxRounds, getSideView, getTimeScore, isFogOfWar } from '@/lib/game/gameState';
 import { FieldBuffs } from './hud/FieldBuffs';
 import type { HexCoordinates } from '@/types/game';
 import { useIsNarrow } from '../shared/useIsNarrow';
@@ -348,6 +348,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           onRetry={handleRetry}
           onMap={() => router.push(exitPath)}
           onArmy={() => router.push('/army')}
+          points={{ you: getTimeScore(gameState, 'player'), enemy: getTimeScore(gameState, 'ai') }}
         />
       )}
 

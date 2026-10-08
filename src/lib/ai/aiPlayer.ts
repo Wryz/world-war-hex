@@ -821,7 +821,8 @@ const attackValueFrom = (planner: Planner, unit: Unit, position: HexCoordinates)
     // Removing a unit also removes the damage it would have done next turn
     if (damage >= health) value += enemy.attackPower;
 
-    const strikesBack = !unit.abilities.includes('stealth') && canStrikeFrom(planner, enemy, enemy.position, position);
+    const isSneakAttack = unit.abilities.includes('stealth') && !enemy.abilities.includes('stealth');
+    const strikesBack = !isSneakAttack && canStrikeFrom(planner, enemy, enemy.position, position);
     if (strikesBack) value -= healthValue(unit, strikeFrom(planner, enemy, enemy.position, self, position) * 0.7);
 
     if (value > best.value) best = { value, target: enemy, damage };

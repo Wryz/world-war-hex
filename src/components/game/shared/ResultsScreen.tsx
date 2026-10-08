@@ -5,6 +5,7 @@ import { starGoals } from '@/lib/campaign/levels';
 import type { BattleRecordResult } from '@/lib/meta/profile';
 import { TROOPS, TroopId } from '@/lib/game/troops';
 import { playStinger } from '@/lib/audio/music';
+import { TIME_SCORE_WEIGHTS, TimeScore } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
 import { emitCoins } from '../effects/effects';
 import {
@@ -27,6 +28,8 @@ interface ResultsScreenProps {
   onRetry: () => void;
   onMap: () => void;
   onArmy: () => void;
+  // When time ran out: each side's points (kills, gold and camps)
+  points?: { you: TimeScore; enemy: TimeScore };
 }
 
 const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds) % 60).padStart(2, '0')}`;
@@ -51,7 +54,7 @@ const useCountUp = (target: number, durationMs: number, delayMs: number) => {
 const STAR_DELAY = 450;
 
 export const ResultsScreen: React.FC<ResultsScreenProps> = ({
-  won, reason, level, stars, record, rounds, stats, durationSeconds, coinsTotal, power, onNext, onRetry, onMap, onArmy
+  won, reason, level, stars, record, rounds, stats, durationSeconds, coinsTotal, power, onNext, onRetry, onMap, onArmy, points
 }) => {
   const rewardDelay = won ? 600 + stars * STAR_DELAY : 600;
   const coins = useCountUp(record.reward.coins, 900, rewardDelay);
@@ -94,8 +97,8 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
 
   const title = won ? 'Victory!' : 'Defeat';
   const subtitle = won
-    ? reason === 'stormed' ? 'You stormed the enemy castle!' : reason === 'timeout' ? 'Time ran out with your side holding the field.' : 'The enemy castle has fallen!'
-    : reason === 'timeout' ? 'Time ran out with the enemy holding the field.' : 'Your castle has fallen.';
+    ? reason === 'stormed' ? 'You stormed the enemy castle!' : reason === 'timeout' ? 'Time ran out - you win on points.' : 'The enemy castle has fallen!'
+    : reason === 'timeout' ? 'Time ran out - the enemy wins on points.' : 'Your castle has fallen.';
 
   return (
     <div className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-950/65 px-3 py-6 backdrop-blur-[2px] sm:items-center">
@@ -115,6 +118,31 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           </h1>
           <p className="mt-1 text-sm text-slate-300">{subtitle}</p>
         </div>
+
+        {/* Points, when time ran out */}
+        {reason === 'timeout' && points && (
+          <div className="mt-4 rounded-xl bg-slate-800 p-3 text-sm">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1">
+              <span />
+              <span className="text-right text-xs font-bold uppercase tracking-widest text-sky-300">You</span>
+              <span className="text-right text-xs font-bold uppercase tracking-widest text-rose-300">Enemy</span>
+              {([
+                ['Kills', 'kills', `Gold value of enemy troops destroyed (x${TIME_SCORE_WEIGHTS.kills})`],
+                ['Gold', 'gold', `Gold earned in the battle (x${TIME_SCORE_WEIGHTS.gold})`],
+                ['Camps', 'camps', `${TIME_SCORE_WEIGHTS.camps} per camp held at the end`]
+              ] as const).map(([label, field, detail]) => (
+                <React.Fragment key={field}>
+                  <span className="text-slate-300" title={detail}>{label}</span>
+                  <span className="text-right tabular-nums">{points.you[field]}</span>
+                  <span className="text-right tabular-nums">{points.enemy[field]}</span>
+                </React.Fragment>
+              ))}
+              <span className="font-display border-t border-white/10 pt-1">Points</span>
+              <span className={`font-display border-t border-white/10 pt-1 text-right tabular-nums ${points.you.total >= points.enemy.total ? 'text-amber-300' : ''}`}>{points.you.total}</span>
+              <span className={`font-display border-t border-white/10 pt-1 text-right tabular-nums ${points.enemy.total > points.you.total ? 'text-amber-300' : ''}`}>{points.enemy.total}</span>
+            </div>
+          </div>
+        )}
 
         {/* Stars */}
         {level && (

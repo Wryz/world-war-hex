@@ -1,9 +1,12 @@
 import React from 'react';
 import { GameState } from '@/types/game';
-import { BASE_MAX_HEALTH, getCastleMaxHealth, getIncome, getMaxRounds, isFogOfWar } from '@/lib/game/gameState';
+import { BASE_MAX_HEALTH, getCastleMaxHealth, getIncome, getMaxRounds, getTimeScore, isFogOfWar } from '@/lib/game/gameState';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
 import { CrownIcon, FogIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon } from '../icons';
 import { setGameSpeed, useGameSpeed } from '../effects/effects';
+
+// The time-up points show for this many final rounds
+const POINTS_SHOWN_ROUNDS = 3;
 
 interface TopBarProps {
   gameState: GameState;
@@ -76,6 +79,19 @@ export const TopBar: React.FC<TopBarProps> = ({
             {timer}s
           </span>
         )}
+        {/* Near the end: the points that decide the battle if time runs out */}
+        {turnNumber > maxRounds - POINTS_SHOWN_ROUNDS && (() => {
+          const you = getTimeScore(gameState, 'player');
+          const enemy = getTimeScore(gameState, 'ai');
+          return (
+            <span
+              className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-bold tabular-nums"
+              title={`If time runs out, the higher score wins. Kills ${you.kills}-${enemy.kills}, gold ${you.gold}-${enemy.gold}, camps ${you.camps}-${enemy.camps}`}
+            >
+              Points <span className="text-sky-300">{you.total}</span>-<span className="text-rose-300">{enemy.total}</span>
+            </span>
+          );
+        })()}
       </div>
 
       {/* Castles */}

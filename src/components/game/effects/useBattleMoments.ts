@@ -123,7 +123,7 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
       if (!flagsRef.current.finalRound && gameState.turnNumber >= getMaxRounds(gameState)) {
         flagsRef.current.finalRound = true;
         setMusicIntensity(2);
-        emitMoment({ title: 'Final Round!', subtitle: 'The stronger castle wins', tone: 'red', big: true });
+        emitMoment({ title: 'Final Round!', subtitle: 'Kills, gold and camps decide it', tone: 'red', big: true });
       }
     }
 
@@ -135,7 +135,7 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
       if (won) emitConfetti();
       playStinger(won ? 'victory' : 'defeat');
       emitMoment(won
-        ? { title: 'Victory!', subtitle: gameState.winReason === 'stormed' ? 'The castle is stormed!' : gameState.winReason === 'timeout' ? 'Your side holds the field' : 'The enemy castle falls!', tone: 'gold', big: true }
+        ? { title: 'Victory!', subtitle: gameState.winReason === 'stormed' ? 'The castle is stormed!' : gameState.winReason === 'timeout' ? 'You win on points' : 'The enemy castle falls!', tone: 'gold', big: true }
         : { title: 'Defeat', subtitle: gameState.winReason === 'timeout' ? 'Time ran out' : 'Your castle has fallen', tone: 'red', big: true });
     }
   }, [gameState, isReady]);

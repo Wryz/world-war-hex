@@ -59,6 +59,8 @@ export interface Unit {
   // Seen by the enemy through the fog after attacking, besieging or springing an ambush, until its
   // side's next turn
   revealed?: boolean;
+  // Stopped short this turn by a hidden enemy it ran into (an ambush)
+  ambushed?: boolean;
 }
 
 // Every troop - the player's cards and the campaign's monsters - is identified by its troop id
@@ -112,6 +114,8 @@ export interface SideStats {
   goldEarned: number;
   campsCaptured: number;
   bossesSlain: number;
+  // Gold value of the enemy troops this side has destroyed
+  slainValue?: number;
   // Times this side's troops walked into a hidden enemy
   ambushed?: number;
   // Enemy troop types this side has met on the battlefield
@@ -212,7 +216,7 @@ export interface GameSettings {
   startingGold?: number;
   // Extra gold the enemy earns every turn
   aiIncomeBonus?: number;
-  // The battle ends after this many rounds; the side whose castle is in better shape wins
+  // The battle ends after this many rounds, decided on points (kills, gold earned, camps held)
   maxRounds?: number;
   // Each side only sees enemy troops its own troops can see
   fogOfWar?: boolean;

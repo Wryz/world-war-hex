@@ -1021,6 +1021,7 @@ export const executeMoves = (state: GameState): GameState => {
     [...newState.players.player.units, ...newState.players.ai.units].map(u => coordKey(u.position))
   );
   const recruited: Unit[] = [];
+  for (const unit of [...newState.players.player.units, ...newState.players.ai.units]) unit.ambushed = false;
 
   // Move units first, so recruits can be deployed on the hexes they leave. Each walks the route its
   // side planned; in the fog it may run into enemies it couldn't see, which stops it short (an ambush).
@@ -1063,6 +1064,7 @@ export const executeMoves = (state: GameState): GameState => {
     while (stop > 0 && !canEndAt(stop)) stop--;
     if (ambusher) {
       ambusher.revealed = true;
+      unit.ambushed = true;
       sideStats(newState, player.type).ambushed = (sideStats(newState, player.type).ambushed ?? 0) + 1;
       addLog(newState, getOpponent(player.type), player.type === 'player'
         ? `Ambush! Your ${getTroopName(unit.type)} ran into a hidden ${getTroopName(ambusher.type)}.`
@@ -1584,11 +1586,29 @@ export const castleHealthRatio = (state: GameState, side: PlayerType): number =>
 const armyValue = (state: GameState, side: PlayerType) =>
   state.players[side].units.reduce((sum, unit) => sum + unit.cost * unit.lifespan / unit.maxLifespan, 0);
 
-// When time runs out the side whose castle is in better shape wins; with the castles level, the
-// side with the stronger army left standing; a dead heat goes to the defender
+// When time runs out the battle is decided on points: the enemy troops each side destroyed (by
+// their gold value), the gold it earned and the camps it holds, each weighted differently
+export const TIME_SCORE_WEIGHTS = { kills: 1, gold: 0.5, camps: 15 } as const;
+
+export interface TimeScore {
+  kills: number;
+  gold: number;
+  camps: number;
+  total: number;
+}
+
+export const getTimeScore = (state: GameState, side: PlayerType): TimeScore => {
+  const stats = state.battleStats?.[side];
+  const kills = Math.round((stats?.slainValue ?? 0) * TIME_SCORE_WEIGHTS.kills);
+  const gold = Math.round((stats?.goldEarned ?? 0) * TIME_SCORE_WEIGHTS.gold);
+  const camps = state.hexGrid.filter(hex => hex.isCamp && hex.owner === side).length * TIME_SCORE_WEIGHTS.camps;
+  return { kills, gold, camps, total: kills + gold + camps };
+};
+
+// The higher score wins; a dead heat goes to the stronger army left standing, then to the defender
 const decideOnTime = (state: GameState): PlayerType => {
-  const castles = castleHealthRatio(state, 'player') - castleHealthRatio(state, 'ai');
-  if (Math.abs(castles) > 1e-9) return castles > 0 ? 'player' : 'ai';
+  const points = getTimeScore(state, 'player').total - getTimeScore(state, 'ai').total;
+  if (points !== 0) return points > 0 ? 'player' : 'ai';
   return armyValue(state, 'player') > armyValue(state, 'ai') ? 'player' : 'ai';
 };
 
@@ -1681,12 +1701,13 @@ const finishTurn = (state: GameState): GameState => {
     return endGame(newState, winner, 'destroyed');
   }
 
-  // The last round is over: the castle in better shape wins
+  // The last round is over: it is decided on points
   if (activePlayer === 'ai' && newState.turnNumber >= getMaxRounds(newState)) {
     const timeWinner = decideOnTime(newState);
-    addLog(newState, timeWinner, timeWinner === 'player'
-      ? 'Time is up - your side holds the field. Victory!'
-      : 'Time is up - the enemy holds the field.');
+    const yours = getTimeScore(newState, 'player');
+    const theirs = getTimeScore(newState, 'ai');
+    addLog(newState, timeWinner, `Time is up - ${timeWinner === 'player' ? 'you win' : 'the enemy wins'} on points, ${yours.total} to ${theirs.total} ` +
+      `(kills ${yours.kills}-${theirs.kills}, gold ${yours.gold}-${theirs.gold}, camps ${yours.camps}-${theirs.camps}).`);
     return endGame(newState, timeWinner, 'timeout');
   }
 
@@ -1834,7 +1855,8 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
 
   const attackers = attackerUnits.map(unit => {
     // Defenders can only strike back at attackers within their own reach, and never at a sneak attack
-    const isSneakAttack = hasAbility(unit, 'stealth');
+    // Sneak attackers can't catch each other unawares
+    const isSneakAttack = hasAbility(unit, 'stealth') && !defenderUnits.some(defender => hasAbility(defender, 'stealth'));
     const canBeHitBack = !combat.intercept && !isSneakAttack && defenderUnits.some(defender => canStrike(state, defender, unit));
     const modifiers = defenderUnits[0] ? describeStrike(unit, defenderUnits[0]) : [];
     if (canBeHitBack) modifiers.push(...describeDefence(unit));
@@ -1881,12 +1903,58 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
 };
 
 // Fight out a combat. Damage is dealt simultaneously; destroying a unit earns its killer a bounty.
+// The special effects at work in a fight, in a few words each, for the battle's callout and the
+// log: sneak attacks, strike-backs, ambushes, flanking, height, counters, cover, armour and more
+export interface CombatEffect {
+  label: string;
+  // Helps the side attacking (good), hinders it (bad), or neither
+  tone: 'good' | 'bad' | 'neutral';
+}
+
+export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect[] => {
+  const live = (unit: Unit) => state.players[unit.owner].units.find(candidate => candidate.id === unit.id);
+  const attackers = combat.attackers.map(live).filter((unit): unit is Unit => !!unit);
+  const target = combat.defenders.map(live).find((unit): unit is Unit => !!unit);
+  if (!target || attackers.length === 0) return [];
+  const effects: CombatEffect[] = [];
+  const add = (label: string, tone: CombatEffect['tone']) => {
+    if (!effects.some(effect => effect.label === label)) effects.push({ label, tone });
+  };
+  const pct = (multiplier: number) => `${Math.round(Math.abs(multiplier - 1) * 100)}%`;
+  const targetTerrain = terrainUnder(state, target);
+
+  if (combat.intercept) add('Struck while attacking', 'good');
+  if (attackers.some(unit => unit.ambushed) || target.ambushed) add('Ambush!', 'neutral');
+  for (const unit of attackers) {
+    const terrain = terrainUnder(state, unit);
+    if (!combat.intercept && hasAbility(unit, 'stealth')) {
+      add(hasAbility(target, 'stealth') ? 'Sneak attack spotted' : 'Sneak attack!', hasAbility(target, 'stealth') ? 'neutral' : 'good');
+    }
+    const flankers = getFlankers(state, unit, target);
+    if (flankers > 0) add(`Flanked +${Math.round(FLANK_BONUS * flankers * 100)}%`, 'good');
+    const height = getHeightMultiplier(terrain, targetTerrain);
+    if (height > 1) add(`High ground +${pct(height)}`, 'good');
+    if (height < 1) add(`Uphill -${pct(height)}`, 'bad');
+    const counter = getCounterMultiplier(unit.type, target.type);
+    if (counter > 1) add(`Counter x${counter}`, 'good');
+    if (counter < 1) add(`Bad matchup x${counter}`, 'bad');
+    if (hasAbility(unit, 'terrainBonus') && terrain === 'forest') add(`Forest pikes +${pct(TERRAIN_BONUS_ATTACK_MULTIPLIER)}`, 'good');
+    if (isEnraged(unit)) add(`Berserk +${pct(BERSERK_ATTACK_MULTIPLIER)}`, 'good');
+    if (getPointBlankMultiplier(unit, getHexDistance(unit.position, target.position)) < 1) add('Point blank', 'bad');
+    const cover = TERRAIN_EFFECTS[targetTerrain].damageTakenMultiplier;
+    if (cover < 1) add(hasAbility(unit, 'magic') ? 'Spells pierce cover' : `Cover -${pct(cover)}`, hasAbility(unit, 'magic') ? 'good' : 'bad');
+  }
+  if (hasAbility(target, 'armored')) add(`Armored -${ARMOR_REDUCTION}`, 'bad');
+  return effects;
+};
+
 export const resolveCombat = (state: GameState, combatIndex: number): GameState => {
   const combat = state.combats[combatIndex];
   if (state.currentPhase !== 'combat' || !combat || combat.resolved) return state;
 
   const newState = cloneState(state);
   const preview = getCombatPreview(newState, combat);
+  const effects = getCombatEffects(newState, combat);
   const getLiveUnit = (unit: Unit) =>
     newState.players[unit.owner].units.find(u => u.id === unit.id);
 
@@ -1904,6 +1972,7 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
         bounties[killer] += getKillBounty(unit);
         const killerStats = sideStats(newState, killer);
         killerStats.kills++;
+        killerStats.slainValue = (killerStats.slainValue ?? 0) + unit.cost;
         killerStats.slain[unit.type] = (killerStats.slain[unit.type] ?? 0) + 1;
         if (unit.isBoss) {
           killerStats.bossesSlain++;
@@ -1920,8 +1989,13 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
     addLog(
       newState,
       getActivePlayer(newState),
-      `${preview.attackers.map(a => unitLabel(a.unit)).join(' & ')} attacked ${unitLabel(defender.unit)}: ` +
-        `defender ${outcome(defender)}, attackers ${preview.attackers.map(outcome).join(', ')}.`
+      (combat.intercept
+        ? `${preview.attackers.map(a => unitLabel(a.unit)).join(' & ')} struck back at ${unitLabel(defender.unit)} as it attacked: ${outcome(defender)}.`
+        : `${preview.attackers.map(a => unitLabel(a.unit)).join(' & ')} attacked ${unitLabel(defender.unit)}: ` +
+          `defender ${outcome(defender)}, attackers ${preview.attackers.map(outcome).join(', ')}.`) +
+        (effects.filter(effect => effect.label !== 'Struck while attacking').length > 0
+          ? ` (${effects.filter(effect => effect.label !== 'Struck while attacking').map(effect => effect.label).join(', ')})`
+          : '')
     );
 
     for (const side of ['player', 'ai'] as const) {

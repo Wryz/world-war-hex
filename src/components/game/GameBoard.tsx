@@ -26,6 +26,7 @@ import {
   getMovePath,
   getValidBaseLocations,
   getSiegeDamage,
+  getCombatEffects,
   HIGH_GROUND_ELEVATION
 } from '@/lib/game/gameState';
 import { getHexDistance } from '@/lib/game/hexUtils';
@@ -574,6 +575,12 @@ interface BoardSceneProps extends GameBoardProps {
   assetsLoaded: boolean;
 }
 
+// High above a hex, clear of the troops fighting on it
+const calloutPosition = (hex: Hex): [number, number, number] => {
+  const [x, y, z] = surfacePosition(hex);
+  return [x, y + 2.3, z];
+};
+
 // Just above a hex's tile, for labels lying on it
 const labelPosition = (hex: Hex): [number, number, number] => {
   const [x, y, z] = surfacePosition(hex);
@@ -662,6 +669,21 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   };
 
   const selectedKey = selectedHex ? coordKey(selectedHex.coordinates) : null;
+
+  // The special effects at work in each of the turn's battles, called out above them
+  const battleCallouts = useMemo(() => {
+    if (currentPhase !== 'combat') return [];
+    return combats.flatMap((combat, index) => {
+      if (combat.resolved) return [];
+      const hex = hexByKey.get(coordKey(combat.hexCoordinates));
+      const effects = getCombatEffects(gameState, combat);
+      return hex && effects.length > 0
+        ? [{ key: `callout-${turnNumber}-${index}`, hex, effects, playerAttacking: combat.attackers[0]?.owner === 'player' }]
+        : [];
+    });
+    // The turn's battles decide the callouts
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPhase, combats, hexByKey, turnNumber]);
 
   // --- Fog and threats ------------------------------------------------------------------------
 
@@ -1180,6 +1202,31 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           >
             {label.lethal ? '☠ ' : ''}-{label.damage}
           </span>
+        </Html>
+      ))}
+
+      {/* Callouts over each battle for the special effects at work in it */}
+      {battleCallouts.map(({ key, hex, effects, playerAttacking }) => (
+        <Html key={key} position={calloutPosition(hex)} center zIndexRange={[7, 0]} style={{ pointerEvents: 'none' }}>
+          <div className="flex flex-col items-center gap-0.5">
+            {effects.slice(0, 3).map((effect, index) => {
+              const helpsYou = effect.tone === 'neutral' ? null : (effect.tone === 'good') === playerAttacking;
+              return (
+                <span
+                  key={effect.label}
+                  className="battle-callout font-display whitespace-nowrap rounded-full px-2 py-0.5 text-xs shadow-lg"
+                  style={{
+                    background: helpsYou === null ? 'rgba(120, 53, 15, 0.92)' : helpsYou ? 'rgba(6, 95, 70, 0.92)' : 'rgba(136, 19, 55, 0.92)',
+                    color: helpsYou === null ? '#fde68a' : helpsYou ? '#a7f3d0' : '#fecdd3',
+                    animationDelay: `${getBattleStartDelay() / getGameSpeed() + index * 0.18}s`,
+                    animationDuration: `${2.6 / getGameSpeed()}s`
+                  }}
+                >
+                  {effect.label}
+                </span>
+              );
+            })}
+          </div>
         </Html>
       ))}
 
