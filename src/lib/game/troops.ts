@@ -96,7 +96,7 @@ export const TROOPS: Record<TroopId, TroopDef> = {
   }),
   artillery: troop({
     id: 'artillery', name: 'Archers', faction: 'kingdom', rarity: 'common', troopClass: 'ranged', cost: 20, attack: 10, health: 6, move: 1,
-    abilities: ['rangedAttack'], role: 'Hits hard from 2 hexes', attackInterval: 1.6,
+    abilities: ['rangedAttack'], role: 'Hits hard from 2, 3 from towers', attackInterval: 1.6,
     lore: 'Crossbow volleys from behind the line. Keep them out of reach of blades.'
   }),
   tank: troop({
@@ -111,7 +111,7 @@ export const TROOPS: Record<TroopId, TroopDef> = {
   }),
   helicopter: troop({
     id: 'helicopter', name: 'Knights', faction: 'kingdom', rarity: 'rare', troopClass: 'cavalry', cost: 26, attack: 8, health: 10, move: 5,
-    abilities: ['rapidMovement'], role: 'Fast mounted cavalry', attackInterval: 0.7,
+    abilities: ['rapidMovement'], role: 'Fast: first to camps and buildings', attackInterval: 0.7,
     lore: 'Mounted knights who reach camps and gold mines long before anyone else.'
   }),
   medic: troop({
@@ -126,7 +126,7 @@ export const TROOPS: Record<TroopId, TroopDef> = {
   }),
   shieldbearer: troop({
     id: 'shieldbearer', name: 'Shieldbearers', faction: 'kingdom', rarity: 'rare', troopClass: 'infantry', cost: 22, attack: 4, health: 20, move: 2,
-    abilities: ['armored'], role: 'Armored wall, takes less damage', attackInterval: 1.1,
+    abilities: ['armored'], role: 'Armored: holds gates and bridges', attackInterval: 1.1,
     lore: 'Behind their tower shields, arrows and claws alike glance away.'
   }),
   berserker: troop({
