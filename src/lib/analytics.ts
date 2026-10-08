@@ -1,11 +1,13 @@
-// Anonymous gameplay analytics (PostHog), used to see where players get stuck in the campaign and
-// which cards and cosmetics they pick. Only game events are sent - no session recordings, no
-// autocaptured clicks and no personal details - and players can switch it off in Settings.
-// It stays off unless NEXT_PUBLIC_POSTHOG_KEY is set at build time. PostHog's browser library is loaded
-// from its CDN only then, so the game has no analytics code to bundle or install otherwise.
+// Anonymous gameplay analytics (PostHog and/or Google Analytics), used to see where players get stuck
+// in the campaign and which cards and cosmetics they pick. Only game events and page views are sent -
+// no session recordings, no autocaptured clicks and no personal details - and players can switch it
+// off in Settings. Each service stays off unless its key is set at build time
+// (NEXT_PUBLIC_POSTHOG_KEY, NEXT_PUBLIC_GA_MEASUREMENT_ID); its browser library is loaded from its CDN
+// only then, so the game has no analytics code to bundle or install otherwise.
 
 const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 const HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
+const GA_ID = process.env.NEXT_PUBLIC_GA_MEASUREMENT_ID;
 const OPT_OUT_KEY = 'wwhAnalyticsOptOut';
 
 export type AnalyticsEvent =
@@ -19,7 +21,10 @@ export type AnalyticsEvent =
   | 'loadout_auto_picked'
   | 'cosmetic_bought'
   | 'save_exported'
-  | 'save_imported';
+  | 'save_imported'
+  | 'ad_reward_offered'
+  | 'ad_reward_watched'
+  | 'ad_interstitial_shown';
 
 type Properties = Record<string, string | number | boolean | null | undefined | string[]>;
 
@@ -39,10 +44,10 @@ let loading: Promise<PostHogClient | null> | null = null;
 // Events sent before the library has loaded
 const queue: [AnalyticsEvent, Properties][] = [];
 
-export const isAnalyticsAvailable = () => !!KEY;
+export const isAnalyticsAvailable = () => !!KEY || !!GA_ID;
 
 export const isAnalyticsEnabled = (): boolean => {
-  if (!KEY || typeof window === 'undefined') return false;
+  if (!isAnalyticsAvailable() || typeof window === 'undefined') return false;
   try {
     return localStorage.getItem(OPT_OUT_KEY) !== '1';
   } catch {
@@ -50,8 +55,61 @@ export const isAnalyticsEnabled = (): boolean => {
   }
 };
 
+// --- Google Analytics (GA4) ----------------------------------------------------------------
+
+interface GtagWindow {
+  dataLayer?: unknown[];
+  gtag?: (...args: unknown[]) => void;
+}
+
+let gaStarted = false;
+
+// GA's own switch: while it is set, gtag.js sends nothing
+const setGaDisabled = (disabled: boolean) => {
+  if (GA_ID) (window as unknown as Record<string, unknown>)[`ga-disable-${GA_ID}`] = disabled;
+};
+
+// Load gtag.js once. Calls made before it arrives wait in the dataLayer. Page views follow the
+// game's client-side navigation through GA's enhanced measurement (browser history changes).
+const startGoogleAnalytics = () => {
+  if (!GA_ID || gaStarted || !isAnalyticsEnabled()) return;
+  gaStarted = true;
+  setGaDisabled(false);
+  const w = window as unknown as GtagWindow;
+  w.dataLayer = w.dataLayer || [];
+  // gtag.js reads the arguments object itself, so it is pushed as is
+  w.gtag = function gtag() {
+    // eslint-disable-next-line prefer-rest-params
+    w.dataLayer!.push(arguments);
+  };
+  w.gtag('js', new Date());
+  w.gtag('config', GA_ID, { allow_google_signals: false, allow_ad_personalization_signals: false });
+  const script = document.createElement('script');
+  script.src = `https://www.googletagmanager.com/gtag/js?id=${encodeURIComponent(GA_ID)}`;
+  script.async = true;
+  document.head.appendChild(script);
+};
+
+// GA event parameters are strings and numbers: lists are joined and empty values dropped
+const toGaParams = (properties: Properties) => {
+  const params: Record<string, string | number> = {};
+  for (const [name, value] of Object.entries(properties)) {
+    if (value === null || value === undefined) continue;
+    params[name] = Array.isArray(value) ? value.join(',') : typeof value === 'boolean' ? String(value) : value;
+  }
+  return params;
+};
+
+const sendToGoogleAnalytics = (event: AnalyticsEvent, properties: Properties) => {
+  if (!GA_ID) return;
+  startGoogleAnalytics();
+  (window as unknown as GtagWindow).gtag?.('event', event, toGaParams(properties));
+};
+
+// --- PostHog -------------------------------------------------------------------------------
+
 const load = (): Promise<PostHogClient | null> => {
-  if (!isAnalyticsEnabled()) return Promise.resolve(null);
+  if (!KEY || !isAnalyticsEnabled()) return Promise.resolve(null);
   loading ??= new Promise<PostHogClient | null>(resolve => {
     const script = document.createElement('script');
     script.src = libraryUrl();
@@ -82,13 +140,18 @@ const load = (): Promise<PostHogClient | null> => {
   return loading;
 };
 
+// --- Both ----------------------------------------------------------------------------------
+
 // Start analytics once the game is open in the browser
 export const initAnalytics = () => {
+  startGoogleAnalytics();
   void load();
 };
 
 export const trackEvent = (event: AnalyticsEvent, properties: Properties = {}) => {
   if (!isAnalyticsEnabled()) return;
+  sendToGoogleAnalytics(event, properties);
+  if (!KEY) return;
   if (client) {
     client.capture(event, properties);
     return;
@@ -106,9 +169,12 @@ export const setAnalyticsEnabled = (enabled: boolean) => {
     // Storage blocked: the choice lasts for this visit only
   }
   if (enabled) {
+    setGaDisabled(false);
+    startGoogleAnalytics();
     client?.opt_in_capturing();
     void load();
   } else {
+    setGaDisabled(true);
     queue.length = 0;
     client?.opt_out_capturing();
   }

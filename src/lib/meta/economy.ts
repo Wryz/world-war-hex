@@ -47,6 +47,10 @@ export const quickBattleReward = (won: boolean, highestCleared: number): BattleR
   return { coins, breakdown: [{ label: won ? 'Skirmish won' : 'Skirmish fought', coins }] };
 };
 
+// Watching the optional ad on the results screen adds half the battle's reward again
+export const AD_BONUS_FRACTION = 0.5;
+export const adBonusCoins = (reward: BattleReward) => Math.max(5, Math.round(reward.coins * AD_BONUS_FRACTION));
+
 // --- Shop ----------------------------------------------------------------------------------
 
 const CARD_PRICES: Record<Rarity, number> = { common: 120, rare: 300, epic: 700, legendary: 1500, boss: 0 };

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { initAnalytics, trackEvent } from '@/lib/analytics';
+import { initAds } from '@/lib/ads';
 import { registerServiceWorker } from '@/lib/offline';
 import { getProfile, highestCleared, profilePower } from '@/lib/meta/profile';
 
@@ -10,6 +11,7 @@ export const AppBoot: React.FC = () => {
   useEffect(() => {
     registerServiceWorker();
     initAnalytics();
+    initAds();
     const profile = getProfile();
     trackEvent('game_opened', {
       highest_cleared: highestCleared(profile),

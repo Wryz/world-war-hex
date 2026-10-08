@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { trackEvent } from '@/lib/analytics';
+import { showBreakAd } from '@/lib/ads';
 import { requestPersistentStorage } from '@/lib/offline';
 import { useRouter } from 'next/navigation';
 import { GameBoard } from './GameBoard';
@@ -222,6 +223,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   const nextLevel = level && level.id < LEVEL_COUNT ? level.id + 1 : null;
 
+  // Leaving the results screen is a natural break, so an ad may play before the next screen
+  const leaveResults = (path: string) => () => showBreakAd('after_battle', getProfile().stats.battles, () => router.push(path));
+
   const activePlayer = gameState.activePlayer ?? 'player';
   const isPlayerPlanning = currentPhase === 'planning' && !isAITurn;
   const deckTypes = useMemo(() => gameState.deck ?? [], [gameState.deck]);
@@ -335,10 +339,10 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           durationSeconds={elapsedRef.current}
           coinsTotal={getProfile().coins}
           power={profilePower(getProfile())}
-          onNext={nextLevel ? () => router.push(`/play?level=${nextLevel}`) : undefined}
+          onNext={nextLevel ? leaveResults(`/play?level=${nextLevel}`) : undefined}
           onRetry={handleRetry}
-          onMap={() => router.push(exitPath)}
-          onArmy={() => router.push('/army')}
+          onMap={leaveResults(exitPath)}
+          onArmy={leaveResults('/army')}
           points={{ you: getStarScore(gameState, 'player'), enemy: getStarScore(gameState, 'ai') }}
         />
       )}

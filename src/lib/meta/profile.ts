@@ -478,6 +478,12 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
   return { reward, previousStars, discovered, newCards, isNewBest };
 };
 
+// Coins from watching the optional ad after a battle
+export const grantBonusCoins = (coins: number) => {
+  const profile = getProfile();
+  setProfile({ ...profile, coins: profile.coins + coins, stats: { ...profile.stats, coinsEarned: profile.stats.coinsEarned + coins } });
+};
+
 // --- Export / import -----------------------------------------------------------------------
 
 const SAVE_FORMAT = 'world-war-hex-save';

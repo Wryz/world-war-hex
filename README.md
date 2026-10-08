@@ -131,6 +131,18 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 
 The game can send anonymous gameplay events to [PostHog](https://posthog.com) - battles started, won, lost and abandoned (with level, deck, bonds and duration), cards bought and upgraded, cosmetics bought, tutorial completion and save exports - to show where players get stuck in the campaign. Nothing is sent unless `NEXT_PUBLIC_POSTHOG_KEY` is set at build time (and optionally `NEXT_PUBLIC_POSTHOG_HOST`, default `https://us.i.posthog.com`). Session recording and autocapture are off, Do Not Track is respected, and players can switch it off in Settings. Events are defined in `src/lib/analytics.ts`.
 
+The same events, plus page views, can also go to Google Analytics 4: set `NEXT_PUBLIC_GA_MEASUREMENT_ID` (the `G-...` ID of a GA4 web stream) at build time. Google signals and ad personalisation are off for it, and the Settings switch turns it off too.
+
+## Ads
+
+The web version can show ads through [Google H5 Games Ads](https://developers.google.com/ad-placement) (AdSense's Ad Placement API), in `src/lib/ads.ts`:
+
+- **Rewarded ad.** When an ad is ready, the results screen offers "Watch an ad for +N coins", half the battle's reward again (`AD_BONUS_FRACTION` in `src/lib/meta/economy.ts`). Players who skip it progress at the normal pace.
+- **Break ad.** Leaving the results screen (Next Level, Map or Army) may play an ad first. Never during a battle, not in a player's first three battles, and not within 90 seconds of another ad.
+- The game's music and sounds go quiet while an ad plays.
+
+Nothing loads unless `NEXT_PUBLIC_ADSENSE_CLIENT` (your `ca-pub-...` publisher ID) is set at build time, so a build without it (such as a paid desktop version) has no ads. `/ads.txt` is generated from the same ID. Set `NEXT_PUBLIC_ADS_TEST=1` as well to get Google's test ads while trying it out. Ads only serve once the site is approved in AdSense and enrolled in H5 Games Ads, and players in the EEA, UK and Switzerland must be shown a Google-certified consent message, which AdSense's Privacy & messaging page can set up without code changes.
+
 ## Credits
 
 - Character models: [KayKit Character Pack: Adventurers](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Adventures-1.0) and [KayKit Character Pack: Skeletons](https://github.com/KayKit-Game-Assets/KayKit-Character-Pack-Skeletons-1.0) by Kay Lousberg ([CC0](http://creativecommons.org/publicdomain/zero/1.0/)), with the characters and weapons split from one shared animation pack and meshopt-compressed for the web
