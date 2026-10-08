@@ -123,7 +123,7 @@ const ENEMY_STRENGTH = 0.835;
 // Factions whose troops are cheaper or trickier than their power suggests (goblin swarms, undead
 // healed by cursed ground) are toned down; the simulator measured these
 const FACTION_STRENGTH: Partial<Record<Faction, number>> = {
-  bandits: 0.86, goblins: 0.75, beasts: 1.01, swamp: 0.81, desert: 0.94, frost: 0.99, undead: 0.68, orcs: 0.8, infernal: 0.74, dragons: 0.95
+  bandits: 0.86, goblins: 0.72, beasts: 1.02, swamp: 0.89, desert: 0.91, frost: 1.0, undead: 0.75, orcs: 0.82, infernal: 0.79, dragons: 1.0
 };
 // Later levels in a region are a little harder than earlier ones; the first meets a new enemy, so it is gentler
 const IN_REGION_RAMP = 0.012;
