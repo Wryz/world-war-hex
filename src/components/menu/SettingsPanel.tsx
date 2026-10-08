@@ -177,8 +177,8 @@ const GuideTab: React.FC = () => (
     <GuideSection title="Winning a battle" icon={<CrownIcon />}>
       <p>
         Attack the enemy castle: a troop that can reach it strikes the castle - from the next hex for most troops, from 2-3
-        hexes for archers and mages with a clear line of sight - unless it can finish off an enemy troop instead. Troops guarding
-        a castle strike the enemies attacking it, and those can&apos;t hit back. Once its walls are breached ({Math.round(STORM_BREACH_RATIO * 100)}% health or less), march a troop onto it to storm it and win at once.
+        hexes for archers and mages with a clear line of sight - unless it can finish off an enemy troop instead. Your troops strike
+        any enemy that attacks within their reach - your castle or another troop - and it can&apos;t hit back. Once its walls are breached ({Math.round(STORM_BREACH_RATIO * 100)}% health or less), march a troop onto it to storm it and win at once.
         When the last round ends, the castle in better shape wins.
       </p>
     </GuideSection>

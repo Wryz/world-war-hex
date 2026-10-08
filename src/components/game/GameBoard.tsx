@@ -801,6 +801,15 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           });
         }
         for (const live of liveDefenders) {
+          // Struck back at while it attacks something else: it keeps its own attack, and takes these
+          // blows on top of any from that fight
+          const prior = combat.intercept ? battles.get(live.id) : undefined;
+          if (prior) {
+            const times = [...(prior.incoming?.times ?? []), ...blowsOn(live, diesAt)].sort((a, b) => a - b);
+            const damage = (prior.incoming?.damage ?? 0) + (damageTo.get(live.id) ?? 0);
+            battles.set(live.id, { ...prior, incoming: { times, damage }, diesAt: getDeathTime(times, damage, live.lifespan) });
+            continue;
+          }
           const target = defenderTarget.get(live.id) ?? null;
           battles.set(live.id, {
             key,

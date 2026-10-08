@@ -1152,7 +1152,8 @@ export const executeMoves = (state: GameState): GameState => {
   // the enemy castle if they can reach it
   const combats = detectCombat(newState, activePlayer);
   const siege = detectSiege(newState, activePlayer, combats);
-  combats.push(...detectIntercepts(newState, siege, combats));
+  // Troops in reach of an attacker strike back at it; fought after the turn's other battles
+  combats.push(...detectIntercepts(newState, activePlayer, siege, combats));
   if (combats.length > 0) {
     addLog(
       newState,
@@ -1509,32 +1510,47 @@ const detectSiege = (state: GameState, side: PlayerType, combats: Combat[]): Gam
   return attackers.length > 0 ? { side, attackerIds: attackers.map(unit => unit.id) } : undefined;
 };
 
-// Troops guarding a castle strike back at the enemies attacking it: each of the defending side's
-// troops not already in a fight attacks one castle attacker it can reach (the one with the fewest
-// other troops able to reach it first). The castle attacker can't hit back, and if it falls it does
-// no damage to the castle.
-const detectIntercepts = (state: GameState, siege: GameState['siege'], combats: Combat[]): Combat[] => {
-  if (!siege) return [];
-  const guardSide = getOpponent(siege.side);
+// Troops of the side not moving strike back at the enemies attacking within their reach - whether
+// those enemies attack a troop or the castle. Each troop not already in a fight strikes one attacker
+// it can reach: one it can finish off (with the others striking it) if it can, otherwise the
+// hardest-hitting. The attacker is busy with its own target, so it can't hit back; a castle attacker
+// that falls does no damage to the castle.
+const detectIntercepts = (state: GameState, attackerSide: PlayerType, siege: GameState['siege'], combats: Combat[]): Combat[] => {
+  const guardSide = getOpponent(attackerSide);
   const busy = new Set(combats.flatMap(combat => [...combat.attackers, ...combat.defenders].map(unit => unit.id)));
-  const raiders = siege.attackerIds
-    .map(id => state.players[siege.side].units.find(unit => unit.id === id))
-    .filter((unit): unit is Unit => !!unit);
-  const guardsFor = (raider: Unit) => state.players[guardSide].units.filter(guard =>
-    !busy.has(guard.id) && canStrike(state, guard, raider) && isUnitVisibleTo(state, guardSide, raider));
-  const intercepts: Combat[] = [];
-  for (const raider of [...raiders].sort((a, b) => guardsFor(a).length - guardsFor(b).length || compareIds(a, b))) {
-    const guards = guardsFor(raider);
-    if (guards.length === 0) continue;
-    for (const guard of guards) {
-      busy.add(guard.id);
-      guard.isEngagedInCombat = true;
-      guard.revealed = true;
-    }
-    raider.isEngagedInCombat = true;
-    intercepts.push({ hexCoordinates: raider.position, attackers: guards, defenders: [raider], resolved: false, intercept: true });
+  const attackerIds = new Set([...combats.flatMap(combat => combat.attackers.map(unit => unit.id)), ...(siege?.attackerIds ?? [])]);
+  const attackers = state.players[attackerSide].units.filter(unit => attackerIds.has(unit.id));
+  if (attackers.length === 0) return [];
+
+  const assigned = new Map<string, Unit[]>();
+  const damageOn = new Map<string, number>();
+  const guards = state.players[guardSide].units
+    .filter(guard => !busy.has(guard.id))
+    .map(guard => ({ guard, targets: attackers.filter(enemy => canStrike(state, guard, enemy) && isUnitVisibleTo(state, guardSide, enemy)) }))
+    .filter(choice => choice.targets.length > 0)
+    // Guards with fewer options pick first
+    .sort((a, b) => a.targets.length - b.targets.length || compareIds(a.guard, b.guard));
+  for (const { guard, targets } of guards) {
+    const options = targets.map(target => {
+      const strike = getStrikePower(state, guard, target);
+      const before = damageOn.get(target.id) ?? 0;
+      const kills = applyArmor(target, Math.max(1, Math.round(before))) < target.lifespan &&
+        applyArmor(target, Math.max(1, Math.round(before + strike))) >= target.lifespan;
+      return { target, strike, kills };
+    }).sort((a, b) => Number(b.kills) - Number(a.kills) || b.target.attackPower - a.target.attackPower || compareIds(a.target, b.target));
+    const { target, strike } = options[0];
+    damageOn.set(target.id, (damageOn.get(target.id) ?? 0) + strike);
+    assigned.set(target.id, [...(assigned.get(target.id) ?? []), guard]);
+    guard.isEngagedInCombat = true;
+    guard.revealed = true;
   }
-  return intercepts;
+
+  return attackers.flatMap(target => {
+    const strikers = assigned.get(target.id);
+    if (!strikers) return [];
+    target.isEngagedInCombat = true;
+    return [{ hexCoordinates: target.position, attackers: strikers, defenders: [target], resolved: false, intercept: true }];
+  });
 };
 
 // Whether `attacker` has breached the enemy castle's walls, so its troops may storm it
@@ -1822,7 +1838,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     const canBeHitBack = !combat.intercept && !isSneakAttack && defenderUnits.some(defender => canStrike(state, defender, unit));
     const modifiers = defenderUnits[0] ? describeStrike(unit, defenderUnits[0]) : [];
     if (canBeHitBack) modifiers.push(...describeDefence(unit));
-    if (combat.intercept) modifiers.push('its target is busy attacking the castle - takes no damage');
+    if (combat.intercept) modifiers.push('its target is busy with its own attack - takes no damage');
     else if (isSneakAttack) modifiers.push('sneak attack - takes no damage');
     else if (!canBeHitBack) modifiers.push('out of reach - takes no damage');
     const terrain = terrainUnder(state, unit);
@@ -1928,7 +1944,8 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
   return newState;
 };
 
-// Fight every battle of the turn at once (they never share a unit, so order doesn't matter)
+// Fight every battle of the turn at once. No troop attacks twice; troops striking back at an attacker
+// come last, so the attacker still lands its own attack first
 export const resolveAllCombats = (state: GameState): GameState => {
   // Only the castle is under attack: the turn simply ends, and the castle takes the blows
   if (state.currentPhase === 'combat' && state.combats.every(combat => combat.resolved)) return finishTurn(state);
