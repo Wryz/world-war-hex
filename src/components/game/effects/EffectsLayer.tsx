@@ -125,7 +125,8 @@ export const EffectsLayer: React.FC = () => {
               >
                 {moment.title}
               </div>
-              {moment.subtitle && (
+              {/* Only huge moments and new rules explain themselves; the rest are just their title */}
+              {(moment.big || moment.explain) && moment.subtitle && (
                 <div className="mt-2 rounded-full bg-slate-900/80 px-4 py-1 text-sm font-bold text-slate-100 shadow-lg">
                   {moment.subtitle}
                 </div>

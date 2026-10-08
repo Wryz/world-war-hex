@@ -104,7 +104,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     if (!isReady || startedRef.current) return;
     startedRef.current = true;
     if (isFogOfWar(gameState)) {
-      setTimeout(() => emitMoment({ title: 'Fog of War', subtitle: 'You only see what your troops can see', tone: 'purple' }), 1200);
+      setTimeout(() => emitMoment({ title: 'Fog of War', subtitle: 'You only see what your troops can see', tone: 'purple', explain: true }), 1200);
     }
     if (shouldContinueGame && gameState.turnNumber > 1) return;
     const profile = getProfile();
@@ -273,7 +273,6 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     const tactic = TACTICS[lastTactic.id];
     emitMoment({
       title: lastTactic.side === 'player' ? tactic.name : `Enemy: ${tactic.name}`,
-      subtitle: tactic.describe(lastTactic.level),
       tone: lastTactic.side === 'player' ? 'purple' : 'red'
     });
     // Announced once per card played

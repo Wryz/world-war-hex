@@ -81,7 +81,7 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
 
     if (after.player.campsCaptured > before.player.campsCaptured) {
       playBattleSound('bounty', 0.7);
-      emitMoment({ title: 'Camp Captured!', subtitle: 'Deploy your cards there now', tone: 'green' });
+      emitMoment({ title: 'Camp Captured!', subtitle: 'Deploy your cards there now', tone: 'green', explain: true });
     }
     if (after.ai.campsCaptured > before.ai.campsCaptured) {
       emitMoment({ title: 'Camp Lost!', tone: 'red' });

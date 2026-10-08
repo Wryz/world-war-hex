@@ -123,6 +123,8 @@ export interface Moment {
   tone: MomentTone;
   // Huge moments (boss defeated, victory) fill the screen
   big?: boolean;
+  // Show the subtitle even though it isn't huge (a new rule worth explaining)
+  explain?: boolean;
 }
 
 export interface EffectsState {
@@ -155,9 +157,14 @@ export const emitCoins = (from: { x: number; y: number }, count: number, target:
 
 export const emitMoment = (moment: Omit<Moment, 'id'>) => {
   const id = nextId++;
-  // Only the latest two callouts stay on screen
-  update(state => ({ ...state, moments: [...state.moments.slice(-1), { ...moment, id }] }));
-  removeLater('moments', id, moment.big ? 2600 : 1900);
+  // One callout at a time: a new one replaces the last, unless that one is huge and this isn't
+  let shown = false;
+  update(state => {
+    if (!moment.big && state.moments.some(current => current.big)) return state;
+    shown = true;
+    return { ...state, moments: [{ ...moment, id }] };
+  });
+  if (shown) removeLater('moments', id, moment.big ? 2600 : 1900);
 };
 
 export const emitConfetti = () => {

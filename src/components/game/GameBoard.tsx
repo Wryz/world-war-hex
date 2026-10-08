@@ -27,6 +27,7 @@ import {
   getValidBaseLocations,
   getSiegeDamage,
   getCombatEffects,
+  strongestEffects,
   HIGH_GROUND_ELEVATION,
   HEIGHT_DAMAGE_PER_UNIT,
   BERSERK_ATTACK_MULTIPLIER,
@@ -641,6 +642,9 @@ interface BoardSceneProps extends GameBoardProps {
   assetsLoaded: boolean;
 }
 
+// Effects called out over a battle at most (the biggest ones)
+const MAX_CALLOUTS = 2;
+
 // High above a hex, clear of the troops fighting on it
 const calloutPosition = (hex: Hex): [number, number, number] => {
   const [x, y, z] = surfacePosition(hex);
@@ -661,76 +665,82 @@ const surfacePosition = (hex: Hex): [number, number, number] => {
 
 const toVector = ([x, y, z]: [number, number, number]) => new THREE.Vector3(x, y, z);
 
-// The buffs (and the odd drawback) working on a unit right now, shown under its health tag: cover,
-// height, healing, a held gold mine, berserk fury and the bonds it fights with
+// The buffs (and the odd drawback) working on a unit right now, shown under its health tag, most
+// telling first: its signature while its condition is met, tactic cards, hazards, then the ground.
+// Bonds are always on, so they only show in the list a tap opens.
 const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitBuff[] => {
   if (!hex) return [];
   const buffs: UnitBuff[] = [];
   const effect = TERRAIN_EFFECTS[hex.terrain];
   const pct = (value: number) => `${Math.round(value * 100)}%`;
-  const ranged = unit.abilities.includes('rangedAttack');
 
-  if (effect.damageTakenMultiplier < 1) {
-    buffs.push({ id: 'cover', terrain: hex.terrain, label: `${effect.name} cover`, value: `-${pct(1 - effect.damageTakenMultiplier)} damage taken`, good: true });
-  }
-  if (effect.elevation >= HIGH_GROUND_ELEVATION) {
-    buffs.push({ id: 'high', terrain: hex.terrain, label: 'High ground', value: `+${pct(HEIGHT_DAMAGE_PER_UNIT)} attack per 1.0 height above the target${ranged ? ', +1 range' : ''}`, good: true });
-  }
-  if (effect.elevation < 1) {
-    buffs.push({ id: 'low', terrain: hex.terrain, label: 'Low ground', value: `+${pct(HEIGHT_DAMAGE_PER_UNIT)} damage taken per 1.0 height an attacker stands above`, good: false });
-  }
-  if (hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) {
-    buffs.push({ id: 'pikes', icon: 'attack', label: 'Forest pikes', value: `+${pct(TERRAIN_BONUS_ATTACK_MULTIPLIER - 1)} attack`, good: true });
-  }
-  if (effect.healPerTurn) {
-    buffs.push({ id: 'heal', terrain: hex.terrain, label: effect.name, value: `+${effect.healPerTurn} health per turn`, good: true });
-  }
-  if (effect.damagePerTurn) {
-    const immune = (hex.terrain === 'lava' && unit.abilities.includes('fireborn')) || (hex.terrain === 'cursed' && unit.abilities.includes('undead'));
-    buffs.push(immune
-      ? { id: 'scorch', terrain: hex.terrain, label: effect.name, value: hex.terrain === 'cursed' ? `+${effect.damagePerTurn} health per turn` : 'Unharmed', good: true }
-      : { id: 'scorch', terrain: hex.terrain, label: effect.name, value: `-${effect.damagePerTurn} health per turn`, good: false });
-  }
-  if (hex.isResourceHex) {
-    buffs.push({ id: 'gold', icon: 'gold', label: 'Gold mine', value: `+${hex.resourceValue ?? 0} gold per turn`, good: true });
-  }
-  if (unit.abilities.includes('berserk') && unit.lifespan * 2 <= unit.maxLifespan) {
-    buffs.push({ id: 'berserk', icon: 'attack', label: 'Berserk', value: `+${pct(BERSERK_ATTACK_MULTIPLIER - 1)} attack`, good: true });
-  }
-  // Its signature ability (awake), and the signature and tactic bonuses at work right now
+  // Its signature, while it is working
   const signature = unitSignature(unit);
   const situational = getSituationalBonuses(state, unit);
   if (signature) {
-    const active = situational.some(bonus => bonus.label === signature.def.name);
-    buffs.push({
-      id: 'signature', icon: 'signature', label: `${signature.def.name} ${ROMAN[signature.rank]}`,
-      value: `${active ? 'Active: ' : ''}${signature.def.describe(signature.rank)}`, good: true
-    });
+    const bonus = situational.find(entry => entry.label === signature.def.name);
+    const warding = signature.def.id === 'ward' &&
+      state.players[unit.owner].units.some(ally => ally.id !== unit.id && getHexDistance(ally.position, unit.position) === 1);
+    if (bonus || warding) {
+      buffs.push({
+        id: 'signature', icon: 'signature', label: `${signature.def.name} ${ROMAN[signature.rank]}`,
+        value: bonus ? `+${pct(bonus.multiplier - 1)} attack` : signature.def.short(signature.rank), good: true
+      });
+    }
   }
+  // Tactic cards at work on it
   for (const bonus of situational) {
     if (bonus.label !== signature?.def.name) {
       buffs.push({ id: `bonus-${bonus.label}`, icon: 'attack', label: bonus.label, value: `+${pct(bonus.multiplier - 1)} attack`, good: true });
     }
   }
   for (const protection of getProtections(state, unit)) {
-    buffs.push({ id: `guard-${protection.label}`, icon: 'shield', label: protection.label, value: `-${pct(protection.reduction)} damage taken`, good: true });
+    buffs.push({ id: `guard-${protection.label}`, icon: 'shield', label: protection.label, value: `-${pct(protection.reduction)} damage`, good: true });
   }
-  const march = getEffects(state, 'march').find(effect => effect.unitId === unit.id);
-  if (march) buffs.push({ id: 'march', icon: 'attack', label: 'Forced March', value: `+${march.value} movement this turn`, good: true });
-  if (isSmoked(state, unit.position)) {
-    buffs.push({ id: 'smoke', icon: 'shield', label: 'Smoke Screen', value: "Can't be shot at from 2 or more hexes", good: true });
+  const march = getEffects(state, 'march').find(entry => entry.unitId === unit.id);
+  if (march) buffs.push({ id: 'march', icon: 'attack', label: 'Forced March', value: `+${march.value} move`, good: true });
+  if (isSmoked(state, unit.position)) buffs.push({ id: 'smoke', icon: 'shield', label: 'Smoke Screen', value: 'Safe from arrows', good: true });
+  // Its own fury
+  if (unit.abilities.includes('berserk') && unit.lifespan * 2 <= unit.maxLifespan) {
+    buffs.push({ id: 'berserk', icon: 'attack', label: 'Berserk', value: `+${pct(BERSERK_ATTACK_MULTIPLIER - 1)} attack`, good: true });
   }
+  // Hazards
+  if (effect.damagePerTurn) {
+    const immune = (hex.terrain === 'lava' && unit.abilities.includes('fireborn')) || (hex.terrain === 'cursed' && unit.abilities.includes('undead'));
+    buffs.push(immune
+      ? { id: 'scorch', terrain: hex.terrain, label: effect.name, value: hex.terrain === 'cursed' ? `+${effect.damagePerTurn} health/turn` : 'Unharmed', good: true }
+      : { id: 'scorch', terrain: hex.terrain, label: effect.name, value: `-${effect.damagePerTurn} health/turn`, good: false });
+  }
+  // The ground
   if (hex.heightOffset) {
     buffs.push({
       id: 'dug', terrain: hex.terrain, label: hex.heightOffset > 0 ? 'Raised ground' : 'Sunken ground',
       value: `${hex.heightOffset > 0 ? '+' : ''}${hex.heightOffset.toFixed(2)} height`, good: hex.heightOffset > 0
     });
   }
+  if (effect.damageTakenMultiplier < 1) {
+    buffs.push({ id: 'cover', terrain: hex.terrain, label: `${effect.name} cover`, value: `-${pct(1 - effect.damageTakenMultiplier)} damage`, good: true });
+  }
+  if (effect.elevation >= HIGH_GROUND_ELEVATION) {
+    buffs.push({ id: 'high', terrain: hex.terrain, label: 'High ground', value: `+${pct(HEIGHT_DAMAGE_PER_UNIT)} attack per height${unit.abilities.includes('rangedAttack') ? ', +1 range' : ''}`, good: true });
+  }
+  if (effect.elevation < 1) {
+    buffs.push({ id: 'low', terrain: hex.terrain, label: 'Low ground', value: `+${pct(HEIGHT_DAMAGE_PER_UNIT)} damage taken per height`, good: false });
+  }
+  if (hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) {
+    buffs.push({ id: 'pikes', icon: 'attack', label: 'Forest pikes', value: `+${pct(TERRAIN_BONUS_ATTACK_MULTIPLIER - 1)} attack`, good: true });
+  }
+  if (effect.healPerTurn) {
+    buffs.push({ id: 'heal', terrain: hex.terrain, label: effect.name, value: `+${effect.healPerTurn} health/turn`, good: true });
+  }
+  if (hex.isResourceHex) {
+    buffs.push({ id: 'gold', icon: 'gold', label: 'Gold mine', value: `+${hex.resourceValue ?? 0} gold/turn`, good: true });
+  }
   if (unit.owner === 'player') {
     for (const bondId of state.bonds ?? []) {
       const bond = getBond(bondId);
       const bonus = bond.bonuses[unit.type as TroopId];
-      if (bonus) buffs.push({ id: `bond-${bond.id}`, icon: 'bond', label: bond.name, value: describeBonus(unit.type as TroopId, bonus), good: true });
+      if (bonus) buffs.push({ id: `bond-${bond.id}`, icon: 'bond', label: bond.name, value: describeBonus(unit.type as TroopId, bonus), good: true, quiet: true });
     }
   }
   return buffs;
@@ -1362,7 +1372,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {battleCallouts.map(({ key, hex, effects, playerAttacking }) => (
         <Html key={key} position={calloutPosition(hex)} center zIndexRange={[7, 0]} style={{ pointerEvents: 'none' }}>
           <div className="flex flex-col items-center gap-0.5">
-            {effects.slice(0, 3).map((effect, index) => {
+            {strongestEffects(effects, MAX_CALLOUTS).map((effect, index) => {
               const helpsYou = effect.tone === 'neutral' ? null : (effect.tone === 'good') === playerAttacking;
               return (
                 <span

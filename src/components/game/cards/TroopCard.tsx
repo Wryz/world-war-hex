@@ -7,8 +7,9 @@ import { cardArtUrl } from './cardArt';
 import { CardSkinId, getCardSkin } from '@/lib/meta/cosmetics';
 import { useProfile } from '@/lib/meta/profile';
 
-// A troop as a playing card: cost gem, level badge, a picture of the troop's own model over its
-// faction's colour and the card frame's pattern, its signature (SIG) badge, name banner, stats and abilities.
+// A troop as a playing card: cost gem, level badge, a picture of the troop over its faction's colour
+// and the card frame's pattern, its signature (SIG) badge, name banner, stats and ability icons. Kept
+// short on purpose: the words (role, signature, abilities) are in the Army's card details and tooltips.
 // Used for the hand in battle, the army and shop, and the bestiary.
 
 export type CardSize = 'xs' | 'xm' | 'sm' | 'md' | 'lg';
@@ -104,7 +105,7 @@ export const TroopCard: React.FC<TroopCardProps> = ({
       aria-pressed={onClick ? selected : undefined}
       className={`group relative block shrink-0 select-none rounded-xl text-left transition-transform duration-150 ${
         isInteractive ? 'cursor-pointer hover:-translate-y-2 focus:outline-none focus-visible:-translate-y-2' : ''
-      } ${selected ? '-translate-y-3' : ''} ${troop.rarity === 'legendary' && !hidden ? 'card-shine overflow-hidden' : ''} ${className}`}
+      } ${selected ? '-translate-y-3' : ''} ${className}`}
       style={{
         // (in rem, so cards grow with the UI size setting)
         width: fill ? '100%' : `${dims.width / 16}rem`,
@@ -118,7 +119,7 @@ export const TroopCard: React.FC<TroopCardProps> = ({
       }}
     >
       <div
-        className={`relative flex h-full flex-col overflow-hidden rounded-[9px] ${dims.pad}`}
+        className={`relative flex h-full flex-col overflow-hidden rounded-[9px] ${dims.pad} ${troop.rarity === 'legendary' && !hidden ? 'card-shine' : ''}`}
         style={{ background: hidden ? '#0f172a' : face.face, boxShadow: hidden ? undefined : `inset 0 0 0 1px ${face.trim}` }}
       >
         {/* Art: the troop's picture over its faction's colour and the frame's pattern */}
@@ -159,11 +160,7 @@ export const TroopCard: React.FC<TroopCardProps> = ({
               title={signatureText}
             >
               <SignatureIcon color={rank > 0 ? '#fff' : '#94a3b8'} />
-              {isSmall
-                ? (rank > 0 ? ROMAN[rank] : '')
-                : size === 'lg'
-                  ? `${signature.name} ${rank > 0 ? ROMAN[rank] : `· Lv${SIGNATURE_UNLOCK_LEVEL}`}`
-                  : `SIG ${rank > 0 ? ROMAN[rank] : `Lv${SIGNATURE_UNLOCK_LEVEL}`}`}
+              {isSmall ? (rank > 0 ? ROMAN[rank] : '') : `SIG${rank > 0 ? ` ${ROMAN[rank]}` : ''}`}
             </span>
           )}
           {locked && (
@@ -200,18 +197,6 @@ export const TroopCard: React.FC<TroopCardProps> = ({
             ))}
           </div>
         )}
-        {size === 'lg' && !hidden && (
-          <div className="mt-1 text-center text-[0.6875rem] leading-tight text-slate-400">
-            <span className="font-bold text-slate-300">{TROOP_CLASSES[troop.troopClass].name}</span> · {troop.role}
-          </div>
-        )}
-        {size === 'lg' && !hidden && signature && (
-          <div className={`mt-1 rounded-md px-1.5 py-1 text-center text-[0.6875rem] leading-tight ${rank > 0 ? 'bg-fuchsia-500/15 text-fuchsia-100' : 'bg-slate-800 text-slate-400'}`} title={signatureText}>
-            <span className="font-bold"><SignatureIcon /> {signature.name}{rank > 0 ? ` ${ROMAN[rank]}` : ''}</span>
-            <span className="block">{rank > 0 ? signature.describe(rank) : `Wakes at level ${SIGNATURE_UNLOCK_LEVEL}`}</span>
-          </div>
-        )}
-
         {children}
       </div>
 

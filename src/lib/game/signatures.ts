@@ -18,6 +18,8 @@ export interface SignatureDef {
   condition: string;
   // What it does at a rank
   describe: (rank: number) => string;
+  // The same in a couple of words, for the board
+  short: (rank: number) => string;
 }
 
 export const SIGNATURE_UNLOCK_LEVEL = 2;
@@ -73,60 +75,73 @@ export const EYE_OF_STORM_RADIUS = 2;
 export const SIGNATURES: Partial<Record<TroopId, SignatureDef>> = {
   infantry: {
     id: 'shoulderToShoulder', name: 'Shoulder to Shoulder', condition: 'Next to friends',
-    describe: rank => `+${pct(shoulderBonusPerAlly(rank))} attack for each friendly troop beside it (up to ${SHOULDER_MAX_ALLIES}).`
+    describe: rank => `+${pct(shoulderBonusPerAlly(rank))} attack for each friendly troop beside it (up to ${SHOULDER_MAX_ALLIES}).`,
+    short: rank => `+${pct(shoulderBonusPerAlly(rank))} attack per ally`
   },
   artillery: {
     id: 'steadyAim', name: 'Steady Aim', condition: "Hasn't moved",
-    describe: rank => `+${pct(steadyAimBonus(rank))} attack on any turn it hasn't moved.`
+    describe: rank => `+${pct(steadyAimBonus(rank))} attack on any turn it hasn't moved.`,
+    short: rank => `+${pct(steadyAimBonus(rank))} attack`
   },
   tank: {
     id: 'brace', name: 'Brace', condition: "On the enemy's turn",
-    describe: rank => `+${pct(braceBonus(rank))} attack when striking back on the enemy's turn.`
+    describe: rank => `+${pct(braceBonus(rank))} attack when striking back on the enemy's turn.`,
+    short: rank => `+${pct(braceBonus(rank))} attack`
   },
   rogue: {
     id: 'loneBlade', name: 'Lone Blade', condition: 'Alone',
-    describe: rank => `+${pct(loneBladeBonus(rank))} attack with no friendly troop within ${LONE_BLADE_RADIUS} hexes.`
+    describe: rank => `+${pct(loneBladeBonus(rank))} attack with no friendly troop within ${LONE_BLADE_RADIUS} hexes.`,
+    short: rank => `+${pct(loneBladeBonus(rank))} attack`
   },
   helicopter: {
     id: 'charge', name: 'Charge', condition: `Moved ${CHARGE_DISTANCE}+ hexes`,
-    describe: rank => `+${pct(chargeBonus(rank))} attack on a turn it rides ${CHARGE_DISTANCE} or more hexes.`
+    describe: rank => `+${pct(chargeBonus(rank))} attack on a turn it rides ${CHARGE_DISTANCE} or more hexes.`,
+    short: rank => `+${pct(chargeBonus(rank))} attack`
   },
   medic: {
     id: 'ward', name: 'Ward', condition: 'Friends beside it',
-    describe: rank => `Friendly troops next to it take ${pct(wardReduction(rank))} less damage.`
+    describe: rank => `Friendly troops next to it take ${pct(wardReduction(rank))} less damage.`,
+    short: rank => `Allies -${pct(wardReduction(rank))} damage`
   },
   shieldbearer: {
     id: 'challenge', name: 'Challenge', condition: 'Enemies nearby',
     describe: rank => {
       const pulls = challengePulls(rank);
       return `At the end of its turn, pulls ${pulls === 1 ? 'the nearest enemy' : `the ${pulls} nearest enemies`} within ${challengeRange(rank)} hexes one hex closer. Bosses hold their ground.`;
-    }
+    },
+    short: rank => `Pulls ${challengePulls(rank)} within ${challengeRange(rank)}`
   },
   berserker: {
     id: 'bloodlust', name: 'Bloodlust', condition: 'Destroys an enemy',
-    describe: rank => `Heals ${bloodlustHeal(rank)} health whenever it destroys an enemy.`
+    describe: rank => `Heals ${bloodlustHeal(rank)} health whenever it destroys an enemy.`,
+    short: rank => `+${bloodlustHeal(rank)} health per kill`
   },
   longbow: {
     id: 'piercingShot', name: 'Piercing Shot', condition: 'Target in cover',
     describe: rank => piercingShare(rank) >= 1
       ? 'Its arrows ignore cover completely.'
-      : `Its arrows ignore ${pct(piercingShare(rank))} of a target's cover.`
+      : `Its arrows ignore ${pct(piercingShare(rank))} of a target's cover.`,
+    short: rank => `Ignores ${pct(piercingShare(rank))} cover`
   },
   cleric: {
     id: 'holySmite', name: 'Holy Smite', condition: 'Undead or demons',
-    describe: rank => `+${pct(holySmiteBonus(rank))} attack against the Undead and the Infernal Legion.`
+    describe: rank => `+${pct(holySmiteBonus(rank))} attack against the Undead and the Infernal Legion.`,
+    short: rank => `+${pct(holySmiteBonus(rank))} vs undead, demons`
   },
   sapper: {
     id: 'undermine', name: 'Undermine', condition: "Hasn't moved",
-    describe: rank => `At the end of a turn it didn't move, the ground around it sinks ${undermineDepth(rank).toFixed(2)} lower.`
+    describe: rank => `At the end of a turn it didn't move, the ground around it sinks ${undermineDepth(rank).toFixed(2)} lower.`,
+    short: rank => `Sinks ground ${undermineDepth(rank).toFixed(2)}`
   },
   pegasus: {
     id: 'strafe', name: 'Strafe', condition: 'Flies past enemies',
-    describe: rank => `Every enemy it flies past on its way takes ${strafeDamage(rank)} damage.`
+    describe: rank => `Every enemy it flies past on its way takes ${strafeDamage(rank)} damage.`,
+    short: rank => `${strafeDamage(rank)} damage per pass`
   },
   archmage: {
     id: 'eyeOfTheStorm', name: 'Eye of the Storm', condition: 'No enemy within 2',
-    describe: rank => `+${pct(eyeOfStormBonus(rank))} spell damage with no enemy within ${EYE_OF_STORM_RADIUS} hexes.`
+    describe: rank => `+${pct(eyeOfStormBonus(rank))} spell damage with no enemy within ${EYE_OF_STORM_RADIUS} hexes.`,
+    short: rank => `+${pct(eyeOfStormBonus(rank))} spell damage`
   }
 };
 

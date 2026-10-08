@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { GameState } from '@/types/game';
-import { FLANK_BONUS, HEIGHT_DAMAGE_PER_UNIT, getCombatEffects } from '@/lib/game/gameState';
+import { FLANK_BONUS, HEIGHT_DAMAGE_PER_UNIT, getCombatEffects, getSituationalBonuses } from '@/lib/game/gameState';
 import { ArrowIcon } from '../icons';
 import { unitSignature } from '@/lib/game/signatures';
 
@@ -10,12 +10,12 @@ import { unitSignature } from '@/lib/game/signatures';
 type TipId = 'flank' | 'height' | 'village' | 'follow' | 'tactics' | 'signature';
 
 const TIPS: Record<TipId, string> = {
-  flank: `Flanked! Two or more troops attacking the same enemy each hit +${Math.round(FLANK_BONUS * 100)}% harder (up to two extra).`,
-  height: `Height counts: every 1.0 of height (the number on each hex) above your target adds +${Math.round(HEIGHT_DAMAGE_PER_UNIT * 100)}% damage. Uphill takes it away.`,
-  village: 'Villages: troops in one take 20% less damage, and the houses block arrows from lower ground.',
-  follow: 'Tip: a hex one of your troops is leaving counts as free - send another troop onto it. Undo (Ctrl+Z) takes back an order.',
-  tactics: 'Tactic card! From round 2, every second round you draw one of the three you brought (hold up to 3). Tap it to play - some need a target. The enemy draws them too.',
-  signature: 'Signature abilities: from level 2 every card has one, and it grows every two levels. Tap the sparkle under a troop to see what it does and when it works.'
+  flank: `Flanked! Each extra attacker on one enemy adds +${Math.round(FLANK_BONUS * 100)}% (up to two).`,
+  height: `Height: +${Math.round(HEIGHT_DAMAGE_PER_UNIT * 100)}% damage per 1.0 above your target. Uphill costs the same.`,
+  village: 'Villages: 20% less damage, and walls that block arrows from below.',
+  follow: 'A hex your troop is leaving is free for another. Ctrl+Z undoes an order.',
+  tactics: 'Tactic card drawn! Tap it to play. You draw one every second round (hold 3).',
+  signature: 'A glowing sparkle under a troop: its signature ability is working. Tap for details.'
 };
 
 const STORAGE_KEY = 'wwhTipsSeen';
@@ -48,7 +48,11 @@ const tipsFor = (state: GameState): TipId[] => {
   if (state.currentPhase === 'planning' && state.activePlayer === 'player' &&
     state.pendingMoves.length > 0 && state.players.player.units.length >= 2) tips.push('follow');
   if (state.currentPhase === 'planning' && state.activePlayer === 'player' && (state.tactics?.player.hand.length ?? 0) > 0) tips.push('tactics');
-  if (state.players.player.units.some(unit => unitSignature(unit))) tips.push('signature');
+  // The first time one of your troops' signatures is working
+  if (state.players.player.units.some(unit => {
+    const signature = unitSignature(unit);
+    return signature && getSituationalBonuses(state, unit).some(bonus => bonus.label === signature.def.name);
+  })) tips.push('signature');
   return tips;
 };
 
