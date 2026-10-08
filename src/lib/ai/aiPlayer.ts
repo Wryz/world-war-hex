@@ -48,6 +48,7 @@ import {
   isImpassable
 } from '../game/gameState';
 import { FELL_DAMAGE, FIRE_DAMAGE } from '../game/battlefield';
+import { CATAPULT_DAMAGE, TAVERN_INCOME } from '../game/structures';
 import { TroopClass, getTroopClass } from '../game/troops';
 
 /**
@@ -589,6 +590,11 @@ const assignInterceptors = (planner: Planner): Map<string, Unit> => {
 /**
  * Camps the AI doesn't hold: neutral ones, and its own camps the player has seized
  */
+// What taking each building is worth to the AI, in the same rough gold terms as a camp
+const BUILDING_VALUE: Partial<Record<TerrainType, number>> = {
+  catapult: 12, tavern: TAVERN_INCOME * 3 + 3, blacksmith: 9, barracks: 6, watchtower: 5, lumbermill: 4
+};
+
 const findCampTargets = (state: GameState): Hex[] =>
   state.hexGrid.filter(hex => hex.isCamp && hex.owner !== 'ai');
 
@@ -608,6 +614,9 @@ const assignObjectives = (planner: Planner): Map<string, Hex> => {
     let value: number;
     if (hex.isCamp && hex.owner !== 'ai') value = CAMP_INCOME * 3 + 4;
     else if (hex.isResourceHex && hex.unit?.owner !== 'ai') value = (hex.resourceValue ?? 0) * 3 * (0.5 + settings.resourceFocus);
+    else if (BUILDING_VALUE[hex.terrain] !== undefined && hex.owner !== 'ai') value = BUILDING_VALUE[hex.terrain]!;
+    // A catapult tower only bombards with a troop in it
+    else if (hex.terrain === 'catapult' && hex.unit?.owner !== 'ai') value = BUILDING_VALUE.catapult!;
     else continue;
     if (profile.posture === 'hold' && !onOurSide(hex)) continue;
     if (hex.unit?.owner === 'player') value *= 0.7;
@@ -617,7 +626,7 @@ const assignObjectives = (planner: Planner): Map<string, Hex> => {
   const units = state.players.ai.units.filter(unit => {
     const hex = planner.hexes.get(key(unit.position));
     return !unit.hasMoved && !unit.abilities.includes('healing') && !planner.interceptors.has(unit.id) &&
-      !(hex?.isResourceHex) && !(hex?.isCamp && hex.owner === 'ai');
+      !(hex?.isResourceHex) && !(hex?.isCamp && hex.owner === 'ai') && hex?.terrain !== 'catapult';
   });
 
   const pairs = objectives.flatMap(({ hex, value }) => units.map(unit => ({
@@ -954,6 +963,8 @@ const decideUnitMove = (planner: Planner, unit: Unit): HexCoordinates | null => 
       if (coordsMatch(position, goal.position)) value += goal.weight * 0.5;
     }
     if (isStay) value += goal.holdValue;
+    // Crewing a catapult tower: a stone at the enemy every turn
+    if (isStay && hex?.terrain === 'catapult') value += CATAPULT_DAMAGE * 1.5;
     // Embers: the hex will be on fire next turn
     if (hex?.fire?.stage === 'smoulder' && !unit.abilities.includes('fireborn')) value -= healthValue(unit, FIRE_DAMAGE * 2);
     // Already on fire (a troop caught in it): get out
@@ -1084,7 +1095,7 @@ const decidePurchase = (
   const armySize = me.units.length + state.pendingPurchases.filter(p => p.playerId === me.id).length;
   const income = getIncome(state, 'ai');
   const upkeepAfter = Math.max(0, armySize + 1 - FREE_UPKEEP_UNITS) * UPKEEP_PER_UNIT;
-  const netAfter = income.base + income.mines + income.camps - upkeepAfter;
+  const netAfter = income.base + income.mines + income.camps + income.taverns - upkeepAfter;
   const isLosing = armyValue(planner.enemies) > armyValue(me.units) * 1.15;
   if (netAfter < profile.minNetIncome && !isLosing && !threat.baseUnderThreat) return null;
 

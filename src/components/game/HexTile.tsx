@@ -28,7 +28,15 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   ice: '#bfe9f7',
   ruins: '#c9bb98',
   village: '#e6c987',
-  cursed: '#6e5f80'
+  cursed: '#6e5f80',
+  // Buildings stand on trodden ground; the watchtower on a stony rise
+  watchtower: '#b9b39f',
+  house: '#d9c58e',
+  catapult: '#c8b98f',
+  blacksmith: '#c8b98f',
+  barracks: '#c8b98f',
+  tavern: '#d9c58e',
+  lumbermill: '#c8b98f'
 };
 
 // Ground recoloured for a map's decor style: a dungeon's stone floors, a haunted wood's dull grass

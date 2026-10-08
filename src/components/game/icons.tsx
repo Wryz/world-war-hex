@@ -14,7 +14,8 @@ import {
   GiTreasureMap, GiFastForwardButton, GiUpgrade, GiTrophy, GiPodium, GiOpenBook, GiTargetArrows, GiHeartPlus,
   GiAngelWings, GiRegeneration, GiChestArmor, GiSiegeRam, GiAngryEyes, GiRaiseSkeleton, GiWingfoot, GiFireRing,
   GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog,
-  GiSparkles, GiAxeInStump, GiFire, GiBurningEmbers, GiLog
+  GiSparkles, GiAxeInStump, GiFire, GiBurningEmbers, GiLog, GiWatchtower, GiHouse, GiCatapult, GiAnvil, GiBarracksTent,
+  GiBeerStein, GiWoodPile
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
@@ -59,7 +60,14 @@ export const TERRAIN_ICON_COMPONENTS: Record<TerrainType, IconType> = {
   ice: GiIceCube,
   ruins: GiBrokenWall,
   village: GiVillage,
-  cursed: GiTombstone
+  cursed: GiTombstone,
+  watchtower: GiWatchtower,
+  house: GiHouse,
+  catapult: GiCatapult,
+  blacksmith: GiAnvil,
+  barracks: GiBarracksTent,
+  tavern: GiBeerStein,
+  lumbermill: GiWoodPile
 };
 
 // Colours that make each terrain icon recognisable at a glance
@@ -78,7 +86,14 @@ export const TERRAIN_ICON_COLORS: Record<TerrainType, string> = {
   ice: '#a5f3fc',
   ruins: '#d6c7a1',
   village: '#fde68a',
-  cursed: '#c084fc'
+  cursed: '#c084fc',
+  watchtower: '#e2e8f0',
+  house: '#fdba74',
+  catapult: '#d6d3d1',
+  blacksmith: '#94a3b8',
+  barracks: '#f87171',
+  tavern: '#fbbf24',
+  lumbermill: '#d97706'
 };
 
 export const ABILITY_ICON_COMPONENTS: Record<Ability, IconType> = {

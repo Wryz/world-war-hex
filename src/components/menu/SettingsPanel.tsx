@@ -241,6 +241,15 @@ const GuideTab: React.FC = () => (
         Fire spreads through forest and burns it down to open ground - cover can go up in smoke.
       </p>
     </GuideSection>
+    <GuideSection title="Buildings" icon={<TerrainIcon terrain="watchtower" />}>
+      <p>Buildings stand where neither side has the longer march. Step a troop onto one to take it; it stays yours, in your colours, until the enemy takes it back.</p>
+      <ul className="flex flex-col gap-1">
+        <li><TerrainIcon terrain="watchtower" /> <b>Watchtower</b>: high ground - a troop up there sees 2 hexes further and its arrows reach 1 further, and the tower keeps watch for you even when empty.</li>
+        <li><TerrainIcon terrain="house" /> <b>House</b>: garrison a troop inside - 40% less damage, no flanking, hidden from anyone not next to it. Houses burn.</li>
+        <li><TerrainIcon terrain="catapult" /> <b>Catapult tower</b>: a troop in it hurls a stone at the weakest enemy within 5 hexes every turn (5 damage), or at the enemy castle (3).</li>
+        <li><TerrainIcon terrain="blacksmith" /> <b>Blacksmith</b>: all your troops attack 10% harder. <TerrainIcon terrain="barracks" /> <b>Barracks</b>: deploy there; recruits get 20% more health. <TerrainIcon terrain="tavern" /> <b>Tavern</b>: +3 gold a turn. <TerrainIcon terrain="lumbermill" /> <b>Lumber mill</b>: fell great trees from 2 hexes away.</li>
+      </ul>
+    </GuideSection>
     <GuideSection title="Fog of war" icon={<FogIcon />}>
       <p>
         From level {FOG_FROM_LEVEL} you only see enemy troops your own troops, castle and camps can see: {SIGHT_RANGE} hexes,

@@ -22,7 +22,7 @@ export const BURN_TURNS = 3;
 // Chance, at the end of each round, that a lava field sets a neighbouring hex smouldering
 export const LAVA_FLARE_CHANCE = 0.3;
 // Chance, at the end of each turn, that a burning hex sets a neighbour smouldering
-export const SPREAD_CHANCE: Partial<Record<TerrainType, number>> = { forest: 0.4, plain: 0.12 };
+export const SPREAD_CHANCE: Partial<Record<TerrainType, number>> = { forest: 0.4, plain: 0.12, house: 0.3 };
 // No new fires start once this many hexes are alight
 export const MAX_FIRES = 8;
 // Great trees per battle, at most, and the share of forest hexes that can hold one
@@ -46,18 +46,23 @@ export const featureSightHeight = (hex: Hex): number =>
 // Ground that can catch fire
 export const isFlammable = (hex: Hex): boolean =>
   !hex.isBase && !hex.isCamp && !hex.isResourceHex && !hex.fire && hex.feature !== 'logBridge' &&
-  (hex.terrain === 'forest' || hex.terrain === 'plain');
+  (hex.terrain === 'forest' || hex.terrain === 'plain' || hex.terrain === 'house');
 
 // Where a tree felled from `from` lands: the next hex on, straight away from the troop chopping it
-export const fallLanding = (from: HexCoordinates, tree: HexCoordinates): HexCoordinates => ({
-  q: 2 * tree.q - from.q,
-  r: 2 * tree.r - from.r
-});
+// (which stands next to it, or further off along a straight line); null off a straight line
+export const fallLanding = (from: HexCoordinates, tree: HexCoordinates): HexCoordinates | null => {
+  const dq = tree.q - from.q;
+  const dr = tree.r - from.r;
+  const distance = Math.max(Math.abs(dq), Math.abs(dr), Math.abs(dq + dr));
+  if (distance === 0 || dq % distance !== 0 || dr % distance !== 0) return null;
+  return { q: tree.q + dq / distance, r: tree.r + dr / distance };
+};
 
 // The hex a tree felled from `from` would land on, if it can be felled that way: there is a hex
 // there, and it isn't a castle or a camp
 export const fellLandingHex = (hexByKey: Map<string, Hex>, from: HexCoordinates, tree: HexCoordinates): Hex | null => {
-  const landing = hexByKey.get(coordKey(fallLanding(from, tree)));
+  const at = fallLanding(from, tree);
+  const landing = at && hexByKey.get(coordKey(at));
   return landing && !landing.isBase && !landing.isCamp ? landing : null;
 };
 

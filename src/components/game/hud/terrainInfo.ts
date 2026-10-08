@@ -16,10 +16,17 @@ export const TERRAIN_SHORT_EFFECTS: Record<TerrainType, string> = {
   ice: 'Low ground, 2 move',
   ruins: '-25% dmg, blocks arrows',
   village: '-20% dmg, blocks arrows',
+  watchtower: 'High ground, +2 sight, -20% dmg',
+  house: '-40% dmg, no flanking, hides troops, burns',
+  catapult: 'Bombards within 5 hexes each turn',
+  blacksmith: 'Held: +10% attack for all',
+  barracks: 'Held: deploy here, +20% health',
+  tavern: 'Held: +3 gold per turn',
+  lumbermill: 'Held: fell trees from 2 hexes',
   cursed: '-2 HP per turn (undead heal)'
 };
 
 // Order terrain types are listed in the terrain guide
 export const TERRAIN_ORDER: TerrainType[] = [
-  'plain', 'forest', 'hills', 'village', 'ruins', 'desert', 'swamp', 'snow', 'ice', 'spring', 'cursed', 'lava', 'resource', 'mountain', 'water'
+  'plain', 'forest', 'hills', 'village', 'ruins', 'watchtower', 'house', 'catapult', 'blacksmith', 'barracks', 'tavern', 'lumbermill', 'desert', 'swamp', 'snow', 'ice', 'spring', 'cursed', 'lava', 'resource', 'mountain', 'water'
 ];

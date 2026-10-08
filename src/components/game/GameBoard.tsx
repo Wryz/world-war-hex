@@ -54,6 +54,7 @@ import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale, getG
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
 import { CampIcon, EmbersIcon, FallenLogIcon, FellIcon, FireIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
 import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
+import { isCapturable } from '@/lib/game/structures';
 import type { UnitBuff } from './UnitMesh';
 import { describeBonus, getBond } from '@/lib/game/bonds';
 import type { TroopId } from '@/lib/game/troops';
@@ -691,7 +692,8 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   // Its bonuses from others (Ward)
   for (const bonus of situational) {
     if (bonus.label !== signature?.def.name) {
-      buffs.push({ id: `bonus-${bonus.label}`, icon: 'attack', label: bonus.label, value: `+${pct(bonus.multiplier - 1)} attack`, good: true });
+      // (a blacksmith's edge is on every troop, so it only shows in the list)
+      buffs.push({ id: `bonus-${bonus.label}`, icon: 'attack', label: bonus.label, value: `+${pct(bonus.multiplier - 1)} attack`, good: true, quiet: bonus.label === 'Blacksmith' });
     }
   }
   for (const protection of getProtections(state, unit)) {
@@ -1437,7 +1439,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {/* Trees, peaks, dunes and gold that show each hex's terrain */}
       <BoardDecorations hexGrid={hexGrid} decor={decor} />
       {/* Great trees, felled trunks and fires */}
-      <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} visibleKeys={visibleKeys} />
+      <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} lastBombard={gameState.lastBombard} visibleKeys={visibleKeys} />
 
       {/* Castles */}
       {playerCastlePosition && (
@@ -1589,6 +1591,11 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
           {hex.isCamp ? <><CampIcon /> Camp</> : <><TerrainIcon terrain={hex.terrain} /> {TERRAIN_EFFECTS[hex.terrain].name}</>}
         </span>
         <span className="text-slate-400"> · height {getHexHeight(hex).toFixed(1)}</span>
+        {isCapturable(hex.terrain) && (
+          <span className="font-semibold" style={{ color: hex.owner ? OWNER_COLORS[hex.owner] : '#cbd5e1' }}>
+            {' '}· {hex.owner === 'player' ? 'yours' : hex.owner === 'ai' ? 'enemy' : 'unclaimed'}
+          </span>
+        )}
         {object ? <span className="text-amber-200"> · {object}</span> : <span className="text-slate-400"> · {effect}</span>}
         {hex.unit && (
           <span className="ml-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>

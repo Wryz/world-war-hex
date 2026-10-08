@@ -23,13 +23,19 @@ import type { BondId } from './bonds';
 import {
   getHexDistance,
   findHexByCoordinates,
-  getNeighbors
+  getNeighbors,
+  getHexesInRange
 } from './hexUtils';
 import { createHexagonalGrid } from './mapGenerator';
 import {
   BURN_TURNS, FELL_DAMAGE, FIRE_DAMAGE, LAVA_FLARE_CHANCE, MAX_FIRES, SPREAD_CHANCE, featureMoveCost, featureSightHeight,
   fellLandingHex, isBlockedByFeature, isFlammable, pickGreatTrees
 } from './battlefield';
+import {
+  BARRACKS_HEALTH_BONUS, BLACKSMITH_ATTACK_BONUS, CATAPULT_CASTLE_DAMAGE, CATAPULT_DAMAGE, CATAPULT_RANGE, HAMLET_SIZE, HELD_TOWER_SIGHT,
+  LUMBERMILL_FELL_REACH, StructureTerrain, TAVERN_INCOME, WATCHTOWER_COUNT, WATCHTOWER_SIGHT_BONUS, WORKSHOPS,
+  WORKSHOP_COUNT, isCapturable
+} from './structures';
 import { getHexHeightOf, getTerrainHeight, shiftHeightOffset } from './hexHeight';
 import { cardStats, getClassCounter, getTroop, getTroopClass } from './troops';
 import {
@@ -192,6 +198,63 @@ export const TERRAIN_EFFECTS: Record<TerrainType, TerrainEffect> = {
     damageTakenMultiplier: 1,
     damagePerTurn: 2,
     description: 'Units here lose 2 health at the end of each of their turns. The undead are healed instead.'
+  },
+  watchtower: {
+    name: 'Watchtower',
+    moveCost: 1,
+    elevation: 2,
+    sightHeight: 3,
+    damageTakenMultiplier: 0.8,
+    description: 'A tower on a rise: a troop up here is on high ground (ranged troops reach 1 hex further, blows land harder downhill), sees 2 hexes further and takes 20% less damage. Step onto it to take it: the side holding it keeps watch from it even when it stands empty.'
+  },
+  house: {
+    name: 'House',
+    moveCost: 1,
+    elevation: 1,
+    sightHeight: 2,
+    damageTakenMultiplier: 0.6,
+    conceals: true,
+    description: 'Garrison a troop inside: it takes 40% less damage, can\'t be flanked and can only be seen from the next hex. Houses block arrows - and burn: a fire nearby can spread to them.'
+  },
+  catapult: {
+    name: 'Catapult Tower',
+    moveCost: 1,
+    elevation: 1,
+    sightHeight: 2,
+    damageTakenMultiplier: 0.8,
+    description: 'A troop in the tower bombards the weakest enemy within 5 hexes at the end of each of its turns (5 damage), or the enemy castle when no troop is in reach (3). Step onto it to take it.'
+  },
+  blacksmith: {
+    name: 'Blacksmith',
+    moveCost: 1,
+    elevation: 1,
+    sightHeight: 2,
+    damageTakenMultiplier: 0.8,
+    description: 'While you hold it, all your troops attack 10% harder. Step onto it to take it.'
+  },
+  barracks: {
+    name: 'Barracks',
+    moveCost: 1,
+    elevation: 1,
+    sightHeight: 2,
+    damageTakenMultiplier: 0.8,
+    description: 'While you hold it, deploy recruits on it or next to it, and they march out drilled: 20% more health. Step onto it to take it.'
+  },
+  tavern: {
+    name: 'Tavern',
+    moveCost: 1,
+    elevation: 1,
+    sightHeight: 2,
+    damageTakenMultiplier: 0.8,
+    description: 'While you hold it, it pays 3 gold every turn. Step onto it to take it.'
+  },
+  lumbermill: {
+    name: 'Lumber Mill',
+    moveCost: 1,
+    elevation: 1,
+    sightHeight: 2,
+    damageTakenMultiplier: 0.8,
+    description: 'While you hold it, your troops can fell great trees from 2 hexes away. Step onto it to take it.'
   },
   village: {
     name: 'Village',
@@ -601,6 +664,75 @@ const placeCamps = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoo
   }
 };
 
+// Buildings go up where neither side has the longer march to them (see lib/game/structures): a
+// catapult tower near the middle, two workshops (a lumber mill only where great trees grow), a
+// watchtower on each flank (on hills where there are some), then a hamlet of houses wherever is left. Each needs open
+// ground around it and room from the castles, camps and other buildings.
+const STRUCTURE_SPACING = 2;
+const MIN_STRUCTURE_CASTLE_DISTANCE = 3;
+const BUILDABLE: TerrainType[] = ['plain', 'forest', 'hills', 'desert', 'swamp', 'snow', 'ruins', 'village'];
+
+const placeStructures = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoordinates): void => {
+  const gridSize = getSettings(state).gridSize;
+  const center = { q: 0, r: 0 };
+  let draws = 0;
+  const random = () => seededRandom((state.battleSeed ?? 0) + 7717 + 13 * draws++);
+  const taken = state.hexGrid.filter(hex => hex.isCamp).map(hex => hex.coordinates);
+  const canBuild = (hex: Hex) => !hex.isBase && !hex.isCamp && !hex.isResourceHex && !hex.feature && BUILDABLE.includes(hex.terrain);
+  const isFair = (hex: Hex, tolerance: number) => {
+    const toPlayer = getHexDistance(hex.coordinates, playerBase);
+    const toAi = getHexDistance(hex.coordinates, aiBase);
+    return Math.abs(toPlayer - toAi) <= tolerance && Math.min(toPlayer, toAi) >= MIN_STRUCTURE_CASTLE_DISTANCE &&
+      getHexDistance(hex.coordinates, center) < gridSize;
+  };
+  const build = (terrain: StructureTerrain, tolerance: number, preference: (hex: Hex) => number = () => 0, spacing = STRUCTURE_SPACING): Hex | null => {
+    for (const allowed of [tolerance, tolerance + 1, tolerance + 2]) {
+      const options = state.hexGrid.filter(hex => canBuild(hex) && isFair(hex, allowed) &&
+        taken.every(other => getHexDistance(other, hex.coordinates) >= spacing));
+      if (options.length === 0) continue;
+      const best = options.map(hex => ({ hex, score: preference(hex) + random() })).sort((a, b) => b.score - a.score)[0].hex;
+      updateHex(state, best.coordinates, { terrain, owner: undefined, feature: undefined });
+      taken.push(best.coordinates);
+      return best;
+    }
+    return null;
+  };
+
+  build('catapult', 0, hex => -1.5 * getHexDistance(hex.coordinates, center));
+  const kinds = WORKSHOPS
+    .filter(kind => kind !== 'lumbermill' || state.hexGrid.some(hex => hex.feature === 'greatTree'))
+    .map(kind => ({ kind, order: random() }))
+    .sort((a, b) => a.order - b.order)
+    .slice(0, WORKSHOP_COUNT);
+  const workshops: Hex[] = [];
+  for (const { kind } of kinds) {
+    const workshop = build(kind, 0, hex => workshops.reduce((sum, other) => sum + 0.6 * getHexDistance(other.coordinates, hex.coordinates), 0));
+    if (workshop) workshops.push(workshop);
+  }
+  const towers: Hex[] = [];
+  for (let i = 0; i < WATCHTOWER_COUNT; i++) {
+    const tower = build('watchtower', 0, hex => (hex.terrain === 'hills' ? 2 : 0) +
+      towers.reduce((sum, other) => sum + 0.8 * getHexDistance(other.coordinates, hex.coordinates), 0));
+    if (tower) towers.push(tower);
+  }
+  // A hamlet: a house near the middle and its neighbours beside it
+  // (houses belong to nobody, so when the fair ground is all taken they can go anywhere left)
+  const nearMiddle = (hex: Hex) => -getHexDistance(hex.coordinates, center);
+  const heart = build('house', 2, nearMiddle) ?? build('house', gridSize * 2, nearMiddle, 1);
+  if (heart) {
+    let houses = 1;
+    for (const c of getNeighbors(heart.coordinates).map(c => ({ c, order: random() })).sort((a, b) => a.order - b.order).map(n => n.c)) {
+      if (houses >= HAMLET_SIZE) break;
+      const hex = findHexByCoordinates(state.hexGrid, c);
+      if (!hex || !canBuild(hex) || taken.some(other => coordsEqual(other, c) || (getHexDistance(other, c) < 2 && !coordsEqual(other, heart.coordinates)))) continue;
+      if (Math.min(getHexDistance(c, playerBase), getHexDistance(c, aiBase)) < MIN_STRUCTURE_CASTLE_DISTANCE) continue;
+      updateHex(state, c, { terrain: 'house', feature: undefined });
+      taken.push(c);
+      houses++;
+    }
+  }
+};
+
 // Place the player's base and an AI base as far away as possible, add the neutral camps,
 // then start the first turn
 export const placeBases = (state: GameState, coordinates: HexCoordinates): GameState => {
@@ -642,6 +774,8 @@ export const placeBases = (state: GameState, coordinates: HexCoordinates): GameS
     };
   }
   placeCamps(newState, playerHex.coordinates, aiHex.coordinates);
+  // The first battle teaches the basics on a field without buildings
+  if (newState.levelId !== 1) placeStructures(newState, playerHex.coordinates, aiHex.coordinates);
 
   const startedState: GameState = {
     ...newState,
@@ -755,6 +889,10 @@ export const canGiveOrders = (state: GameState, player: Player) =>
   state.currentPhase === 'planning' && player.type === getActivePlayer(state);
 
 // Camps currently held by a side
+// Buildings of a kind a side holds
+export const getHeldBuildings = (state: GameState, side: PlayerType, terrain: StructureTerrain): Hex[] =>
+  state.hexGrid.filter(hex => hex.terrain === terrain && hex.owner === side);
+
 export const getOwnedCamps = (state: GameState, playerType: PlayerType): Hex[] =>
   state.hexGrid.filter(hex => hex.isCamp && hex.owner === playerType);
 
@@ -762,7 +900,7 @@ export const getOwnedCamps = (state: GameState, playerType: PlayerType): Hex[] =
 const getDeploymentSpots = (state: GameState, playerType: PlayerType): HexCoordinates[] => {
   const baseHex = findBaseHex(state, playerType);
   const spots = baseHex ? getNeighbors(baseHex.coordinates) : [];
-  for (const camp of getOwnedCamps(state, playerType)) {
+  for (const camp of [...getOwnedCamps(state, playerType), ...getHeldBuildings(state, playerType, 'barracks')]) {
     spots.push(camp.coordinates, ...getNeighbors(camp.coordinates));
   }
   return [...new Map(spots.map(c => [coordKey(c), c])).values()];
@@ -1035,12 +1173,16 @@ export const getFellTargets = (state: GameState, unit: Unit): HexCoordinates[] =
   if (unit.hasMoved || hasAbility(unit, 'flying')) return [];
   const hexByKey = new Map(state.hexGrid.map(hex => [coordKey(hex.coordinates), hex]));
   const claimed = new Set(state.pendingMoves.filter(m => m.unitId !== unit.id).map(m => coordKey(m.to)));
-  return getNeighbors(unit.position)
-    .map(c => hexByKey.get(coordKey(c)))
+  return getHexesInRange(state.hexGrid, unit.position, fellReach(state, unit.owner))
+    .filter(hex => getHexDistance(hex.coordinates, unit.position) > 0)
     .filter((hex): hex is Hex => hex?.feature === 'greatTree' && !claimed.has(coordKey(hex.coordinates)) &&
       !!fellLandingHex(hexByKey, unit.position, hex.coordinates))
     .map(hex => hex.coordinates);
 };
+
+// How far a side's troops can fell trees from: the next hex, or 2 with a lumber mill
+const fellReach = (state: GameState, side: PlayerType) =>
+  getHeldBuildings(state, side, 'lumbermill').length > 0 ? LUMBERMILL_FELL_REACH : 1;
 
 // Whether a queued order is to fell a tree rather than to move (an order onto a great tree)
 export const isFellOrder = (state: GameState, move: Move): boolean =>
@@ -1141,7 +1283,8 @@ const fellTree = (state: GameState, order: Move): void => {
   const side = findPlayerById(state, order.playerId)?.type;
   const unit = side && state.players[side].units.find(u => u.id === order.unitId);
   const tree = findHexByCoordinates(state.hexGrid, order.to);
-  if (!side || !unit || unit.hasMoved || tree?.feature !== 'greatTree' || getHexDistance(unit.position, tree.coordinates) !== 1) return;
+  if (!side || !unit || unit.hasMoved || tree?.feature !== 'greatTree' ||
+    getHexDistance(unit.position, tree.coordinates) > fellReach(state, side)) return;
   const landingAt = getFellLanding(state, unit.position, tree.coordinates);
   const landing = landingAt && findHexByCoordinates(state.hexGrid, landingAt);
   if (!landing) return;
@@ -1267,10 +1410,18 @@ export const executeMoves = (state: GameState): GameState => {
   // Trees fall
   for (const order of fellOrders) fellTree(newState, order);
 
-  // Units ending their move on a camp claim it
+  // Units ending their move on a camp or a building that can be held claim it
   for (const side of ['player', 'ai'] as const) {
     for (const unit of newState.players[side].units) {
       const hex = findHexByCoordinates(newState.hexGrid, unit.position);
+      if (hex && isCapturable(hex.terrain) && hex.owner !== side) {
+        const building = TERRAIN_EFFECTS[hex.terrain].name;
+        addLog(newState, side, hex.owner
+          ? `${unitLabel(unit)} seized ${side === 'player' ? 'the enemy' : 'your'} ${building}!`
+          : `${unitLabel(unit)} took the ${building}.`);
+        updateHex(newState, unit.position, { owner: side });
+        continue;
+      }
       if (!hex?.isCamp || hex.owner === side) continue;
       addLog(newState, side, hex.owner
         ? `${unitLabel(unit)} seized ${side === 'player' ? 'an enemy camp' : 'your camp'}!`
@@ -1304,6 +1455,11 @@ export const executeMoves = (state: GameState): GameState => {
     }
 
     const newUnit = createUnit(purchase.unitType, player.type, purchase.position, stats);
+    // Recruits marching out of barracks their side holds come drilled
+    if (getHeldBuildings(newState, player.type, 'barracks').some(barracks => getHexDistance(barracks.coordinates, newUnit.position) <= 1)) {
+      newUnit.maxLifespan = Math.round(newUnit.maxLifespan * (1 + BARRACKS_HEALTH_BONUS));
+      newUnit.lifespan = newUnit.maxLifespan;
+    }
     newState.players[player.type].units.push(newUnit);
     occupied.add(coordKey(newUnit.position));
     recruited.push(newUnit);
@@ -1432,7 +1588,8 @@ export const isFogOfWar = (state: GameState) => !!getSettings(state).fogOfWar;
 export const getSightRange = (state: GameState, unit: Unit): number =>
   SIGHT_RANGE +
   (getTroopClass(unit.type) === 'skirmisher' || hasAbility(unit, 'flying') ? SCOUT_SIGHT_BONUS : 0) +
-  (getElevation(terrainUnder(state, unit)) >= HIGH_GROUND_ELEVATION ? HIGH_GROUND_SIGHT_BONUS : 0);
+  (getElevation(terrainUnder(state, unit)) >= HIGH_GROUND_ELEVATION ? HIGH_GROUND_SIGHT_BONUS : 0) +
+  (terrainUnder(state, unit) === 'watchtower' ? WATCHTOWER_SIGHT_BONUS : 0);
 
 // Everything that keeps watch for a side: its troops, its castle and the camps it holds
 const lookoutsOf = (state: GameState, side: PlayerType): { position: HexCoordinates; range: number }[] => {
@@ -1440,7 +1597,8 @@ const lookoutsOf = (state: GameState, side: PlayerType): { position: HexCoordina
   return [
     ...state.players[side].units.map(unit => ({ position: unit.position, range: getSightRange(state, unit) })),
     ...(castle ? [{ position: castle.coordinates, range: CASTLE_SIGHT }] : []),
-    ...getOwnedCamps(state, side).map(camp => ({ position: camp.coordinates, range: CAMP_SIGHT }))
+    ...getOwnedCamps(state, side).map(camp => ({ position: camp.coordinates, range: CAMP_SIGHT })),
+    ...getHeldBuildings(state, side, 'watchtower').map(tower => ({ position: tower.coordinates, range: HELD_TOWER_SIGHT }))
   ];
 };
 
@@ -1616,6 +1774,8 @@ export const getSituationalBonuses = (
   if (rank > 0 && !allies.some(ally => getHexDistance(ally.position, at) <= LONE_BLADE_RADIUS)) add('Lone Blade', loneBladeBonus(rank));
   rank = rankOf(attacker, 'charge');
   if (rank > 0 && ownTurn && movedHexes >= CHARGE_DISTANCE) add('Charge', chargeBonus(rank));
+  // A blacksmith its side holds
+  if (getHeldBuildings(state, attacker.owner, 'blacksmith').length > 0) add('Blacksmith', BLACKSMITH_ATTACK_BONUS);
   rank = rankOf(attacker, 'eyeOfTheStorm');
   if (rank > 0 && !enemies.some(enemy => getHexDistance(enemy.position, at) <= EYE_OF_STORM_RADIUS)) add('Eye of the Storm', eyeOfStormBonus(rank));
   return bonuses;
@@ -1643,6 +1803,9 @@ export const getProtections = (state: GameState, unit: Unit, at: HexCoordinates 
 export const getDamageTakenMultiplier = (state: GameState, unit: Unit, at?: HexCoordinates): number =>
   getProtections(state, unit, at).reduce((product, protection) => product * (1 - protection.reduction), 1);
 
+// Troops garrisoned in a house can't be flanked: only one side of it can be got at
+const canBeFlanked = (state: GameState, target: Unit) => terrainUnder(state, target) !== 'house';
+
 // A strike where the two units actually stand, including flanking when `attackersOnTarget` troops
 // (this one included) attack the target together, the attacker's situational bonuses and whatever
 // shields the target
@@ -1650,7 +1813,7 @@ const getStrikePower = (state: GameState, attacker: Unit, target: Unit, attacker
   getStrikePowerOnTerrain(
     attacker, terrainUnder(state, attacker), target, terrainUnder(state, target),
     getHexDistance(attacker.position, target.position), getHeightDifference(state, attacker.position, target.position)
-  ) * (1 + FLANK_BONUS * getFlankers(attackersOnTarget)) *
+  ) * (1 + FLANK_BONUS * (canBeFlanked(state, target) ? getFlankers(attackersOnTarget) : 0)) *
   getSituationalMultiplier(state, attacker) *
   getDamageTakenMultiplier(state, target);
 
@@ -1927,7 +2090,8 @@ export const advanceFires = (state: GameState, roundEnds: boolean, random: (salt
     burntOut++;
     updateHex(state, hex.coordinates, {
       fire: undefined, scorched: true,
-      terrain: hex.terrain === 'forest' ? 'plain' : hex.terrain,
+      // A forest burns down to open ground, a house to a shell
+      terrain: hex.terrain === 'forest' ? 'plain' : hex.terrain === 'house' ? 'ruins' : hex.terrain,
       feature: hex.feature === 'logBridge' ? hex.feature : undefined
     });
   }
@@ -2019,6 +2183,7 @@ const finishTurn = (state: GameState): GameState => {
   if (healedByMages > 0) {
     addLog(newState, activePlayer, `${sideTroops} healers mend ${healedByMages} health.`);
   }
+  bombard(newState, activePlayer);
   advanceFires(newState, activePlayer === 'ai');
   applyChallenges(newState, activePlayer);
   undermine(newState, diggers.filter(digger => newState.players[activePlayer].units.some(unit => unit.id === digger.id)));
@@ -2031,11 +2196,12 @@ const finishTurn = (state: GameState): GameState => {
     const parts = [
       income.mines > 0 && `+${income.mines} mines`,
       income.camps > 0 && `+${income.camps} camps`,
+      income.taverns > 0 && `+${income.taverns} taverns`,
       income.upkeep > 0 && `-${income.upkeep} upkeep`
     ].filter(Boolean);
     addLog(newState, 'player', `You earn ${income.total} gold` + (parts.length > 0 ? ` (${parts.join(', ')}).` : '.'));
-  } else if (income.mines + income.camps > 0) {
-    addLog(newState, 'ai', `The enemy earns ${income.mines + income.camps} gold from mines and camps.`);
+  } else if (income.mines + income.camps + income.taverns > 0) {
+    addLog(newState, 'ai', `The enemy earns ${income.mines + income.camps + income.taverns} gold from mines, camps and taverns.`);
   }
 
   const winner = checkBaseDestroyed(newState);
@@ -2130,6 +2296,36 @@ export const getSiegeDamage = (unit: Unit): number =>
   unit.attackPower * (hasAbility(unit, 'siege') ? SIEGE_MULTIPLIER : 1);
 
 // The besieging side's units near the enemy base damage it, plundering gold as they do
+// Catapult towers: a troop of the side whose turn it is standing in one hurls a stone at the weakest
+// enemy troop it can see within reach, or at the enemy castle when no troop is in reach
+const bombard = (state: GameState, side: PlayerType): void => {
+  const enemySide = getOpponent(side);
+  for (const tower of state.hexGrid.filter(hex => hex.terrain === 'catapult')) {
+    const crew = state.players[side].units.find(unit => coordsEqual(unit.position, tower.coordinates));
+    if (!crew) continue;
+    const target = state.players[enemySide].units
+      .filter(enemy => getHexDistance(enemy.position, tower.coordinates) <= CATAPULT_RANGE && isUnitVisibleTo(state, side, enemy))
+      .sort((a, b) => a.lifespan - b.lifespan || getHexDistance(a.position, tower.coordinates) - getHexDistance(b.position, tower.coordinates))[0];
+    const serial = (state.lastBombard?.serial ?? 0) + 1;
+    if (target) {
+      const hit = inflictDamage(state, target, CATAPULT_DAMAGE, side);
+      state.lastBombard = { side, from: tower.coordinates, to: target.position, serial };
+      addLog(state, side, `The catapult hurls a stone at ${unitLabel(target).replace(/^Your|^Enemy/, side === 'player' ? 'the enemy' : 'your')}` +
+        ` (-${hit.damage}${hit.destroyed ? ', destroyed' : ''}).`);
+      continue;
+    }
+    const castle = findBaseHex(state, enemySide);
+    if (!castle || getHexDistance(castle.coordinates, tower.coordinates) > CATAPULT_RANGE) continue;
+    const before = state.players[enemySide].baseHealth ?? BASE_MAX_HEALTH;
+    const after = Math.max(0, before - CATAPULT_CASTLE_DAMAGE);
+    state.players[enemySide].baseHealth = after;
+    updateHex(state, castle.coordinates, { baseHealth: after });
+    sideStats(state, side).siegeDamage += before - after;
+    state.lastBombard = { side, from: tower.coordinates, to: castle.coordinates, serial };
+    addLog(state, side, `The catapult pounds ${enemySide === 'player' ? 'your' : 'the enemy'} castle (-${before - after}).`);
+  }
+};
+
 const processDamageToBase = (state: GameState, besieger: PlayerType): void => {
   const side = getOpponent(besieger);
   const baseHex = findBaseHex(state, side);
@@ -2167,6 +2363,8 @@ export interface IncomeBreakdown {
   mines: number;
   // Camps this side holds
   camps: number;
+  // Taverns this side holds
+  taverns: number;
   // Cost of keeping an army larger than FREE_UPKEEP_UNITS
   upkeep: number;
   total: number;
@@ -2179,8 +2377,9 @@ export const getIncome = (state: GameState, side: PlayerType): IncomeBreakdown =
     .reduce((sum, hex) => sum + (hex.resourceValue ?? 0), 0);
   const camps = getOwnedCamps(state, side).length * CAMP_INCOME;
   const upkeep = Math.max(0, state.players[side].units.length - FREE_UPKEEP_UNITS) * UPKEEP_PER_UNIT;
+  const taverns = getHeldBuildings(state, side, 'tavern').length * TAVERN_INCOME;
   const base = TURN_INCOME + (side === 'ai' ? getSettings(state).aiIncomeBonus ?? 0 : 0);
-  return { base, mines, camps, upkeep, total: base + mines + camps - upkeep };
+  return { base, mines, camps, taverns, upkeep, total: base + mines + camps + taverns - upkeep };
 };
 
 // ---------------------------------------------------------------------------
@@ -2243,7 +2442,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
       modifiers.push(mod('Point blank', 'bad', percent(RANGED_POINT_BLANK_MULTIPLIER), size(RANGED_POINT_BLANK_MULTIPLIER)));
     }
     if (hasAbility(unit, 'magic') && TERRAIN_EFFECTS[targetTerrain].damageTakenMultiplier < 1) modifiers.push(mod('Spells pierce cover', 'good', undefined, 20));
-    const flankers = getFlankers(attackersOnTarget);
+    const flankers = canBeFlanked(state, target) ? getFlankers(attackersOnTarget) : 0;
     if (flankers > 0) modifiers.push(mod('Flanking', 'good', `+${Math.round(FLANK_BONUS * flankers * 100)}%`, Math.round(FLANK_BONUS * flankers * 100)));
     const pierce = piercingShare(rankOf(unit, 'piercingShot'));
     if (pierce > 0 && TERRAIN_EFFECTS[targetTerrain].damageTakenMultiplier < 1) modifiers.push(mod('Piercing Shot', 'good', `${Math.round(pierce * 100)}% cover`, 20));
@@ -2360,7 +2559,7 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     }
     const smite = getSmiteMultiplier(unit, target);
     if (smite > 1) bonuses.set('Holy Smite', Math.max(bonuses.get('Holy Smite') ?? 0, size(smite)));
-    const flankers = getFlankers(attackers.length);
+    const flankers = canBeFlanked(state, target) ? getFlankers(attackers.length) : 0;
     if (flankers > 0) add('Flanked', 'good', `+${Math.round(FLANK_BONUS * flankers * 100)}%`, Math.round(FLANK_BONUS * flankers * 100));
     const height = getHeightMultiplier(getHeightDifference(state, unit.position, target.position));
     if (height > 1) add('High ground', 'good', `+${pct(height)}`, size(height));

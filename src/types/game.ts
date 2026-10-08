@@ -17,7 +17,15 @@ export type TerrainType =
   | 'ruins'
   | 'cursed'
   // Houses, mills and wells: cover, and buildings that block arrows
-  | 'village';
+  | 'village'
+  // Buildings with a job of their own (see lib/game/structures)
+  | 'watchtower'
+  | 'house'
+  | 'catapult'
+  | 'blacksmith'
+  | 'barracks'
+  | 'tavern'
+  | 'lumbermill';
 
 export type PlayerType = 'player' | 'ai';
 
@@ -184,6 +192,8 @@ export interface GameState {
   pendingGuards?: { type: UnitType; stats: TroopStats; isBoss?: boolean }[];
   // Seeds the battle's chance events (fires flaring up around lava)
   battleSeed?: number;
+  // The catapult's most recent stone, for the board to show it flying (serial counts stones)
+  lastBombard?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
   // The tree felled most recently, for the board to show it falling (serial counts fellings)
   lastFell?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
 }

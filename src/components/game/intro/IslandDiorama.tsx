@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Hex, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
+import { Hex, HexCoordinates, PlayerType, TerrainType, Unit, UnitType } from '@/types/game';
 import { DEFAULT_SETTINGS, isImpassable } from '@/lib/game/gameState';
 import { cardStats } from '@/lib/game/troops';
 import { createHexagonalGrid, REGION_THEMES as MAP_THEMES } from '@/lib/game/mapGenerator';
@@ -39,10 +39,12 @@ const TROOPS: [UnitType, PlayerType, HexCoordinates][] = [
   ['skeleton_archer', 'ai', { q: -1, r: -1 }],
   ['wyvern', 'ai', { q: 2, r: -2 }]
 ];
+// A watchtower and a cottage, so the battlefield's buildings show from the first screen
+const BUILDINGS: [HexCoordinates, TerrainType][] = [[{ q: 2, r: 0 }, 'watchtower'], [{ q: -2, r: 3 }, 'house']];
 // Skirmishes that play on a loop: [attacker index, target index] into TROOPS
 const SKIRMISHES: [number, number][] = [[0, 4], [4, 0], [1, 4], [5, 1], [3, 0]];
 // Hexes that must be open ground so the pieces above have somewhere to stand
-const OPEN_HEXES = [...CASTLES.map(([c]) => c), ...CAMPS.map(([c]) => c), ...TROOPS.map(([, , c]) => c)];
+const OPEN_HEXES = [...CASTLES.map(([c]) => c), ...CAMPS.map(([c]) => c), ...TROOPS.map(([, , c]) => c), ...BUILDINGS.map(([c]) => c)];
 
 const key = (c: HexCoordinates) => `${c.q},${c.r}`;
 const noop = () => {};
@@ -59,6 +61,8 @@ const buildIsland = (themeIndex: number): Hex[] => {
     const camp = CAMPS.find(([c]) => key(c) === coordinates);
     if (castle) return { ...hex, terrain: 'plain', isResourceHex: false, isBase: true, owner: castle[1] };
     if (camp) return { ...hex, terrain: 'plain', isResourceHex: false, isCamp: true, owner: camp[1] ?? undefined };
+    const building = BUILDINGS.find(([c]) => key(c) === coordinates);
+    if (building) return { ...hex, terrain: building[1], isResourceHex: false };
     if (open.has(coordinates) && (isImpassable(hex) || hex.isResourceHex)) {
       return { ...hex, terrain: 'plain', isResourceHex: false };
     }
@@ -80,7 +84,7 @@ const Island: React.FC<{ themeIndex: number; live: boolean; onReady: () => void 
   const spinRef = useRef<THREE.Group>(null);
   const hexGrid = useMemo(() => buildIsland(themeIndex), [themeIndex]);
   // The scenery packs this island needs (as the board's decorations pick them)
-  const packs = useMemo((): PropPack[] => hexGrid.some(hex => hex.terrain === 'cursed') ? ['medieval', 'halloween'] : ['medieval'], [hexGrid]);
+  const packs = useMemo((): PropPack[] => ['medieval', 'buildings', ...(hexGrid.some(hex => hex.terrain === 'cursed') ? ['halloween' as const] : [])], [hexGrid]);
   const scenery = usePropLibrary(packs);
   const settledRef = useRef(0);
 

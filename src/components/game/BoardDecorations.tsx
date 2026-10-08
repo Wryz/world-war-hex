@@ -1,6 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { Hex, TerrainType } from '@/types/game';
+import { Hex, PlayerType, TerrainType } from '@/types/game';
+import { STRUCTURE_TERRAINS, isStructure } from '@/lib/game/structures';
 import type { MapDecor } from '@/lib/game/mapGenerator';
 import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
 import { KAYKIT_HEX_SCALE, PropLibrary, PropPack, usePropLibrary } from './utils/kaykitProps';
@@ -280,7 +281,18 @@ const InstancedPart: React.FC<{ part: PartName; matrices: THREE.Matrix4[] }> = (
 // --- KayKit scenery ---------------------------------------------------------------------------
 
 // Terrain drawn with KayKit models once they have loaded (the rest keeps the shapes above)
-const KAYKIT_TERRAIN: ReadonlySet<TerrainType> = new Set(['forest', 'mountain', 'plain', 'resource', 'ruins', 'cursed', 'water', 'swamp', 'village']);
+const KAYKIT_TERRAIN: ReadonlySet<TerrainType> = new Set(['forest', 'mountain', 'plain', 'resource', 'ruins', 'cursed', 'water', 'swamp', 'village', ...STRUCTURE_TERRAINS]);
+
+// Buildings drawn in the colour of the side holding them (yellow while nobody does), and their size
+const BUILDING_MODELS: Partial<Record<TerrainType, { model: string; scale: number }>> = {
+  watchtower: { model: 'building_tower_A', scale: 0.62 },
+  catapult: { model: 'building_tower_catapult', scale: 0.6 },
+  blacksmith: { model: 'building_blacksmith', scale: 0.58 },
+  barracks: { model: 'building_barracks', scale: 0.58 },
+  tavern: { model: 'building_tavern', scale: 0.58 },
+  lumbermill: { model: 'building_lumbermill', scale: 0.58 }
+};
+const SIDE_COLOR: Record<PlayerType | 'none', string> = { player: 'blue', ai: 'red', none: 'yellow' };
 const S = KAYKIT_HEX_SCALE;
 
 // Where each KayKit model goes on the board: one list of transforms per model
@@ -336,6 +348,24 @@ const buildPropMatrices = (hexes: Hex[], decor?: MapDecor): Map<string, THREE.Ma
           const z = Math.sin(angle) * 0.48;
           add(model, cx + x, y, cz + z, scales[model] ?? 0.46, facing(x, z));
         }
+        break;
+      }
+      case 'watchtower':
+      case 'catapult':
+      case 'blacksmith':
+      case 'barracks':
+      case 'tavern':
+      case 'lumbermill': {
+        const building = BUILDING_MODELS[hex.terrain]!;
+        add(`${building.model}_${SIDE_COLOR[hex.owner ?? 'none']}`, cx, y, cz, building.scale, Math.round(seededRandom(hex, 3) * 6) * Math.PI / 3);
+        break;
+      }
+      case 'house': {
+        // A cottage, and a crate or barrel by the door
+        const turn = Math.round(seededRandom(hex, 3) * 6) * Math.PI / 3;
+        add(seededRandom(hex, 4) > 0.5 ? 'building_home_A_yellow' : 'building_home_B_yellow', cx, y, cz, 0.68, turn);
+        const [{ x, z, r }] = rimSpots(hex, 1);
+        add(r > 0.5 ? 'barrel' : 'crate_B_small', cx + x * 1.1, y, cz + z * 1.1, 1.4, r * 6);
         break;
       }
       case 'mountain':
@@ -431,14 +461,17 @@ const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[]; decor?: MapDecor }> 
   // Only the packs this map's scenery uses download (Halloween bits for haunted ground, dungeon props
   // for the Underkeep)
   const hasCursed = hexGrid.some(hex => hex.terrain === 'cursed');
+  const hasBuildings = hexGrid.some(hex => isStructure(hex.terrain));
   const packs = useMemo((): PropPack[] => [
     'medieval',
     ...(hasCursed || decor === 'haunted' ? ['halloween' as const] : []),
-    ...(decor === 'dungeon' ? ['dungeon' as const] : [])
-  ], [hasCursed, decor]);
+    ...(decor === 'dungeon' ? ['dungeon' as const] : []),
+    ...(hasBuildings ? ['buildings' as const] : [])
+  ], [hasCursed, decor, hasBuildings]);
   const library = usePropLibrary(packs);
   // Decorations only depend on the terrain, not on units moving around
-  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}`).join('|');
+  // (and on who holds each building, which shows in its colours)
+  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}${isStructure(h.terrain) ? h.owner ?? '' : ''}`).join('|');
   const hexesRef = useRef(hexGrid);
   hexesRef.current = hexGrid;
 

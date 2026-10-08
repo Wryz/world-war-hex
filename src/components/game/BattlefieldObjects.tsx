@@ -4,6 +4,7 @@ import * as THREE from 'three';
 import { GameState, Hex, HexCoordinates } from '@/types/game';
 import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
 import { PropModel, usePropLibrary } from './utils/kaykitProps';
+import { isStructure } from '@/lib/game/structures';
 
 // The battlefield's objects (see lib/game/battlefield): great trees standing in the forests, the
 // trunks of felled ones lying where they fell (toppling over when it has just happened), and fires -
@@ -223,23 +224,66 @@ const Embers: React.FC<{ at: THREE.Vector3; seed: number }> = ({ at, seed }) => 
   );
 };
 
+// A catapult stone flying in a high arc from the tower to where it lands, then gone
+const STONE_SECONDS = 1.1;
+const CatapultStone: React.FC<{ from: THREE.Vector3; to: THREE.Vector3; model: PropModel | null }> = ({ from, to, model }) => {
+  const ref = useRef<THREE.Group>(null);
+  const progressRef = useRef(0);
+  const height = 2.5 + from.distanceTo(to) * 0.25;
+  useFrame((_, delta) => {
+    const stone = ref.current;
+    if (!stone) return;
+    progressRef.current = Math.min(1, progressRef.current + Math.min(delta, 0.05) / STONE_SECONDS);
+    const t = progressRef.current;
+    stone.position.lerpVectors(from, to, t);
+    stone.position.y += 1.2 + Math.sin(t * Math.PI) * height - t * 1.2;
+    stone.rotation.x += delta * 6;
+    stone.visible = t < 1;
+  });
+  return (
+    <group ref={ref} position={from}>
+      {model ? <mesh geometry={model.geometry} material={model.material} scale={0.9} castShadow /> : (
+        <mesh castShadow>
+          <icosahedronGeometry args={[0.16, 0]} />
+          <meshStandardMaterial color="#78716c" flatShading />
+        </mesh>
+      )}
+    </group>
+  );
+};
+
 interface BattlefieldObjectsProps {
   hexGrid: Hex[];
   // The most recent felling, which topples over rather than appearing already fallen
   lastFell?: GameState['lastFell'];
+  // The catapult's most recent stone, which flies across when it is new
+  lastBombard?: GameState['lastBombard'];
   // Hexes hidden in the fog of war (as "q,r" keys), where nothing new is shown; null without fog
   visibleKeys?: Set<string> | null;
 }
 
-const BattlefieldObjectsComponent: React.FC<BattlefieldObjectsProps> = ({ hexGrid, lastFell, visibleKeys = null }) => {
-  const library = usePropLibrary();
+const BattlefieldObjectsComponent: React.FC<BattlefieldObjectsProps> = ({ hexGrid, lastFell, lastBombard, visibleKeys = null }) => {
+  // (the buildings pack holds the stumps and the catapult's stone)
+  const hasBuildings = hexGrid.some(hex => isStructure(hex.terrain)) || hexGrid.some(hex => hex.fellFrom);
+  const library = usePropLibrary(hasBuildings ? ['medieval', 'buildings'] : ['medieval']);
   const treeModel = library?.get('tree_single_A') ?? null;
+  const stumpModel = library?.get('tree_single_A_cut') ?? null;
+  const stoneModel = library?.get('projectile_catapult') ?? null;
   const hexByKey = useMemo(() => new Map(hexGrid.map(hex => [key(hex.coordinates), hex])), [hexGrid]);
-  // Fellings seen when the board first appeared are shown lying down; later ones topple over
+  // Fellings and stones seen when the board first appeared are shown done; later ones play out
   const firstSerialRef = useRef(lastFell?.serial ?? 0);
+  const firstStoneRef = useRef(lastBombard?.serial ?? 0);
 
   return (
     <group>
+      {lastBombard && lastBombard.serial > firstStoneRef.current && (
+        <CatapultStone
+          key={`stone-${lastBombard.serial}`}
+          from={surface(hexByKey.get(key(lastBombard.from)), lastBombard.from).add(new THREE.Vector3(0, 0.9, 0))}
+          to={surface(hexByKey.get(key(lastBombard.to)), lastBombard.to)}
+          model={stoneModel}
+        />
+      )}
       {hexGrid.map(hex => {
         const at = surface(hex, hex.coordinates);
         const id = key(hex.coordinates);
@@ -247,6 +291,16 @@ const BattlefieldObjectsComponent: React.FC<BattlefieldObjectsProps> = ({ hexGri
         return (
           <React.Fragment key={id}>
             {hex.feature === 'greatTree' && <GreatTree base={at} model={treeModel} />}
+            {/* The stump left where a felled tree stood */}
+            {(hex.feature === 'log' || hex.feature === 'logBridge') && hex.fellFrom && stumpModel && (
+              <mesh
+                geometry={stumpModel.geometry}
+                material={stumpModel.material}
+                position={surface(hexByKey.get(key(hex.fellFrom)), hex.fellFrom)}
+                scale={0.75}
+                castShadow
+              />
+            )}
             {(hex.feature === 'log' || hex.feature === 'logBridge') && hex.fellFrom && (
               <GreatTree
                 // A new felling mounts anew so it falls from upright
