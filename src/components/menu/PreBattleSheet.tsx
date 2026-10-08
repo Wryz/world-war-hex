@@ -157,7 +157,7 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
                   onClick={() => setOpenTerrain(current => (current === terrain ? null : terrain))}
                   aria-expanded={openTerrain === terrain}
                   title={TERRAIN_EFFECTS[terrain].name}
-                  className={`rounded-full p-1 text-sm transition-colors hover:bg-slate-700 ${openTerrain === terrain ? 'bg-slate-700 ring-1 ring-amber-300' : 'bg-slate-800'}`}
+                  className={`p-0.5 text-base transition-transform hover:scale-125 ${openTerrain === terrain ? 'scale-125 drop-shadow-[0_0_4px_rgba(252,211,77,0.9)]' : ''}`}
                 >
                   <TerrainIcon terrain={terrain} />
                 </button>
