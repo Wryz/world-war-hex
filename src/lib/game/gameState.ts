@@ -1998,7 +1998,6 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
   const pct = (multiplier: number) => `${Math.round(Math.abs(multiplier - 1) * 100)}%`;
   const targetTerrain = terrainUnder(state, target);
 
-  if (combat.intercept) add('Struck while attacking', 'good');
   if (attackers.some(unit => unit.ambushed) || target.ambushed) add('Ambush!', 'neutral');
   for (const unit of attackers) {
     const terrain = terrainUnder(state, unit);
@@ -2071,8 +2070,8 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
         ? `${preview.attackers.map(a => unitLabel(a.unit)).join(' & ')} struck back at ${unitLabel(defender.unit)} as it attacked: ${outcome(defender)}.`
         : `${preview.attackers.map(a => unitLabel(a.unit)).join(' & ')} attacked ${unitLabel(defender.unit)}: ` +
           `defender ${outcome(defender)}, attackers ${preview.attackers.map(outcome).join(', ')}.`) +
-        (effects.filter(effect => effect.label !== 'Struck while attacking').length > 0
-          ? ` (${effects.filter(effect => effect.label !== 'Struck while attacking').map(describeEffect).join(', ')})`
+        (effects.length > 0
+          ? ` (${effects.map(describeEffect).join(', ')})`
           : '')
     );
 
