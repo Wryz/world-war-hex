@@ -145,4 +145,4 @@ The game can send anonymous gameplay events to [PostHog](https://posthog.com) - 
 3. Run the development server: `npm run dev`
 4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to load [DynaPuff](https://fonts.google.com/specimen/DynaPuff) for titles and buttons; body text is [Fredoka](https://fonts.google.com/specimen/Fredoka), self-hosted from [Fontsource](https://fontsource.org/fonts/fredoka) (both under the SIL Open Font License).
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to load [DynaPuff](https://fonts.google.com/specimen/DynaPuff) for titles and buttons; and [Fredoka](https://fonts.google.com/specimen/Fredoka) for body text (both under the SIL Open Font License).
