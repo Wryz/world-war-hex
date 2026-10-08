@@ -118,8 +118,8 @@ export const StyleScreen: React.FC = () => {
                   onClick={() => setPreviewCastle(style.id)}
                 >
                   <span className="flex h-10 w-10 shrink-0 flex-col overflow-hidden rounded-lg ring-2 ring-slate-900" aria-hidden>
-                    <span className="flex-[45]" style={{ background: style.roof ?? '#3b82f6' }} />
-                    <span className="flex-[55]" style={{ background: style.stone }} />
+                    <span className="flex-[45]" style={{ background: style.swatch[0] }} />
+                    <span className="flex-[55]" style={{ background: style.swatch[1] }} />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="font-display block">{style.name}</span>

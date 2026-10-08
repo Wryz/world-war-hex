@@ -25,14 +25,13 @@ export interface CastleStyle {
   name: string;
   description: string;
   price: number;
-  stone: string;
-  stoneDark: string;
-  // Roof colour; your castle's flag always flies your blue
-  roof?: string;
-  crown: string;
-  crownGlow: string;
-  // Extra decoration on the walls
-  decor?: 'pennants' | 'crystals' | 'vines' | 'runes' | 'gilded';
+  // The KayKit building your castle is drawn as, and its scale (a fraction of the hex-to-KayKit scale)
+  model: string;
+  scale: number;
+  // The model pack it comes from: the standard castle is in the medieval pack every battle loads
+  pack: 'medieval' | 'castles';
+  // Colours for the Style screen's swatch: roof, then walls
+  swatch: [string, string];
 }
 
 export const CARD_SKINS: CardSkin[] = [
@@ -73,30 +72,31 @@ export const CARD_SKINS: CardSkin[] = [
   }
 ];
 
+// Each style is a real KayKit building (Medieval Hexagon Pack and Halloween Bits, CC0)
 export const CASTLE_STYLES: CastleStyle[] = [
   {
-    id: 'keep', name: 'Stone Keep', description: 'Grey stone and a stubborn garrison.', price: 0,
-    stone: '#cfc6b8', stoneDark: '#a39a8c', crown: '#ffcc33', crownGlow: '#b8860b'
+    id: 'keep', name: 'Stone Keep', description: 'Grey stone, blue banners and a stubborn garrison.', price: 0,
+    model: 'building_castle_blue', scale: 0.58, pack: 'medieval', swatch: ['#3b82f6', '#cfc6b8']
   },
   {
-    id: 'sandstone', name: 'Desert Fort', description: 'Sun-baked walls flying bright pennants.', price: 300,
-    stone: '#e3c995', stoneDark: '#c2a36b', crown: '#ffcc33', crownGlow: '#b8860b', decor: 'pennants'
+    id: 'sandstone', name: 'Desert Fort', description: 'The same stout walls under sun-gold roofs.', price: 300,
+    model: 'building_castle_yellow', scale: 0.58, pack: 'castles', swatch: ['#facc15', '#cfc6b8']
   },
   {
-    id: 'ice', name: 'Ice Citadel', description: 'Carved from a glacier and crowned with crystal.', price: 700,
-    stone: '#dbeafe', stoneDark: '#93c5fd', roof: '#38bdf8', crown: '#e0f2fe', crownGlow: '#38bdf8', decor: 'crystals'
+    id: 'ice', name: 'Watchtower', description: 'One tall tower that sees the whole battlefield.', price: 700,
+    model: 'building_tower_B_blue', scale: 0.92, pack: 'castles', swatch: ['#3b82f6', '#a8a29e']
   },
   {
-    id: 'elven', name: 'Elven Spire', description: 'Living stone wrapped in ivy and blossom.', price: 700,
-    stone: '#c7d4b6', stoneDark: '#8aa278', roof: '#2563eb', crown: '#d9f99d', crownGlow: '#65a30d', decor: 'vines'
+    id: 'elven', name: 'Forest Keep', description: 'A castle roofed in forest green.', price: 700,
+    model: 'building_castle_green', scale: 0.58, pack: 'castles', swatch: ['#22c55e', '#cfc6b8']
   },
   {
-    id: 'shadow', name: 'Shadow Keep', description: 'Dark basalt etched with glowing runes.', price: 1000,
-    stone: '#4a4458', stoneDark: '#2a2535', roof: '#4338ca', crown: '#c084fc', crownGlow: '#7e22ce', decor: 'runes'
+    id: 'shadow', name: 'Haunted Crypt', description: 'Rule from a mausoleum - the enemy will think twice.', price: 1000,
+    model: 'crypt', scale: 0.19, pack: 'castles', swatch: ['#6d28d9', '#57534e']
   },
   {
-    id: 'golden', name: 'Golden Palace', description: 'White marble, gold trim and a king\'s ransom in banners.', price: 1500,
-    stone: '#f8f4ea', stoneDark: '#e5d3a1', crown: '#ffd700', crownGlow: '#daa520', decor: 'gilded'
+    id: 'golden', name: 'Golden Cathedral', description: 'A great cathedral with a golden spire.', price: 1500,
+    model: 'building_church_yellow', scale: 1.25, pack: 'castles', swatch: ['#facc15', '#f8f4ea']
   }
 ];
 
