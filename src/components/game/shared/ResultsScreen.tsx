@@ -73,7 +73,7 @@ const StarProgress: React.FC<{ level: LevelDef; points: number; won: boolean }> 
       <div className="relative h-4 rounded-full bg-slate-700">
         <div
           className="h-full rounded-full transition-[width] duration-1000 ease-out"
-          style={{ width: at(filled), background: won ? 'linear-gradient(90deg, #f59e0b, #fde047)' : '#64748b' }}
+          style={{ width: at(filled), background: won ? '#f59e0b' : '#64748b' }}
         />
         {[{ value: two, stars: 2 }, { value: three, stars: 3 }].map(mark => {
           const reached = won && points >= mark.value;
@@ -257,7 +257,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           </div>
         )}
         {record.newCards.length > 0 && (
-          <div className="mt-3 rounded-xl bg-gradient-to-r from-purple-900/80 to-amber-900/60 px-3 py-2 text-sm font-bold">
+          <div className="mt-3 rounded-xl bg-purple-900/80 px-3 py-2 text-sm font-bold">
             New card in the shop: {record.newCards.map(id => TROOPS[id].name).join(', ')}!
           </div>
         )}

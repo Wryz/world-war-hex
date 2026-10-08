@@ -11,11 +11,11 @@ import { useProfile } from '@/lib/meta/profile';
 export type CardSize = 'xs' | 'xm' | 'sm' | 'md' | 'lg';
 
 export const RARITY_STYLES: Record<Rarity, { frame: string; label: string; text: string }> = {
-  common: { frame: 'linear-gradient(160deg, #e2e8f0, #64748b)', label: 'Common', text: '#cbd5e1' },
-  rare: { frame: 'linear-gradient(160deg, #7dd3fc, #1d4ed8)', label: 'Rare', text: '#7dd3fc' },
-  epic: { frame: 'linear-gradient(160deg, #e9d5ff, #7e22ce)', label: 'Epic', text: '#d8b4fe' },
-  legendary: { frame: 'linear-gradient(160deg, #fef08a, #d97706 55%, #fde68a)', label: 'Legendary', text: '#fcd34d' },
-  boss: { frame: 'linear-gradient(160deg, #fca5a5, #991b1b 55%, #450a0a)', label: 'Boss', text: '#fca5a5' }
+  common: { frame: '#94a3b8', label: 'Common', text: '#cbd5e1' },
+  rare: { frame: '#3b82f6', label: 'Rare', text: '#7dd3fc' },
+  epic: { frame: '#a855f7', label: 'Epic', text: '#d8b4fe' },
+  legendary: { frame: '#f59e0b', label: 'Legendary', text: '#fcd34d' },
+  boss: { frame: '#b91c1c', label: 'Boss', text: '#fca5a5' }
 };
 
 const SIZES: Record<CardSize, { width: number; icon: string; name: string; stats: string; gem: string; pad: string }> = {
@@ -45,6 +45,8 @@ interface TroopCardProps {
   hideLevel?: boolean;
   // Card frame to show; your cards default to the one you have equipped
   skin?: CardSkinId;
+  // Stretch to the width of its grid cell (text and icons keep the size's scale)
+  fill?: boolean;
   onClick?: () => void;
   className?: string;
   children?: React.ReactNode;
@@ -64,6 +66,7 @@ export const TroopCard: React.FC<TroopCardProps> = ({
   hidden = false,
   hideLevel = false,
   skin,
+  fill = false,
   onClick,
   className = '',
   children,
@@ -91,9 +94,9 @@ export const TroopCard: React.FC<TroopCardProps> = ({
         isInteractive ? 'cursor-pointer hover:-translate-y-2 focus:outline-none focus-visible:-translate-y-2' : ''
       } ${selected ? '-translate-y-3' : ''} ${troop.rarity === 'legendary' && !hidden ? 'card-shine overflow-hidden' : ''} ${className}`}
       style={{
-        width: dims.width,
+        width: fill ? '100%' : dims.width,
         aspectRatio: '5 / 7',
-        background: hidden ? 'linear-gradient(160deg, #475569, #1e293b)' : rarity.frame,
+        background: hidden ? '#475569' : rarity.frame,
         padding: size === 'xs' || size === 'xm' ? 2 : 3,
         boxShadow: selected
           ? '0 0 0 3px #fde047, 0 12px 24px rgba(0,0,0,0.45)'
@@ -109,9 +112,7 @@ export const TroopCard: React.FC<TroopCardProps> = ({
         <div
           className="relative flex flex-1 items-center justify-center overflow-hidden rounded-md"
           style={{
-            background: hidden
-              ? 'radial-gradient(circle at 50% 40%, #334155, #0f172a)'
-              : `radial-gradient(circle at 50% 38%, ${faction.color}cc, ${faction.color}33 60%, #0f172a 100%)`
+            background: hidden ? '#1e293b' : `color-mix(in srgb, ${faction.color} 55%, #0f172a)`
           }}
         >
           {/* Faint diagonal pattern so the art area reads as a printed card */}

@@ -65,13 +65,13 @@ export const ArmyScreen: React.FC = () => {
           <span className="font-display flex items-center gap-1 text-xl text-orange-300"><PowerIcon /> {profilePower(profile)} power</span>
         </div>
         <p className="mt-1 text-sm text-slate-400">Tap a card to bring it or leave it behind. Counters are in the guide.</p>
-        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-3 pl-1.5 pt-1.5">
+        <div className="mt-4 grid max-w-3xl grid-cols-4 gap-3 pl-1.5 pt-1.5 sm:gap-5">
           {Array.from({ length: MAX_DECK_SIZE }, (_, i) => {
             const id = profile.deck[i];
             return id ? (
-              <TroopCard key={id} type={id} level={profile.cards[id]} size={isNarrow ? 'xs' : 'sm'} onClick={() => toggleDeckCard(id)} title="Leave this card behind" />
+              <TroopCard key={id} type={id} level={profile.cards[id]} size={isNarrow ? 'xs' : 'md'} fill onClick={() => toggleDeckCard(id)} title="Leave this card behind" />
             ) : (
-              <div key={`empty-${i}`} className="flex items-center justify-center rounded-xl border-2 border-dashed border-slate-600 text-xs font-bold text-slate-500" style={{ width: isNarrow ? 64 : 88, aspectRatio: '5 / 7' }}>
+              <div key={`empty-${i}`} className="flex items-center justify-center rounded-xl border-2 border-dashed border-slate-600 text-sm font-bold text-slate-500" style={{ width: '100%', aspectRatio: '5 / 7' }}>
                 Empty
               </div>
             );
@@ -85,7 +85,7 @@ export const ArmyScreen: React.FC = () => {
       {/* Collection */}
       <section className="mt-6">
         <h2 className="font-display mb-3 text-2xl text-slate-800">Your cards</h2>
-        <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 md:grid-cols-4">
           {owned.map(id => {
             const level = profile.cards[id]!;
             const cost = upgradeCost(id, level);
@@ -96,7 +96,8 @@ export const ArmyScreen: React.FC = () => {
                 <TroopCard
                   type={id}
                   level={level}
-                  size="md"
+                  size="lg"
+                  fill
                   selected={inDeck}
                   onClick={() => toggleDeckCard(id)}
                   title={inDeck ? 'In your battle cards - tap to leave it behind' : 'Tap to bring it into battle'}
@@ -110,18 +111,18 @@ export const ArmyScreen: React.FC = () => {
                   <button
                     onClick={() => handleUpgrade(id)}
                     disabled={profile.coins < cost}
-                    className="flex w-[128px] flex-col items-center rounded-xl bg-emerald-600 px-2 py-1.5 text-white shadow-[0_4px_0_#065f46] transition-transform hover:-translate-y-0.5 hover:bg-emerald-500 active:translate-y-0.5 disabled:bg-slate-600 disabled:shadow-[0_4px_0_#1e293b] disabled:hover:translate-y-0"
+                    className="flex w-full flex-col items-center rounded-xl bg-emerald-600 px-2 py-2 text-white shadow-[0_4px_0_#065f46] transition-transform hover:-translate-y-0.5 hover:bg-emerald-500 active:translate-y-0.5 disabled:bg-slate-600 disabled:shadow-[0_4px_0_#1e293b] disabled:hover:translate-y-0"
                     title={`Upgrade to level ${level + 1}`}
                   >
-                    <span className="font-display flex items-center gap-1 text-sm"><UpgradeIcon color="currentColor" /> Lv{level + 1} · <CoinIcon />{cost}</span>
-                    <span className="flex gap-2 text-[11px] font-bold opacity-90">
+                    <span className="font-display flex items-center gap-1 text-base"><UpgradeIcon color="currentColor" /> Lv{level + 1} · <CoinIcon />{cost}</span>
+                    <span className="flex gap-2 text-sm font-bold opacity-90">
                       {gains.attack > 0 && <span className="flex items-center gap-0.5"><AttackIcon />+{gains.attack}</span>}
                       {gains.health > 0 && <span className="flex items-center gap-0.5"><HealthIcon />+{gains.health}</span>}
                       <span className="flex items-center gap-0.5"><PowerIcon />+{gains.power}</span>
                     </span>
                   </button>
                 ) : (
-                  <span className="font-display rounded-xl bg-amber-500 px-3 py-1.5 text-sm text-slate-900">Max level</span>
+                  <span className="font-display w-full rounded-xl bg-amber-500 px-3 py-2 text-center text-base text-slate-900">Max level</span>
                 )}
               </div>
             );
@@ -160,20 +161,20 @@ export const ArmyScreen: React.FC = () => {
         <section className="mt-8">
           <h2 className="font-display mb-1 text-2xl text-slate-800">Recruit new cards</h2>
           <p className="mb-3 text-sm font-semibold text-slate-700">More cards unlock as you advance.</p>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 md:grid-cols-4">
             {forSale.map(id => {
               const price = cardPrice(id);
               return (
                 <div key={id} className="flex flex-col items-center gap-2">
-                  <TroopCard type={id} size="md" />
+                  <TroopCard type={id} size="lg" fill />
                   <button
                     onClick={() => handleBuy(id)}
                     disabled={profile.coins < price}
-                    className="font-display flex w-[128px] items-center justify-center gap-1 rounded-xl bg-amber-500 px-2 py-2 text-slate-900 shadow-[0_4px_0_#b45309] transition-transform hover:-translate-y-0.5 hover:bg-amber-400 active:translate-y-0.5 disabled:bg-slate-600 disabled:text-slate-300 disabled:shadow-[0_4px_0_#1e293b] disabled:hover:translate-y-0"
+                    className="font-display flex w-full items-center justify-center gap-1 rounded-xl bg-amber-500 px-2 py-2.5 text-lg text-slate-900 shadow-[0_4px_0_#b45309] transition-transform hover:-translate-y-0.5 hover:bg-amber-400 active:translate-y-0.5 disabled:bg-slate-600 disabled:text-slate-300 disabled:shadow-[0_4px_0_#1e293b] disabled:hover:translate-y-0"
                   >
                     Buy <CoinIcon color={profile.coins < price ? '#cbd5e1' : '#0f172a'} />{price}
                   </button>
-                  <span className="text-[11px] font-bold" style={{ color: RARITY_STYLES[TROOPS[id].rarity].text }}>{RARITY_STYLES[TROOPS[id].rarity].label}</span>
+                  <span className="text-sm font-bold" style={{ color: RARITY_STYLES[TROOPS[id].rarity].text }}>{RARITY_STYLES[TROOPS[id].rarity].label}</span>
                 </div>
               );
             })}
@@ -181,8 +182,8 @@ export const ArmyScreen: React.FC = () => {
               const unlockAt = CARD_UNLOCK_LEVEL[id] ?? 0;
               return (
                 <div key={id} className="flex flex-col items-center gap-2">
-                  <TroopCard type={id} size="md" locked />
-                  <span className="flex w-[128px] items-center justify-center gap-1 rounded-xl bg-slate-800/80 px-2 py-2 text-center text-[11px] font-bold text-slate-300">
+                  <TroopCard type={id} size="lg" fill locked />
+                  <span className="flex w-full items-center justify-center gap-1 rounded-xl bg-slate-800/80 px-2 py-2.5 text-center text-sm font-bold text-slate-300">
                     <LockIcon /> Beat level {unlockAt}
                   </span>
                   <span className="text-center text-xs font-semibold text-slate-700">{getLevel(unlockAt).name} ({unlockAt - cleared > 0 ? `${unlockAt - cleared} to go` : 'ready'})</span>

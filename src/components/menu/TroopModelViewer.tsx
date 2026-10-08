@@ -6,6 +6,7 @@ import { TroopId, cardStats } from '@/lib/game/troops';
 import { UnitMesh } from '../game/UnitMesh';
 import { HexTile } from '../game/HexTile';
 import { getHexSurfaceHeight } from '../game/utils/boardGeometry';
+import { SKY_COLOR } from '@/components/menu/MenuShell';
 
 const noop = () => {};
 const PEDESTAL = { id: 'viewer', coordinates: { q: 0, r: 0 }, terrain: 'plain' as const };
@@ -34,7 +35,7 @@ export const TroopModelViewer: React.FC<{ type: TroopId; owner: PlayerType }> = 
   const battle = useMemo(() => (attacking ? { key: `viewer-${type}`, target: [0, SURFACE, 1.6] as [number, number, number] } : null), [attacking, type]);
 
   return (
-    <div className="relative h-64 w-full overflow-hidden rounded-xl" style={{ background: 'radial-gradient(circle at 50% 40%, #e0f4ff, #8ccfff)' }}>
+    <div className="relative h-64 w-full overflow-hidden rounded-xl" style={{ background: SKY_COLOR }}>
       <Canvas shadows flat dpr={[1, 1.5]} camera={{ position: [0, 3.2, 4.2], fov: 38 }}>
         <hemisphereLight args={['#ffffff', '#9ccfe8', 1.6]} />
         <directionalLight position={[4, 8, 5]} intensity={1.5} castShadow />

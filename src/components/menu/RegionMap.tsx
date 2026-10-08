@@ -162,7 +162,7 @@ export const RegionMap: React.FC<{
       })}
       {locked && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl"
-          style={{ background: 'radial-gradient(ellipse at 30% 30%, rgba(241,245,249,0.55), transparent 55%), radial-gradient(ellipse at 75% 65%, rgba(241,245,249,0.5), transparent 55%), rgba(226,232,240,0.25)' }}>
+          style={{ background: 'rgba(226,232,240,0.55)' }}>
           {lockedLabel}
         </div>
       )}

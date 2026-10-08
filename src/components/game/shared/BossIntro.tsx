@@ -29,7 +29,7 @@ export const BossIntro: React.FC<BossIntroProps> = ({ boss, level, onDone }) => 
     <button
       type="button"
       onClick={onDone}
-      className="animate-fadeIn fixed inset-0 z-[50] flex cursor-pointer items-center justify-center bg-gradient-to-b from-red-950/90 via-slate-950/85 to-slate-950/90 px-4"
+      className="animate-fadeIn fixed inset-0 z-[50] flex cursor-pointer items-center justify-center bg-red-950/90 px-4"
       aria-label="Continue"
     >
       <div className="moment-pop moment-big flex max-w-md flex-col items-center text-center" style={{ animationDuration: `${INTRO_DURATION}ms` }}>

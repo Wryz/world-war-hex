@@ -42,7 +42,7 @@ export const StatsScreen: React.FC = () => {
 
   const s = profile.stats;
   const winRate = s.battles > 0 ? Math.round(s.wins / s.battles * 100) : 0;
-  const favourites = (Object.entries(s.cardsPlayed) as [TroopId, number][]).sort((a, b) => b[1] - a[1]).slice(0, 5);
+  const favourites = (Object.entries(s.cardsPlayed) as [TroopId, number][]).sort((a, b) => b[1] - a[1]).slice(0, 4);
   const mostPlayed = favourites[0]?.[1] ?? 1;
   const discovered = MOB_IDS.filter(id => (profile.bestiary[id]?.seen ?? 0) > 0).length;
 
@@ -117,17 +117,16 @@ export const StatsScreen: React.FC = () => {
           {favourites.length > 0 && (
             <section className={`${CARD_CLASS} mt-4 p-4`}>
               <h2 className="font-display mb-3 text-2xl">Favourite cards</h2>
-              <div className="flex flex-col gap-2">
+              <div className="grid grid-cols-2 gap-x-5 gap-y-6 pl-1.5 pt-1.5 sm:grid-cols-4">
                 {favourites.map(([id, count]) => (
-                  <div key={id} className="flex items-center gap-3">
-                    <TroopCard type={id} level={profile.cards[id] ?? 1} size="xs" hideLevel />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-bold">{TROOPS[id].name}</div>
-                      <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-slate-700">
+                  <div key={id} className="flex flex-col gap-2">
+                    <TroopCard type={id} level={profile.cards[id] ?? 1} size="lg" fill hideLevel />
+                    <div className="flex items-center gap-2">
+                      <div className="h-2.5 min-w-0 flex-1 overflow-hidden rounded-full bg-slate-700">
                         <div className="h-full rounded-full bg-sky-400" style={{ width: `${count / mostPlayed * 100}%` }} />
                       </div>
+                      <span className="font-display text-lg" title="Times played">{count}</span>
                     </div>
-                    <span className="font-display w-12 text-right text-lg">{count}</span>
                   </div>
                 ))}
               </div>

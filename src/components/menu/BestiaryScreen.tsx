@@ -82,7 +82,7 @@ export const BestiaryScreen: React.FC = () => {
         <div className="min-w-0 flex-1">
           <div className="font-display text-xl">{hydrated ? discovered.length : 0} / {MOB_IDS.length} discovered</div>
           <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-slate-700">
-            <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-amber-400" style={{ width: `${(hydrated ? discovered.length : 0) / MOB_IDS.length * 100}%` }} />
+            <div className="h-full rounded-full bg-emerald-400" style={{ width: `${(hydrated ? discovered.length : 0) / MOB_IDS.length * 100}%` }} />
           </div>
           <p className="mt-2 text-sm leading-relaxed text-slate-400">Meet monsters in battle to add them. Tap one for details.</p>
         </div>
@@ -105,20 +105,21 @@ export const BestiaryScreen: React.FC = () => {
         ))}
       </div>
 
-      <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
+      <div className="mt-6 grid grid-cols-2 gap-x-5 gap-y-7 sm:grid-cols-3 md:grid-cols-4">
         {shown.map(id => {
           const seen = hydrated && (profile.bestiary[id]?.seen ?? 0) > 0;
           return (
             <div key={id} className="flex flex-col items-center gap-2">
               <TroopCard
                 type={id}
-                size="md"
+                size="lg"
+                fill
                 hidden={!seen}
                 hideLevel
                 onClick={seen ? () => setSelected(id) : undefined}
                 title={seen ? TROOPS[id].name : `Undiscovered - roams ${regionOf(TROOPS[id].faction)?.name ?? 'somewhere'}`}
               />
-              <span className="rounded-full bg-slate-900/75 px-2.5 py-0.5 text-center text-xs font-semibold text-slate-200">
+              <span className="rounded-full bg-slate-900/75 px-3 py-1 text-center text-sm font-semibold text-slate-200">
                 {seen ? `${profile.bestiary[id]?.slain ?? 0} slain` : regionOf(TROOPS[id].faction)?.name}
               </span>
             </div>

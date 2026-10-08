@@ -50,6 +50,7 @@ import type { UnitBuff } from './UnitMesh';
 import { describeBonus, getBond } from '@/lib/game/bonds';
 import type { TroopId } from '@/lib/game/troops';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
+import { SKY_COLOR } from '@/components/menu/MenuShell';
 
 // Identity of a unit's buffs, to keep its props stable while they don't change
 const buffKey = (buffs: UnitBuff[]) => buffs.map(buff => `${buff.id}:${buff.value}`).join('|');
@@ -119,8 +120,8 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
 
 
   return (
-    // Bright sky gradient behind the floating battlefield
-    <div className="w-full h-full" style={{ background: 'radial-gradient(ellipse at 50% 40%, #e0f4ff 0%, #b3e1ff 55%, #8ccfff 100%)' }}>
+    // Bright sky behind the floating battlefield
+    <div className="w-full h-full" style={{ background: SKY_COLOR }}>
       {/* Flat (no tone mapping) keeps the low-poly colours bright and true; cap the pixel ratio for smoothness */}
       <Canvas shadows flat dpr={[1, 1.5]}>
         <Suspense fallback={null}>

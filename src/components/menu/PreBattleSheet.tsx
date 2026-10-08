@@ -64,7 +64,7 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
           Auto-pick
         </button>
       </div>
-      <div className="flex flex-wrap gap-x-4 gap-y-6 pl-1.5 pt-3">
+      <div className="grid grid-cols-4 gap-x-3 gap-y-6 pl-1.5 pt-3 sm:gap-x-4">
         {owned.map(id => {
           const inDeck = profile.deck.includes(id);
           const matchup = matchupScore(id, enemies);
@@ -74,7 +74,8 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
               <TroopCard
                 type={id}
                 level={profile.cards[id]}
-                size="sm"
+                size="md"
+                fill
                 selected={inDeck}
                 disabled={!inDeck && isFull}
                 onClick={() => toggleDeckCard(id)}
@@ -124,7 +125,7 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 backdrop-blur-[2px] sm:items-center" onClick={onClose}>
       <div
-        className={`${CARD_CLASS} animate-fadeIn relative max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-b-none p-5 sm:rounded-2xl`}
+        className={`${CARD_CLASS} animate-fadeIn relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-5 sm:rounded-2xl`}
         onClick={event => event.stopPropagation()}
         role="dialog"
         aria-label={`Level ${level.id}: ${level.name}`}
@@ -198,7 +199,7 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
           <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-slate-400">
             <AttackIcon /> {faction.title}
           </div>
-          <div className="flex flex-wrap gap-2.5">
+          <div className="grid grid-cols-4 gap-3 sm:gap-4">
             {enemies.map(id => {
               const guard = level.guards.find(g => g.type === id);
               const seen = (profile.bestiary[id]?.seen ?? 0) > 0;
@@ -206,7 +207,8 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
                 <TroopCard
                   key={id}
                   type={id}
-                  size="sm"
+                  size="md"
+                  fill
                   level={level.enemyTier}
                   stats={guard?.stats ?? roster[id] ?? scaleTroop(TROOPS[id], level.enemyScale)}
                   hidden={!seen && !guard}

@@ -12,7 +12,9 @@ export const PRIMARY_BUTTON =
 export const SECONDARY_BUTTON =
   'font-display rounded-xl bg-slate-700 px-4 py-2 text-slate-100 shadow-[0_4px_0_#020617] transition-transform hover:-translate-y-0.5 hover:bg-slate-600 active:translate-y-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0';
 
-export const SKY_BACKGROUND = 'radial-gradient(ellipse at 65% 35%, #e0f4ff 0%, #b3e1ff 55%, #8ccfff 100%)';
+// The sky behind every screen: one flat colour
+export const SKY_COLOR = '#b3e1ff';
+export const SKY_BACKGROUND = SKY_COLOR;
 
 // The player's coins, army power and stars, shown in every menu
 export const ResourceBadges: React.FC<{ className?: string }> = ({ className = '' }) => {
@@ -48,7 +50,7 @@ interface MenuShellProps {
 // Layout shared by the menu screens: sky background, a header with a back button, and the resources
 export const MenuShell: React.FC<MenuShellProps> = ({ title, icon, backHref = '/', children, actions, wide = false }) => (
   <div className="min-h-screen w-full overflow-x-hidden" style={{ background: SKY_BACKGROUND }}>
-    <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-gradient-to-b from-sky-200/90 to-sky-200/0 px-3 pb-4 pt-3 backdrop-blur-[2px] sm:px-6">
+    <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-sky-200/95 px-3 pb-4 pt-3 backdrop-blur-[2px] sm:px-6">
       <Link
         href={backHref}
         className={`${SECONDARY_BUTTON} flex items-center gap-1 px-3 py-2 text-base`}

@@ -42,33 +42,33 @@ export const CARD_SKINS: CardSkin[] = [
   },
   {
     id: 'parchment', name: 'Old Map', description: 'Inked on weathered parchment from the royal archives.', price: 300,
-    face: 'linear-gradient(170deg, #4a3b24, #1f160b)',
+    face: '#3a2d1a',
     pattern: 'radial-gradient(#f5deb3 1px, transparent 1.6px) 0 0 / 7px 7px', patternOpacity: 0.3, trim: '#d6b77a'
   },
   {
     id: 'frost', name: 'Frostbound', description: 'Cards that never thaw, rimed with Frostpeak ice.', price: 600,
-    face: 'linear-gradient(170deg, #0c4a6e, #082f49)',
+    face: '#0b3d5c',
     pattern: 'radial-gradient(#e0f2fe 1px, transparent 1.6px) 0 0 / 9px 9px', patternOpacity: 0.45, trim: '#7dd3fc'
   },
   {
     id: 'ember', name: 'Emberforged', description: 'Hammered in the fires of the Emberforge.', price: 600,
-    face: 'linear-gradient(170deg, #7c2d12, #1c0a05)',
+    face: '#5a210d',
     pattern: 'repeating-linear-gradient(-60deg, #fb923c 0 1px, transparent 1px 7px)', patternOpacity: 0.4, trim: '#fb923c'
   },
   {
     id: 'obsidian', name: 'Obsidian', description: 'Black glass that hums with a violet glow.', price: 900,
-    face: 'linear-gradient(170deg, #241d38, #09070f)',
+    face: '#1a1528',
     pattern: 'repeating-linear-gradient(90deg, #a855f7 0 1px, transparent 1px 10px)', patternOpacity: 0.35, trim: '#a855f7'
   },
   {
     id: 'royal', name: 'Royal Seal', description: 'Deep blue and gold, fit for the throne room.', price: 1200,
-    face: 'linear-gradient(170deg, #1e3a8a, #0b1440)',
+    face: '#16296a',
     pattern: 'radial-gradient(#fcd34d 1.2px, transparent 1.8px) 0 0 / 10px 10px', patternOpacity: 0.5, trim: '#fcd34d'
   },
   {
     id: 'holo', name: 'Prismatic', description: 'A shimmering foil that catches every colour of the rainbow.', price: 2000,
-    face: 'linear-gradient(135deg, #312e81, #0f172a)',
-    pattern: 'linear-gradient(115deg, #f472b6, #60a5fa, #34d399, #facc15, #f472b6) 0 0 / 300% 300%', patternOpacity: 0.35,
+    face: '#25226a',
+    pattern: 'repeating-linear-gradient(115deg, #f472b6 0 6px, #60a5fa 6px 12px, #34d399 12px 18px, #facc15 18px 24px)', patternOpacity: 0.35,
     trim: '#f0abfc', animated: true
   }
 ];
