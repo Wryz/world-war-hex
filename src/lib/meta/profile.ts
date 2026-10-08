@@ -4,6 +4,7 @@ import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId, isTroopId } from '../game/tro
 import {
   BattleReward,
   CARD_UNLOCK_LEVEL,
+  ELITE_UNLOCK_LEVEL,
   MAX_DECK_SIZE,
   STARTER_CARDS,
   cardPrice,
@@ -255,6 +256,9 @@ export const highestUnlocked = (profile: Profile): number => Math.min(LEVEL_COUN
 
 export const isLevelUnlocked = (profile: Profile, levelId: number) => levelId <= highestUnlocked(profile);
 
+// Whether cards may train past level 10
+export const eliteUnlocked = (profile: Profile) => highestCleared(profile) >= ELITE_UNLOCK_LEVEL;
+
 export const totalStars = (profile: Profile) =>
   Object.values(profile.levels).reduce((sum, record) => sum + record.stars, 0);
 
@@ -289,7 +293,7 @@ export const upgradeCard = (id: TroopId): boolean => {
   const profile = getProfile();
   const level = profile.cards[id];
   if (level === undefined) return false;
-  const cost = upgradeCost(id, level);
+  const cost = upgradeCost(id, level, eliteUnlocked(profile));
   if (cost === null || profile.coins < cost) return false;
   setProfile({
     ...profile,

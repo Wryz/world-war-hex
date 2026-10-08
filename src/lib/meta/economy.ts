@@ -1,4 +1,4 @@
-import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, Rarity, TroopId, cardPower, getTroop } from '../game/troops';
+import { BASE_MAX_CARD_LEVEL, MAX_CARD_LEVEL, PLAYER_CARD_IDS, Rarity, TroopId, cardPower, getTroop } from '../game/troops';
 
 // The campaign economy: coins earned from battles, card prices and upgrade costs, and the
 // progression model that sets each level's recommended power.
@@ -55,9 +55,21 @@ const UPGRADE_GROWTH = 1.5;
 
 export const cardPrice = (id: TroopId) => CARD_PRICES[getTroop(id).rarity];
 
-// Coins to raise a card from `level` to `level + 1`, or null at max level
-export const upgradeCost = (id: TroopId, level: number): number | null =>
-  level >= MAX_CARD_LEVEL ? null : Math.round(UPGRADE_BASE[getTroop(id).rarity] * UPGRADE_GROWTH ** (level - 1) / 5) * 5;
+// Elite card levels (past level 10) open once this campaign level is won, and cost less extra per
+// level than the first ten, so the last regions still have upgrades within reach
+export const ELITE_UNLOCK_LEVEL = 100;
+const ELITE_GROWTH = 1.25;
+
+// Coins to raise a card from `level` to `level + 1`, or null at its max level (level 10 until the
+// elite levels are open)
+export const upgradeCost = (id: TroopId, level: number, eliteUnlocked = false): number | null => {
+  if (level >= MAX_CARD_LEVEL || (level >= BASE_MAX_CARD_LEVEL && !eliteUnlocked)) return null;
+  const base = UPGRADE_BASE[getTroop(id).rarity];
+  const cost = level < BASE_MAX_CARD_LEVEL
+    ? base * UPGRADE_GROWTH ** (level - 1)
+    : base * UPGRADE_GROWTH ** (BASE_MAX_CARD_LEVEL - 2) * ELITE_GROWTH ** (level - BASE_MAX_CARD_LEVEL + 1);
+  return Math.round(cost / 5) * 5;
+};
 
 // Campaign level that must be cleared before a card appears in the shop (starter cards are owned)
 export const CARD_UNLOCK_LEVEL: Partial<Record<TroopId, number>> = {
@@ -143,7 +155,7 @@ const buildProgression = (lastLevel: number): ProgressionSnapshot[] => {
             consider(cardPrice(id), { ...levels, [id]: 1 }, () => { levels[id] = 1; });
           }
         } else {
-          const cost = upgradeCost(id, owned);
+          const cost = upgradeCost(id, owned, level > ELITE_UNLOCK_LEVEL);
           if (cost !== null) consider(cost, { ...levels, [id]: owned + 1 }, () => { levels[id] = owned + 1; });
         }
       }

@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
-import { PLAYER_CARD_IDS, TROOPS, TroopId, cardPower, cardStats } from '@/lib/game/troops';
-import { CARD_UNLOCK_LEVEL, MAX_DECK_SIZE, cardPrice, upgradeCost } from '@/lib/meta/economy';
+import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TROOPS, TroopId, cardPower, cardStats } from '@/lib/game/troops';
+import { CARD_UNLOCK_LEVEL, ELITE_UNLOCK_LEVEL, MAX_DECK_SIZE, cardPrice, upgradeCost } from '@/lib/meta/economy';
 import {
-  buyCard, highestCleared, isCardAvailable, profilePower, toggleDeckCard, upgradeCard, useHasHydrated, useProfile
+  buyCard, eliteUnlocked, highestCleared, isCardAvailable, profilePower, toggleDeckCard, upgradeCard, useHasHydrated, useProfile
 } from '@/lib/meta/profile';
 import { playStinger, useMusic } from '@/lib/audio/music';
 import { getLevel } from '@/lib/campaign/levels';
@@ -25,6 +25,8 @@ const upgradeGains = (id: TroopId, level: number) => {
 // Your cards: choose the four to bring into battle, buy new cards as the campaign unlocks them, and upgrade them with coins
 export const ArmyScreen: React.FC = () => {
   const profile = useProfile();
+  // Cards may train past level 10 once level 100 is won
+  const eliteOpen = eliteUnlocked(profile);
   const hydrated = useHasHydrated();
   const [flash, setFlash] = useState<{ id: TroopId; text: string } | null>(null);
   const isNarrow = useIsNarrow();
@@ -88,7 +90,7 @@ export const ArmyScreen: React.FC = () => {
         <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 md:grid-cols-4">
           {owned.map(id => {
             const level = profile.cards[id]!;
-            const cost = upgradeCost(id, level);
+            const cost = upgradeCost(id, level, eliteOpen);
             const inDeck = profile.deck.includes(id);
             const gains = cost !== null ? upgradeGains(id, level) : null;
             return (
@@ -122,7 +124,13 @@ export const ArmyScreen: React.FC = () => {
                     </span>
                   </button>
                 ) : (
-                  <span className="font-display w-full rounded-xl bg-amber-500 px-3 py-2 text-center text-base text-slate-900">Max level</span>
+                  level < MAX_CARD_LEVEL ? (
+                    <span className="flex w-full items-center justify-center gap-1 rounded-xl bg-slate-800/80 px-2 py-2 text-center text-sm font-bold text-slate-300" title="Elite levels 11-15 open once you win level 100">
+                      <LockIcon /> Elite levels: beat level {ELITE_UNLOCK_LEVEL}
+                    </span>
+                  ) : (
+                    <span className="font-display w-full rounded-xl bg-amber-500 px-3 py-2 text-center text-base text-slate-900">Max level</span>
+                  )
                 )}
               </div>
             );

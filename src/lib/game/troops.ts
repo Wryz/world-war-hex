@@ -501,7 +501,9 @@ export const weakAgainst = (troopClass: TroopClass): TroopClass[] =>
 
 // --- Levels and power ----------------------------------------------------------------------
 
-export const MAX_CARD_LEVEL = 10;
+// Cards train up to level 10, and on to elite levels 11-15 once the first hundred battles are won
+export const BASE_MAX_CARD_LEVEL = 10;
+export const MAX_CARD_LEVEL = 15;
 // Each card level adds this share of the base attack and health
 export const LEVEL_STAT_STEP = 0.1;
 
