@@ -104,7 +104,6 @@ export const StatsScreen: React.FC = () => {
               <Stat label="Troops lost" value={s.unitsLost} />
               <Stat label="Cards played" value={s.unitsDeployed} />
               <Stat label="Bosses defeated" value={s.bossesDefeated} accent="#f87171" />
-              <Stat label="Castles stormed" value={s.castlesStormed} />
               <Stat label="Castles razed" value={s.castlesDestroyed} />
               <Stat label="Camps captured" value={s.campsCaptured} />
               <Stat label="Siege damage" value={s.siegeDamage} />

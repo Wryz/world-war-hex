@@ -21,7 +21,7 @@ const LOADING_TIPS = [
   'Water and mountains are impassable - look for the passes.',
   'Only troops that attack the enemy castle damage it - get next to it, or bring archers within range.',
   'Your troops strike any enemy that attacks within their reach - and it can\'t hit back.',
-  'At half health a castle\'s walls break - then a single unit can storm it.',
+  'A castle only falls when its health runs out - keep troops on it until it does.',
   'Archers hit from 2 hexes away, where melee units can\'t strike back.',
   'Destroying an enemy unit pays a bounty of half its cost.',
   'Rogues strike from the shadows: enemies can\'t hit back at them.',
