@@ -182,6 +182,8 @@ export const StatsScreen: React.FC = () => {
         <ul className="flex flex-col gap-1">
           <li><b>Music:</b> &ldquo;Medieval: Exploration&rdquo;, &ldquo;Harvest Season&rdquo;, &ldquo;Battle&rdquo;, &ldquo;Victory Theme&rdquo; and &ldquo;Defeat Theme&rdquo; by RandomMind; &ldquo;Epic Boss Battle&rdquo; by Juhani Junkala (CC0, OpenGameArt)</li>
           <li><b>Characters:</b> KayKit Adventurers and Skeletons by Kay Lousberg (CC0); horse from the three.js examples (MIT)</li>
+          <li><b>Campaign map:</b> Map Pack by Kenney (kenney.nl, CC0)</li>
+          <li><b>Fonts:</b> DynaPuff and Fredoka (SIL Open Font License)</li>
           <li><b>Icons:</b> Game Icons (game-icons.net, CC BY 3.0) and Lucide</li>
           <li><b>Sound effects:</b> synthesised with ZzFX</li>
         </ul>

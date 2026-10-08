@@ -6,14 +6,15 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 
 - **Cards.** Your troops are playing cards. You start with four and bring four into every battle, picked before each fight (the pre-battle screen marks the cards that counter that enemy, and Auto-pick chooses a strong set). In battle, tap a card, then a glowing hex next to your castle (or a camp you hold) to deploy it.
 - **Bonds.** Twelve pairs of cards fight better together - Swordsmen and Pikemen form a Shield Wall (+15% health each), Archers and Longbowmen a Volley (+15% attack each), War Clerics give Berserkers Regenerates, and so on. Bring both cards of a bond into a battle and its bonuses apply to every troop you recruit from them; the pre-battle screen and the Army screen show which bonds you have and which are one card away.
-- **Campaign.** 100 battles across 10 regions - Greenvale Meadows, Goblin Woods, Howling Hills, Mirefen Marsh, Sunscorch Desert, Frostpeak Pass, Gravemoor, Ironfang Badlands, Emberforge Wastes and Dragonspire Peaks. Each region has its own map theme, terrain and enemy faction, an elite battle (a champion guards the castle) and a boss battle. Win to unlock the next level, and earn up to three stars per level.
+- **Campaign.** 100 battles across 10 regions - Greenvale Meadows, Goblin Woods, Howling Hills, Mirefen Marsh, Sunscorch Desert, Frostpeak Pass, Gravemoor, Ironfang Badlands, Emberforge Wastes and Dragonspire Peaks. The campaign map draws each region as its own island - grass and farmland, pine woods, desert dunes, snowfields, gloomy moors and scorched badlands - with the road winding past its ten levels. Each region has its own battle theme, terrain and enemy faction, an elite battle (a champion guards the castle) and a boss battle. Win to unlock the next level, and earn up to three stars per level.
 - **50 monsters.** Ten factions of five - bandits, goblins, beasts, swamp folk, the sand court, the frostborn, the undead, orcs, the infernal legion and the dragonkin - each with four troops the enemy recruits and a boss.
 - **Bestiary.** Every monster you meet is added to the Bestiary on the main menu, with its lore, abilities, kill count and a 3D model to inspect.
 - **Power.** Each card has a power rating from its stats and abilities, and your army's power is the sum of the four cards you bring. Every campaign level shows its recommended power, so you know when to upgrade first.
 - **Coins.** Battles pay coins - more for wins and stars, a little for a loss - which buy new cards (the shop gains cards as you advance) and upgrade cards up to level 10.
 - **Style.** Coins also buy cosmetics: seven card frames (Old Map, Frostbound, Emberforged, Obsidian, Royal Seal, a shimmering Prismatic foil...) and six castle styles (Desert Fort, Ice Citadel, Elven Spire, Shadow Keep, Golden Palace). They only change how your army looks, never how it fights.
-- **Stats and saves.** Lifetime stats, settings and your progress live in the browser; download a save file to back it up or move it to another computer. The browser is asked to keep the save safe from automatic clean-up.
-- **Offline.** After one visit online, the game keeps working without a connection: a service worker caches the pages, scripts, models and sounds (and each music track once it has played).
+- **Settings.** The gear on the main menu opens sound (separate sliders for the menu, map, battle and boss music, the jingles and sound effects), gameplay options and the full guide to the rules.
+- **Stats and saves.** Lifetime stats and your progress live in the browser; download a save file to back it up or move it to another computer. The browser is asked to keep the save safe from automatic clean-up.
+- **Offline.** After one visit online, the game keeps working without a connection: a service worker caches the pages, scripts, models, map art and sounds (and each music track once it has played).
 - **Short battles.** Small maps, castles placed automatically, 30-second turns, a round limit (the stronger castle wins when time runs out), all of a turn's battles fought at once and a 2x speed button keep a battle to a few minutes.
 - **Big moments.** First blood, double and triple kills, rampages, camp captures, crushing blows, last stands, the final round and boss kills get callouts, screen shake, slow motion, confetti and coins flying into your treasury. Castles shudder when hit and crumble when they fall, and fallen troops play out their deaths.
 - **Music.** Recorded medieval menu, map, battle and boss themes with victory and defeat jingles (CC0 tracks by RandomMind and Juhani Junkala), plus synthesised jingles for stars, unlocks and bosses. Drop your own MP3s into `public/music/` to replace any of them (see its README).
@@ -98,16 +99,16 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 ### Screens (`src/app`)
 
 - `page.tsx`: Main menu (`components/game/intro/IntroScreen`, with a 3D island of troops and monsters)
-- `campaign`: The campaign map and the pre-battle sheet: recommended power and picking your four cards (`components/menu/CampaignScreen`, `PreBattleSheet`; suggestions in `lib/meta/loadout.ts`)
+- `campaign`: The campaign map (each region an island of map tiles, laid out in `lib/campaign/mapArt.ts` and drawn by `components/menu/RegionMap`) and the pre-battle sheet: recommended power and picking your four cards (`components/menu/CampaignScreen`, `PreBattleSheet`; suggestions in `lib/meta/loadout.ts`)
 - `army`: Your cards, the card shop and upgrades (`components/menu/ArmyScreen`)
 - `bestiary`: The bestiary and its 3D model viewer (`components/menu/BestiaryScreen`, `TroopModelViewer`)
-- `stats`: Stats, settings and save files (`components/menu/StatsScreen`)
+- `stats`: Stats and save files (`components/menu/StatsScreen`); the main menu's settings and guide are in `components/menu/SettingsPanel`
 - `play`: A battle (`/play?level=7`, or `/play?mode=quick&difficulty=hard`)
 
 ### Battle (`src/components/game`)
 
 - `GameController`: Runs a battle and lays out its HUD, records the result and shows the results screen
-- `GameBoard`: The 3D board and camera (framed so the board sits just above the hand; drag to orbit, scroll to zoom), routes, battle markers, deaths and damage numbers
+- `GameBoard`: The 3D board and camera (framed so the board sits just above the hand; drag to orbit, scroll to zoom; selecting something far away swings it round to the nearest of four sides), routes, battle markers, deaths and damage numbers
 - `UnitMesh`: An animated troop - KayKit character or procedural creature - walking, fighting blow by blow (see `utils/battleTiming`) and falling
 - `Castle`, `Camp`, `HexTile`, `BoardDecorations`, `MovePath`: The rest of the board
 - `cards/TroopCard`: A troop as a playing card, used everywhere
@@ -125,7 +126,7 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 
 ## Analytics
 
-The game can send anonymous gameplay events to [PostHog](https://posthog.com) - battles started, won, lost and abandoned (with level, deck, bonds and duration), cards bought and upgraded, cosmetics bought, tutorial completion and save exports - to show where players get stuck in the campaign. Nothing is sent unless `NEXT_PUBLIC_POSTHOG_KEY` is set at build time (and optionally `NEXT_PUBLIC_POSTHOG_HOST`, default `https://us.i.posthog.com`). Session recording and autocapture are off, Do Not Track is respected, and players can switch it off in Stats & Save. Events are defined in `src/lib/analytics.ts`.
+The game can send anonymous gameplay events to [PostHog](https://posthog.com) - battles started, won, lost and abandoned (with level, deck, bonds and duration), cards bought and upgraded, cosmetics bought, tutorial completion and save exports - to show where players get stuck in the campaign. Nothing is sent unless `NEXT_PUBLIC_POSTHOG_KEY` is set at build time (and optionally `NEXT_PUBLIC_POSTHOG_HOST`, default `https://us.i.posthog.com`). Session recording and autocapture are off, Do Not Track is respected, and players can switch it off in Settings. Events are defined in `src/lib/analytics.ts`.
 
 ## Credits
 
@@ -133,6 +134,7 @@ The game can send anonymous gameplay events to [PostHog](https://posthog.com) - 
 - Knights' horse: from the [three.js examples](https://github.com/mrdoob/three.js) (MIT), model by [mirada](https://mirada.com/) for ROME
 - Monsters without a character model are procedural low-poly creatures built in code
 - Music: "Medieval: Exploration", "Medieval: Harvest Season", "Medieval: Battle", "Medieval: Victory Theme" and "Medieval: Defeat Theme" by [RandomMind](https://opengameart.org/users/randommind), and "Epic Boss Battle" by [Juhani Junkala](https://opengameart.org/content/boss-battle-music) (all [CC0](http://creativecommons.org/publicdomain/zero/1.0/), from OpenGameArt); the remaining jingles are synthesised in the browser
+- Campaign map: [Map Pack](https://kenney.nl/assets/map-pack) by [Kenney](https://kenney.nl) ([CC0](http://creativecommons.org/publicdomain/zero/1.0/))
 - Battle sounds are synthesised with [ZzFX](https://github.com/KilledByAPixel/ZzFX) (MIT)
 - Icons from [Game Icons](https://game-icons.net) and [Lucide](https://lucide.dev) via [react-icons](https://react-icons.github.io/react-icons/)
 
@@ -143,4 +145,4 @@ The game can send anonymous gameplay events to [PostHog](https://posthog.com) - 
 3. Run the development server: `npm run dev`
 4. Open [http://localhost:3000](http://localhost:3000) in your browser
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to load [Nunito](https://fonts.google.com/specimen/Nunito) for body text and [DynaPuff](https://fonts.google.com/specimen/DynaPuff) for titles and buttons.
+This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to load [DynaPuff](https://fonts.google.com/specimen/DynaPuff) for titles and buttons; body text is [Fredoka](https://fonts.google.com/specimen/Fredoka), self-hosted from [Fontsource](https://fontsource.org/fonts/fredoka) (both under the SIL Open Font License).

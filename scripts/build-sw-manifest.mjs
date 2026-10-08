@@ -1,5 +1,5 @@
-// Runs after `next build`: lists every built script, style and font, plus the 3D models and sound
-// effects, in public/sw-manifest.js for the service worker to cache on install, so the whole game
+// Runs after `next build`: lists every built script, style and font, plus the 3D models, sound
+// effects and campaign map art, in public/sw-manifest.js for the service worker to cache on install, so the whole game
 // works offline after one visit. Music is left out (it's large) and is cached as each track plays.
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
@@ -17,7 +17,7 @@ const publicUrl = path => `/${relative(join(root, 'public'), path).split(sep).jo
 const nextStatic = walk(join(root, '.next', 'static'))
   .filter(path => /\.(js|css|woff2?)$/.test(path))
   .map(path => `/_next/static/${relative(join(root, '.next', 'static'), path).split(sep).join('/')}`);
-const publicAssets = ['models', 'sounds'].flatMap(dir => walk(join(root, 'public', dir)).map(publicUrl));
+const publicAssets = ['models', 'sounds', 'map'].flatMap(dir => walk(join(root, 'public', dir)).map(publicUrl));
 
 const version = readFileSync(join(root, '.next', 'BUILD_ID'), 'utf8').trim();
 const files = [...nextStatic, ...publicAssets];

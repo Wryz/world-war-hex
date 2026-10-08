@@ -1,6 +1,6 @@
 // Anonymous gameplay analytics (PostHog), used to see where players get stuck in the campaign and
 // which cards and cosmetics they pick. Only game events are sent - no session recordings, no
-// autocaptured clicks and no personal details - and players can switch it off in Stats & Save.
+// autocaptured clicks and no personal details - and players can switch it off in Settings.
 // It stays off unless NEXT_PUBLIC_POSTHOG_KEY is set at build time. PostHog's browser library is loaded
 // from its CDN only then, so the game has no analytics code to bundle or install otherwise.
 
@@ -97,7 +97,7 @@ export const trackEvent = (event: AnalyticsEvent, properties: Properties = {}) =
   void load();
 };
 
-// The player's choice in Stats & Save
+// The player's choice in Settings
 export const setAnalyticsEnabled = (enabled: boolean) => {
   try {
     if (enabled) localStorage.removeItem(OPT_OUT_KEY);
