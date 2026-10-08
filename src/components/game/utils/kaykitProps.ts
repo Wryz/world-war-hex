@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { loadGltf } from './unitModelCache';
 
 // Scenery, castles and camps from KayKit's Medieval Hexagon Pack, Halloween Bits and Dungeon
@@ -21,6 +22,23 @@ export interface PropModel {
 
 export type PropLibrary = Map<string, PropModel>;
 
+// The packs store positions and normals as small quantized integers, scaled back up by each model's
+// node. Baking that scale into a quantized attribute would clip it, so copy them out as floats first.
+const toFloatGeometry = (source: THREE.BufferGeometry): THREE.BufferGeometry => {
+  const geometry = source.clone();
+  for (const name of Object.keys(geometry.attributes)) {
+    const attribute = geometry.getAttribute(name);
+    if (!(attribute instanceof THREE.InterleavedBufferAttribute) && attribute.array instanceof Float32Array && !attribute.normalized) continue;
+    const values = new Float32Array(attribute.count * attribute.itemSize);
+    const read = [attribute.getX, attribute.getY, attribute.getZ, attribute.getW];
+    for (let i = 0; i < attribute.count; i++) {
+      for (let k = 0; k < attribute.itemSize; k++) values[i * attribute.itemSize + k] = read[k].call(attribute, i);
+    }
+    geometry.setAttribute(name, new THREE.BufferAttribute(values, attribute.itemSize));
+  }
+  return geometry;
+};
+
 let library: PropLibrary | null = null;
 let loading: Promise<PropLibrary> | null = null;
 
@@ -29,20 +47,29 @@ export const loadPropLibrary = (): Promise<PropLibrary> => {
     const props: PropLibrary = new Map();
     for (const pack of packs) {
       pack.scene.updateMatrixWorld(true);
-      pack.scene.traverse(object => {
-        const mesh = object as THREE.Mesh;
-        if (!mesh.isMesh) return;
-        // Each model is one mesh, named after it (or sitting under a node that is)
-        const name = mesh.name || mesh.parent?.name;
-        if (!name || props.has(name)) return;
-        const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
-        const material = mesh.material as THREE.MeshStandardMaterial;
-        material.roughness = 1;
-        material.metalness = 0;
+      // Each top-level node is one model, named after it; some (a windmill and its sails, a chest and
+      // its lid) are made of several meshes, merged here into one
+      for (const model of pack.scene.children) {
+        if (!model.name || props.has(model.name)) continue;
+        const parts: THREE.BufferGeometry[] = [];
+        let material: THREE.MeshStandardMaterial | null = null;
+        model.traverse(object => {
+          const mesh = object as THREE.Mesh;
+          if (!mesh.isMesh) return;
+          const geometry = toFloatGeometry(mesh.geometry).applyMatrix4(mesh.matrixWorld);
+          parts.push(geometry.index ? geometry.toNonIndexed() : geometry);
+          material ??= mesh.material as THREE.MeshStandardMaterial;
+        });
+        if (parts.length === 0 || !material) continue;
+        const geometry = parts.length === 1 ? parts[0] : mergeGeometries(parts);
+        if (!geometry) continue;
+        const shared = material as THREE.MeshStandardMaterial;
+        shared.roughness = 1;
+        shared.metalness = 0;
         // Lift KayKit's palette to the board's brighter colours
-        material.color.setScalar(PALETTE_LIFT);
-        props.set(name, { geometry, material });
-      });
+        shared.color.setScalar(PALETTE_LIFT);
+        props.set(model.name, { geometry, material: shared });
+      }
     }
     library = props;
     return props;

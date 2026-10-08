@@ -1333,12 +1333,14 @@ const BoardScene: React.FC<BoardSceneProps> = ({
                     <span className="flex items-center bg-slate-100 px-1.5 font-bold tabular-nums text-slate-800">{effect.value}</span>
                   )}
                   <span
-                    className="font-display flex items-center px-2 py-0.5"
+                    className="font-display flex items-center gap-1 px-2 py-0.5"
                     style={{
                       background: helpsYou === null ? '#fbbf24' : helpsYou ? '#34d399' : '#fb7185',
                       color: '#0f172a'
                     }}
                   >
+                    {/* A shape as well as a colour: up for you, down for the enemy */}
+                    <span aria-hidden className="text-[0.625rem]">{helpsYou === null ? '!' : helpsYou ? '▲' : '▼'}</span>
                     {effect.label}
                   </span>
                 </span>

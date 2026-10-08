@@ -148,7 +148,9 @@ const BuffRow: React.FC<{ buffs: UnitBuff[]; open: boolean; setOpen: (update: (o
             <div key={buff.id} className="flex items-center gap-1 whitespace-nowrap">
               <BuffIcon buff={buff} />
               <b className="text-slate-100">{buff.label}</b>
-              <span className={buff.good ? 'text-emerald-300' : 'text-rose-300'}>{buff.value}</span>
+              <span className={buff.good ? 'text-emerald-300' : 'text-rose-300'}>
+                <span aria-hidden>{buff.good ? '▲ ' : '▼ '}</span>{buff.value}
+              </span>
             </div>
           ))}
         </div>
