@@ -1,7 +1,7 @@
 // Renders each troop's 3D model on its own, with a transparent background (WebP), from the dev page
-// /dev/card-art, into art/card-renders/: the references scripts/generate-card-art.ts paints the card
-// pictures from. A troop without a painting yet (in art/card-ai/) gets its render as its card
-// picture in public/cards/ too. Run it against the dev server after changing a troop's model:
+// /dev/card-art, into art/card-renders/ (the references for painted card art). A troop without a
+// painting yet (in art/card-ai/) gets its render as its card picture in public/cards/ too. Run it
+// against the dev server after changing a troop's model:
 //
 //   npm run dev                                   (in one terminal)
 //   node scripts/render-card-art.mjs [troop ...]   (in another; all troops when none are named)
