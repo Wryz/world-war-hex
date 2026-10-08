@@ -28,8 +28,8 @@ export const strikeOffset = (id: string) => {
 };
 
 // Seconds after a battle starts at which each of a unit's blows lands on its target
-// (striking every `interval` seconds; the troop's own attack speed unless told otherwise)
-export const getImpactTimes = (unit: Unit, interval = getAttackInterval(unit.type)): number[] => {
+export const getImpactTimes = (unit: Unit): number[] => {
+  const interval = getAttackInterval(unit.type);
   const impactDelay = unit.abilities.includes('rangedAttack')
     ? interval * RANGED_RELEASE_POINT + PROJECTILE_FLIGHT_TIME
     : interval * MELEE_IMPACT_POINT;
@@ -40,20 +40,6 @@ export const getImpactTimes = (unit: Unit, interval = getAttackInterval(unit.typ
     times.push(time);
   }
   return times;
-};
-
-// Troops attacking a castle land their damage over at least this many blows (when they deal that
-// much), so its health visibly counts down
-const SIEGE_BLOWS = 5;
-const FASTEST_INTERVAL = 0.3;
-
-// The attack interval a castle attacker strikes at: its own, or faster if that is too slow to land
-// its damage over a few blows within the battle
-export const getSiegeInterval = (unit: Unit, damage: number): number => {
-  const wanted = Math.min(SIEGE_BLOWS, Math.max(1, Math.round(damage)));
-  let interval = getAttackInterval(unit.type);
-  while (interval > FASTEST_INTERVAL && getImpactTimes(unit, interval).length < wanted) interval *= 0.9;
-  return Math.max(FASTEST_INTERVAL, interval);
 };
 
 // When a unit's health bar runs out during a battle (seconds after it starts), given the times the

@@ -41,7 +41,7 @@ import { playSound } from './utils/SoundPlayer';
 import { playBattleSound } from './utils/battleSounds';
 import { getCastleStyle } from '@/lib/meta/cosmetics';
 import { useProfile } from '@/lib/meta/profile';
-import { getBattleStartDelay, getDeathTime, getImpactTimes, getImpactTimesUntil, getSiegeInterval } from './utils/battleTiming';
+import { getBattleStartDelay, getDeathTime, getImpactTimes, getImpactTimesUntil } from './utils/battleTiming';
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale, getGameSpeed } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
@@ -562,12 +562,10 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
 // The blows each troop attacking a castle lands on it in the battle being fought: one per point of
 // damage it deals (as many as it can strike in the battle). One struck down by the castle's guards
 // lands none, as it does no damage. Also the total, as the castle will take it.
-const getSiegeBlows = (state: GameState): { blows: Map<string, number[]>; intervals: Map<string, number>; damage: number; fallsAt: number | null } => {
+const getSiegeBlows = (state: GameState): { blows: Map<string, number[]>; damage: number; fallsAt: number | null } => {
   const blows = new Map<string, number[]>();
-  // Slow hitters (bosses) swing faster at a castle, so their damage lands over several blows
-  const intervals = new Map<string, number>();
   const siege = state.currentPhase === 'combat' ? state.siege : undefined;
-  if (!siege) return { blows, intervals, damage: 0, fallsAt: null };
+  if (!siege) return { blows, damage: 0, fallsAt: null };
   const doomed = new Set(state.combats
     .filter(combat => combat.intercept && !combat.resolved)
     .flatMap(combat => getCombatPreview(state, combat).defenders.filter(entry => entry.destroyed).map(entry => entry.unit.id)));
@@ -581,9 +579,7 @@ const getSiegeBlows = (state: GameState): { blows: Map<string, number[]>; interv
     }
     const damage = getSiegeDamage(unit);
     total += damage;
-    const interval = getSiegeInterval(unit, damage);
-    intervals.set(id, interval);
-    const times = getImpactTimes(unit, interval).slice(0, Math.max(1, Math.round(damage)));
+    const times = getImpactTimes(unit).slice(0, Math.max(1, Math.round(damage)));
     blows.set(id, times);
     for (const time of times) all.push({ id, time, damage: damage / times.length });
   }
@@ -601,7 +597,7 @@ const getSiegeBlows = (state: GameState): { blows: Map<string, number[]>; interv
   if (fallsAt !== null) {
     for (const [id, times] of blows) blows.set(id, times.filter(time => time <= fallsAt!));
   }
-  return { blows, intervals, damage: Math.min(health, Math.round(total)), fallsAt };
+  return { blows, damage: Math.min(health, Math.round(total)), fallsAt };
 };
 
 interface BoardSceneProps extends GameBoardProps {
@@ -962,7 +958,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             startDelay: getBattleStartDelay(),
             incoming: struck?.incoming,
             strikes: siegeBlows.blows.get(id)?.length ?? 0,
-            interval: siegeBlows.intervals.get(id),
             diesAt: struck?.diesAt ?? null,
             // Once the castle's health runs out, its attackers stand down
             targetDiesAt: siegeBlows.fallsAt

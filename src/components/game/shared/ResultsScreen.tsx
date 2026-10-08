@@ -3,7 +3,7 @@ import { SideStats, WinReason } from '@/types/game';
 import type { LevelDef } from '@/lib/campaign/levels';
 import { starThresholds } from '@/lib/campaign/levels';
 import type { BattleRecordResult } from '@/lib/meta/profile';
-import { TROOPS, TroopId } from '@/lib/game/troops';
+import { TROOPS } from '@/lib/game/troops';
 import { playStinger } from '@/lib/audio/music';
 import { SPEED_POINTS_PER_ROUND, StarScore, TIME_SCORE_WEIGHTS } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
@@ -117,9 +117,6 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
     if (record.newCards.length > 0) timeouts.push(setTimeout(() => playStinger('unlock'), rewardDelay + 900));
     return () => timeouts.forEach(clearTimeout);
   }, [won, stars, record, rewardDelay]);
-
-  // The card played most this battle
-  const mvp = (Object.entries(stats.played) as [TroopId, number][]).sort((a, b) => b[1] - a[1])[0]?.[0];
 
   const share = async () => {
     const starText = '★'.repeat(stars) + '☆'.repeat(3 - stars);
@@ -237,23 +234,13 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           ))}
         </div>
 
-        {/* MVP, discoveries and unlocks */}
-        {(mvp || record.discovered.length > 0) && (
-          <div className="mt-3 flex flex-wrap items-start gap-4">
-            {mvp && (
-              <div>
-                <div className="mb-1.5 text-xs font-bold uppercase tracking-widest text-slate-400">Most played</div>
-                <TroopCard type={mvp} size="md" hideLevel />
-              </div>
-            )}
-            {record.discovered.length > 0 && (
-              <div className="min-w-0 flex-1">
-                <div className="mb-1.5 text-xs font-bold uppercase tracking-widest text-emerald-300">New in the Bestiary!</div>
-                <div className="flex flex-wrap gap-2.5">
-                  {record.discovered.slice(0, 4).map(id => <TroopCard key={id} type={id} size="md" hideLevel />)}
-                </div>
-              </div>
-            )}
+        {/* Discoveries and unlocks */}
+        {record.discovered.length > 0 && (
+          <div className="mt-3">
+            <div className="mb-1.5 text-xs font-bold uppercase tracking-widest text-emerald-300">New in the Bestiary!</div>
+            <div className="flex flex-wrap gap-2.5">
+              {record.discovered.slice(0, 4).map(id => <TroopCard key={id} type={id} size="md" hideLevel />)}
+            </div>
           </div>
         )}
         {record.newCards.length > 0 && (
