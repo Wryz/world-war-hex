@@ -30,8 +30,13 @@ import {
   HIGH_GROUND_ELEVATION,
   HEIGHT_DAMAGE_PER_UNIT,
   BERSERK_ATTACK_MULTIPLIER,
-  TERRAIN_BONUS_ATTACK_MULTIPLIER
+  TERRAIN_BONUS_ATTACK_MULTIPLIER,
+  getSituationalBonuses,
+  getProtections,
+  getEffects,
+  isSmoked
 } from '@/lib/game/gameState';
+import { ROMAN, unitSignature } from '@/lib/game/signatures';
 import { getHexDistance } from '@/lib/game/hexUtils';
 import { estimateDamage, getThreatLevels, getThreats } from '@/lib/game/threats';
 import { HEX_SIZE, axialToWorld, getHexHeight, getHexSurfaceHeight } from './utils/boardGeometry';
@@ -112,6 +117,8 @@ interface GameBoardProps {
   unitIds?: Set<string>;
   // Tint the hexes enemies can strike next turn, and label damage for the selected troop
   showThreats?: boolean;
+  // A tactic card is being aimed: the highlighted hexes are its targets
+  targetingTactic?: boolean;
 }
 
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
@@ -690,6 +697,35 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   if (unit.abilities.includes('berserk') && unit.lifespan * 2 <= unit.maxLifespan) {
     buffs.push({ id: 'berserk', icon: 'attack', label: 'Berserk', value: `+${pct(BERSERK_ATTACK_MULTIPLIER - 1)} attack`, good: true });
   }
+  // Its signature ability (awake), and the signature and tactic bonuses at work right now
+  const signature = unitSignature(unit);
+  const situational = getSituationalBonuses(state, unit);
+  if (signature) {
+    const active = situational.some(bonus => bonus.label === signature.def.name);
+    buffs.push({
+      id: 'signature', icon: 'signature', label: `${signature.def.name} ${ROMAN[signature.rank]}`,
+      value: `${active ? 'Active: ' : ''}${signature.def.describe(signature.rank)}`, good: true
+    });
+  }
+  for (const bonus of situational) {
+    if (bonus.label !== signature?.def.name) {
+      buffs.push({ id: `bonus-${bonus.label}`, icon: 'attack', label: bonus.label, value: `+${pct(bonus.multiplier - 1)} attack`, good: true });
+    }
+  }
+  for (const protection of getProtections(state, unit)) {
+    buffs.push({ id: `guard-${protection.label}`, icon: 'shield', label: protection.label, value: `-${pct(protection.reduction)} damage taken`, good: true });
+  }
+  const march = getEffects(state, 'march').find(effect => effect.unitId === unit.id);
+  if (march) buffs.push({ id: 'march', icon: 'attack', label: 'Forced March', value: `+${march.value} movement this turn`, good: true });
+  if (isSmoked(state, unit.position)) {
+    buffs.push({ id: 'smoke', icon: 'shield', label: 'Smoke Screen', value: "Can't be shot at from 2 or more hexes", good: true });
+  }
+  if (hex.heightOffset) {
+    buffs.push({
+      id: 'dug', terrain: hex.terrain, label: hex.heightOffset > 0 ? 'Raised ground' : 'Sunken ground',
+      value: `${hex.heightOffset > 0 ? '+' : ''}${hex.heightOffset.toFixed(2)} height`, good: hex.heightOffset > 0
+    });
+  }
   if (unit.owner === 'player') {
     for (const bondId of state.bonds ?? []) {
       const bond = getBond(bondId);
@@ -720,7 +756,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   assetsLoaded,
   selectedUnitTypeForPurchase = null,
   unitIds,
-  showThreats = false
+  showThreats = false,
+  targetingTactic = false
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const unitIdsRef = useRef(unitIds);
@@ -742,17 +779,24 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   // Which hexes are highlighted and how
   const validMoveKeys = useMemo(() => new Set(validMoves.map(coordKey)), [validMoves]);
+  // During setup: the castle sites on offer (or, without a list, anywhere a castle may go)
   const validBaseKeys = useMemo(
-    () => isSetupPhase ? new Set(getValidBaseLocations(gameState).map(h => coordKey(h.coordinates))) : new Set<string>(),
-    // Valid base locations only depend on the map during setup
+    () => !isSetupPhase ? new Set<string>()
+      : new Set((gameState.castleChoices ?? getValidBaseLocations(gameState).map(h => h.coordinates)).map(coordKey)),
+    // Castle sites only depend on the map during setup
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [isSetupPhase, hexGrid]
+    [isSetupPhase, hexGrid, gameState.castleChoices]
+  );
+  // Hexes under a Smoke Screen
+  const smokedKeys = useMemo(
+    () => new Set((gameState.effects ?? []).filter(effect => effect.kind === 'smoke').flatMap(effect => effect.hexes ?? [])),
+    [gameState.effects]
   );
 
   const getHighlight = (key: string): HexHighlight => {
     if (isSetupPhase) return validBaseKeys.has(key) ? 'base' : 'none';
     if (!validMoveKeys.has(key)) return 'none';
-    return selectedUnitTypeForPurchase ? 'deploy' : 'move';
+    return targetingTactic ? 'tactic' : selectedUnitTypeForPurchase ? 'deploy' : 'move';
   };
 
   const selectedKey = selectedHex ? coordKey(selectedHex.coordinates) : null;
@@ -1290,6 +1334,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             onHexHoverEnd={handleHexHoverEnd}
             fogged={!!visibleKeys && !visibleKeys.has(key)}
             threat={threatLevels?.get(key) ?? 0}
+            smoked={smokedKeys.has(key)}
             decor={decor}
           />
         );

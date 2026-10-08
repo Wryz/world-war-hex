@@ -3,7 +3,9 @@ import {
   CAMP_INCOME, FLANK_BONUS, HEIGHT_DAMAGE_PER_UNIT, MAX_HEIGHT_BONUS, FREE_UPKEEP_UNITS, MAX_FLANKERS, SIGHT_RANGE, STORM_BREACH_RATIO,
   SPEED_POINTS_PER_ROUND, TERRAIN_EFFECTS, TIME_SCORE_WEIGHTS, TURN_INCOME, UPKEEP_PER_UNIT
 } from '@/lib/game/gameState';
-import { TROOP_CLASSES, TroopClass, strongAgainst } from '@/lib/game/troops';
+import { PLAYER_CARD_IDS, TROOPS, TROOP_CLASSES, TroopClass, strongAgainst } from '@/lib/game/troops';
+import { SIGNATURE_UNLOCK_LEVEL, getSignature } from '@/lib/game/signatures';
+import { FIRST_TACTIC_ROUND, TACTICS, TACTIC_HAND_LIMIT, TACTIC_IDS, TACTIC_LOADOUT_SIZE } from '@/lib/game/tactics';
 import { FOG_FROM_LEVEL } from '@/lib/campaign/levels';
 import { MUSIC_CHANNELS, setChannelVolume, setMusicVolume, useMusicMix, useMusicVolume } from '@/lib/audio/music';
 import { isAnalyticsAvailable, isAnalyticsEnabled, setAnalyticsEnabled } from '@/lib/analytics';
@@ -13,7 +15,7 @@ import { TERRAIN_ORDER, TERRAIN_SHORT_EFFECTS } from '../game/hud/terrainInfo';
 import { CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
 import {
   AttackIcon, BondIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
-  SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon
+  SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon, TacticBackIcon, TacticIcon, TACTIC_COLORS
 } from '../game/icons';
 import type { Difficulty } from '../game/storage/GameStorage';
 import { UI_SIZES, setUiSize, useUiSize } from '@/lib/uiSize';
@@ -252,6 +254,43 @@ const GuideTab: React.FC = () => (
       <p>
         You bring four cards into each battle. Some pairs of cards form bonds: bring both and their troops fight better.
         The Army screen lists every bond.
+      </p>
+    </GuideSection>
+    <GuideSection title="Signature abilities" icon={<SignatureIcon />}>
+      <p>
+        From level {SIGNATURE_UNLOCK_LEVEL} every card has a signature ability that works only when its condition is met, and it grows stronger every two levels (rank I at level 2 up to VII):
+      </p>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {PLAYER_CARD_IDS.map(id => {
+          const signature = getSignature(id);
+          return signature && (
+            <li key={id} className="rounded-lg bg-slate-800/80 px-3 py-2">
+              <b>{TROOPS[id].name}: {signature.name}</b>
+              <span className="block text-slate-400">{signature.describe(1)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </GuideSection>
+    <GuideSection title="Tactic cards" icon={<TacticBackIcon />}>
+      <p>
+        Bring {TACTIC_LOADOUT_SIZE} tactic cards into battle (pick them before the fight). From round {FIRST_TACTIC_ROUND}, every second round you draw one of them at random -
+        you can hold {TACTIC_HAND_LIMIT} - and play it on your turn: tap it, and tap a pink hex if it needs a target. The enemy draws its own and plays them too.
+        Tactic cards level up in the Army; more unlock as you advance.
+      </p>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {TACTIC_IDS.map(id => (
+          <li key={id} className="flex items-start gap-2 rounded-lg bg-slate-800/80 px-3 py-2">
+            <TacticIcon id={id} className="mt-0.5 shrink-0 text-base" color={TACTIC_COLORS[id]} />
+            <span><b>{TACTICS[id].name}</b><span className="block text-slate-400">{TACTICS[id].describe(1)}</span></span>
+          </li>
+        ))}
+      </ul>
+    </GuideSection>
+    <GuideSection title="Your castle" icon={<CrownIcon />}>
+      <p>
+        Before the first turn, pick one of a few sites on your edge of the map for your castle. The enemy builds across the map from you,
+        and the camps go up halfway between - so where you build shapes the whole battle.
       </p>
     </GuideSection>
     <GuideSection title="Terrain" icon={<CampIcon />}>

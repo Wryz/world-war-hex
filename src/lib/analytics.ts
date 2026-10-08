@@ -22,6 +22,10 @@ export type AnalyticsEvent =
   | 'cosmetic_bought'
   | 'save_exported'
   | 'save_imported'
+  | 'tactic_bought'
+  | 'tactic_upgraded'
+  | 'tactic_played'
+  | 'castle_chosen'
   | 'ad_reward_offered'
   | 'ad_reward_watched'
   | 'ad_interstitial_shown';

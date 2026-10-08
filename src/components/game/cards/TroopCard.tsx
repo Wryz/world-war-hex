@@ -1,7 +1,8 @@
 import React from 'react';
 import { TroopStats, UnitType } from '@/types/game';
 import { ABILITIES, FACTIONS, Rarity, TROOPS, TROOP_CLASSES, cardStats } from '@/lib/game/troops';
-import { AbilityIcon, AttackIcon, GoldIcon, HealthIcon, LockIcon, MoveIcon, UnitIcon } from '../icons';
+import { AbilityIcon, AttackIcon, GoldIcon, HealthIcon, LockIcon, MoveIcon, SignatureIcon, UnitIcon } from '../icons';
+import { ROMAN, SIGNATURE_UNLOCK_LEVEL, getSignature, signatureRank } from '@/lib/game/signatures';
 import { CardSkinId, getCardSkin } from '@/lib/meta/cosmetics';
 import { useProfile } from '@/lib/meta/profile';
 
@@ -82,6 +83,12 @@ export const TroopCard: React.FC<TroopCardProps> = ({
   const dims = SIZES[size];
   const isInteractive = !!onClick && !disabled;
   const Tag = onClick ? 'button' : 'div';
+  // The card's signature ability (Kingdom cards), awake from level 2
+  const signature = getSignature(type);
+  const rank = signatureRank(level);
+  const signatureText = signature && (rank > 0
+    ? `${signature.name} ${ROMAN[rank]}: ${signature.describe(rank)}`
+    : `${signature.name} (wakes at level ${SIGNATURE_UNLOCK_LEVEL}): ${signature.describe(1)}`);
 
   return (
     <Tag
@@ -158,11 +165,22 @@ export const TroopCard: React.FC<TroopCardProps> = ({
                 <AbilityIcon ability={ability} className={size === 'lg' ? 'text-base' : 'text-[0.6875rem]'} />
               </span>
             ))}
+            {signature && size !== 'lg' && (
+              <span title={signatureText} className={rank > 0 ? '' : 'opacity-40 grayscale'}>
+                <SignatureIcon className="text-[0.6875rem]" />
+              </span>
+            )}
           </div>
         )}
         {size === 'lg' && !hidden && (
           <div className="mt-1 text-center text-[0.6875rem] leading-tight text-slate-400">
             <span className="font-bold text-slate-300">{TROOP_CLASSES[troop.troopClass].name}</span> · {troop.role}
+          </div>
+        )}
+        {size === 'lg' && !hidden && signature && (
+          <div className={`mt-1 rounded-md px-1.5 py-1 text-center text-[0.6875rem] leading-tight ${rank > 0 ? 'bg-fuchsia-500/15 text-fuchsia-100' : 'bg-slate-800 text-slate-400'}`} title={signatureText}>
+            <span className="font-bold"><SignatureIcon /> {signature.name}{rank > 0 ? ` ${ROMAN[rank]}` : ''}</span>
+            <span className="block">{rank > 0 ? signature.describe(rank) : `Wakes at level ${SIGNATURE_UNLOCK_LEVEL}`}</span>
           </div>
         )}
 

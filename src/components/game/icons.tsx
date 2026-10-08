@@ -13,7 +13,9 @@ import {
   GiFountain, GiLava, GiIceCube, GiBrokenWall, GiVillage, GiTombstone, GiCrownCoin, GiSwordsPower, GiPadlock, GiPokerHand,
   GiTreasureMap, GiFastForwardButton, GiUpgrade, GiTrophy, GiPodium, GiOpenBook, GiTargetArrows, GiHeartPlus,
   GiAngelWings, GiRegeneration, GiChestArmor, GiSiegeRam, GiAngryEyes, GiRaiseSkeleton, GiWingfoot, GiFireRing,
-  GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog
+  GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog,
+  GiRallyTheTroops, GiFirstAidKit, GiFlamingArrow, GiRunningShoe, GiShieldReflect, GiFireBomb, GiSmokeBomb, GiSpade,
+  GiCloakDagger, GiPitchfork, GiEarthCrack, GiSparkles, GiCardRandom
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
@@ -21,6 +23,7 @@ import {
   LuSettings, LuBookOpen, LuGamepad2
 } from 'react-icons/lu';
 import { Ability, TerrainType, UnitType } from '@/types/game';
+import type { TacticId } from '@/lib/game/tactics';
 
 // SVG icons used throughout the game: Game Icons (game-icons.net) and Lucide, via react-icons
 
@@ -202,3 +205,46 @@ export const ShareIcon = icon(LuShare2);
 export const CloseIcon = icon(LuX);
 export const TrashIcon = icon(LuTrash2);
 export const PlayIcon = icon(LuPlay);
+
+// Tactic cards, each with its own picture and colour
+export const TACTIC_ICON_COMPONENTS: Record<TacticId, IconType> = {
+  rally: GiRallyTheTroops,
+  mend: GiFirstAidKit,
+  volley: GiFlamingArrow,
+  forcedMarch: GiRunningShoe,
+  bulwark: GiShieldReflect,
+  sabotage: GiFireBomb,
+  smoke: GiSmokeBomb,
+  earthworks: GiSpade,
+  shadowstep: GiCloakDagger,
+  callToArms: GiPitchfork,
+  sinkhole: GiEarthCrack
+};
+
+export const TACTIC_COLORS: Record<TacticId, string> = {
+  rally: '#f97316',
+  mend: '#22c55e',
+  volley: '#ef4444',
+  forcedMarch: '#0ea5e9',
+  bulwark: '#64748b',
+  sabotage: '#eab308',
+  smoke: '#94a3b8',
+  earthworks: '#a16207',
+  shadowstep: '#7c3aed',
+  callToArms: '#16a34a',
+  sinkhole: '#78350f'
+};
+
+const WRAPPED_TACTIC_ICONS = Object.fromEntries(
+  Object.entries(TACTIC_ICON_COMPONENTS).map(([id, Component]) => [id, icon(Component)])
+) as Record<TacticId, React.FC<IconProps>>;
+
+export const TacticIcon: React.FC<IconProps & { id: TacticId }> = ({ id, ...props }) => {
+  const Icon = WRAPPED_TACTIC_ICONS[id];
+  return <Icon {...props} />;
+};
+
+// A card's signature ability
+export const SignatureIcon = icon(GiSparkles, '#f0abfc');
+// A tactic card drawn face down (the enemy's hand)
+export const TacticBackIcon = icon(GiCardRandom, '#e2e8f0');

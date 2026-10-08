@@ -1,5 +1,6 @@
 import type { TroopId } from '@/lib/game/troops';
 import type { BondId } from '@/lib/game/bonds';
+import type { TacticId } from '@/lib/game/tactics';
 
 export type TerrainType =
   | 'plain'
@@ -39,6 +40,9 @@ export interface Hex {
   owner?: PlayerType;
   unit?: Unit;
   baseHealth?: number; // Health of base if this is a base hex
+  // How far the ground here has been raised (positive) or dug out (negative) during the battle,
+  // on top of its natural height (see lib/game/hexHeight)
+  heightOffset?: number;
 }
 
 export interface Unit {
@@ -63,6 +67,8 @@ export interface Unit {
   revealed?: boolean;
   // Stopped short this turn by a hidden enemy it ran into (an ambush)
   ambushed?: boolean;
+  // Hexes it walked (or flew) this turn
+  movedHexes?: number;
 }
 
 // Every troop - the player's cards and the campaign's monsters - is identified by its troop id
@@ -162,6 +168,52 @@ export interface GameState {
   battleStats?: Record<PlayerType, SideStats>;
   // Campaign level being played, if any
   levelId?: number;
+  // Before the first turn: the sites the player may build their castle on, and the enemy's starting
+  // guards, posted once the castles stand
+  castleChoices?: HexCoordinates[];
+  pendingGuards?: { type: UnitType; stats: TroopStats; isBoss?: boolean }[];
+  // Tactic cards: the three each side brought and the ones it holds now
+  tactics?: Record<PlayerType, SideTactics>;
+  // Tactic cards still working on the battle (until the end of the turn, or the owner's next turn)
+  effects?: BattleEffect[];
+  // Seeds the random tactic card draws
+  tacticSeed?: number;
+  // The tactic card played most recently, for the callout announcing it (serial counts plays)
+  lastTactic?: { side: PlayerType; id: TacticId; level: number; at?: HexCoordinates; serial: number };
+}
+
+export interface TacticCard {
+  id: TacticId;
+  level: number;
+}
+
+export interface HeldTactic extends TacticCard {
+  // Tells two copies of the same card apart
+  uid: string;
+}
+
+export interface SideTactics {
+  // The cards drawn from, at their levels
+  loadout: TacticCard[];
+  hand: HeldTactic[];
+  // Cards drawn so far (numbers each new card)
+  drawn: number;
+}
+
+export type BattleEffectKind = 'rally' | 'march' | 'bulwark' | 'smoke' | 'shadowstep';
+
+export interface BattleEffect {
+  kind: BattleEffectKind;
+  // The side that played it
+  side: PlayerType;
+  // The troop it works on, if it works on one
+  unitId?: string;
+  // The hexes it covers, as "q,r" keys
+  hexes?: string[];
+  // Its strength: a share (0.2 for 20%) or a number of hexes or points
+  value: number;
+  // 'turn': until the end of this turn; 'nextTurn': until its side's next turn begins
+  lasts: 'turn' | 'nextTurn';
 }
 
 export interface Sighting {

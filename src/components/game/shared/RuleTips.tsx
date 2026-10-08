@@ -2,17 +2,20 @@ import React, { useEffect, useState } from 'react';
 import { GameState } from '@/types/game';
 import { FLANK_BONUS, HEIGHT_DAMAGE_PER_UNIT, getCombatEffects } from '@/lib/game/gameState';
 import { ArrowIcon } from '../icons';
+import { unitSignature } from '@/lib/game/signatures';
 
 // One-off tips the first time a rule comes up in a battle (flanking, height, village cover,
 // following a troop out of its hex). Each shows once per browser, then never again.
 
-type TipId = 'flank' | 'height' | 'village' | 'follow';
+type TipId = 'flank' | 'height' | 'village' | 'follow' | 'tactics' | 'signature';
 
 const TIPS: Record<TipId, string> = {
   flank: `Flanked! Two or more troops attacking the same enemy each hit +${Math.round(FLANK_BONUS * 100)}% harder (up to two extra).`,
   height: `Height counts: every 1.0 of height (the number on each hex) above your target adds +${Math.round(HEIGHT_DAMAGE_PER_UNIT * 100)}% damage. Uphill takes it away.`,
   village: 'Villages: troops in one take 20% less damage, and the houses block arrows from lower ground.',
-  follow: 'Tip: a hex one of your troops is leaving counts as free - send another troop onto it. Undo (Ctrl+Z) takes back an order.'
+  follow: 'Tip: a hex one of your troops is leaving counts as free - send another troop onto it. Undo (Ctrl+Z) takes back an order.',
+  tactics: 'Tactic card! From round 2, every second round you draw one of the three you brought (hold up to 3). Tap it to play - some need a target. The enemy draws them too.',
+  signature: 'Signature abilities: from level 2 every card has one, and it grows every two levels. Tap the sparkle under a troop to see what it does and when it works.'
 };
 
 const STORAGE_KEY = 'wwhTipsSeen';
@@ -44,6 +47,8 @@ const tipsFor = (state: GameState): TipId[] => {
   }
   if (state.currentPhase === 'planning' && state.activePlayer === 'player' &&
     state.pendingMoves.length > 0 && state.players.player.units.length >= 2) tips.push('follow');
+  if (state.currentPhase === 'planning' && state.activePlayer === 'player' && (state.tactics?.player.hand.length ?? 0) > 0) tips.push('tactics');
+  if (state.players.player.units.some(unit => unitSignature(unit))) tips.push('signature');
   return tips;
 };
 

@@ -12,8 +12,12 @@ import {
   levelLossReward,
   levelWinReward,
   quickBattleReward,
-  upgradeCost
+  upgradeCost,
+  TACTIC_UNLOCK_LEVEL,
+  tacticPrice,
+  tacticUpgradeCost
 } from './economy';
+import { MAX_TACTIC_LEVEL, STARTER_TACTICS, TACTIC_IDS, TACTIC_LOADOUT_SIZE, TacticId, isTacticId } from '../game/tactics';
 import { LEVEL_COUNT } from '../campaign/levels';
 import {
   CARD_SKINS, CASTLE_STYLES, CardSkinId, CastleStyleId, DEFAULT_CARD_SKIN, DEFAULT_CASTLE_STYLE, isCardSkinId, isCastleStyleId
@@ -84,6 +88,9 @@ export interface Profile {
   tutorialDone: boolean;
   // Card frames and castle styles owned, and the ones in use
   cosmetics: ProfileCosmetics;
+  // Tactic cards owned and their levels, and the three brought into battle
+  tactics: Partial<Record<TacticId, number>>;
+  tacticLoadout: TacticId[];
   createdAt: string;
   updatedAt: string;
 }
@@ -107,6 +114,8 @@ export const createProfile = (): Profile => {
     stats: emptyStats(),
     tutorialDone: false,
     cosmetics: { cardSkins: [DEFAULT_CARD_SKIN], castleStyles: [DEFAULT_CASTLE_STYLE], cardSkin: DEFAULT_CARD_SKIN, castleStyle: DEFAULT_CASTLE_STYLE },
+    tactics: Object.fromEntries(STARTER_TACTICS.map(id => [id, 1])),
+    tacticLoadout: [...STARTER_TACTICS],
     createdAt: now,
     updatedAt: now
   };
@@ -186,6 +195,19 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
     if (isCastleStyleId(raw.cosmetics.castleStyle) && cosmetics.castleStyles.includes(raw.cosmetics.castleStyle)) cosmetics.castleStyle = raw.cosmetics.castleStyle;
   }
 
+  // Tactic cards came later: older saves get the starter cards
+  const tactics: Profile['tactics'] = {};
+  if (isRecord(raw.tactics)) {
+    for (const [id, level] of Object.entries(raw.tactics)) {
+      if (isTacticId(id)) tactics[id] = Math.min(MAX_TACTIC_LEVEL, Math.max(1, toCount(level)));
+    }
+  }
+  for (const id of STARTER_TACTICS) tactics[id] ??= 1;
+  const tacticLoadout = (Array.isArray(raw.tacticLoadout) ? raw.tacticLoadout : [])
+    .filter((id): id is TacticId => isTacticId(id) && tactics[id] !== undefined)
+    .filter((id, index, all) => all.indexOf(id) === index)
+    .slice(0, TACTIC_LOADOUT_SIZE);
+
   return {
     ...base,
     coins: toCount(raw.coins),
@@ -196,6 +218,8 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
     stats,
     tutorialDone: raw.tutorialDone === true,
     cosmetics,
+    tactics,
+    tacticLoadout: tacticLoadout.length > 0 ? tacticLoadout : STARTER_TACTICS.filter(id => tactics[id] !== undefined),
     createdAt: typeof raw.createdAt === 'string' ? raw.createdAt : base.createdAt,
     updatedAt: typeof raw.updatedAt === 'string' ? raw.updatedAt : base.updatedAt
   };
@@ -327,6 +351,62 @@ export const setDeck = (deck: TroopId[]): boolean => {
   setProfile({ ...profile, deck: next });
   return true;
 };
+
+// --- Tactic cards --------------------------------------------------------------------------
+
+export const isTacticAvailable = (profile: Profile, id: TacticId) => {
+  const unlockAt = TACTIC_UNLOCK_LEVEL[id];
+  return unlockAt !== undefined && highestCleared(profile) >= unlockAt;
+};
+
+export const buyTactic = (id: TacticId): boolean => {
+  const profile = getProfile();
+  if (profile.tactics[id] !== undefined || !isTacticAvailable(profile, id)) return false;
+  const price = tacticPrice(id);
+  if (profile.coins < price) return false;
+  setProfile({
+    ...profile,
+    coins: profile.coins - price,
+    tactics: { ...profile.tactics, [id]: 1 },
+    tacticLoadout: profile.tacticLoadout.length < TACTIC_LOADOUT_SIZE ? [...profile.tacticLoadout, id] : profile.tacticLoadout,
+    stats: { ...profile.stats, coinsSpent: profile.stats.coinsSpent + price }
+  });
+  trackEvent('tactic_bought', { tactic: id, price, highest_cleared: highestCleared(profile) });
+  return true;
+};
+
+export const upgradeTactic = (id: TacticId): boolean => {
+  const profile = getProfile();
+  const level = profile.tactics[id];
+  if (level === undefined) return false;
+  const cost = tacticUpgradeCost(level);
+  if (cost === null || profile.coins < cost) return false;
+  setProfile({
+    ...profile,
+    coins: profile.coins - cost,
+    tactics: { ...profile.tactics, [id]: level + 1 },
+    stats: { ...profile.stats, coinsSpent: profile.stats.coinsSpent + cost }
+  });
+  trackEvent('tactic_upgraded', { tactic: id, level: level + 1, cost });
+  return true;
+};
+
+// Bring a tactic card into battle, or leave it behind (at least one stays)
+export const toggleTacticLoadout = (id: TacticId): boolean => {
+  const profile = getProfile();
+  if (profile.tactics[id] === undefined) return false;
+  if (profile.tacticLoadout.includes(id)) {
+    if (profile.tacticLoadout.length <= 1) return false;
+    setProfile({ ...profile, tacticLoadout: profile.tacticLoadout.filter(card => card !== id) });
+    return true;
+  }
+  if (profile.tacticLoadout.length >= TACTIC_LOADOUT_SIZE) return false;
+  setProfile({ ...profile, tacticLoadout: [...profile.tacticLoadout, id] });
+  return true;
+};
+
+// Owned tactic cards in the order they are listed
+export const ownedTactics = (profile: Profile): TacticId[] => TACTIC_IDS.filter(id => profile.tactics[id] !== undefined);
 
 // --- Cosmetics -----------------------------------------------------------------------------
 

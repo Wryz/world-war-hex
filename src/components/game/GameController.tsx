@@ -30,7 +30,9 @@ import { battleTroopTypes } from '@/lib/campaign/battleSetup';
 import {
   BattleRecordResult, completeTutorial, getProfile, profilePower, recordBattle
 } from '@/lib/meta/profile';
-import { setMusicIntensity, useMusic } from '@/lib/audio/music';
+import { playStinger, setMusicIntensity, useMusic } from '@/lib/audio/music';
+import { TACTICS } from '@/lib/game/tactics';
+import { getTacticHand } from '@/lib/game/battleTactics';
 
 interface GameControllerProps {
   battle: BattleConfig;
@@ -84,7 +86,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     handleCancelSelection,
     handleUndo,
     canUndo,
-    notice
+    notice,
+    selectedTactic,
+    handleTacticSelect
   } = useGameHandlers({ battle, resume: shouldContinueGame, isReady });
 
   useMusic(level?.isBoss ? 'boss' : 'battle');
@@ -262,8 +266,40 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  // Tactic cards: announce each one played, and each new one drawn into the player's hand
+  const lastTactic = gameState.lastTactic;
+  useEffect(() => {
+    if (!lastTactic || !isReady) return;
+    const tactic = TACTICS[lastTactic.id];
+    emitMoment({
+      title: lastTactic.side === 'player' ? tactic.name : `Enemy: ${tactic.name}`,
+      subtitle: tactic.describe(lastTactic.level),
+      tone: lastTactic.side === 'player' ? 'purple' : 'red'
+    });
+    // Announced once per card played
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lastTactic?.serial]);
+  const playerTactics = getTacticHand(gameState, 'player');
+  const drawnCount = gameState.tactics?.player.drawn ?? 0;
+  const drawnRef = useRef(drawnCount);
+  useEffect(() => {
+    if (drawnCount > drawnRef.current && isReady) {
+      const card = playerTactics[playerTactics.length - 1];
+      if (card) {
+        setToast({ id: Date.now(), text: `New tactic card: ${TACTICS[card.id].name}` });
+        playStinger('unlock');
+      }
+    }
+    drawnRef.current = drawnCount;
+    // Only a new draw announces itself
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawnCount]);
+
   // Short instruction while the player is in the middle of an action
-  const hint = selectedUnitTypeForPurchase
+  const aimedTactic = selectedTactic ? playerTactics.find(card => card.uid === selectedTactic) : undefined;
+  const hint = aimedTactic
+    ? `Tap a pink hex to play ${TACTICS[aimedTactic.id].name} · tap the card again to put it back`
+    : selectedUnitTypeForPurchase
     ? `Tap a glowing hex to deploy ${getUnitTypeName(selectedUnitTypeForPurchase)} · Esc to cancel`
     : selectedUnit?.owner === 'player' && isPlayerPlanning
       ? validMoves.length > 0
@@ -277,6 +313,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         gameState={viewState}
         unitIds={unitIds}
         showThreats={showThreats && isPlayerPlanning}
+        targetingTactic={!!selectedTactic}
         selectedHex={selectedHex ?? undefined}
         selectedUnit={selectedUnit}
         validMoves={validMoves}
@@ -321,7 +358,22 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           onEndTurn={handleEndTurn}
           canUndo={canUndo}
           onUndo={handleUndo}
+          tactics={playerTactics}
+          selectedTactic={selectedTactic}
+          onTacticSelect={handleTacticSelect}
         />
+      )}
+
+      {/* Before the first turn: choose the castle's site */}
+      {currentPhase === 'setup' && isReady && gameState.castleChoices && (
+        <div className="fixed inset-x-3 top-4 z-20 flex justify-center pointer-events-none">
+          <div className="max-w-md rounded-2xl bg-slate-900/90 px-5 py-3 text-center text-slate-100 shadow-xl ring-1 ring-emerald-300/50">
+            <div className="font-display text-xl text-emerald-300">Choose your castle&apos;s site</div>
+            <p className="mt-1 text-sm text-slate-300">
+              Tap one of the glowing hexes on your edge of the map. Look for high ground, cover and gold mines nearby - the enemy builds across the map from you.
+            </p>
+          </div>
+        </div>
       )}
 
       {currentPhase === 'combat' && <CombatResolver gameState={viewState} />}
