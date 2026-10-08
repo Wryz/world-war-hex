@@ -1529,7 +1529,7 @@ export const getHeightMultiplier = (heightDifference: number): number => {
   return 1 + capped / 100;
 };
 
-// How tall the hex at a position stands right now, earthworks and digging included
+// How tall the hex at a position stands right now, digging included
 export const getHeightOfHex = (state: GameState, at: HexCoordinates): number =>
   getHexHeightOf(findHexByCoordinates(state.hexGrid, at) ?? { coordinates: at, terrain: 'plain' });
 
