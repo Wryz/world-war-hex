@@ -110,16 +110,15 @@ body {
 
 /* A battle's special effects (sneak attack, flanking...) popping up above it as the fight begins */
 @keyframes calloutPop {
-  0% { opacity: 0; transform: translateY(8px) scale(0.6); }
-  12% { opacity: 1; transform: translateY(0) scale(1.1); }
-  22% { transform: scale(1); }
-  85% { opacity: 1; }
-  100% { opacity: 0; transform: translateY(-8px); }
+  0% { opacity: 0; transform: translateY(12px) scale(0.85); }
+  18% { opacity: 1; transform: translateY(0) scale(1); }
+  72% { opacity: 1; transform: translateY(-2px) scale(1); }
+  100% { opacity: 0; transform: translateY(-16px) scale(0.96); }
 }
 
 .battle-callout {
   opacity: 0;
-  animation: calloutPop 2.6s ease-out both;
+  animation: calloutPop 2.6s cubic-bezier(0.33, 1, 0.68, 1) both;
 }
 
 /* Confetti falling and spinning */

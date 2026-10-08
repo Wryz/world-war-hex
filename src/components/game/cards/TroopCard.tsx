@@ -8,7 +8,7 @@ import { useProfile } from '@/lib/meta/profile';
 // A troop as a playing card: cost gem, level badge, art, name banner, stats and abilities.
 // Used for the hand in battle, the army and shop, and the bestiary.
 
-export type CardSize = 'xs' | 'sm' | 'md' | 'lg';
+export type CardSize = 'xs' | 'xm' | 'sm' | 'md' | 'lg';
 
 export const RARITY_STYLES: Record<Rarity, { frame: string; label: string; text: string }> = {
   common: { frame: 'linear-gradient(160deg, #e2e8f0, #64748b)', label: 'Common', text: '#cbd5e1' },
@@ -20,6 +20,8 @@ export const RARITY_STYLES: Record<Rarity, { frame: string; label: string; text:
 
 const SIZES: Record<CardSize, { width: number; icon: string; name: string; stats: string; gem: string; pad: string }> = {
   xs: { width: 64, icon: 'text-2xl', name: 'text-[8px]', stats: 'text-[9px]', gem: 'h-4 min-w-4 text-[9px]', pad: 'p-[3px]' },
+  // Between xs and sm: a phone's battle hand
+  xm: { width: 70, icon: 'text-3xl', name: 'text-[9px]', stats: 'text-[10px]', gem: 'h-[18px] min-w-[18px] text-[10px]', pad: 'p-[3px]' },
   sm: { width: 88, icon: 'text-4xl', name: 'text-[10px]', stats: 'text-[10px]', gem: 'h-5 min-w-5 text-[11px]', pad: 'p-1' },
   md: { width: 128, icon: 'text-5xl', name: 'text-xs', stats: 'text-xs', gem: 'h-6 min-w-6 text-xs', pad: 'p-1.5' },
   lg: { width: 200, icon: 'text-7xl', name: 'text-base', stats: 'text-sm', gem: 'h-8 min-w-8 text-base', pad: 'p-2' }
@@ -92,7 +94,7 @@ export const TroopCard: React.FC<TroopCardProps> = ({
         width: dims.width,
         aspectRatio: '5 / 7',
         background: hidden ? 'linear-gradient(160deg, #475569, #1e293b)' : rarity.frame,
-        padding: size === 'xs' ? 2 : 3,
+        padding: size === 'xs' || size === 'xm' ? 2 : 3,
         boxShadow: selected
           ? '0 0 0 3px #fde047, 0 12px 24px rgba(0,0,0,0.45)'
           : '0 5px 0 rgba(15, 23, 42, 0.55), 0 8px 18px rgba(0,0,0,0.3)',
@@ -131,7 +133,7 @@ export const TroopCard: React.FC<TroopCardProps> = ({
 
         {/* Name banner */}
         <div
-          className={`font-display mt-1 text-center leading-tight text-slate-100 ${size === 'xs' ? 'truncate' : 'line-clamp-2'} ${dims.name}`}
+          className={`font-display mt-1 text-center leading-tight text-slate-100 ${size === 'xs' || size === 'xm' ? 'truncate' : 'line-clamp-2'} ${dims.name}`}
           style={{ textShadow: '0 1px 0 #0f172a' }}
         >
           {hidden ? '???' : troop.name}
@@ -182,7 +184,7 @@ export const TroopCard: React.FC<TroopCardProps> = ({
           style={{ ['--tw-ring-color' as string]: rarity.text }}
           title={`Level ${level}`}
         >
-          {size === 'xs' ? level : `Lv${level}`}
+          {size === 'xs' || size === 'xm' ? level : `Lv${level}`}
         </span>
       )}
     </Tag>

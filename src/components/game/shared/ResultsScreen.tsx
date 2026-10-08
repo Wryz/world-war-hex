@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { SideStats, WinReason } from '@/types/game';
 import type { LevelDef } from '@/lib/campaign/levels';
-import { starGoals } from '@/lib/campaign/levels';
+import { starThresholds } from '@/lib/campaign/levels';
 import type { BattleRecordResult } from '@/lib/meta/profile';
 import { TROOPS, TroopId } from '@/lib/game/troops';
 import { playStinger } from '@/lib/audio/music';
@@ -54,6 +54,47 @@ const useCountUp = (target: number, durationMs: number, delayMs: number) => {
 
 const STAR_DELAY = 450;
 
+// Your points on a bar, with the second and third stars marked where they are earned
+const StarProgress: React.FC<{ level: LevelDef; points: number; won: boolean }> = ({ level, points, won }) => {
+  const [two, three] = starThresholds(level);
+  const top = Math.round(three * 1.25);
+  const at = (value: number) => `${Math.min(100, (value / top) * 100)}%`;
+  const [filled, setFilled] = useState(0);
+  useEffect(() => {
+    const timeout = setTimeout(() => setFilled(points), 300);
+    return () => clearTimeout(timeout);
+  }, [points]);
+  return (
+    <div className="mx-auto mt-4 max-w-md">
+      <div className="mb-1.5 flex items-baseline justify-between text-sm">
+        <span className="font-bold text-slate-300">Points</span>
+        <span className="font-display text-xl text-amber-300">{points}</span>
+      </div>
+      <div className="relative h-4 rounded-full bg-slate-700">
+        <div
+          className="h-full rounded-full transition-[width] duration-1000 ease-out"
+          style={{ width: at(filled), background: won ? 'linear-gradient(90deg, #f59e0b, #fde047)' : '#64748b' }}
+        />
+        {[{ value: two, stars: 2 }, { value: three, stars: 3 }].map(mark => {
+          const reached = won && points >= mark.value;
+          return (
+            <div key={mark.stars} className="absolute -top-1.5 flex -translate-x-1/2 flex-col items-center" style={{ left: at(mark.value) }}>
+              <span className="h-7 w-1 rounded-full bg-slate-900/80" />
+              <span className={`mt-1 flex items-center gap-0.5 whitespace-nowrap text-sm font-bold ${reached ? 'text-amber-300' : 'text-slate-400'}`}>
+                {Array.from({ length: mark.stars }, (_, i) => reached ? <FilledStarIcon key={i} /> : <StarIcon key={i} color="#64748b" />)}
+                <span className="ml-0.5 tabular-nums">{mark.value}</span>
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <p className="mt-9 text-center text-sm text-slate-400">
+        {won ? 'Kills, gold, camps and a bonus for every round left.' : 'Win the battle to earn stars.'}
+      </p>
+    </div>
+  );
+};
+
 export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   won, reason, level, stars, record, rounds, stats, durationSeconds, coinsTotal, power, onNext, onRetry, onMap, onArmy, points
 }) => {
@@ -103,7 +144,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
 
   return (
     <div className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-950/65 px-3 py-6 backdrop-blur-[2px] sm:items-center">
-      <div className="animate-fadeIn w-full max-w-lg rounded-2xl bg-slate-900/95 p-5 text-slate-100 shadow-2xl ring-1 ring-white/10 sm:p-6">
+      <div className="animate-fadeIn w-full max-w-xl rounded-2xl bg-slate-900/95 p-5 text-slate-100 shadow-2xl ring-1 ring-white/10 sm:p-6">
         {/* Header */}
         <div className="text-center">
           {level && (
@@ -117,16 +158,35 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           >
             {won ? <LaurelIcon /> : <SkullIcon color="#f87171" />} {title}
           </h1>
-          <p className="mt-1 text-sm text-slate-300">{subtitle}</p>
+          <p className="mt-1 text-base text-slate-200">{subtitle}</p>
         </div>
 
-        {/* Points: they decide a battle when time runs out, and (with the speed bonus) the stars */}
-        {points && (
-          <div className="mt-4 rounded-xl bg-slate-800 p-3 text-sm">
-            <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 gap-y-1">
+        {/* Stars */}
+        {level && (
+          <div className="mt-4 flex items-end justify-center gap-3">
+            {[0, 1, 2].map(i => (
+              <span
+                key={i}
+                className={`${i < stars && won ? 'star-stamp' : 'opacity-25'} ${i === 1 ? 'text-6xl' : 'text-5xl'}`}
+                style={i < stars && won ? { animationDelay: `${600 + i * STAR_DELAY}ms` } : undefined}
+              >
+                {i < stars && won
+                  ? <FilledStarIcon className="drop-shadow-[0_3px_0_rgba(0,0,0,0.5)]" />
+                  : <StarIcon color="#475569" />}
+              </span>
+            ))}
+          </div>
+        )}
+        {/* Points towards the stars: a bar with the second and third stars marked on it */}
+        {level && points && <StarProgress level={level} points={points.you.total} won={won} />}
+
+        {/* When time ran out, the points that decided it */}
+        {reason === 'timeout' && points && (
+          <div className="mt-4 rounded-xl bg-slate-800 p-3 text-base">
+            <div className="grid grid-cols-[1fr_auto_auto] gap-x-5 gap-y-1">
               <span />
-              <span className="text-right text-xs font-bold uppercase tracking-widest text-sky-300">You</span>
-              <span className="text-right text-xs font-bold uppercase tracking-widest text-rose-300">Enemy</span>
+              <span className="text-right text-sm font-bold uppercase tracking-widest text-sky-300">You</span>
+              <span className="text-right text-sm font-bold uppercase tracking-widest text-rose-300">Enemy</span>
               {([
                 ['Kills', 'kills', `Gold value of enemy troops destroyed (x${TIME_SCORE_WEIGHTS.kills})`],
                 ['Gold', 'gold', `Gold earned in the battle (x${TIME_SCORE_WEIGHTS.gold})`],
@@ -146,46 +206,18 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           </div>
         )}
 
-        {/* Stars */}
-        {level && (
-          <div className="mt-4 flex items-end justify-center gap-3">
-            {[0, 1, 2].map(i => (
-              <span
-                key={i}
-                className={`${i < stars && won ? 'star-stamp' : 'opacity-25'} ${i === 1 ? 'text-6xl' : 'text-5xl'}`}
-                style={i < stars && won ? { animationDelay: `${600 + i * STAR_DELAY}ms` } : undefined}
-              >
-                {i < stars && won
-                  ? <FilledStarIcon className="drop-shadow-[0_3px_0_rgba(0,0,0,0.5)]" />
-                  : <StarIcon color="#475569" />}
-              </span>
-            ))}
-          </div>
-        )}
-        {level && (
-          <ul className="mx-auto mt-2 flex max-w-xs flex-col gap-0.5 text-xs">
-            {starGoals(level).map((goal, i) => {
-              const earned = won && i < stars;
-              return (
-                <li key={goal} className={`flex items-center gap-2 ${earned ? 'text-slate-100' : 'text-slate-500'}`}>
-                  {earned ? <FilledStarIcon /> : <StarIcon color="#475569" />} {goal}
-                </li>
-              );
-            })}
-          </ul>
-        )}
 
         {/* Reward */}
         <div ref={rewardRef} className="mt-4 flex items-center justify-between rounded-xl bg-slate-800 px-4 py-3">
           <div>
-            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Reward</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Reward</div>
             <div className="font-display flex items-center gap-1.5 text-3xl text-yellow-300"><CoinIcon />+{coins}</div>
-            <div className="text-[11px] text-slate-400">
+            <div className="text-sm text-slate-300">
               {record.reward.breakdown.map(item => `${item.label} ${item.coins}`).join(' · ')}
             </div>
           </div>
           <div className="text-right">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Your coins</div>
+            <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Your coins</div>
             <div id="hud-coins" className="font-display flex items-center justify-end gap-1 text-xl text-yellow-200"><CoinIcon />{shownTotal}</div>
           </div>
         </div>
@@ -199,8 +231,8 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
             ['Time', formatDuration(durationSeconds)]
           ].map(([label, value]) => (
             <div key={label} className="rounded-lg bg-slate-800/70 py-1.5">
-              <div className="font-display text-lg">{value}</div>
-              <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</div>
+              <div className="font-display text-xl">{value}</div>
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-400">{label}</div>
             </div>
           ))}
         </div>
@@ -210,15 +242,15 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           <div className="mt-3 flex flex-wrap items-start gap-4">
             {mvp && (
               <div>
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Most played</div>
-                <TroopCard type={mvp} size="xs" hideLevel />
+                <div className="mb-1.5 text-xs font-bold uppercase tracking-widest text-slate-400">Most played</div>
+                <TroopCard type={mvp} size="md" hideLevel />
               </div>
             )}
             {record.discovered.length > 0 && (
               <div className="min-w-0 flex-1">
-                <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-300">New in the Bestiary!</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {record.discovered.slice(0, 5).map(id => <TroopCard key={id} type={id} size="xs" hideLevel />)}
+                <div className="mb-1.5 text-xs font-bold uppercase tracking-widest text-emerald-300">New in the Bestiary!</div>
+                <div className="flex flex-wrap gap-2.5">
+                  {record.discovered.slice(0, 4).map(id => <TroopCard key={id} type={id} size="md" hideLevel />)}
                 </div>
               </div>
             )}
@@ -230,7 +262,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           </div>
         )}
         {!won && level && power < level.recommendedPower && (
-          <div className="mt-3 flex items-center gap-2 rounded-xl bg-slate-800 px-3 py-2 text-xs text-slate-300">
+          <div className="mt-3 flex items-center gap-2 rounded-xl bg-slate-800 px-3 py-2 text-sm text-slate-300">
             <PowerIcon className="text-base" />
             Your army&apos;s power is {power}; this level recommends {level.recommendedPower}. Upgrade your cards in the Army.
           </div>

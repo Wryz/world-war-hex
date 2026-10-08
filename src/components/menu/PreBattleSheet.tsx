@@ -74,7 +74,7 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
               <TroopCard
                 type={id}
                 level={profile.cards[id]}
-                size="xs"
+                size="sm"
                 selected={inDeck}
                 disabled={!inDeck && isFull}
                 onClick={() => toggleDeckCard(id)}
@@ -206,7 +206,7 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
                 <TroopCard
                   key={id}
                   type={id}
-                  size="xs"
+                  size="sm"
                   level={level.enemyTier}
                   stats={guard?.stats ?? roster[id] ?? scaleTroop(TROOPS[id], level.enemyScale)}
                   hidden={!seen && !guard}

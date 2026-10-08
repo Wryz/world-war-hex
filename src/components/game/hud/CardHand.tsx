@@ -103,7 +103,7 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
                   type={type}
                   level={stats.level}
                   stats={stats}
-                  size={isNarrow ? 'xs' : 'sm'}
+                  size={isNarrow ? 'xm' : 'md'}
                   selected={isSelected}
                   disabled={!canAfford && !isSelected}
                   onClick={() => onCardSelect(type)}

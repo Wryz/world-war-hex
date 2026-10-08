@@ -64,6 +64,8 @@ const BOARD_VIEW_MARGIN = 1.11;
 // pixels above the bottom of the screen: just clear of the card hand once the battle has started
 const BOARD_NEAR_EDGE_MARGIN_SETUP = 28;
 const BOARD_NEAR_EDGE_MARGIN_BATTLE = 170;
+const BOARD_NEAR_EDGE_MARGIN_BATTLE_WIDE = 240;
+const NARROW_SCREEN = 520;
 // Room left above the board's far edge for the top HUD when the whole board fits on screen
 const BOARD_FAR_EDGE_MARGIN = 90;
 const CAMERA_TURN_SPEED = 2.2;
@@ -222,7 +224,9 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
 
   const sizeRef = useRef(size);
   sizeRef.current = size;
-  const nearEdgeMargin = gameState.currentPhase === 'setup' ? BOARD_NEAR_EDGE_MARGIN_SETUP : BOARD_NEAR_EDGE_MARGIN_BATTLE;
+  // The battle hand's cards are bigger on wide screens, so the board leaves more room for them there
+  const nearEdgeMargin = gameState.currentPhase === 'setup' ? BOARD_NEAR_EDGE_MARGIN_SETUP
+    : size.width < NARROW_SCREEN ? BOARD_NEAR_EDGE_MARGIN_BATTLE : BOARD_NEAR_EDGE_MARGIN_BATTLE_WIDE;
 
   // Default overview: aim the camera so the near edge of the board lands just above the bottom HUD,
   // whatever the shape of the screen, leaving as much room as possible for the rest of the board.
@@ -556,14 +560,15 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
 // The blows each troop attacking a castle lands on it in the battle being fought: one per point of
 // damage it deals (as many as it can strike in the battle). One struck down by the castle's guards
 // lands none, as it does no damage. Also the total, as the castle will take it.
-const getSiegeBlows = (state: GameState): { blows: Map<string, number[]>; damage: number } => {
+const getSiegeBlows = (state: GameState): { blows: Map<string, number[]>; damage: number; fallsAt: number | null } => {
   const blows = new Map<string, number[]>();
   const siege = state.currentPhase === 'combat' ? state.siege : undefined;
-  if (!siege) return { blows, damage: 0 };
+  if (!siege) return { blows, damage: 0, fallsAt: null };
   const doomed = new Set(state.combats
     .filter(combat => combat.intercept && !combat.resolved)
     .flatMap(combat => getCombatPreview(state, combat).defenders.filter(entry => entry.destroyed).map(entry => entry.unit.id)));
   let total = 0;
+  const all: { id: string; time: number; damage: number }[] = [];
   for (const id of siege.attackerIds) {
     const unit = state.players[siege.side].units.find(candidate => candidate.id === id);
     if (!unit || doomed.has(id)) {
@@ -572,9 +577,25 @@ const getSiegeBlows = (state: GameState): { blows: Map<string, number[]>; damage
     }
     const damage = getSiegeDamage(unit);
     total += damage;
-    blows.set(id, getImpactTimes(unit).slice(0, Math.max(1, Math.round(damage))));
+    const times = getImpactTimes(unit).slice(0, Math.max(1, Math.round(damage)));
+    blows.set(id, times);
+    for (const time of times) all.push({ id, time, damage: damage / times.length });
   }
-  return { blows, damage: Math.round(total) };
+  // The castle falls at the blow that empties its health: nobody strikes it after that
+  const health = state.players[siege.side === 'player' ? 'ai' : 'player'].baseHealth ?? BASE_MAX_HEALTH;
+  let landed = 0;
+  let fallsAt: number | null = null;
+  for (const blow of all.sort((a, b) => a.time - b.time)) {
+    landed += blow.damage;
+    if (Math.round(landed) >= health) {
+      fallsAt = blow.time;
+      break;
+    }
+  }
+  if (fallsAt !== null) {
+    for (const [id, times] of blows) blows.set(id, times.filter(time => time <= fallsAt!));
+  }
+  return { blows, damage: Math.min(health, Math.round(total)), fallsAt };
 };
 
 interface BoardSceneProps extends GameBoardProps {
@@ -919,7 +940,9 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             startDelay: getBattleStartDelay(),
             incoming: struck?.incoming,
             strikes: siegeBlows.blows.get(id)?.length ?? 0,
-            diesAt: struck?.diesAt ?? null
+            diesAt: struck?.diesAt ?? null,
+            // Once the castle's health runs out, its attackers stand down
+            targetDiesAt: siegeBlows.fallsAt
           });
         }
       }

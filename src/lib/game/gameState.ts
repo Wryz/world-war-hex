@@ -1612,7 +1612,9 @@ export interface StarScore extends TimeScore {
 }
 export const getStarScore = (state: GameState, side: PlayerType): StarScore => {
   const score = getTimeScore(state, side);
-  const speed = Math.max(0, getMaxRounds(state) - state.turnNumber) * SPEED_POINTS_PER_ROUND;
+  // Only a win earns the speed bonus
+  const lost = state.winner !== undefined && state.winner !== side;
+  const speed = lost ? 0 : Math.max(0, getMaxRounds(state) - state.turnNumber) * SPEED_POINTS_PER_ROUND;
   return { ...score, speed, total: score.total + speed };
 };
 
