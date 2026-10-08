@@ -68,12 +68,12 @@ export const TopBar: React.FC<TopBarProps> = ({
   return (
     <div className="fixed top-3 inset-x-3 z-20 flex items-start justify-between gap-3 pointer-events-none">
       {/* Turn */}
-      <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-2 px-3 py-1.5 text-sm`}>
+      <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-1.5 whitespace-nowrap px-2 py-1.5 text-sm sm:gap-2 sm:px-3`}>
         <span className={`font-display ${isFinalRound ? 'text-red-400 animate-pulse' : 'text-slate-300'}`} title={`The battle ends after round ${maxRounds}`}>
-          Round {Math.max(1, turnNumber)}<span className="text-slate-500">/{maxRounds}</span>
+          <span className="hidden sm:inline">Round </span>{Math.max(1, turnNumber)}<span className="text-slate-500">/{maxRounds}</span>
         </span>
         <span
-          className="rounded-full px-2.5 py-0.5 text-xs font-bold text-white"
+          className="rounded-full px-2 py-0.5 text-xs font-bold text-white sm:px-2.5"
           style={{ background: isAITurn ? SIDE_COLORS.ai : SIDE_COLORS.player }}
         >
           {isAITurn ? 'Enemy turn' : 'Your turn'}
@@ -92,7 +92,7 @@ export const TopBar: React.FC<TopBarProps> = ({
               className="rounded-full bg-slate-800 px-2 py-0.5 text-xs font-bold tabular-nums"
               title={`If time runs out, the higher score wins. Kills ${you.kills}-${enemy.kills}, gold ${you.gold}-${enemy.gold}, camps ${you.camps}-${enemy.camps}`}
             >
-              Points <span className="text-sky-300">{you.total}</span>-<span className="text-rose-300">{enemy.total}</span>
+              <span className="hidden sm:inline">Points </span><span className="text-sky-300">{you.total}</span>-<span className="text-rose-300">{enemy.total}</span>
             </span>
           );
         })()}
@@ -117,7 +117,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       {/* Treasury */}
-      <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-2 px-3 py-1.5`}>
+      <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-1 px-2 py-1.5 sm:gap-2 sm:px-3`}>
         <span id="hud-gold" className="font-display flex items-center gap-1 text-base text-amber-300" title={`${income.total >= 0 ? '+' : ''}${income.total} gold per turn (${incomeDetails})`}>
           <GoldIcon className="text-lg" /> {players.player.points}
           <span className={`text-xs ${income.upkeep > 0 ? 'text-rose-300' : 'text-amber-200/70'}`}>
@@ -135,7 +135,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <ThreatIcon className="text-base" />
         </button>
         {isFogOfWar(gameState) && (
-          <span className="text-slate-400" title="Fog of war: you only see enemy troops your own troops can see. Forests hide troops unless you're right next to them.">
+          <span className="hidden text-slate-400 sm:inline" title="Fog of war: you only see enemy troops your own troops can see. Forests hide troops unless you're right next to them.">
             <FogIcon className="text-base" />
           </span>
         )}
@@ -149,7 +149,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           <SpeedIcon className="text-base" />{speed}x
         </button>
         {onSave && (
-          <button onClick={onSave} title="Save game" aria-label="Save game" className={ICON_BUTTON_CLASS}>
+          <button onClick={onSave} title="Save game" aria-label="Save game" className={`${ICON_BUTTON_CLASS} hidden sm:inline-flex`}>
             <SaveIcon className="text-base" />
           </button>
         )}

@@ -76,7 +76,7 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
         </div>
       )}
 
-      <div className="flex max-w-full items-end gap-2 sm:gap-3">
+      <div className="flex max-w-full items-end gap-1.5 sm:gap-3">
         {/* Treasury */}
         <div className={`${PANEL_CLASS} pointer-events-auto hidden flex-col items-center px-3 py-2 sm:flex`}>
           <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Gold</span>
@@ -84,7 +84,7 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
         </div>
 
         {/* Hand */}
-        <div className="pointer-events-auto flex items-end gap-1.5 sm:gap-2.5" role="group" aria-label="Your hand">
+        <div className="pointer-events-auto flex items-end gap-1 sm:gap-2.5" role="group" aria-label="Your hand">
           {hand.map((type, index) => {
             const stats = getRosterStats(gameState, 'player', type);
             if (!stats) return null;
@@ -130,9 +130,9 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
           <button
             onClick={onEndTurn}
             data-tutorial="end-turn"
-            className="font-display rounded-xl bg-amber-500 px-3 py-3 text-base text-slate-900 shadow-[0_5px_0_#b45309] transition-transform hover:-translate-y-0.5 hover:bg-amber-400 active:translate-y-1 active:shadow-[0_1px_0_#b45309] sm:px-5 sm:text-lg"
+            className="font-display rounded-xl bg-amber-500 px-2 py-2.5 text-sm leading-tight text-slate-900 shadow-[0_5px_0_#b45309] transition-transform hover:-translate-y-0.5 hover:bg-amber-400 active:translate-y-1 active:shadow-[0_1px_0_#b45309] sm:px-5 sm:py-3 sm:text-lg"
           >
-            <span className="flex items-center gap-1.5">End Turn <ArrowIcon /></span>
+            <span className="flex items-center gap-1 sm:gap-1.5">End{isNarrow ? <br /> : ' '}Turn <ArrowIcon /></span>
           </button>
         </div>
       </div>
