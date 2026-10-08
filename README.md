@@ -12,7 +12,7 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 - **Power.** Each card has a power rating from its stats and abilities, and your army's power is the sum of the four cards you bring. Every campaign level shows its recommended power, so you know when to upgrade first.
 - **Coins.** Battles pay coins - more for wins and stars, a little for a loss - which buy new cards (the shop gains cards as you advance) and upgrade cards up to level 10.
 - **Style.** Coins also buy cosmetics: seven card frames (Old Map, Frostbound, Emberforged, Obsidian, Royal Seal, a shimmering Prismatic foil...) and six castle styles (Desert Fort, Ice Citadel, Elven Spire, Shadow Keep, Golden Palace). They only change how your army looks, never how it fights.
-- **Settings.** The gear on the main menu opens sound (separate sliders for the menu, map, battle and boss music, the jingles and sound effects), gameplay options and the full guide to the rules.
+- **Settings.** The gear on the main menu opens sound (separate sliders for the menu, map, battle and boss music, the jingles and sound effects), gameplay options, quick battles (a one-off battle on a random map at easy, medium or hard) and the full guide to the rules.
 - **Stats and saves.** Lifetime stats and your progress live in the browser; download a save file to back it up or move it to another computer. The browser is asked to keep the save safe from automatic clean-up.
 - **Offline.** After one visit online, the game keeps working without a connection: a service worker caches the pages, scripts, models, map art and sounds (and each music track once it has played).
 - **Short battles.** Small maps, castles placed automatically, 30-second turns, a round limit (the stronger castle wins when time runs out), all of a turn's battles fought at once and a 2x speed button keep a battle to a few minutes.
@@ -108,7 +108,7 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 ### Battle (`src/components/game`)
 
 - `GameController`: Runs a battle and lays out its HUD, records the result and shows the results screen
-- `GameBoard`: The 3D board and camera (framed so the board sits just above the hand; drag to orbit, scroll to zoom; selecting something far away swings it round to the nearest of four sides, and picking a card keeps or brings into view a side with your castle or a camp you hold), routes, battle markers, deaths and damage numbers
+- `GameBoard`: The 3D board and camera (framed so the board sits just above the hand; drag to orbit, scroll to zoom; selecting something far away swings it round to the nearest of four sides, picking a card keeps or brings into view a side with your castle or a camp you hold, and when battles break out it rises to look down on them, then settles on the nearest side once they're over), routes, battle markers, deaths and damage numbers
 - `UnitMesh`: An animated troop - KayKit character or procedural creature - walking, fighting blow by blow (see `utils/battleTiming`) and falling
 - `Castle`, `Camp`, `HexTile`, `BoardDecorations`, `MovePath`: The rest of the board
 - `cards/TroopCard`: A troop as a playing card, used everywhere

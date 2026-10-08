@@ -38,7 +38,7 @@ import { getCastleStyle } from '@/lib/meta/cosmetics';
 import { useProfile } from '@/lib/meta/profile';
 import { getBattleStartDelay, getDeathTime, getImpactTimesUntil } from './utils/battleTiming';
 import { getUnitTypeName } from './utils/UnitHelpers';
-import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale } from './effects/effects';
+import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale, getGameSpeed } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
 import { AttackIcon, CampIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
 import type { UnitBadge } from './UnitMesh';
@@ -73,6 +73,13 @@ const CAMERA_MAX_ELEVATION = THREE.MathUtils.degToRad(85);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 // Furthest the view can be panned from the centre of the board (fraction of the framed radius)
 const CAMERA_MAX_PAN = 0.73;
+// Looking down on a turn's battles: the tilt, how much room is left around them, the closest and
+// furthest zoom, and how long the view holds after they end before settling back on a side
+const BATTLE_VIEW_ELEVATION = THREE.MathUtils.degToRad(82);
+const BATTLE_VIEW_MARGIN = 1.35;
+const BATTLE_VIEW_MIN_ZOOM = 0.5;
+const BATTLE_VIEW_MAX_ZOOM = 0.95;
+const BATTLE_VIEW_HOLD_MS = 600;
 
 // Sun position; the shadow camera looks from here towards the board centre
 const SHADOW_LIGHT_POSITION: [number, number, number] = [12, 30, 18];
@@ -239,8 +246,14 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
     desiredElevationRef.current = CAMERA_ELEVATION;
   }, [defaultLookAt]);
 
-  // New turn (or castles placed): swing to the active side's default view
-  useEffect(() => showSide(0), [showSide]);
+  // Set while the camera is looking down on a turn's battles (until it settles back on a side)
+  const battleViewRef = useRef(false);
+
+  // New turn (or castles placed): swing to the active side's default view, unless the turn's
+  // battles are still being watched from above (the camera settles from there instead)
+  useEffect(() => {
+    if (!battleViewRef.current) showSide(0);
+  }, [showSide]);
 
   // Which of the four sides a point on the board is nearest, or null for points near the middle
   // (they're in view from every side)
@@ -278,6 +291,57 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
     // Only reacts to picking a card
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deployingCard]);
+
+  // Battles about to be fought: rise to a view from above that takes in every fight (and any castle
+  // under attack), then once they're over settle on whichever side the camera is nearest
+  const targetAzimuthRef = useRef(targetAzimuth);
+  targetAzimuthRef.current = targetAzimuth;
+  const battleKey = gameState.currentPhase === 'combat' ? `${gameState.turnNumber}-${viewSide}` : null;
+  const isGameOver = gameState.currentPhase === 'gameOver';
+  useEffect(() => {
+    if (battleKey) {
+      const points = gameState.combats.flatMap(combat => [combat.hexCoordinates, ...combat.attackers.map(unit => unit.position)]);
+      if (gameState.siege) {
+        const castle = findBaseHex(gameState, gameState.siege.side === 'player' ? 'ai' : 'player');
+        if (castle) points.push(castle.coordinates);
+        for (const id of gameState.siege.attackerIds) {
+          const unit = gameState.players[gameState.siege.side].units.find(candidate => candidate.id === id);
+          if (unit) points.push(unit.position);
+        }
+      }
+      if (points.length === 0) return;
+      const world = points.map(point => axialToWorld(point));
+      const centre = new THREE.Vector3(
+        world.reduce((sum, [x]) => sum + x, 0) / world.length, 0,
+        world.reduce((sum, [, , z]) => sum + z, 0) / world.length
+      );
+      const spread = Math.max(...world.map(([x, , z]) => Math.hypot(x - centre.x, z - centre.z))) + HEX_SIZE * 1.5;
+      const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
+      const horizontal = Math.hypot(centre.x, centre.z);
+      if (horizontal > maxPan) centre.multiplyScalar(maxPan / horizontal);
+      battleViewRef.current = true;
+      desiredLookAtRef.current = centre;
+      desiredZoomRef.current = THREE.MathUtils.clamp(spread * BATTLE_VIEW_MARGIN / viewRadiusRef.current, BATTLE_VIEW_MIN_ZOOM, BATTLE_VIEW_MAX_ZOOM);
+      desiredElevationRef.current = BATTLE_VIEW_ELEVATION;
+      return;
+    }
+    if (!battleViewRef.current || isGameOver) {
+      battleViewRef.current = false;
+      return;
+    }
+    // Hold on the aftermath for a moment, then settle on the nearest side
+    const settle = setTimeout(() => {
+      battleViewRef.current = false;
+      const castleAzimuth = targetAzimuthRef.current;
+      showSide(nearestSide(azimuthRef.current ?? castleAzimuth, castleAzimuth));
+    }, BATTLE_VIEW_HOLD_MS / getGameSpeed());
+    return () => {
+      clearTimeout(settle);
+      battleViewRef.current = false;
+    };
+    // Only reacts to battles starting and ending
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [battleKey, isGameOver]);
 
   // The battle is won: swoop down on the losing castle as it falls
   const loser = gameState.currentPhase === 'gameOver' && gameState.winner

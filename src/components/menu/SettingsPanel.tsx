@@ -13,10 +13,12 @@ import { TERRAIN_ORDER, TERRAIN_SHORT_EFFECTS } from '../game/hud/terrainInfo';
 import { CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
 import {
   AttackIcon, BondIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
-  SettingsIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon
+  SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon
 } from '../game/icons';
+import type { Difficulty } from '../game/storage/GameStorage';
 
-type Tab = 'sound' | 'gameplay' | 'guide';
+export type SettingsTab = 'sound' | 'gameplay' | 'guide';
+type Tab = SettingsTab;
 
 const TABS: { id: Tab; label: string; Icon: React.FC<{ className?: string }> }[] = [
   { id: 'sound', label: 'Sound', Icon: MusicIcon },
@@ -81,13 +83,55 @@ const SoundTab: React.FC = () => {
   );
 };
 
-const GameplayTab: React.FC = () => {
+const DIFFICULTY_OPTIONS: { level: Difficulty; label: string; Icon: React.FC<{ color?: string }> }[] = [
+  { level: 'easy', label: 'Easy', Icon: ShieldIcon },
+  { level: 'medium', label: 'Medium', Icon: AttackIcon },
+  { level: 'hard', label: 'Hard', Icon: SkullIcon }
+];
+
+// A one-off battle on a random map against a mixed army, outside the campaign
+const QuickBattle: React.FC<{ onStart: (difficulty: Difficulty) => void }> = ({ onStart }) => {
+  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
+  return (
+    <div className="flex flex-col gap-2 rounded-xl bg-slate-800/60 p-3">
+      <span>
+        <b className="block text-slate-100">Quick battle</b>
+        <span className="text-xs text-slate-400">A one-off battle on a random map, outside the campaign. Medium and hard are fought in the fog of war.</span>
+      </span>
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="flex gap-1" role="group" aria-label="Difficulty">
+          {DIFFICULTY_OPTIONS.map(({ level, label, Icon }) => (
+            <button
+              key={level}
+              onClick={() => setDifficulty(level)}
+              aria-pressed={difficulty === level}
+              className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-bold ${
+                difficulty === level ? 'bg-amber-400 text-slate-900' : 'bg-slate-900 text-slate-200 hover:bg-slate-700'
+              }`}
+            >
+              <Icon color="currentColor" /> {label}
+            </button>
+          ))}
+        </div>
+        <button
+          onClick={() => onStart(difficulty)}
+          className="font-display ml-auto rounded-lg bg-sky-500 px-5 py-1.5 text-slate-900 shadow-[0_3px_0_#0369a1] hover:bg-sky-400"
+        >
+          Play
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const GameplayTab: React.FC<{ onStartQuickBattle?: (difficulty: Difficulty) => void }> = ({ onStartQuickBattle }) => {
   const speed = useGameSpeed();
   // Read in the browser only, so the server render matches
   const [analyticsOn, setAnalyticsOn] = useState(false);
   useEffect(() => setAnalyticsOn(isAnalyticsEnabled()), []);
   return (
     <div className="flex flex-col gap-4 text-sm">
+      {onStartQuickBattle && <QuickBattle onStart={onStartQuickBattle} />}
       <div className="flex items-center justify-between gap-3">
         <span>
           <b className="block text-slate-100">Battle speed</b>
@@ -203,8 +247,13 @@ const GuideTab: React.FC = () => (
   </div>
 );
 
-// Settings, opened from the main menu: sound levels for each kind of music, gameplay options and the guide
-export const SettingsPanel: React.FC<{ onClose: () => void; initialTab?: Tab }> = ({ onClose, initialTab = 'sound' }) => {
+// Settings, opened from the main menu: sound levels for each kind of music, gameplay options (and
+// quick battles) and the guide
+export const SettingsPanel: React.FC<{
+  onClose: () => void;
+  initialTab?: Tab;
+  onStartQuickBattle?: (difficulty: Difficulty) => void;
+}> = ({ onClose, initialTab = 'sound', onStartQuickBattle }) => {
   const [tab, setTab] = useState<Tab>(initialTab);
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -245,7 +294,7 @@ export const SettingsPanel: React.FC<{ onClose: () => void; initialTab?: Tab }> 
         </div>
         <div className="overflow-y-auto px-5 py-5">
           {tab === 'sound' && <SoundTab />}
-          {tab === 'gameplay' && <GameplayTab />}
+          {tab === 'gameplay' && <GameplayTab onStartQuickBattle={onStartQuickBattle} />}
           {tab === 'guide' && <GuideTab />}
         </div>
       </div>

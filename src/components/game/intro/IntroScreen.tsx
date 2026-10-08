@@ -10,10 +10,10 @@ import { setMuted, useMuted } from '../utils/SoundPlayer';
 import { CARD_CLASS, PRIMARY_BUTTON, ResourceBadges, SKY_BACKGROUND } from '@/components/menu/MenuShell';
 import { TroopCard } from '../cards/TroopCard';
 import {
-  AttackIcon, BookIcon, BossIcon, CardsIcon, MapIcon, ResumeIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon,
+  AttackIcon, BookIcon, BossIcon, CardsIcon, MapIcon, ResumeIcon, SoundOffIcon, SoundOnIcon,
   StarIcon, StatsIcon, StyleIcon, SettingsIcon, GuideIcon
 } from '../icons';
-import { SettingsPanel } from '../../menu/SettingsPanel';
+import { SettingsPanel, SettingsTab } from '../../menu/SettingsPanel';
 import { BattleConfig, Difficulty } from '../storage/GameStorage';
 
 // The 3D island needs WebGL, so it only renders in the browser
@@ -25,12 +25,6 @@ export interface IntroScreenProps {
   savedBattle?: BattleConfig | null;
   onContinueBattle?: () => void;
 }
-
-const DIFFICULTY_OPTIONS: { level: Difficulty; label: string; Icon: typeof ShieldIcon }[] = [
-  { level: 'easy', label: 'Easy', Icon: ShieldIcon },
-  { level: 'medium', label: 'Medium', Icon: AttackIcon },
-  { level: 'hard', label: 'Hard', Icon: SkullIcon }
-];
 
 const Cloud: React.FC<{ className: string; delay: string; duration: string }> = ({ className, delay, duration }) => (
   <div
@@ -59,9 +53,8 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
   const profile = useProfile();
   const hydrated = useHasHydrated();
   const isMuted = useMuted();
-  const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [themeName, setThemeName] = useState<string | null>(null);
-  const [settingsTab, setSettingsTab] = useState<'sound' | 'guide' | null>(null);
+  const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   useMusic('menu');
 
   const nextLevel = getLevel(hydrated ? highestUnlocked(profile) : 1);
@@ -104,12 +97,12 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
           onClick={() => setSettingsTab('sound')}
           className={`${CARD_CLASS} p-2.5`}
           aria-label="Settings"
-          title="Settings: sound, gameplay and the guide"
+          title="Settings: sound, gameplay, quick battles and the guide"
         >
           <SettingsIcon />
         </button>
       </div>
-      {settingsTab && <SettingsPanel initialTab={settingsTab} onClose={() => setSettingsTab(null)} />}
+      {settingsTab && <SettingsPanel initialTab={settingsTab} onClose={() => setSettingsTab(null)} onStartQuickBattle={onStartQuickBattle} />}
 
       <main className="relative z-10 order-1 flex flex-col justify-center px-4 pt-16 pb-4 sm:px-8 lg:min-h-screen lg:max-w-[40rem] lg:px-14 lg:py-10 pointer-events-none">
         <div className="pointer-events-auto">
@@ -192,30 +185,6 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
             </button>
           </div>
 
-          {/* Quick battle */}
-          <div className={`${CARD_CLASS} mt-4 flex max-w-lg flex-wrap items-center gap-2 p-3`}>
-            <span className="font-display mr-auto text-lg">Quick battle</span>
-            <div className="flex gap-1" role="group" aria-label="Difficulty">
-              {DIFFICULTY_OPTIONS.map(({ level, label, Icon }) => (
-                <button
-                  key={level}
-                  onClick={() => setDifficulty(level)}
-                  aria-pressed={difficulty === level}
-                  className={`flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm font-bold ${
-                    difficulty === level ? 'bg-amber-400 text-slate-900' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
-                  }`}
-                >
-                  <Icon color="currentColor" /> {label}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => onStartQuickBattle(difficulty)}
-              className="font-display rounded-lg bg-sky-500 px-4 py-1.5 text-slate-900 shadow-[0_3px_0_#0369a1] hover:bg-sky-400"
-            >
-              Play
-            </button>
-          </div>
         </div>
       </main>
     </div>
