@@ -135,7 +135,7 @@ On the dev server (`npm run dev`), or any copy of the game served from localhost
 
 ### Card art
 
-Every card shows a portrait of its troop's own 3D model on its faction's home ground, against a backdrop in the faction's colours (`src/components/game/cards/cardArt.ts`). The portraits in `public/cards/` are rendered from the dev page `/dev/card-art?type=<troop>`: with the dev server running, `node scripts/render-card-art.mjs [troop ...]` photographs them (it needs Playwright: `npm i --no-save playwright && npx playwright install chromium`). Re-run it after changing a troop's model.
+Every card shows a picture of its troop's own 3D model - no ground, no shadow - over the faction's colour and the card frame's pattern, so the frames from the Style shop show behind the troop (`src/components/game/cards/cardArt.ts`). The pictures in `public/cards/` are transparent WebP images rendered from the dev page `/dev/card-art?type=<troop>`: with the dev server running, `node scripts/render-card-art.mjs [troop ...]` photographs them (it needs Playwright: `npm i --no-save playwright && npx playwright install chromium`). Re-run it after changing a troop's model.
 
 ### Balance
 

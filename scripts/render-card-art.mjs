@@ -1,5 +1,5 @@
-// Renders the card portraits in public/cards/: each troop's 3D model on its home ground, photographed
-// from the dev page /dev/card-art. Run it against the dev server after changing a troop's model:
+// Renders the card portraits in public/cards/: each troop's 3D model on its own, with a transparent
+// background (WebP), taken from the dev page /dev/card-art. Run it against the dev server after changing a troop's model:
 //
 //   npm run dev                                   (in one terminal)
 //   node scripts/render-card-art.mjs [troop ...]   (in another; all troops when none are named)
@@ -7,7 +7,7 @@
 // Needs Playwright and its Chromium: `npm i --no-save playwright && npx playwright install chromium`.
 // Set CARD_ART_URL to use another server than http://localhost:3000, and PLAYWRIGHT_CHROMIUM to a
 // Chromium executable to use instead of Playwright's own.
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
@@ -38,7 +38,10 @@ for (const id of ids) {
   try {
     await page.goto(`${base}/dev/card-art?type=${id}`, { waitUntil: 'load' });
     await page.waitForSelector('body[data-ready="1"]', { timeout: 90000 });
-    await page.locator('#card-art').screenshot({ path: join(outDir, `${id}.jpg`), type: 'jpeg', quality: 84 });
+    // The 3D canvas itself, transparent where the troop isn't
+    const data = await page.evaluate(() => document.querySelector('#card-art canvas').toDataURL('image/webp', 0.86));
+    if (!data.startsWith('data:image/webp')) throw new Error('the browser could not encode WebP');
+    writeFileSync(join(outDir, `${id}.webp`), Buffer.from(data.split(',')[1], 'base64'));
     console.log(`  ${id}`);
   } catch (error) {
     failed++;
