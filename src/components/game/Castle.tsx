@@ -6,6 +6,10 @@ import { PlayerType } from '@/types/game';
 import { OWNER_COLORS } from './UnitMesh';
 import { CrownIcon } from './icons';
 import { getTimeScale, setCastleShownDamage } from './effects/effects';
+import { KAYKIT_HEX_SCALE, usePropLibrary } from './utils/kaykitProps';
+
+// KayKit's castle fills a hex and stands four units tall; this keeps it about two units high
+const KAYKIT_CASTLE_SCALE = KAYKIT_HEX_SCALE * 0.58;
 import { CastleStyle, getCastleStyle } from '@/lib/meta/cosmetics';
 
 // Blows landing on a castle during a battle: when each lands (seconds after the battle starts, once
@@ -228,6 +232,8 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
     if (!fallen) collapseRef.current = null;
   }, [fallen]);
   const ownerColor = OWNER_COLORS[owner];
+  const props = usePropLibrary();
+  const kaykitCastle = look.id === 'keep' ? props?.get(owner === 'player' ? 'building_castle_blue' : 'building_castle_red') ?? null : null;
   const shownHealth = Math.max(0, health - (incoming ? shownDamage : 0));
   const healthRatio = maxHealth > 0 ? shownHealth / maxHealth : 0;
   const healthColor = healthRatio > 0.6 ? '#22c55e' : healthRatio > 0.3 ? '#eab308' : '#ef4444';
@@ -324,6 +330,10 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
   return (
     <group position={position}>
       <group ref={structureRef}>
+      {kaykitCastle ? (
+        // The standard Stone Keep is KayKit's castle in the owner's colours
+        <mesh geometry={kaykitCastle.geometry} material={kaykitCastle.material} scale={KAYKIT_CASTLE_SCALE} castShadow receiveShadow />
+      ) : (<>
       {/* Keep */}
       <mesh position={[0, 0.45, 0]} castShadow>
         <cylinderGeometry args={[0.42, 0.5, 0.9, 6]} />
@@ -351,6 +361,7 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
         <meshStandardMaterial color={ownerColor} side={THREE.DoubleSide} />
       </mesh>
       <CastleDecor look={look} angles={towerAngles} />
+      </>)}
       </group>
 
       {/* Rubble and dust when the castle falls */}
@@ -365,8 +376,8 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
         ))}
       </group>
 
-      {/* Crown */}
-      <group ref={crownRef} position={[0, 1.75, 0]}>
+      {/* Crown (KayKit's castle has its own banners) */}
+      <group ref={crownRef} position={[0, 1.75, 0]} visible={!kaykitCastle}>
         <Crown gemColor={ownerColor} metal={look.crown} glow={look.crownGlow} />
       </group>
 

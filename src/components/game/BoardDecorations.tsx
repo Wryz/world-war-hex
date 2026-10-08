@@ -1,7 +1,8 @@
 import { memo, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { Hex } from '@/types/game';
+import { Hex, TerrainType } from '@/types/game';
 import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
+import { KAYKIT_HEX_SCALE, PropLibrary, usePropLibrary } from './utils/kaykitProps';
 
 // Terrain props (trees, peaks, dunes, gold) drawn with one instanced mesh per part,
 // so the whole board's decorations cost a handful of draw calls
@@ -134,7 +135,7 @@ const rimSpots = (hex: Hex, count: number) =>
     return { x: Math.cos(angle) * radius, z: Math.sin(angle) * radius, r: seededRandom(hex, i + 20) };
   });
 
-const buildMatrices = (hexes: Hex[]): Record<PartName, THREE.Matrix4[]> => {
+const buildMatrices = (hexes: Hex[], skip: ReadonlySet<TerrainType>): Record<PartName, THREE.Matrix4[]> => {
   const result: Record<PartName, THREE.Matrix4[]> = {
     treeTrunk: [], treeTop: [], peak: [], snow: [], dune: [], nugget: [],
     hill: [], reed: [], puddle: [], snowTree: [], drift: [], pool: [], rock: [],
@@ -152,6 +153,7 @@ const buildMatrices = (hexes: Hex[]): Record<PartName, THREE.Matrix4[]> => {
   };
 
   for (const hex of hexes) {
+    if (skip.has(hex.terrain)) continue;
     const [cx, , cz] = axialToWorld(hex.coordinates);
     const y = getHexSurfaceHeight(hex);
 
@@ -269,20 +271,127 @@ const InstancedPart: React.FC<{ part: PartName; matrices: THREE.Matrix4[] }> = (
   );
 };
 
+// --- KayKit scenery ---------------------------------------------------------------------------
+
+// Terrain drawn with KayKit models once they have loaded (the rest keeps the shapes above)
+const KAYKIT_TERRAIN: ReadonlySet<TerrainType> = new Set(['forest', 'mountain', 'plain', 'resource', 'ruins', 'cursed', 'water', 'swamp']);
+const S = KAYKIT_HEX_SCALE;
+
+// Where each KayKit model goes on the board: one list of transforms per model
+const buildPropMatrices = (hexes: Hex[]): Map<string, THREE.Matrix4[]> => {
+  const result = new Map<string, THREE.Matrix4[]>();
+  const quaternion = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  const add = (model: string, x: number, y: number, z: number, scale: number, turn = 0) => {
+    quaternion.setFromAxisAngle(up, turn);
+    const matrix = new THREE.Matrix4().compose(new THREE.Vector3(x, y, z), quaternion, new THREE.Vector3(scale, scale, scale));
+    const list = result.get(model);
+    if (list) list.push(matrix);
+    else result.set(model, [matrix]);
+  };
+  const pick = (models: string[], r: number) => models[Math.min(models.length - 1, Math.floor(r * models.length))];
+
+  for (const hex of hexes) {
+    if (!KAYKIT_TERRAIN.has(hex.terrain) || hex.isBase || hex.isCamp) continue;
+    const [cx, , cz] = axialToWorld(hex.coordinates);
+    const y = getHexSurfaceHeight(hex);
+    const spin = (salt: number) => seededRandom(hex, salt) * Math.PI * 2;
+
+    switch (hex.terrain) {
+      case 'forest':
+        for (const { x, z, r } of rimSpots(hex, 4)) {
+          add(r > 0.5 ? 'tree_single_A' : 'tree_single_B', cx + x, y, cz + z, 0.5 + r * 0.25, r * 6);
+        }
+        break;
+      case 'mountain':
+        add(pick(['mountain_A', 'mountain_B', 'mountain_C', 'mountain_A_grass', 'mountain_B_grass_trees'], seededRandom(hex, 1)), cx, y, cz, S * 0.95, Math.round(seededRandom(hex, 2) * 6) * Math.PI / 3);
+        break;
+      case 'plain':
+        // A little scenery on some open ground: a rock, or a lone tree at the edge
+        if (seededRandom(hex, 7) < 0.35) {
+          const [{ x, z, r }] = rimSpots(hex, 1);
+          if (r > 0.6) add(r > 0.8 ? 'tree_single_A' : 'tree_single_B', cx + x * 1.1, y, cz + z * 1.1, 0.42, r * 6);
+          else add(pick(['rock_single_A', 'rock_single_D', 'rock_single_E'], r), cx + x, y, cz + z, 1, r * 6);
+        }
+        break;
+      case 'resource': {
+        const [mine, stone, crate] = rimSpots(hex, 3);
+        add('building_mine_yellow', cx + mine.x * 1.05, y, cz + mine.z * 1.05, 0.3, Math.atan2(-mine.x, -mine.z));
+        add('resource_stone', cx + stone.x, y, cz + stone.z, 0.75, spin(4));
+        add('crate_A_big', cx + crate.x, y, cz + crate.z, 1, spin(5));
+        break;
+      }
+      case 'ruins': {
+        const [ruin, wall, rock] = rimSpots(hex, 3);
+        add('building_destroyed', cx + ruin.x, y, cz + ruin.z, 0.32, spin(4));
+        add('wall_straight', cx + wall.x, y, cz + wall.z, 0.2, Math.atan2(wall.x, wall.z) + Math.PI / 2);
+        add('rock_single_D', cx + rock.x, y, cz + rock.z, 1, spin(6));
+        break;
+      }
+      case 'cursed':
+        for (const [i, { x, z, r }] of rimSpots(hex, 3).entries()) {
+          const model = pick(['gravestone', 'grave_A', 'tree_dead_medium', 'pumpkin_orange_jackolantern', 'lantern_standing', 'gravemarker_A'], r);
+          const scale = model === 'tree_dead_medium' ? 0.13 : model === 'grave_A' ? 0.11 : model.startsWith('pumpkin') ? 0.18 : model === 'lantern_standing' ? 0.24 : 0.14;
+          add(model, cx + x, y, cz + z, scale, spin(i + 8));
+        }
+        break;
+      case 'water':
+        for (const [i, { x, z, r }] of rimSpots(hex, 3).entries()) {
+          add(r > 0.5 ? 'waterlily_A' : 'waterlily_B', cx + x * 0.7, y, cz + z * 0.7, 1.6, spin(i + 2));
+        }
+        if (seededRandom(hex, 9) > 0.5) add('waterplant_A', cx + 0.4, y, cz - 0.3, 1.6, spin(10));
+        break;
+      case 'swamp':
+        for (const [i, { x, z, r }] of rimSpots(hex, 4).entries()) {
+          add(pick(['waterplant_A', 'waterplant_B', 'waterplant_C', 'waterlily_A'], r), cx + x, y, cz + z, 1.7, spin(i + 2));
+        }
+        break;
+    }
+  }
+  return result;
+};
+
+const InstancedProp: React.FC<{ library: PropLibrary; model: string; matrices: THREE.Matrix4[] }> = ({ library, model, matrices }) => {
+  const ref = useRef<THREE.InstancedMesh>(null);
+  const prop = library.get(model);
+
+  useLayoutEffect(() => {
+    const mesh = ref.current;
+    if (!mesh) return;
+    matrices.forEach((matrix, i) => mesh.setMatrixAt(i, matrix));
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }, [matrices]);
+
+  if (!prop || matrices.length === 0) return null;
+  return <instancedMesh key={matrices.length} ref={ref} args={[prop.geometry, prop.material, matrices.length]} castShadow receiveShadow />;
+};
+
+const NO_SKIP: ReadonlySet<TerrainType> = new Set();
+
 const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[] }> = ({ hexGrid }) => {
+  const library = usePropLibrary();
   // Decorations only depend on the terrain, not on units moving around
   const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}`).join('|');
   const hexesRef = useRef(hexGrid);
   hexesRef.current = hexGrid;
 
-  // Rebuild only when the terrain signature changes
+  // Rebuild only when the terrain signature changes (or the KayKit models arrive)
+  const matrices = useMemo(
+    () => buildMatrices(hexesRef.current, library ? KAYKIT_TERRAIN : NO_SKIP),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [terrainSignature, !!library]
+  );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const matrices = useMemo(() => buildMatrices(hexesRef.current), [terrainSignature]);
+  const props = useMemo(() => (library ? buildPropMatrices(hexesRef.current) : null), [terrainSignature, library]);
 
   return (
     <>
       {(Object.keys(PARTS) as PartName[]).map(part => (
         <InstancedPart key={part} part={part} matrices={matrices[part]} />
+      ))}
+      {library && props && [...props].map(([model, list]) => (
+        <InstancedProp key={model} library={library} model={model} matrices={list} />
       ))}
     </>
   );

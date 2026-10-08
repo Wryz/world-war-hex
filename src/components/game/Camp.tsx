@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { PlayerType } from '@/types/game';
 import { OWNER_COLORS } from './UnitMesh';
 import { CampIcon } from './icons';
+import { usePropLibrary } from './utils/kaykitProps';
 
 interface CampProps {
   // Side holding the camp, or null while it is still neutral
@@ -27,6 +28,12 @@ const STAKES = Array.from({ length: 14 }, (_, i) => (i / 16) * Math.PI * 2 + Mat
 const CampComponent: React.FC<CampProps> = ({ owner, position, hideLabel = false }) => {
   const flagRef = useRef<THREE.Group>(null);
   const color = owner ? OWNER_COLORS[owner] : NEUTRAL_COLOR;
+  const props = usePropLibrary();
+  const flag = props?.get(owner === 'player' ? 'flag_blue' : owner === 'ai' ? 'flag_red' : 'flag_yellow');
+  const tent = props?.get('tent');
+  const crate = props?.get('crate_A_big');
+  const barrel = props?.get('barrel');
+  const kaykit = flag && tent && crate && barrel ? { flag, tent, crate, barrel } : null;
 
   useFrame((state) => {
     // Banner flutters in the wind
@@ -46,29 +53,46 @@ const CampComponent: React.FC<CampProps> = ({ owner, position, hideLabel = false
         </mesh>
       ))}
 
+      {kaykit ? (
+        // KayKit tents, supplies and a flag in the colour of whoever holds the camp, around the
+        // spot where a unit stands
+        <>
+          <mesh geometry={kaykit.tent.geometry} material={kaykit.tent.material} position={[-0.34, 0, -0.3]} rotation={[0, Math.PI / 4, 0]} scale={0.95} castShadow />
+          <mesh geometry={kaykit.tent.geometry} material={kaykit.tent.material} position={[0.36, 0, 0.3]} rotation={[0, -Math.PI / 5, 0]} scale={0.7} castShadow />
+          <mesh geometry={kaykit.crate.geometry} material={kaykit.crate.material} position={[0.42, 0, -0.12]} rotation={[0, 0.4, 0]} scale={0.9} castShadow />
+          <mesh geometry={kaykit.barrel.geometry} material={kaykit.barrel.material} position={[-0.4, 0, 0.28]} scale={0.9} castShadow />
+          <group ref={flagRef} position={[0.3, 0, -0.42]}>
+            <mesh geometry={kaykit.flag.geometry} material={kaykit.flag.material} scale={2.4} castShadow />
+          </group>
+        </>
+      ) : (
+        <>
       {/* Tent behind the spot where a unit stands */}
-      <group position={[-0.32, 0, -0.32]} rotation={[0, Math.PI / 4, 0]}>
-        <mesh position={[0, 0.22, 0]} castShadow>
-          <coneGeometry args={[0.26, 0.44, 4]} />
-          <meshStandardMaterial color={CANVAS} flatShading />
-        </mesh>
-        <mesh position={[0, 0.47, 0]}>
-          <coneGeometry args={[0.05, 0.08, 4]} />
-          <meshStandardMaterial color={color} flatShading />
-        </mesh>
-      </group>
+        <group position={[-0.32, 0, -0.32]} rotation={[0, Math.PI / 4, 0]}>
+          <mesh position={[0, 0.22, 0]} castShadow>
+            <coneGeometry args={[0.26, 0.44, 4]} />
+            <meshStandardMaterial color={CANVAS} flatShading />
+          </mesh>
+          <mesh position={[0, 0.47, 0]}>
+            <coneGeometry args={[0.05, 0.08, 4]} />
+            <meshStandardMaterial color={color} flatShading />
+          </mesh>
+        </group>
 
-      {/* Banner pole */}
-      <mesh position={[0.38, 0.45, -0.3]} castShadow>
-        <cylinderGeometry args={[0.018, 0.018, 0.9, 6]} />
-        <meshStandardMaterial color={WOOD_DARK} />
-      </mesh>
-      <group ref={flagRef} position={[0.38, 0.78, -0.3]}>
-        <mesh position={[0.15, 0, 0]}>
-          <boxGeometry args={[0.3, 0.18, 0.012]} />
-          <meshStandardMaterial color={color} side={THREE.DoubleSide} />
+        {/* Banner pole */}
+        <mesh position={[0.38, 0.45, -0.3]} castShadow>
+          <cylinderGeometry args={[0.018, 0.018, 0.9, 6]} />
+          <meshStandardMaterial color={WOOD_DARK} />
         </mesh>
-      </group>
+        <group ref={flagRef} position={[0.38, 0.78, -0.3]}>
+          <mesh position={[0.15, 0, 0]}>
+            <boxGeometry args={[0.3, 0.18, 0.012]} />
+            <meshStandardMaterial color={color} side={THREE.DoubleSide} />
+          </mesh>
+        </group>
+
+        </>
+      )}
 
       {/* Label so camps are easy to spot from far away */}
       {!hideLabel && (
