@@ -7,14 +7,13 @@ import { unitSignature } from '@/lib/game/signatures';
 // One-off tips the first time a rule comes up in a battle (flanking, height, village cover,
 // following a troop out of its hex). Each shows once per browser, then never again.
 
-type TipId = 'flank' | 'height' | 'village' | 'follow' | 'tactics' | 'signature';
+type TipId = 'flank' | 'height' | 'village' | 'follow' | 'signature';
 
 const TIPS: Record<TipId, string> = {
   flank: `Flanked! Each extra attacker on one enemy adds +${Math.round(FLANK_BONUS * 100)}% (up to two).`,
   height: `Height: +${Math.round(HEIGHT_DAMAGE_PER_UNIT * 100)}% damage per 1.0 above your target. Uphill costs the same.`,
   village: 'Villages: 20% less damage, and walls that block arrows from below.',
   follow: 'A hex your troop is leaving is free for another. Ctrl+Z undoes an order.',
-  tactics: 'Tactic card drawn! Tap it to play. You draw one every second round (hold 3).',
   signature: 'A glowing sparkle under a troop: its signature ability is working. Tap for details.'
 };
 
@@ -47,7 +46,6 @@ const tipsFor = (state: GameState): TipId[] => {
   }
   if (state.currentPhase === 'planning' && state.activePlayer === 'player' &&
     state.pendingMoves.length > 0 && state.players.player.units.length >= 2) tips.push('follow');
-  if (state.currentPhase === 'planning' && state.activePlayer === 'player' && (state.tactics?.player.hand.length ?? 0) > 0) tips.push('tactics');
   // The first time one of your troops' signatures is working
   if (state.players.player.units.some(unit => {
     const signature = unitSignature(unit);

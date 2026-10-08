@@ -34,8 +34,7 @@ import {
   TERRAIN_BONUS_ATTACK_MULTIPLIER,
   getSituationalBonuses,
   getProtections,
-  getEffects,
-  isSmoked
+
 } from '@/lib/game/gameState';
 import { ROMAN, unitSignature } from '@/lib/game/signatures';
 import { getHexDistance } from '@/lib/game/hexUtils';
@@ -118,8 +117,6 @@ interface GameBoardProps {
   unitIds?: Set<string>;
   // Tint the hexes enemies can strike next turn, and label damage for the selected troop
   showThreats?: boolean;
-  // A tactic card is being aimed: the highlighted hexes are its targets
-  targetingTactic?: boolean;
 }
 
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
@@ -666,7 +663,7 @@ const surfacePosition = (hex: Hex): [number, number, number] => {
 const toVector = ([x, y, z]: [number, number, number]) => new THREE.Vector3(x, y, z);
 
 // The buffs (and the odd drawback) working on a unit right now, shown under its health tag, most
-// telling first: its signature while its condition is met, tactic cards, hazards, then the ground.
+// telling first: its signature while its condition is met, hazards, then the ground.
 // Bonds are always on, so they only show in the list a tap opens.
 const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitBuff[] => {
   if (!hex) return [];
@@ -688,7 +685,7 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
       });
     }
   }
-  // Tactic cards at work on it
+  // Its bonuses from others (Ward)
   for (const bonus of situational) {
     if (bonus.label !== signature?.def.name) {
       buffs.push({ id: `bonus-${bonus.label}`, icon: 'attack', label: bonus.label, value: `+${pct(bonus.multiplier - 1)} attack`, good: true });
@@ -697,9 +694,6 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   for (const protection of getProtections(state, unit)) {
     buffs.push({ id: `guard-${protection.label}`, icon: 'shield', label: protection.label, value: `-${pct(protection.reduction)} damage`, good: true });
   }
-  const march = getEffects(state, 'march').find(entry => entry.unitId === unit.id);
-  if (march) buffs.push({ id: 'march', icon: 'attack', label: 'Forced March', value: `+${march.value} move`, good: true });
-  if (isSmoked(state, unit.position)) buffs.push({ id: 'smoke', icon: 'shield', label: 'Smoke Screen', value: 'Safe from arrows', good: true });
   // Its own fury
   if (unit.abilities.includes('berserk') && unit.lifespan * 2 <= unit.maxLifespan) {
     buffs.push({ id: 'berserk', icon: 'attack', label: 'Berserk', value: `+${pct(BERSERK_ATTACK_MULTIPLIER - 1)} attack`, good: true });
@@ -766,8 +760,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   assetsLoaded,
   selectedUnitTypeForPurchase = null,
   unitIds,
-  showThreats = false,
-  targetingTactic = false
+  showThreats = false
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const unitIdsRef = useRef(unitIds);
@@ -797,16 +790,11 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [isSetupPhase, hexGrid, gameState.castleChoices]
   );
-  // Hexes under a Smoke Screen
-  const smokedKeys = useMemo(
-    () => new Set((gameState.effects ?? []).filter(effect => effect.kind === 'smoke').flatMap(effect => effect.hexes ?? [])),
-    [gameState.effects]
-  );
 
   const getHighlight = (key: string): HexHighlight => {
     if (isSetupPhase) return validBaseKeys.has(key) ? 'base' : 'none';
     if (!validMoveKeys.has(key)) return 'none';
-    return targetingTactic ? 'tactic' : selectedUnitTypeForPurchase ? 'deploy' : 'move';
+    return selectedUnitTypeForPurchase ? 'deploy' : 'move';
   };
 
   const selectedKey = selectedHex ? coordKey(selectedHex.coordinates) : null;
@@ -1344,7 +1332,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             onHexHoverEnd={handleHexHoverEnd}
             fogged={!!visibleKeys && !visibleKeys.has(key)}
             threat={threatLevels?.get(key) ?? 0}
-            smoked={smokedKeys.has(key)}
             decor={decor}
           />
         );

@@ -5,7 +5,6 @@ import {
 } from '@/lib/game/gameState';
 import { PLAYER_CARD_IDS, TROOPS, TROOP_CLASSES, TroopClass, strongAgainst } from '@/lib/game/troops';
 import { SIGNATURE_UNLOCK_LEVEL, getSignature } from '@/lib/game/signatures';
-import { FIRST_TACTIC_ROUND, TACTICS, TACTIC_HAND_LIMIT, TACTIC_IDS, TACTIC_LOADOUT_SIZE } from '@/lib/game/tactics';
 import { FOG_FROM_LEVEL } from '@/lib/campaign/levels';
 import { MUSIC_CHANNELS, setChannelVolume, setMusicVolume, useMusicMix, useMusicVolume } from '@/lib/audio/music';
 import { isAnalyticsAvailable, isAnalyticsEnabled, setAnalyticsEnabled } from '@/lib/analytics';
@@ -15,7 +14,7 @@ import { TERRAIN_ORDER, TERRAIN_SHORT_EFFECTS } from '../game/hud/terrainInfo';
 import { CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
 import {
   AttackIcon, BondIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
-  SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon, TacticBackIcon, TacticIcon, TACTIC_COLORS
+  SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon
 } from '../game/icons';
 import type { Difficulty } from '../game/storage/GameStorage';
 import { UI_SIZES, setUiSize, useUiSize } from '@/lib/uiSize';
@@ -270,21 +269,6 @@ const GuideTab: React.FC = () => (
             </li>
           );
         })}
-      </ul>
-    </GuideSection>
-    <GuideSection title="Tactic cards" icon={<TacticBackIcon />}>
-      <p>
-        Bring {TACTIC_LOADOUT_SIZE} tactic cards into battle (pick them before the fight). From round {FIRST_TACTIC_ROUND}, every second round you draw one of them at random -
-        you can hold {TACTIC_HAND_LIMIT} - and play it on your turn: tap it, and tap a pink hex if it needs a target. The enemy draws its own and plays them too.
-        Tactic cards level up in the Army; more unlock as you advance.
-      </p>
-      <ul className="grid gap-1.5 sm:grid-cols-2">
-        {TACTIC_IDS.map(id => (
-          <li key={id} className="flex items-start gap-2 rounded-lg bg-slate-800/80 px-3 py-2">
-            <TacticIcon id={id} className="mt-0.5 shrink-0 text-base" color={TACTIC_COLORS[id]} />
-            <span><b>{TACTICS[id].name}</b><span className="block text-slate-400">{TACTICS[id].describe(1)}</span></span>
-          </li>
-        ))}
       </ul>
     </GuideSection>
     <GuideSection title="Your castle" icon={<CrownIcon />}>

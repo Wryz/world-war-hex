@@ -1,8 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
 import {
   Ability,
-  BattleEffect,
-  BattleEffectKind,
   GameState,
   Hex,
   HexCoordinates,
@@ -19,7 +17,6 @@ import {
   Sighting,
   Combat,
   GameSettings,
-  TacticCard,
   WinReason
 } from '@/types/game';
 import type { BondId } from './bonds';
@@ -36,7 +33,6 @@ import {
   challengePulls, challengeRange, chargeBonus, eyeOfStormBonus, holySmiteBonus, isSmitable, loneBladeBonus,
   piercingShare, rankOf, shoulderBonusPerAlly, steadyAimBonus, strafeDamage, undermineDepth, wardReduction
 } from './signatures';
-import { TACTIC_HAND_LIMIT, isTacticDrawRound } from './tactics';
 
 // Default game settings: a small board and short turns so a battle takes a few minutes
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -277,8 +273,6 @@ export interface BattleSetup {
   levelId?: number;
   // Units the enemy starts with next to its castle
   guards?: GuardSpec[];
-  // The tactic cards each side brings (none: no tactic cards this battle)
-  tactics?: Record<PlayerType, TacticCard[]>;
   // Let the player pick their castle's site before the first turn (otherwise it is placed for them)
   chooseCastle?: boolean;
 }
@@ -332,11 +326,7 @@ export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS, s
     bonds: setup?.bonds,
     levelId: setup?.levelId,
     battleStats: { player: emptySideStats(), ai: emptySideStats() },
-    tactics: setup?.tactics && {
-      player: { loadout: setup.tactics.player, hand: [], drawn: 0 },
-      ai: { loadout: setup.tactics.ai, hand: [], drawn: 0 }
-    },
-    tacticSeed: Math.floor(Math.random() * 2 ** 31)
+    battleSeed: Math.floor(Math.random() * 2 ** 31)
   };
 };
 
@@ -415,12 +405,7 @@ export const cloneState = (state: GameState): GameState => ({
   battleStats: state.battleStats && {
     player: cloneSideStats(state.battleStats.player),
     ai: cloneSideStats(state.battleStats.ai)
-  },
-  tactics: state.tactics && {
-    player: { ...state.tactics.player, hand: [...state.tactics.player.hand] },
-    ai: { ...state.tactics.ai, hand: [...state.tactics.ai.hand] }
-  },
-  effects: state.effects && [...state.effects]
+  }
 });
 
 const cloneSideStats = (stats: SideStats): SideStats => ({
@@ -1364,8 +1349,6 @@ export const canStrike = (state: GameState, attacker: Unit, target: Unit): boole
   const distance = getHexDistance(attacker.position, target.position);
   if (distance > getUnitAttackRange(state, attacker)) return false;
   if (distance <= 1) return true;
-  // Smoke hides its hexes from anything further away
-  if (isSmoked(state, target.position)) return false;
   if (hasAbility(attacker, 'magic')) return true;
   return hasLineOfSight(state.hexGrid, attacker.position, target.position);
 };
@@ -1526,20 +1509,7 @@ export const getStrikePowerOnTerrain = (
   getPointBlankMultiplier(attacker, distance) *
   getSmiteMultiplier(attacker, target);
 
-// --- Signature abilities and tactic cards in a fight ---------------------------------------
-
-export const getEffects = (state: GameState, kind: BattleEffectKind): BattleEffect[] =>
-  (state.effects ?? []).filter(effect => effect.kind === kind);
-
-const unitEffect = (state: GameState, kind: BattleEffectKind, unitId: string): BattleEffect | undefined =>
-  state.effects?.find(effect => effect.kind === kind && effect.unitId === unitId);
-
-// Whether smoke hangs over a hex (nothing in it can be shot at from 2 or more hexes away)
-export const isSmoked = (state: GameState, at: HexCoordinates): boolean =>
-  getEffects(state, 'smoke').some(effect => effect.hexes?.includes(coordKey(at)));
-
-// Whether a unit strikes from the shadows this turn (Shadowstep): its target can't strike back
-export const isShadowstepping = (state: GameState, unit: Unit): boolean => !!unitEffect(state, 'shadowstep', unit.id);
+// --- Signature abilities in a fight -----------------------------------------------------------
 
 export interface SituationalBonus {
   label: string;
@@ -1548,7 +1518,7 @@ export interface SituationalBonus {
 
 // The attack bonuses a unit gets from where it stands and what it has done this turn: its signature
 // ability (beside friends, alone, standing still, after a charge, on the enemy's turn, far from the
-// enemy) and tactic cards (Rally, Shadowstep). `at` is where it strikes from and `movedHexes` how far
+// enemy). `at` is where it strikes from and `movedHexes` how far
 // it walked to get there, so the AI can ask about hexes a unit hasn't moved to yet.
 export const getSituationalBonuses = (
   state: GameState,
@@ -1579,13 +1549,6 @@ export const getSituationalBonuses = (
   if (rank > 0 && ownTurn && movedHexes >= CHARGE_DISTANCE) add('Charge', chargeBonus(rank));
   rank = rankOf(attacker, 'eyeOfTheStorm');
   if (rank > 0 && !enemies.some(enemy => getHexDistance(enemy.position, at) <= EYE_OF_STORM_RADIUS)) add('Eye of the Storm', eyeOfStormBonus(rank));
-
-  if (ownTurn) {
-    // Rallies played this turn add up
-    add('Rally', getEffects(state, 'rally').filter(effect => effect.side === attacker.owner).reduce((sum, effect) => sum + effect.value, 0));
-    const shadow = unitEffect(state, 'shadowstep', attacker.id);
-    if (shadow) add('Shadowstep', shadow.value);
-  }
   return bonuses;
 };
 
@@ -1598,15 +1561,13 @@ export interface Protection {
   reduction: number;
 }
 
-// What shields a unit standing at `at` from damage: a friendly Mage's Ward beside it, and Bulwark
+// What shields a unit standing at `at` from damage: a friendly Mage's Ward beside it
 export const getProtections = (state: GameState, unit: Unit, at: HexCoordinates = unit.position): Protection[] => {
   const protections: Protection[] = [];
   const ward = Math.max(0, ...state.players[unit.owner].units
     .filter(ally => ally.id !== unit.id && getHexDistance(ally.position, at) === 1)
     .map(ally => wardReduction(rankOf(ally, 'ward'))));
   if (ward > 0) protections.push({ label: 'Ward', reduction: ward });
-  const bulwark = unitEffect(state, 'bulwark', unit.id);
-  if (bulwark) protections.push({ label: 'Bulwark', reduction: bulwark.value });
   return protections;
 };
 
@@ -1746,7 +1707,6 @@ export const canStrikeCastle = (state: GameState, unit: Unit): boolean => {
   const distance = getHexDistance(unit.position, castle.coordinates);
   if (distance > getUnitAttackRange(state, unit)) return false;
   if (distance <= 1) return true;
-  if (isSmoked(state, castle.coordinates)) return false;
   return hasAbility(unit, 'magic') || hasLineOfSight(state.hexGrid, unit.position, castle.coordinates);
 };
 
@@ -1892,8 +1852,6 @@ const finishTurn = (state: GameState): GameState => {
   const healers = newState.players[activePlayer].units.filter(unit => hasAbility(unit, 'healing'));
   // Siege Sappers that stood still this turn dig out the ground around them (Undermine)
   const diggers = newState.players[activePlayer].units.filter(unit => rankOf(unit, 'undermine') > 0 && !unit.movedHexes);
-  // Forced March wears off at the end of the turn
-  const marchBonus = new Map(getEffects(state, 'march').filter(effect => effect.side === activePlayer).map(effect => [effect.unitId, effect.value]));
   let healedAtSprings = 0;
   let healedByMages = 0;
   const burned: Unit[] = [];
@@ -1911,7 +1869,6 @@ const finishTurn = (state: GameState): GameState => {
       // A side's troops slip back into the fog when its own turn comes round again
       const updated = {
         ...unit, lifespan, hasMoved: false, isEngagedInCombat: false, movedHexes: 0,
-        movementRange: unit.movementRange - (marchBonus.get(unit.id) ?? 0),
         revealed: side === activePlayer ? unit.revealed : false
       };
       if (lifespan <= 0) burned.push(updated);
@@ -1934,9 +1891,6 @@ const finishTurn = (state: GameState): GameState => {
   }
   applyChallenges(newState, activePlayer);
   undermine(newState, diggers.filter(digger => newState.players[activePlayer].units.some(unit => unit.id === digger.id)));
-  // Tactic cards that last the turn wear off now, and the other side's until-your-next-turn ones too
-  newState.effects = (newState.effects ?? []).filter(effect =>
-    !(effect.lasts === 'turn' && effect.side === activePlayer) && !(effect.lasts === 'nextTurn' && effect.side !== activePlayer));
 
   processDamageToBase(newState, activePlayer);
   const income = getIncome(newState, activePlayer);
@@ -1978,7 +1932,7 @@ const finishTurn = (state: GameState): GameState => {
     turnNumber: activePlayer === 'ai' ? newState.turnNumber + 1 : newState.turnNumber,
     planningTimeRemaining: getSettings(state).planningPhaseTime
   };
-  return isTacticDrawRound(next.turnNumber) ? drawTactic(next, next.activePlayer!) : next;
+  return next;
 };
 
 // Challenge: each of the side's Shieldbearers pulls the nearest enemies it can see within its reach one
@@ -2030,32 +1984,14 @@ const undermine = (state: GameState, diggers: Unit[]): void => {
   }
 };
 
-// --- Tactic card draws -----------------------------------------------------------------------
+// --- Randomness -----------------------------------------------------------------------------
 
-// A small seeded random number generator, so draws don't depend on when the page happens to run them
+// A small seeded random number generator, so a battle's chance events don't depend on when the page happens to run them
 const seededRandom = (seed: number): number => {
   let t = (seed + 0x6d2b79f5) | 0;
   t = Math.imul(t ^ (t >>> 15), t | 1);
   t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-};
-
-// At the start of a side's turn in a draw round it draws one of the tactic cards it brought, at
-// random - unless its hand of tactic cards is already full
-export const drawTactic = (state: GameState, side: PlayerType): GameState => {
-  const tactics = state.tactics?.[side];
-  if (!tactics || tactics.loadout.length === 0) return state;
-  if (tactics.hand.length >= TACTIC_HAND_LIMIT) {
-    if (side === 'player') addLog(state, 'player', 'Your tactic cards are full - play one to make room for the next.');
-    return state;
-  }
-  const roll = seededRandom((state.tacticSeed ?? 0) + state.turnNumber * 7919 + (side === 'ai' ? 104729 : 0) + tactics.drawn * 31);
-  const card = tactics.loadout[Math.floor(roll * tactics.loadout.length)];
-  const drawn = { ...card, uid: `${side}-tactic-${tactics.drawn + 1}` };
-  return {
-    ...state,
-    tactics: { ...state.tactics!, [side]: { ...tactics, hand: [...tactics.hand, drawn], drawn: tactics.drawn + 1 } }
-  };
 };
 
 // Siege damage one unit deals to a castle in its range
@@ -2199,8 +2135,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
   const attackers = attackerUnits.map(unit => {
     // Defenders can only strike back at attackers within their own reach, and never at a sneak attack
     // Sneak attackers can't catch each other unawares
-    const isSneakAttack = isShadowstepping(state, unit) ||
-      (hasAbility(unit, 'stealth') && !defenderUnits.some(defender => hasAbility(defender, 'stealth')));
+    const isSneakAttack = (hasAbility(unit, 'stealth') && !defenderUnits.some(defender => hasAbility(defender, 'stealth')));
     const canBeHitBack = !combat.intercept && !isSneakAttack && defenderUnits.some(defender => canStrike(state, defender, unit));
     const modifiers = defenderUnits[0] ? describeStrike(unit, defenderUnits[0], attackerUnits.length) : [];
     if (canBeHitBack) modifiers.push(...describeDefence(unit));
@@ -2278,20 +2213,19 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
   };
   const size = (multiplier: number) => Math.round(Math.abs(multiplier - 1) * 100);
   const pct = (multiplier: number) => `${size(multiplier)}%`;
-  // Signature and tactic bonuses, one entry for them all: the biggest of each kind across the attackers
+  // Signature bonuses, one entry for them all: the biggest of each kind across the attackers
   const bonuses = new Map<string, number>();
   const targetTerrain = terrainUnder(state, target);
 
   if (attackers.some(unit => unit.ambushed) || target.ambushed) add('Ambush!', 'neutral');
   for (const unit of attackers) {
     const terrain = terrainUnder(state, unit);
-    if (!combat.intercept && isShadowstepping(state, unit)) add('Shadowstep!', 'good');
-    else if (!combat.intercept && hasAbility(unit, 'stealth')) {
+    if (!combat.intercept && hasAbility(unit, 'stealth')) {
       const spotted = hasAbility(target, 'stealth');
       add(spotted ? 'Sneak attack spotted' : 'Sneak attack!', spotted ? 'neutral' : 'good', undefined, spotted ? 5 : 100);
     }
     for (const bonus of getSituationalBonuses(state, unit)) {
-      if (bonus.label !== 'Shadowstep') bonuses.set(bonus.label, Math.max(bonuses.get(bonus.label) ?? 0, size(bonus.multiplier)));
+      bonuses.set(bonus.label, Math.max(bonuses.get(bonus.label) ?? 0, size(bonus.multiplier)));
     }
     const smite = getSmiteMultiplier(unit, target);
     if (smite > 1) bonuses.set('Holy Smite', Math.max(bonuses.get('Holy Smite') ?? 0, size(smite)));
@@ -2431,7 +2365,7 @@ const creditKill = (state: GameState, unit: Unit, killer: PlayerType): void => {
   sideStats(state, unit.owner).lost++;
 };
 
-// Damage dealt outside a fight (Pegasus Knights' Strafe), softened by armour and Ward or Bulwark as in a fight.
+// Damage dealt outside a fight (Pegasus Knights' Strafe), softened by armour and Ward as in a fight.
 // A unit it destroys is removed and pays its bounty to `by`. Works on a state the caller has cloned.
 export const inflictDamage = (state: GameState, unit: Unit, amount: number, by: PlayerType): { damage: number; destroyed: boolean } => {
   const live = state.players[unit.owner].units.find(u => u.id === unit.id);

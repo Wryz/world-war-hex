@@ -1,15 +1,12 @@
-// Tests for signature abilities, tactic cards and choosing the castle's site. Run with `npm test`.
+// Tests for signature abilities and choosing the castle's site. Run with `npm test`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { GameState, TacticCard } from '@/types/game';
+import type { GameState } from '@/types/game';
 import {
-  DEFAULT_SETTINGS, addPendingMove, canStrike, chooseCastle, createBattle, drawTactic, executeMoves, findBaseHex,
-  getCombatPreview, getHeightOfHex, getValidMoveTargets
+  DEFAULT_SETTINGS, addPendingMove, chooseCastle, createBattle, executeMoves, findBaseHex, getCombatPreview, getHeightOfHex
 } from './gameState';
-import { getTacticTargets, playTactic } from './battleTactics';
 import { getHexDistance } from './hexUtils';
 import { MAX_SIGNATURE_RANK, signatureRank, strafeDamage } from './signatures';
-import { TACTICS, TACTIC_HAND_LIMIT, TACTIC_IDS, isTacticDrawRound, mendHeal, pitDepth, rallyBonus } from './tactics';
 import { at, find, health, makeBattle, makeUnit, place, playTurn } from './testUtils';
 
 // Damage the first defender would take if the attackers struck it now
@@ -121,153 +118,6 @@ test('Berserkers heal when they destroy an enemy', () => {
   const after = playTurn(state);
   assert.equal(find(after, victim), undefined);
   assert.ok(health(after, berserker) > 5);
-});
-
-// --- Tactic cards ---------------------------------------------------------------------------
-
-const LOADOUT: TacticCard[] = [{ id: 'mend', level: 1 }, { id: 'pitTrap', level: 1 }, { id: 'rally', level: 1 }];
-
-const withHand = (state: GameState, ...cards: TacticCard[]): GameState => ({
-  ...state,
-  tactics: {
-    player: { loadout: LOADOUT, hand: cards.map((card, i) => ({ ...card, uid: `p${i}` })), drawn: cards.length },
-    ai: { loadout: LOADOUT, hand: [], drawn: 0 }
-  }
-});
-
-test('tactic cards are drawn from round 2, every second round', () => {
-  assert.deepEqual([1, 2, 3, 4, 5, 6].map(isTacticDrawRound), [false, true, false, true, false, true]);
-});
-
-test('a side draws one of its own cards, and holds no more than three', () => {
-  let { state } = makeBattle('player');
-  state = withHand(state);
-  for (let i = 0; i < 5; i++) state = drawTactic(state, 'player');
-  assert.equal(state.tactics!.player.hand.length, TACTIC_HAND_LIMIT);
-  assert.ok(state.tactics!.player.hand.every(card => LOADOUT.some(owned => owned.id === card.id)));
-});
-
-test('the turn after round 1 ends, each side draws a tactic card', () => {
-  let { state } = makeBattle('player');
-  state = withHand(state);
-  state.turnNumber = 1;
-  const afterPlayer = playTurn(state);
-  assert.equal(afterPlayer.tactics!.ai.hand.length, 0, 'no draw in round 1');
-  const afterAi = playTurn(afterPlayer);
-  assert.equal(afterAi.turnNumber, 2);
-  assert.equal(afterAi.tactics!.player.hand.length, 1);
-});
-
-test('tactic cards never aim at enemy troops directly', () => {
-  assert.ok(TACTIC_IDS.every(id => ['none', 'ownUnit', 'hex'].includes(TACTICS[id].target)));
-});
-
-test('Mend heals, and a Pit Trap drops an enemy into low ground without hurting it', () => {
-  const { state: base, centre } = makeBattle('player');
-  const state = withHand(base, { id: 'mend', level: 3 }, { id: 'pitTrap', level: 3 });
-  const wounded = makeUnit('player', centre, { lifespan: 5 });
-  const enemy = makeUnit('ai', at(centre, 2, 0));
-  place(state, wounded, enemy);
-  const mended = playTactic(state, 'player', 'p0', centre);
-  assert.equal(health(mended, wounded), 5 + mendHeal(3));
-  const before = getHeightOfHex(mended, enemy.position);
-  const trapped = playTactic(mended, 'player', 'p1', enemy.position);
-  assert.equal(health(trapped, enemy), 20, 'no damage');
-  assert.ok(Math.abs(getHeightOfHex(trapped, enemy.position) - (before - pitDepth(3))) < 1e-6);
-  assert.equal(trapped.tactics!.player.hand.length, 0);
-});
-
-test('troops strike harder down into a pit', () => {
-  const { state: base, centre } = makeBattle('player');
-  const state = withHand(base, { id: 'pitTrap', level: 10 });
-  const attacker = makeUnit('player', centre, { attackPower: 10 });
-  const enemy = makeUnit('ai', at(centre, 1, 0), { lifespan: 99, maxLifespan: 99 });
-  place(state, attacker, enemy);
-  const level = damageTo(state, [attacker], enemy);
-  const trapped = playTactic(state, 'player', 'p0', enemy.position);
-  assert.ok(damageTo(trapped, [attacker], enemy) > level);
-});
-
-test('a tactic card needs a valid target and the right turn', () => {
-  const { state: base, centre } = makeBattle('player');
-  const state = withHand(base, { id: 'mend', level: 1 });
-  place(state, makeUnit('player', centre));
-  assert.equal(getTacticTargets(state, 'player', 'mend').length, 0, 'nobody is wounded');
-  assert.equal(playTactic(state, 'player', 'p0', centre), state);
-  const wounded = { ...state, players: { ...state.players, player: { ...state.players.player, units: [{ ...state.players.player.units[0], lifespan: 5 }] } } };
-  assert.notEqual(playTactic(wounded, 'player', 'p0', centre), wounded, 'playable on its own turn');
-  const enemyTurn = { ...wounded, activePlayer: 'ai' as const };
-  assert.equal(playTactic(enemyTurn, 'player', 'p0', centre), enemyTurn, 'not on the enemy turn');
-});
-
-test('Rally makes this turn\'s attacks hit harder, then wears off', () => {
-  const { state: base, centre } = makeBattle('player');
-  const state = withHand(base, { id: 'rally', level: 1 });
-  const attacker = makeUnit('player', centre, { attackPower: 10 });
-  const target = makeUnit('ai', at(centre, 1, 0), { lifespan: 99, maxLifespan: 99 });
-  place(state, attacker, target);
-  const plain = damageTo(state, [attacker], target);
-  const rallied = playTactic(state, 'player', 'p0');
-  assert.equal(damageTo(rallied, [attacker], target), Math.round(plain * (1 + rallyBonus(1))));
-  assert.equal(playTurn(rallied).effects?.length ?? 0, 0);
-});
-
-test('Forced March adds movement for one turn only', () => {
-  const { state: base, centre } = makeBattle('player');
-  const state = withHand(base, { id: 'forcedMarch', level: 1 });
-  const unit = makeUnit('player', centre, { movementRange: 2 });
-  place(state, unit);
-  const before = getValidMoveTargets(state, unit).length;
-  const marched = playTactic(state, 'player', 'p0', centre);
-  assert.ok(getValidMoveTargets(marched, find(marched, unit)!).length > before);
-  assert.equal(find(playTurn(marched), unit)!.movementRange, 2);
-});
-
-test('Smoke stops shots from afar but not blows from the next hex', () => {
-  const { state: base, centre } = makeBattle('player');
-  const state = withHand(base, { id: 'smoke', level: 1 });
-  const target = makeUnit('ai', centre);
-  const archer = makeUnit('player', at(centre, 2, 0), { abilities: ['rangedAttack'] });
-  const sword = makeUnit('player', at(centre, -1, 0));
-  place(state, target, archer, sword);
-  assert.ok(canStrike(state, archer, target));
-  const smoked = playTactic(state, 'player', 'p0', centre);
-  assert.ok(!canStrike(smoked, archer, target));
-  assert.ok(canStrike(smoked, sword, target));
-});
-
-test('Earthworks raise the ground and Sinkhole lowers it', () => {
-  const { state: base, centre } = makeBattle('player');
-  const state = withHand(base, { id: 'earthworks', level: 1 }, { id: 'sinkhole', level: 1 });
-  place(state, makeUnit('player', centre));
-  const target = at(centre, 1, 0);
-  const raised = playTactic(state, 'player', 'p0', target);
-  assert.ok(getHeightOfHex(raised, target) > getHeightOfHex(state, target));
-  const sunk = playTactic(raised, 'player', 'p1', at(centre, 0, 1));
-  assert.ok(getHeightOfHex(sunk, at(centre, 0, 1)) < getHeightOfHex(raised, at(centre, 0, 1)));
-});
-
-test('a Barricade turns open ground into cover that stops arrows', () => {
-  const { state: base, centre } = makeBattle('player');
-  const state = withHand(base, { id: 'barricade', level: 1 });
-  const archer = makeUnit('ai', at(centre, 2, 0), { abilities: ['rangedAttack'], attackPower: 10 });
-  const sword = makeUnit('ai', at(centre, 1, 0), { attackPower: 10 });
-  const defender = makeUnit('player', centre, { lifespan: 99, maxLifespan: 99 });
-  place(state, archer, sword, defender);
-  const open = damageTo(state, [sword], defender);
-  const walled = playTactic(state, 'player', 'p0', centre);
-  assert.equal(walled.hexGrid.find(hex => hex.coordinates.q === centre.q && hex.coordinates.r === centre.r)!.terrain, 'ruins');
-  assert.ok(damageTo(walled, [sword], defender) < open, 'cover');
-  assert.equal(getTacticTargets(walled, 'player', 'barricade').some(c => c.q === archer.position.q && c.r === archer.position.r), false, 'not under an enemy');
-});
-
-test('Call to Arms brings a free troop to the castle', () => {
-  const { state: base } = makeBattle('player');
-  const state = withHand(base, { id: 'callToArms', level: 1 });
-  const called = playTactic(state, 'player', 'p0');
-  assert.equal(called.players.player.units.length, 1);
-  const castle = findBaseHex(called, 'player')!;
-  assert.equal(getHexDistance(called.players.player.units[0].position, castle.coordinates), 1);
 });
 
 // --- Choosing the castle --------------------------------------------------------------------

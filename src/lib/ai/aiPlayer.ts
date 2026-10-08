@@ -1,5 +1,4 @@
 import { getHexHeightOf } from '../game/hexHeight';
-import { planTactics } from './aiTactics';
 import {
   GameState,
   Player,
@@ -43,8 +42,7 @@ import {
   getSiegeDamage,
   getTimeScore,
   getSituationalMultiplier,
-  getDamageTakenMultiplier,
-  isSmoked
+  getDamageTakenMultiplier
 } from '../game/gameState';
 import { TroopClass, getTroopClass } from '../game/troops';
 
@@ -244,8 +242,6 @@ const mirrorSides = (state: GameState): GameState => {
     winner: flipSide(state.winner),
     rosters: state.rosters && { player: state.rosters.ai, ai: state.rosters.player },
     battleStats: state.battleStats && { player: state.battleStats.ai, ai: state.battleStats.player },
-    tactics: state.tactics && { player: state.tactics.ai, ai: state.tactics.player },
-    effects: state.effects?.map(effect => ({ ...effect, side: flipSide(effect.side) })),
     // The deck only limits the real player's recruits; the planner is told which cards it holds instead
     deck: undefined,
     // A campaign enemy's income bonus doesn't belong to the side being planned for
@@ -266,8 +262,7 @@ const mirrorSides = (state: GameState): GameState => {
 export const planAITurn = (initial: GameState, options: AIPlanOptions = {}): GameState => {
   const doctrine = options.doctrine ?? 'balanced';
   const side = options.side ?? 'ai';
-  // Tactic cards first: they change the board the moves are planned on
-  const state = planTactics(initial, side, options.difficulty ?? initial.settings?.aiDifficulty);
+  const state = initial;
   // In the fog of war the planner only knows about the enemy troops its side can see, and remembers
   // where it last saw the others
   const view = getSideView(state, side, true);
@@ -474,7 +469,6 @@ const canStrikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, a
   const distance = getHexDistance(from, at);
   if (distance > getAttackRange(attacker, terrainAt(planner, from))) return false;
   if (distance <= 1) return true;
-  if (isSmoked(planner.state, at)) return false;
   return attacker.abilities.includes('magic') || hasLineOfSight(planner.state.hexGrid, from, at);
 };
 

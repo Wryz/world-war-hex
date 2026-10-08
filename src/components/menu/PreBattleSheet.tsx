@@ -5,9 +5,7 @@ import { ALL_THEMES } from '@/lib/game/mapGenerator';
 import { FACTIONS, TROOPS, scaleTroop } from '@/lib/game/troops';
 import { TERRAIN_EFFECTS } from '@/lib/game/gameState';
 import { MAX_DECK_SIZE, levelWinReward } from '@/lib/meta/economy';
-import { ownedTactics, profilePower, setDeck, toggleDeckCard, toggleTacticLoadout, useProfile } from '@/lib/meta/profile';
-import { FACTION_TACTICS, TACTICS, TACTIC_LOADOUT_SIZE, enemyTacticLevel } from '@/lib/game/tactics';
-import { TacticCard } from '../game/cards/TacticCard';
+import { profilePower, setDeck, toggleDeckCard, useProfile } from '@/lib/meta/profile';
 import { matchupScore, suggestLoadout } from '@/lib/meta/loadout';
 import { trackEvent } from '@/lib/analytics';
 import { PLAYER_CARD_IDS, TroopId } from '@/lib/game/troops';
@@ -16,7 +14,7 @@ import { BondList } from '../game/cards/BondList';
 import { activeBonds } from '@/lib/game/bonds';
 import { CARD_CLASS, PRIMARY_BUTTON, SECONDARY_BUTTON } from './MenuShell';
 import {
-  AttackIcon, BossIcon, CardsIcon, CloseIcon, CoinIcon, PowerIcon, ShieldIcon, StarIcon, TerrainIcon, BondIcon, FogIcon, TacticBackIcon, TacticIcon
+  AttackIcon, BossIcon, CardsIcon, CloseIcon, CoinIcon, PowerIcon, ShieldIcon, StarIcon, TerrainIcon, BondIcon, FogIcon
 } from '../game/icons';
 import { TerrainType } from '@/types/game';
 
@@ -104,48 +102,6 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
       </div>
       <div className="mt-5">
         <BondList deck={profile.deck} owned={owned} brief />
-      </div>
-    </div>
-  );
-};
-
-// Pick the three tactic cards to bring, and see the ones the enemy brings
-const TacticPicker: React.FC<{ level: LevelDef }> = ({ level }) => {
-  const profile = useProfile();
-  const owned = ownedTactics(profile);
-  const isFull = profile.tacticLoadout.length >= TACTIC_LOADOUT_SIZE;
-  const enemyLevel = enemyTacticLevel(level.id);
-  return (
-    <div className="mt-5">
-      <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
-        <span className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-slate-400">
-          <TacticBackIcon /> Tactic cards {profile.tacticLoadout.length}/{TACTIC_LOADOUT_SIZE}
-        </span>
-        <span className="flex items-center gap-1 text-xs text-slate-400" title="The enemy draws from these">
-          Enemy brings
-          {FACTION_TACTICS[level.region.faction].map(id => (
-            <span key={id} title={`${TACTICS[id].name} (level ${enemyLevel}): ${TACTICS[id].describe(enemyLevel)}`}><TacticIcon id={id} className="text-base" color="#fca5a5" /></span>
-          ))}
-        </span>
-      </div>
-      <p className="mb-2 text-xs text-slate-400">From round 2, every second round you draw one of these at random. Play it on your turn.</p>
-      <div className="grid grid-cols-4 gap-x-3 gap-y-6 pl-1.5 pt-3 sm:grid-cols-6 sm:gap-x-4">
-        {owned.map(id => {
-          const inLoadout = profile.tacticLoadout.includes(id);
-          return (
-            <TacticCard
-              key={id}
-              id={id}
-              level={profile.tactics[id]}
-              size="sm"
-              fill
-              selected={inLoadout}
-              disabled={!inLoadout && isFull}
-              onClick={() => toggleTacticLoadout(id)}
-              title={`${TACTICS[id].name}: ${TACTICS[id].describe(profile.tactics[id] ?? 1)} ${inLoadout ? '(tap to leave behind)' : isFull ? '(leave one behind first)' : '(tap to bring)'}`}
-            />
-          );
-        })}
       </div>
     </div>
   );
@@ -265,7 +221,6 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
 
         {/* Cards to bring */}
         <LoadoutPicker enemies={enemies} />
-        {level.id > 1 && <TacticPicker level={level} />}
 
         {/* Stars and the reward */}
         <div className="mt-4 flex flex-wrap items-center gap-1.5">

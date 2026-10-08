@@ -1,10 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useIsNarrow } from '../../shared/useIsNarrow';
-import { GameState, HeldTactic, UnitType } from '@/types/game';
+import { GameState, UnitType } from '@/types/game';
 import { getHand, getNextCard, getRosterStats, getTroopName } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
-import { TacticCard } from '../cards/TacticCard';
-import { TACTICS } from '@/lib/game/tactics';
 import { ArrowIcon, BondIcon, GoldIcon, UndoIcon } from '../icons';
 import { BondDef, describeBond, getBond } from '@/lib/game/bonds';
 import { PANEL_CLASS } from './styles';
@@ -47,16 +45,12 @@ interface CardHandProps {
   // Take back the last order this turn
   canUndo?: boolean;
   onUndo?: () => void;
-  // Tactic cards held, the one being aimed, and picking one
-  tactics?: HeldTactic[];
-  selectedTactic?: string | null;
-  onTacticSelect?: (uid: string) => void;
 }
 
 // The player's hand at the bottom of the screen: the cards they brought into battle. Pick a card,
 // then a glowing hex to play it.
 export const CardHand: React.FC<CardHandProps> = ({
-  gameState, isAITurn, selectedUnitType, hint, onCardSelect, onEndTurn, canUndo = false, onUndo, tactics = [], selectedTactic = null, onTacticSelect
+  gameState, isAITurn, selectedUnitType, hint, onCardSelect, onEndTurn, canUndo = false, onUndo
 }) => {
   const hand = getHand(gameState);
   const nextCard = getNextCard(gameState);
@@ -100,24 +94,6 @@ export const CardHand: React.FC<CardHandProps> = ({
         </div>
       )}
 
-      {/* Tactic cards held: tap to play (or to aim, then tap a pink hex) */}
-      {tactics.length > 0 && onTacticSelect && (
-        <div className="pointer-events-auto flex items-end gap-1.5 sm:gap-2" role="group" aria-label="Your tactic cards" data-tutorial="tactics">
-          <span className="mr-0.5 self-center text-[0.5625rem] font-bold uppercase tracking-widest text-slate-100 drop-shadow">Tactics</span>
-          {tactics.map(card => (
-            <TacticCard
-              key={card.uid}
-              id={card.id}
-              level={card.level}
-              size={isNarrow ? 'xs' : 'sm'}
-              selected={selectedTactic === card.uid}
-              onClick={() => onTacticSelect(card.uid)}
-              className="card-draw"
-              title={`${TACTICS[card.id].name} (level ${card.level}): ${TACTICS[card.id].describe(card.level)}`}
-            />
-          ))}
-        </div>
-      )}
 
       <div className="flex max-w-full items-end gap-1.5 sm:gap-3">
         {/* Treasury */}
