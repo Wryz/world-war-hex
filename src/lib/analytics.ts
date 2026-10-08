@@ -1,9 +1,8 @@
-import type { PostHog } from 'posthog-js';
-
 // Anonymous gameplay analytics (PostHog), used to see where players get stuck in the campaign and
 // which cards and cosmetics they pick. Only game events are sent - no session recordings, no
 // autocaptured clicks and no personal details - and players can switch it off in Stats & Save.
-// It stays off unless NEXT_PUBLIC_POSTHOG_KEY is set at build time.
+// It stays off unless NEXT_PUBLIC_POSTHOG_KEY is set at build time. PostHog's browser library is loaded
+// from its CDN only then, so the game has no analytics code to bundle or install otherwise.
 
 const KEY = process.env.NEXT_PUBLIC_POSTHOG_KEY;
 const HOST = process.env.NEXT_PUBLIC_POSTHOG_HOST || 'https://us.i.posthog.com';
@@ -24,8 +23,19 @@ export type AnalyticsEvent =
 
 type Properties = Record<string, string | number | boolean | null | undefined | string[]>;
 
-let client: PostHog | null = null;
-let loading: Promise<PostHog | null> | null = null;
+// The parts of PostHog's browser library the game uses
+interface PostHogClient {
+  init: (key: string, config: Record<string, unknown>) => void;
+  capture: (event: string, properties?: Properties) => void;
+  opt_in_capturing: () => void;
+  opt_out_capturing: () => void;
+}
+
+// PostHog serves its browser library from the assets host next to the ingestion host
+const libraryUrl = () => `${HOST.replace('.i.posthog.com', '-assets.i.posthog.com')}/static/array.js`;
+
+let client: PostHogClient | null = null;
+let loading: Promise<PostHogClient | null> | null = null;
 // Events sent before the library has loaded
 const queue: [AnalyticsEvent, Properties][] = [];
 
@@ -40,10 +50,19 @@ export const isAnalyticsEnabled = (): boolean => {
   }
 };
 
-const load = (): Promise<PostHog | null> => {
+const load = (): Promise<PostHogClient | null> => {
   if (!isAnalyticsEnabled()) return Promise.resolve(null);
-  loading ??= import('posthog-js')
-    .then(({ default: posthog }) => {
+  loading ??= new Promise<PostHogClient | null>(resolve => {
+    const script = document.createElement('script');
+    script.src = libraryUrl();
+    script.async = true;
+    script.crossOrigin = 'anonymous';
+    script.onload = () => resolve((window as unknown as { posthog?: PostHogClient }).posthog ?? null);
+    script.onerror = () => resolve(null);
+    document.head.appendChild(script);
+  })
+    .then(posthog => {
+      if (!posthog) return null;
       posthog.init(KEY!, {
         api_host: HOST,
         person_profiles: 'identified_only',
