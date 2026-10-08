@@ -198,7 +198,7 @@ export const getLevel = (levelId: number): LevelDef => {
   ) / 100;
   const enemyTier = Math.max(1, Math.round((enemyScale - 1) / 0.1) + 1);
   const gridSize = region.id < 2 ? 4 : 5;
-  const maxRounds = gridSize === 4 ? 10 : 12;
+  const maxRounds = gridSize === 4 ? 12 : 14;
 
   const guards: GuardSpec[] = [];
   if (isBoss) {
