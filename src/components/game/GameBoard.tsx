@@ -111,6 +111,7 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
           <CameraRig
             gameState={props.gameState}
             focus={props.selectedUnit?.position ?? (props.selectedHex && (props.selectedHex.isCamp || props.selectedHex.isBase) ? props.selectedHex.coordinates : null)}
+            deployingCard={props.selectedUnitTypeForPurchase}
           />
         </Suspense>
       </Canvas>
@@ -141,7 +142,17 @@ const CAMERA_FOCUS_MIN_RADIUS = 0.35;
 // The camera views the board from one of four sides: behind the active castle (side 0), or a quarter,
 // half or three-quarter turn around the board, each framed the same way. Selecting something on
 // another side of the board swings the camera round to the side nearest it.
-const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null }> = ({ gameState, focus }) => {
+// Which of the four camera sides (quarter turns from the castle side at `castleAzimuth`) an
+// azimuth is nearest
+const nearestSide = (azimuth: number, castleAzimuth: number) => {
+  let best = 0;
+  for (let side = 1; side < 4; side++) {
+    if (Math.abs(angleDelta(azimuth, castleAzimuth + side * Math.PI / 2)) < Math.abs(angleDelta(azimuth, castleAzimuth + best * Math.PI / 2))) best = side;
+  }
+  return best;
+};
+
+const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; deployingCard?: UnitType | null }> = ({ gameState, focus, deployingCard }) => {
   const { camera, size, gl } = useThree();
 
   // Let the HUD place things (flying coins) over points on the board
@@ -231,25 +242,42 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null }
   // New turn (or castles placed): swing to the active side's default view
   useEffect(() => showSide(0), [showSide]);
 
+  // Which of the four sides a point on the board is nearest, or null for points near the middle
+  // (they're in view from every side)
+  const sideOf = useCallback((coordinates: HexCoordinates): number | null => {
+    const [x, , z] = axialToWorld(coordinates);
+    if (Math.hypot(x, z) < viewRadiusRef.current * CAMERA_FOCUS_MIN_RADIUS) return null;
+    return nearestSide(Math.atan2(x, z), targetAzimuth);
+  }, [targetAzimuth]);
+  const currentSide = () => nearestSide(targetAzimuth + azimuthOffsetRef.current, targetAzimuth);
+
   // A selection on another side of the board: swing round to the side nearest it
   const focusKey = focus ? `${focus.q},${focus.r}` : null;
   useEffect(() => {
     if (!focus || gameState.currentPhase !== 'planning') return;
-    const [x, , z] = axialToWorld(focus);
-    if (Math.hypot(x, z) < viewRadiusRef.current * CAMERA_FOCUS_MIN_RADIUS) return;
-    const angle = Math.atan2(x, z);
-    const nearestSide = (azimuth: number) => {
-      let best = 0;
-      for (let side = 1; side < 4; side++) {
-        if (Math.abs(angleDelta(azimuth, targetAzimuth + side * Math.PI / 2)) < Math.abs(angleDelta(azimuth, targetAzimuth + best * Math.PI / 2))) best = side;
-      }
-      return best;
-    };
-    const side = nearestSide(angle);
-    if (side !== nearestSide(targetAzimuth + azimuthOffsetRef.current)) showSide(side);
+    const side = sideOf(focus);
+    if (side !== null && side !== currentSide()) showSide(side);
     // Only reacts to a new selection
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey]);
+
+  // Picking a card to play: stay on this side if it shows the castle or a camp of ours to deploy
+  // at, otherwise swing to the nearest side that does
+  useEffect(() => {
+    if (!deployingCard || gameState.currentPhase !== 'planning') return;
+    const spots = gameState.hexGrid.filter(hex => hex.owner === viewSide && (hex.isBase || hex.isCamp));
+    const sides = spots.map(hex => sideOf(hex.coordinates));
+    // A spot near the middle is in view whichever side the camera is on
+    if (sides.includes(null)) return;
+    const from = currentSide();
+    if (sides.includes(from)) return;
+    // Fewest quarter turns away (the castle's own side first on a tie)
+    const steps = (side: number) => Math.min((side - from + 4) % 4, (from - side + 4) % 4);
+    const best = (sides as number[]).reduce((a, b) => (steps(b) < steps(a) || (steps(b) === steps(a) && b === 0) ? b : a));
+    showSide(best);
+    // Only reacts to picking a card
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [deployingCard]);
 
   // The battle is won: swoop down on the losing castle as it falls
   const loser = gameState.currentPhase === 'gameOver' && gameState.winner

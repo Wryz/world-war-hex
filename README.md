@@ -108,7 +108,7 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 ### Battle (`src/components/game`)
 
 - `GameController`: Runs a battle and lays out its HUD, records the result and shows the results screen
-- `GameBoard`: The 3D board and camera (framed so the board sits just above the hand; drag to orbit, scroll to zoom; selecting something far away swings it round to the nearest of four sides), routes, battle markers, deaths and damage numbers
+- `GameBoard`: The 3D board and camera (framed so the board sits just above the hand; drag to orbit, scroll to zoom; selecting something far away swings it round to the nearest of four sides, and picking a card keeps or brings into view a side with your castle or a camp you hold), routes, battle markers, deaths and damage numbers
 - `UnitMesh`: An animated troop - KayKit character or procedural creature - walking, fighting blow by blow (see `utils/battleTiming`) and falling
 - `Castle`, `Camp`, `HexTile`, `BoardDecorations`, `MovePath`: The rest of the board
 - `cards/TroopCard`: A troop as a playing card, used everywhere
