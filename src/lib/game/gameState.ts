@@ -182,6 +182,14 @@ export const TERRAIN_EFFECTS: Record<TerrainType, TerrainEffect> = {
     damageTakenMultiplier: 1,
     damagePerTurn: 2,
     description: 'Units here lose 2 health at the end of each of their turns. The undead are healed instead.'
+  },
+  village: {
+    name: 'Village',
+    moveCost: 1,
+    elevation: 1,
+    sightHeight: 2,
+    damageTakenMultiplier: 0.8,
+    description: 'Houses and walls: units here take 20% less damage, and the buildings block arrows unless shot from higher ground.'
   }
 };
 

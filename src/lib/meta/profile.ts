@@ -13,6 +13,7 @@ import {
   quickBattleReward,
   upgradeCost
 } from './economy';
+import { LEVEL_COUNT } from '../campaign/levels';
 import {
   CARD_SKINS, CASTLE_STYLES, CardSkinId, CastleStyleId, DEFAULT_CARD_SKIN, DEFAULT_CASTLE_STYLE, isCardSkinId, isCastleStyleId
 } from './cosmetics';
@@ -141,7 +142,7 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
   if (isRecord(raw.levels)) {
     for (const [key, record] of Object.entries(raw.levels)) {
       const id = Number(key);
-      if (!Number.isInteger(id) || id < 1 || id > 100 || !isRecord(record)) continue;
+      if (!Number.isInteger(id) || id < 1 || id > LEVEL_COUNT || !isRecord(record)) continue;
       levels[id] = {
         stars: Math.min(3, toCount(record.stars)),
         wins: toCount(record.wins),
@@ -250,7 +251,7 @@ export const highestCleared = (profile: Profile): number =>
   Object.entries(profile.levels).reduce((max, [id, record]) => (record.wins > 0 ? Math.max(max, Number(id)) : max), 0);
 
 // The furthest level the player may play
-export const highestUnlocked = (profile: Profile): number => Math.min(100, highestCleared(profile) + 1);
+export const highestUnlocked = (profile: Profile): number => Math.min(LEVEL_COUNT, highestCleared(profile) + 1);
 
 export const isLevelUnlocked = (profile: Profile, levelId: number) => levelId <= highestUnlocked(profile);
 

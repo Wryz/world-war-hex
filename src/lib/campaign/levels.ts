@@ -4,8 +4,9 @@ import { Faction, MOB_IDS, TROOPS, TroopId, cardPower, scaleTroop, statsPower } 
 import { expectedProgression, recommendedPower, baseLevelReward } from '../meta/economy';
 import { LEVEL_TUNING } from './levelTuning';
 
-// The campaign: ten regions of ten levels each. Every region has its own map theme, enemy
-// faction and terrain; the tenth level of each is a boss battle. Enemies get stronger level by
+// The campaign: fifteen regions of ten levels each. Every region has its own map theme, enemy
+// faction and terrain; the tenth level of each is a boss battle. The last five regions are
+// rematches: old factions return with allies, on new ground. Enemies get stronger level by
 // level, in step with how strong the player can expect their cards to be by then.
 
 export interface Region {
@@ -14,6 +15,8 @@ export interface Region {
   // Map theme (see mapGenerator REGION_THEMES)
   theme: string;
   faction: Faction;
+  // Factions that lend the region's faction troops
+  allies?: Faction[];
   boss: TroopId;
   // Terrain this region introduces
   newTerrain: TerrainType[];
@@ -84,6 +87,37 @@ export const REGIONS: Region[] = [
     newTerrain: [], colors: ['#fca5a5', '#9f1239'],
     blurb: 'At the roof of the world, the Elder Dragon waits. End this.',
     places: ['Cultist Camp', 'Wyvern Roost', 'Scorched Steps', 'Drake Hatchery', 'Knight\'s Grave', 'Ember Glacier', 'Hoard Gate', 'Sky Bridge', 'Dragon\'s Maw', 'The Dragonspire']
+  },
+  {
+    id: 10, name: 'The King\'s Road', theme: 'The King\'s Road', faction: 'orcs', allies: ['bandits', 'goblins'], boss: 'orc_warlord',
+    newTerrain: ['village'], colors: ['#bef264', '#a16207'],
+    blurb: 'The Iron Horde is back, burning the villages along the King\'s Road. Houses give cover and block arrows.',
+    places: ['Haywain Village', 'Miller\'s Green', 'Burnt Barn', 'Crossroads Inn', 'Market Square', 'Old Watchtower', 'Bellwether Church', 'Windmill Hill', 'The Sacked Town', 'Gorrash Rides Again']
+  },
+  {
+    id: 11, name: 'Hallowmere', theme: 'Hallowmere', faction: 'undead', allies: ['swamp'], boss: 'lich_king',
+    newTerrain: [], colors: ['#fdba74', '#7c2d12'],
+    blurb: 'Morthul has risen again, and the pumpkin fields of Hallowmere glow at night.',
+    places: ['Pumpkin Patch', 'Lanternway', 'Scarecrow Field', 'Hollow Oak', 'Coffin Lane', 'Candle Crypt', 'Witchlight Bog', 'Ravenhall', 'The Bone Orchard', 'Morthul\'s Return']
+  },
+  {
+    id: 12, name: 'The Underkeep', theme: 'The Underkeep', faction: 'infernal', allies: ['goblins'], boss: 'demon_lord',
+    newTerrain: [], colors: ['#fca5a5', '#57534e'],
+    blurb: 'Under the mountains lies the old keep. Demons and goblins fight over its treasure vaults.',
+    places: ['Deepgate', 'Torchlit Hall', 'Pillar Maze', 'Collapsed Stair', 'Vault of Coins', 'Goblin Mines', 'Chained Bridge', 'Flooded Forge', 'Hall of Banners', 'The Pit Throne']
+  },
+  {
+    id: 13, name: 'Rimeholt', theme: 'Rimeholt', faction: 'frost', allies: ['dragons'], boss: 'frost_giant',
+    newTerrain: [], colors: ['#e0f2fe', '#1e3a8a'],
+    blurb: 'Far north of the pass, the frost giants have woken the ice drakes.',
+    places: ['Rime Gate', 'Frostfang Village', 'Shattered Lake', 'Iceveil Woods', 'Wyrm\'s Rest', 'Hoarfrost Keep', 'Glacier Tombs', 'Northwind Tower', 'Rimeholt Peak', 'Hrimgar\'s Vengeance']
+  },
+  {
+    id: 14, name: 'The Last Bastion', theme: 'The Last Bastion', faction: 'dragons',
+    allies: ['bandits', 'goblins', 'beasts', 'swamp', 'desert', 'frost', 'undead', 'orcs', 'infernal'], boss: 'elder_dragon',
+    newTerrain: [], colors: ['#fde68a', '#7e22ce'],
+    blurb: 'Every army you have beaten marches together on the realm\'s last fortress. Hold the line.',
+    places: ['Outer Walls', 'Refugee Camp', 'Siege Lines', 'Burning Village', 'Broken Gate', 'Dragon\'s Shadow', 'Hall of Heroes', 'The Inner Keep', 'The Final Charge', 'The Last Bastion']
   }
 ];
 
@@ -95,7 +129,7 @@ export interface StarGoal {
 }
 
 export interface LevelDef {
-  id: number; // 1..100
+  id: number; // 1..LEVEL_COUNT
   region: Region;
   // 0..9 within its region
   index: number;
@@ -154,12 +188,22 @@ const regularsOf = (faction: Faction): TroopId[] =>
   MOB_IDS.filter(id => TROOPS[id].faction === faction && !TROOPS[id].isBoss);
 
 // The enemy's troop types: the region's faction, introduced a type or two at a time, joined
-// later in the region by a troop from the previous region's faction
+// later in the region by a troop from the previous region's faction, or by its allies'
 const enemyRosterFor = (region: Region, index: number): TroopId[] => {
-  const own = regularsOf(region.faction);
+  const faction = regularsOf(region.faction);
+  // A rematch starts from the faction's tougher troops
+  const offset = region.allies ? 2 : 0;
+  const own = [...faction.slice(offset), ...faction.slice(0, offset)];
   const count = index === 0 ? 1 : index <= 2 ? 2 : index <= 4 ? 3 : 4;
-  const roster = own.slice(0, count);
-  if (region.id > 0 && (index === 6 || index === 8)) {
+  const roster = own.slice(0, region.allies ? Math.min(count, 3) : count);
+  if (region.allies) {
+    // Allies join from the second battle: one troop, then two from the seventh
+    const allyCount = index === 0 ? 0 : index < 6 ? 1 : 2;
+    for (let i = 0; i < allyCount; i++) {
+      const troops = regularsOf(region.allies[(index + i) % region.allies.length]);
+      roster.push(troops[(region.id + index + i) % troops.length]);
+    }
+  } else if (region.id > 0 && (index === 6 || index === 8)) {
     const previous = regularsOf(REGIONS[region.id - 1].faction);
     roster.push(previous[(region.id + index) % previous.length]);
   }

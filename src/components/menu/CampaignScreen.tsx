@@ -62,7 +62,7 @@ const RegionBand: React.FC<{ region: Region; onSelect: (level: LevelDef) => void
   );
 };
 
-// The campaign map: ten regions of ten battles, from Greenvale to the Dragonspire
+// The campaign map: fifteen regions of ten battles, from Greenvale to the Last Bastion
 export const CampaignScreen: React.FC<{ initialLevel?: number }> = ({ initialLevel }) => {
   const router = useRouter();
   const profile = useProfile();

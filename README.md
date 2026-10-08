@@ -6,7 +6,7 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 
 - **Cards.** Your troops are playing cards. You start with four and bring four into every battle, picked before each fight (the pre-battle screen marks the cards that counter that enemy, and Auto-pick chooses a strong set). In battle, tap a card, then a glowing hex next to your castle (or a camp you hold) to deploy it.
 - **Bonds.** Twelve pairs of cards fight better together - Swordsmen and Pikemen form a Shield Wall (+15% health each), Archers and Longbowmen a Volley (+15% attack each), War Clerics give Berserkers Regenerates, and so on. Bring both cards of a bond into a battle and its bonuses apply to every troop you recruit from them; the pre-battle screen and the Army screen show which bonds you have and which are one card away.
-- **Campaign.** 100 battles across 10 regions - Greenvale Meadows, Goblin Woods, Howling Hills, Mirefen Marsh, Sunscorch Desert, Frostpeak Pass, Gravemoor, Ironfang Badlands, Emberforge Wastes and Dragonspire Peaks. The campaign map draws each region as its own island - grass and farmland, pine woods, desert dunes, snowfields, gloomy moors and scorched badlands - with the road winding past its ten levels. Each region has its own battle theme, terrain and enemy faction, an elite battle (a champion guards the castle) and a boss battle. Win to unlock the next level, and earn up to three stars per level: one for winning, and two and three for winning with enough points - the gold value of enemy troops destroyed, half the gold you earned, 15 for every camp you hold and 10 for every round left (the bars rise with the level's recommended power).
+- **Campaign.** 150 battles across 15 regions - Greenvale Meadows, Goblin Woods, Howling Hills, Mirefen Marsh, Sunscorch Desert, Frostpeak Pass, Gravemoor, Ironfang Badlands, Emberforge Wastes and Dragonspire Peaks, then five rematch regions where old foes return with allies: the King's Road (villages whose houses give cover and block arrows), haunted Hallowmere, the Underkeep's treasure vaults, frozen Rimeholt and the Last Bastion, where every army marches at once. The campaign map draws each region as its own island - grass and farmland, pine woods, desert dunes, snowfields, gloomy moors and scorched badlands - with the road winding past its ten levels. Each region has its own battle theme, terrain and enemy faction, an elite battle (a champion guards the castle) and a boss battle. Win to unlock the next level, and earn up to three stars per level: one for winning, and two and three for winning with enough points - the gold value of enemy troops destroyed, half the gold you earned, 15 for every camp you hold and 10 for every round left (the bars rise with the level's recommended power).
 - **50 monsters.** Ten factions of five - bandits, goblins, beasts, swamp folk, the sand court, the frostborn, the undead, orcs, the infernal legion and the dragonkin - each with four troops the enemy recruits and a boss.
 - **Bestiary.** Every monster you meet is added to the Bestiary on the main menu, with its lore, abilities, kill count and a 3D model to inspect.
 - **Power.** Each card has a power rating from its stats and abilities, and your army's power is the sum of the four cards you bring. Every campaign level shows its recommended power, so you know when to upgrade first.
@@ -56,7 +56,7 @@ Ranged troops caught in close combat fight at half strength. Every card and unit
 
 ### Height and line of sight
 
-Each hex has a height level: water, swamp, ice and lava 0, most ground 1, hills and snow 2, mountains 3. Attacking down onto lower ground deals 25% more damage per level (up to two levels); attacking uphill deals 25% less. Ranged troops on high ground reach one hex further. Shots at range are blocked by any hex in between that stands higher than both the shooter and the target: mountains block everything, ridges hide units from archers below, and forest canopies and ruined walls count one level higher. Spells arc over anything.
+Each hex has a height level: water, swamp, ice and lava 0, most ground 1, hills and snow 2, mountains 3. Attacking down onto lower ground deals 25% more damage per level (up to two levels); attacking uphill deals 25% less. Ranged troops on high ground reach one hex further. Shots at range are blocked by any hex in between that stands higher than both the shooter and the target: mountains block everything, ridges hide units from archers below, and forest canopies, ruined walls and village houses count one level higher. Spells arc over anything.
 
 ### Terrain
 
@@ -66,6 +66,7 @@ Each hex has a height level: water, swamp, ice and lava 0, most ground 1, hills 
 | Forest | 1 (trees 2) | Units take 40% less damage (except from spells); Pikemen attack 50% harder; blocks shots from below |
 | Hills | 2 | High ground; costs 2 movement |
 | Ruins | 1 (walls 2) | Units take 25% less damage (except from spells); blocks shots from below |
+| Village | 1 (houses 2) | Units take 20% less damage (except from spells); the houses block shots from below |
 | Desert | 1 | Costs 2 movement |
 | Swamp | 0 | Low ground; costs 2 movement |
 | Snow | 2 | High ground; costs 3 movement |
@@ -92,7 +93,7 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 - `game/mapGenerator.ts`: Seeded, themed map generation, including the campaign's region themes
 - `game/hexUtils.ts`: Hex grid maths
 - `ai/aiPlayer.ts`: The AI: scores every move on the fight it offers, the danger it walks into, the ground and its goal; recruits counters from whatever roster it has; plays either side, with selectable doctrines for simulations
-- `campaign/levels.ts`: The 10 regions and 100 levels: enemy rosters and scaling, bosses, star goals and rewards
+- `campaign/levels.ts`: The 15 regions and 150 levels: enemy rosters and scaling, bosses, star goals and rewards
 - `campaign/battleSetup.ts`: Builds a battle from a campaign level (or a quick battle) and the player's deck
 - `meta/economy.ts`: Rewards, card prices, upgrade costs and the progression model behind recommended power
 - `meta/profile.ts`: The player's saved progress, the shop, battle results, stats, and save export and import
@@ -136,7 +137,7 @@ The game can send anonymous gameplay events to [PostHog](https://posthog.com) - 
 - Knights' horse: from the [three.js examples](https://github.com/mrdoob/three.js) (MIT), model by [mirada](https://mirada.com/) for ROME
 - Monsters without a character model are procedural low-poly creatures built in code
 - Music: "Medieval: Exploration", "Medieval: Harvest Season", "Medieval: Battle", "Medieval: Victory Theme" and "Medieval: Defeat Theme" by [RandomMind](https://opengameart.org/users/randommind), and "Epic Boss Battle" by [Juhani Junkala](https://opengameart.org/content/boss-battle-music) (all [CC0](http://creativecommons.org/publicdomain/zero/1.0/), from OpenGameArt); the remaining jingles are synthesised in the browser
-- Battlefield scenery, castles and camps: [KayKit Medieval Hexagon Pack](https://github.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0) and [KayKit Halloween Bits](https://github.com/KayKit-Game-Assets/KayKit-Halloween-Bits-1.0) by Kay Lousberg ([CC0](http://creativecommons.org/publicdomain/zero/1.0/)), packed into two meshopt-compressed GLBs in `public/models/kaykit/`
+- Battlefield scenery, castles and camps: [KayKit Medieval Hexagon Pack](https://github.com/KayKit-Game-Assets/KayKit-Medieval-Hexagon-Pack-1.0) , [KayKit Halloween Bits](https://github.com/KayKit-Game-Assets/KayKit-Halloween-Bits-1.0) and [KayKit Dungeon Remastered](https://github.com/KayKit-Game-Assets/KayKit-Dungeon-Remastered-1.0) by Kay Lousberg ([CC0](http://creativecommons.org/publicdomain/zero/1.0/)), packed into three meshopt-compressed GLBs in `public/models/kaykit/`
 - Campaign map: [Map Pack](https://kenney.nl/assets/map-pack) by [Kenney](https://kenney.nl) ([CC0](http://creativecommons.org/publicdomain/zero/1.0/))
 - Battle sounds are synthesised with [ZzFX](https://github.com/KilledByAPixel/ZzFX) (MIT)
 - Icons from [Game Icons](https://game-icons.net) and [Lucide](https://lucide.dev) via [react-icons](https://react-icons.github.io/react-icons/)

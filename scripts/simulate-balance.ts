@@ -27,7 +27,7 @@ const tune = args[0] === '--tune';
 if (tune) args.shift();
 const battlesPerLevel = Number(args[0] ?? 12);
 const requested = args.slice(1).map(Number).filter(n => n >= 1 && n <= LEVEL_COUNT);
-const levels = requested.length > 0 ? requested : [1, 2, 3, 5, 8, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 90, 100];
+const levels = requested.length > 0 ? requested : [1, 2, 3, 5, 8, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150];
 
 // Shuffle so the hand differs from battle to battle, as it would for a real player
 const shuffle = <T>(items: T[]) => {

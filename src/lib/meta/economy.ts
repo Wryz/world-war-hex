@@ -157,11 +157,13 @@ const buildProgression = (lastLevel: number): ProgressionSnapshot[] => {
   return snapshots;
 };
 
+// Campaign levels the model covers (levels.ts LEVEL_COUNT; not imported, as levels.ts imports this file)
+const MODELLED_LEVELS = 150;
 let progressionCache: ProgressionSnapshot[] | null = null;
 
 // The model player's state when starting a campaign level (1-based)
 export const expectedProgression = (levelId: number): ProgressionSnapshot => {
-  progressionCache ??= buildProgression(100);
+  progressionCache ??= buildProgression(MODELLED_LEVELS);
   return progressionCache[Math.min(Math.max(levelId, 1), progressionCache.length) - 1];
 };
 

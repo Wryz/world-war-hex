@@ -135,7 +135,27 @@ const REGION_ART: RegionArt[] = [
   // Dragonspire Peaks
   { route: 1, mirror: true, land: 'stone', plateau: 'snow', plateauAt: { col: 4, row: 5, cols: 3, rows: 3 },
     cutouts: [{ col: 1, row: 1, cols: 1, rows: 2 }, { col: 6, row: 11, cols: 2, rows: 1 }],
-    scenery: ['snowyPine', 'pinkCrystal', 'rock', 'snowyTree', 'pinkCrystal'], tint: 'rgba(159, 18, 57, 0.18)' }
+    scenery: ['snowyPine', 'pinkCrystal', 'rock', 'snowyTree', 'pinkCrystal'], tint: 'rgba(159, 18, 57, 0.18)' },
+  // The King's Road
+  { route: 1, mirror: false, land: 'grass', plateau: 'autumn', plateauAt: { col: 2, row: 6, cols: 3, rows: 3 },
+    cutouts: [{ col: 7, row: 1, cols: 1, rows: 3 }, { col: 1, row: 10, cols: 2, rows: 2 }],
+    scenery: ['tower', 'tree', 'bush', 'sign', 'tree', 'bigTree', 'tent'] },
+  // Hallowmere
+  { route: 0, mirror: true, land: 'autumn', plateau: 'dirt', plateauAt: { col: 4, row: 2, cols: 3, rows: 3 },
+    cutouts: [{ col: 1, row: 6, cols: 1, rows: 3 }, { col: 6, row: 11, cols: 2, rows: 1 }],
+    scenery: ['deadTree', 'redMushroom', 'mushrooms', 'deadTree', 'sprout', 'mushroom'], tint: 'rgba(234, 88, 12, 0.18)' },
+  // The Underkeep
+  { route: 1, mirror: true, land: 'stone', plateau: 'dirt', plateauAt: { col: 2, row: 7, cols: 3, rows: 3 },
+    cutouts: [{ col: 1, row: 1, cols: 2, rows: 2 }, { col: 7, row: 6, cols: 1, rows: 4 }],
+    scenery: ['rock', 'rock', 'purpleCrystal', 'portal', 'sandRock', 'pinkCrystal'], tint: 'rgba(41, 37, 36, 0.38)' },
+  // Rimeholt
+  { route: 0, mirror: false, land: 'snow', plateau: 'snow', plateauAt: { col: 3, row: 2, cols: 3, rows: 3 },
+    cutouts: [{ col: 1, row: 4, cols: 1, rows: 3 }, { col: 7, row: 10, cols: 1, rows: 2 }],
+    scenery: ['snowyPine', 'snowyPine', 'igloo', 'snowyTree', 'rock', 'snowman'], tint: 'rgba(30, 58, 138, 0.16)' },
+  // The Last Bastion
+  { route: 1, mirror: false, land: 'grass', plateau: 'stone', plateauAt: { col: 4, row: 5, cols: 3, rows: 3 },
+    cutouts: [{ col: 1, row: 1, cols: 1, rows: 3 }, { col: 6, row: 11, cols: 2, rows: 1 }],
+    scenery: ['tower', 'castle', 'tower', 'pine', 'rock', 'tree'], tint: 'rgba(126, 34, 206, 0.14)' }
 ];
 
 export interface Sprite {

@@ -86,7 +86,11 @@ export interface MapTheme {
   dry: [TerrainType, number][];
   // Healing springs scattered across the middle of the map
   springs: number;
+  // Region-specific scenery swapped in for some terrain
+  decor?: MapDecor;
 }
+
+export type MapDecor = 'dungeon' | 'haunted';
 
 export const MAP_THEMES: MapTheme[] = [
   {
@@ -136,6 +140,14 @@ export const MAP_THEMES: MapTheme[] = [
     wet: [['forest', 0.16]],
     dry: [['desert', 0.08]],
     springs: 2
+  },
+  {
+    name: 'Farmlands',
+    lowlands: [['water', 0.08]],
+    highlands: [['hills', 0.1]],
+    wet: [['forest', 0.14]],
+    dry: [['village', 0.1]],
+    springs: 1
   }
 ];
 
@@ -219,6 +231,48 @@ export const REGION_THEMES: MapTheme[] = [
     highlands: [['mountain', 0.12], ['snow', 0.1], ['hills', 0.1]],
     wet: [['forest', 0.08], ['cursed', 0.05]],
     dry: [['ruins', 0.08]],
+    springs: 1
+  },
+  {
+    name: 'The King\'s Road',
+    lowlands: [['water', 0.06]],
+    highlands: [['hills', 0.1]],
+    wet: [['forest', 0.14]],
+    dry: [['village', 0.12]],
+    springs: 1
+  },
+  {
+    name: 'Hallowmere',
+    lowlands: [['water', 0.05], ['swamp', 0.12]],
+    highlands: [['hills', 0.06]],
+    wet: [['cursed', 0.14], ['forest', 0.14]],
+    dry: [['village', 0.05]],
+    springs: 1,
+    decor: 'haunted'
+  },
+  {
+    name: 'The Underkeep',
+    lowlands: [['lava', 0.1]],
+    highlands: [['mountain', 0.16], ['hills', 0.06]],
+    wet: [['ruins', 0.16]],
+    dry: [],
+    springs: 1,
+    decor: 'dungeon'
+  },
+  {
+    name: 'Rimeholt',
+    lowlands: [['ice', 0.14], ['water', 0.04]],
+    highlands: [['mountain', 0.14], ['snow', 0.22]],
+    wet: [['forest', 0.1]],
+    dry: [['village', 0.05], ['ruins', 0.04]],
+    springs: 0
+  },
+  {
+    name: 'The Last Bastion',
+    lowlands: [['water', 0.05], ['lava', 0.05]],
+    highlands: [['mountain', 0.1], ['hills', 0.1]],
+    wet: [['forest', 0.1], ['cursed', 0.05]],
+    dry: [['village', 0.08], ['ruins', 0.06]],
     springs: 1
   }
 ];

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
-import { getLevel, LEVEL_COUNT } from '@/lib/campaign/levels';
+import { getLevel, LEVEL_COUNT, REGIONS } from '@/lib/campaign/levels';
 import { MOB_IDS, FACTIONS } from '@/lib/game/troops';
 import { highestCleared, highestUnlocked, useHasHydrated, useProfile } from '@/lib/meta/profile';
 import { useMusic } from '@/lib/audio/music';
@@ -75,7 +75,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
         {themeName && (
           <div className="pointer-events-none absolute bottom-4 right-4 lg:bottom-8 lg:right-8">
             <div key={themeName} className={`${CARD_CLASS} animate-fadeIn px-4 py-2 text-right`}>
-              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">100 battles across</div>
+              <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{LEVEL_COUNT} battles across</div>
               <div className="font-display text-lg text-amber-300">{themeName}</div>
             </div>
           </div>
@@ -167,7 +167,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
 
           {/* Everything else */}
           <div className="mt-4 grid max-w-lg grid-cols-2 gap-2">
-            <MenuTile href="/campaign" icon={<MapIcon />} title="World Map" detail="10 regions · 100 battles" />
+            <MenuTile href="/campaign" icon={<MapIcon />} title="World Map" detail={`${REGIONS.length} regions · ${LEVEL_COUNT} battles`} />
             <MenuTile href="/army" icon={<CardsIcon />} title="Army" detail="Build your deck, upgrade cards" />
             <MenuTile href="/bestiary" icon={<BookIcon />} title="Bestiary" detail={`${hydrated ? discovered : 0}/${MOB_IDS.length} monsters discovered`} />
             <MenuTile href="/style" icon={<StyleIcon />} title="Style" detail="Card frames, castle styles" />

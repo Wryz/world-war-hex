@@ -22,6 +22,7 @@ const TERRAIN_HEIGHTS: Record<TerrainType, number> = {
   lava: 0.35,
   ice: 0.3,
   ruins: 1.1,
+  village: 1.1,
   cursed: 0.8
 };
 

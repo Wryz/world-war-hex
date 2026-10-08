@@ -15,7 +15,9 @@ export type TerrainType =
   | 'lava'
   | 'ice'
   | 'ruins'
-  | 'cursed';
+  | 'cursed'
+  // Houses, mills and wells: cover, and buildings that block arrows
+  | 'village';
 
 export type PlayerType = 'player' | 'ai';
 

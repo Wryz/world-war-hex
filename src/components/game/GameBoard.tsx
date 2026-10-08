@@ -49,6 +49,7 @@ import { CampIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from
 import type { UnitBuff } from './UnitMesh';
 import { describeBonus, getBond } from '@/lib/game/bonds';
 import type { TroopId } from '@/lib/game/troops';
+import { ALL_THEMES } from '@/lib/game/mapGenerator';
 
 // Identity of a unit's buffs, to keep its props stable while they don't change
 const buffKey = (buffs: UnitBuff[]) => buffs.map(buff => `${buff.id}:${buff.value}`).join('|');
@@ -704,6 +705,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const isSetupPhase = currentPhase === 'setup';
 
   const hexByKey = useMemo(() => new Map(hexGrid.map(hex => [coordKey(hex.coordinates), hex])), [hexGrid]);
+  // The map's decor style (a dungeon's stone floors and pillars, a haunted wood's pumpkins)
+  const decor = ALL_THEMES.find(theme => theme.name === gameState.mapName)?.decor;
   const hoveredHex = hoveredKey ? hexByKey.get(hoveredKey) ?? null : null;
 
   // Which hexes are highlighted and how
@@ -1237,6 +1240,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             onHexHoverEnd={handleHexHoverEnd}
             fogged={!!visibleKeys && !visibleKeys.has(key)}
             threat={threatLevels?.get(key) ?? 0}
+            decor={decor}
           />
         );
       })}
@@ -1307,7 +1311,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       ))}
 
       {/* Trees, peaks, dunes and gold that show each hex's terrain */}
-      <BoardDecorations hexGrid={hexGrid} />
+      <BoardDecorations hexGrid={hexGrid} decor={decor} />
 
       {/* Castles */}
       {playerCastlePosition && (

@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useMemo } from 'react';
 import { useFrame, ThreeEvent } from '@react-three/fiber';
 import { Hex, TerrainType } from '@/types/game';
+import type { MapDecor } from '@/lib/game/mapGenerator';
 import * as THREE from 'three';
 import { playSound } from './utils/SoundPlayer';
 import {
@@ -26,8 +27,17 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   lava: '#4a2b26',
   ice: '#bfe9f7',
   ruins: '#c9bb98',
+  village: '#e6c987',
   cursed: '#6e5f80'
 };
+
+// Ground recoloured for a map's decor style: a dungeon's stone floors, a haunted wood's dull grass
+const DECOR_COLORS: Record<MapDecor, Partial<Record<TerrainType, string>>> = {
+  dungeon: { plain: '#b3aba3', hills: '#9c9188', village: '#c9b48f' },
+  haunted: { plain: '#b4c46e', forest: '#5b8a4f', hills: '#c7b56f' }
+};
+
+const terrainColor = (terrain: TerrainType, decor?: MapDecor) => (decor && DECOR_COLORS[decor][terrain]) ?? TERRAIN_COLORS[terrain];
 
 // Tiles are drawn slightly smaller than their cell so thin gaps outline every hex
 const TILE_SCALE = 0.92;
@@ -67,6 +77,8 @@ interface HexTileProps {
   fogged?: boolean;
   // How dangerous the hex is next turn (0 = safe, 1 = deadly), shown as a red wash
   threat?: number;
+  // The map's decor style, which recolours some ground
+  decor?: MapDecor;
 }
 
 const createHexShape = (size: number) => {
@@ -110,7 +122,8 @@ const HexTileComponent: React.FC<HexTileProps> = ({
   onHexHover,
   onHexHoverEnd,
   fogged = false,
-  threat = 0
+  threat = 0,
+  decor
 }) => {
   const liftRef = useRef<THREE.Group>(null);
   const selectionRingRef = useRef<THREE.Mesh>(null);
@@ -139,15 +152,15 @@ const HexTileComponent: React.FC<HexTileProps> = ({
   useEffect(() => () => geometry.dispose(), [geometry]);
 
   const color = useMemo(() => {
-    const base = new THREE.Color(TERRAIN_COLORS[hex.terrain]);
+    const base = new THREE.Color(terrainColor(hex.terrain, decor));
     if (isHovered) return base.offsetHSL(0, 0.05, 0.12);
     if (highlight !== 'none') return base.offsetHSL(0, 0.05, 0.08);
     return base;
-  }, [hex.terrain, isHovered, highlight]);
+  }, [hex.terrain, decor, isHovered, highlight]);
 
   const sideColor = useMemo(
-    () => new THREE.Color(TERRAIN_COLORS[hex.terrain]).offsetHSL(0, -0.05, -0.18),
-    [hex.terrain]
+    () => new THREE.Color(terrainColor(hex.terrain, decor)).offsetHSL(0, -0.05, -0.18),
+    [hex.terrain, decor]
   );
 
   useFrame((state) => {

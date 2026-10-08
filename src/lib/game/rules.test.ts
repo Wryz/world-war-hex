@@ -7,7 +7,8 @@ import {
   DEFAULT_SETTINGS, createBattle, executeMoves, findBaseHex, getCombatPreview, getStarScore, getTimeScore, resolveAllCombats
 } from './gameState';
 import { getHexDistance } from './hexUtils';
-import { getLevel, starThresholds, starsForWin } from '../campaign/levels';
+import { LEVEL_COUNT, getLevel, starThresholds, starsForWin } from '../campaign/levels';
+import { TROOPS } from './troops';
 
 let nextId = 0;
 
@@ -165,4 +166,15 @@ test('stars: one for a win, two and three for enough points', () => {
   assert.equal(starsForWin(level, 0), 1);
   assert.equal(starsForWin(level, two), 2);
   assert.equal(starsForWin(level, three), 3);
+});
+
+test('every campaign level builds, with a known, distinct enemy roster', () => {
+  for (let id = 1; id <= LEVEL_COUNT; id++) {
+    const level = getLevel(id);
+    assert.equal(level.id, id);
+    assert.ok(level.enemyRoster.length > 0, `level ${id} has enemies`);
+    assert.ok(level.enemyRoster.every(troop => TROOPS[troop]), `level ${id} roster is known`);
+    assert.equal(new Set(level.enemyRoster).size, level.enemyRoster.length, `level ${id} roster has no repeats`);
+    assert.ok(Number.isFinite(level.enemyScale) && level.enemyScale > 0, `level ${id} scale`);
+  }
 });

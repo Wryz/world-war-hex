@@ -1,6 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
 import { Hex, TerrainType } from '@/types/game';
+import type { MapDecor } from '@/lib/game/mapGenerator';
 import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
 import { KAYKIT_HEX_SCALE, PropLibrary, usePropLibrary } from './utils/kaykitProps';
 
@@ -232,6 +233,11 @@ const buildMatrices = (hexes: Hex[], skip: ReadonlySet<TerrainType>): Record<Par
           else add('block', cx + x, y, cz + z, 0.18, 0.1 + r * 0.1, 0.14, 0, r * 4);
         }
         break;
+      case 'village':
+        for (const { x, z, r } of rimSpots(hex, 3)) {
+          add('block', cx + x, y, cz + z, 0.2, 0.18 + r * 0.1, 0.16, 0, Math.atan2(x, z));
+        }
+        break;
       case 'cursed':
         for (const { x, z, r } of rimSpots(hex, 3)) {
           if (r > 0.6) add('deadTree', cx + x, y, cz + z, 1, 1 + r * 0.4, 1, (r - 0.5) * 0.4);
@@ -274,11 +280,13 @@ const InstancedPart: React.FC<{ part: PartName; matrices: THREE.Matrix4[] }> = (
 // --- KayKit scenery ---------------------------------------------------------------------------
 
 // Terrain drawn with KayKit models once they have loaded (the rest keeps the shapes above)
-const KAYKIT_TERRAIN: ReadonlySet<TerrainType> = new Set(['forest', 'mountain', 'plain', 'resource', 'ruins', 'cursed', 'water', 'swamp']);
+const KAYKIT_TERRAIN: ReadonlySet<TerrainType> = new Set(['forest', 'mountain', 'plain', 'resource', 'ruins', 'cursed', 'water', 'swamp', 'village']);
 const S = KAYKIT_HEX_SCALE;
 
 // Where each KayKit model goes on the board: one list of transforms per model
-const buildPropMatrices = (hexes: Hex[]): Map<string, THREE.Matrix4[]> => {
+// A map's decor style swaps some scenery for its region's own (a dungeon's pillars, a haunted wood's
+// pumpkins)
+const buildPropMatrices = (hexes: Hex[], decor?: MapDecor): Map<string, THREE.Matrix4[]> => {
   const result = new Map<string, THREE.Matrix4[]>();
   const quaternion = new THREE.Quaternion();
   const up = new THREE.Vector3(0, 1, 0);
@@ -297,18 +305,50 @@ const buildPropMatrices = (hexes: Hex[]): Map<string, THREE.Matrix4[]> => {
     const y = getHexSurfaceHeight(hex);
     const spin = (salt: number) => seededRandom(hex, salt) * Math.PI * 2;
 
+    // Toward the hex's centre from a spot on its rim, so buildings face the middle
+    const facing = (x: number, z: number) => Math.atan2(-x, -z);
+
     switch (hex.terrain) {
       case 'forest':
         for (const { x, z, r } of rimSpots(hex, 4)) {
-          add(r > 0.5 ? 'tree_single_A' : 'tree_single_B', cx + x, y, cz + z, 0.5 + r * 0.25, r * 6);
+          if (decor === 'haunted') {
+            add(r > 0.5 ? 'tree_pine_orange_medium' : 'tree_dead_large', cx + x, y, cz + z, r > 0.5 ? 0.16 + r * 0.04 : 0.17 + r * 0.05, r * 6);
+          } else {
+            add(r > 0.5 ? 'tree_single_A' : 'tree_single_B', cx + x, y, cz + z, 0.5 + r * 0.25, r * 6);
+          }
         }
         break;
+      case 'village': {
+        // Two or three buildings around the edge, with the middle left clear for troops
+        const spots = rimSpots(hex, 3);
+        const buildings = ['building_home_A_yellow', 'building_home_B_yellow', 'building_home_A_yellow', 'building_windmill_yellow',
+          'building_well_yellow', 'building_market_yellow', 'building_church_yellow', 'building_home_B_yellow'];
+        for (const [i, { x, z, r }] of spots.entries()) {
+          if (i === 2 && r < 0.4) {
+            add('fence_wood_straight', cx + x * 0.2, y, cz + z * 0.2, 0.5, facing(x, z));
+            continue;
+          }
+          const model = pick(buildings, seededRandom(hex, i + 30));
+          const scale = model === 'building_market_yellow' ? 0.42 : model === 'building_church_yellow' ? 0.5 : 0.58;
+          add(model, cx + x * 1.05, y, cz + z * 1.05, scale, facing(x, z));
+        }
+        break;
+      }
       case 'mountain':
-        add(pick(['mountain_A', 'mountain_B', 'mountain_C', 'mountain_A_grass', 'mountain_B_grass_trees'], seededRandom(hex, 1)), cx, y, cz, S * 0.95, Math.round(seededRandom(hex, 2) * 6) * Math.PI / 3);
+        // (the grassy variants' tops read as yellow once the palette is lifted, so bare rock only)
+        add(pick(['mountain_A', 'mountain_B', 'mountain_C'], seededRandom(hex, 1)), cx, y, cz, S * 0.95, Math.round(seededRandom(hex, 2) * 6) * Math.PI / 3);
         break;
       case 'plain':
         // A little scenery on some open ground: a rock, or a lone tree at the edge
-        if (seededRandom(hex, 7) < 0.35) {
+        if (decor === 'dungeon' && seededRandom(hex, 7) < 0.45) {
+          const [{ x, z, r }] = rimSpots(hex, 1);
+          if (r > 0.55) add('torch_lit', cx + x, y + 0.2, cz + z, 0.5, r * 6);
+          else add(r > 0.25 ? 'column' : 'rubble_half', cx + x, y, cz + z, r > 0.25 ? 0.42 : 0.12, r * 6);
+        } else if (decor === 'haunted' && seededRandom(hex, 7) < 0.35) {
+          const [{ x, z, r }] = rimSpots(hex, 1);
+          if (r > 0.5) add(r > 0.75 ? 'pumpkin_orange' : 'pumpkin_orange_jackolantern', cx + x, y, cz + z, r > 0.75 ? 0.2 : 0.16, r * 6);
+          else add('fence_broken', cx + x, y, cz + z, 0.1, facing(x, z) + Math.PI / 2);
+        } else if (seededRandom(hex, 7) < 0.35) {
           const [{ x, z, r }] = rimSpots(hex, 1);
           if (r > 0.6) add(r > 0.8 ? 'tree_single_A' : 'tree_single_B', cx + x * 1.1, y, cz + z * 1.1, 0.42, r * 6);
           else add(pick(['rock_single_A', 'rock_single_D', 'rock_single_E'], r), cx + x, y, cz + z, 1, r * 6);
@@ -316,6 +356,13 @@ const buildPropMatrices = (hexes: Hex[]): Map<string, THREE.Matrix4[]> => {
         break;
       case 'resource': {
         const [mine, stone, crate] = rimSpots(hex, 3);
+        if (decor === 'dungeon') {
+          // A treasure vault rather than a mine
+          add('chest_gold', cx + mine.x, y, cz + mine.z, 0.2, facing(mine.x, mine.z));
+          add('coin_stack_large', cx + stone.x, y, cz + stone.z, 0.18, spin(4));
+          add('torch_lit', cx + crate.x, y + 0.2, cz + crate.z, 0.5, spin(5));
+          break;
+        }
         add('building_mine_yellow', cx + mine.x * 1.05, y, cz + mine.z * 1.05, 0.3, Math.atan2(-mine.x, -mine.z));
         add('resource_stone', cx + stone.x, y, cz + stone.z, 0.75, spin(4));
         add('crate_A_big', cx + crate.x, y, cz + crate.z, 1, spin(5));
@@ -323,6 +370,13 @@ const buildPropMatrices = (hexes: Hex[]): Map<string, THREE.Matrix4[]> => {
       }
       case 'ruins': {
         const [ruin, wall, rock] = rimSpots(hex, 3);
+        if (decor === 'dungeon') {
+          // Broken halls: pillars, rubble and a fallen banner
+          add('pillar_decorated', cx + ruin.x, y, cz + ruin.z, 0.13, facing(ruin.x, ruin.z));
+          add('rubble_large', cx + wall.x, y, cz + wall.z, 0.08, Math.atan2(wall.x, wall.z) + Math.PI / 2);
+          add(rock.r > 0.5 ? 'sword_shield_broken' : 'candle_triple', cx + rock.x, y + (rock.r > 0.5 ? 0.06 : 0), cz + rock.z, rock.r > 0.5 ? 0.16 : 0.3, spin(6));
+          break;
+        }
         add('building_destroyed', cx + ruin.x, y, cz + ruin.z, 0.32, spin(4));
         add('wall_straight', cx + wall.x, y, cz + wall.z, 0.2, Math.atan2(wall.x, wall.z) + Math.PI / 2);
         add('rock_single_D', cx + rock.x, y, cz + rock.z, 1, spin(6));
@@ -369,7 +423,7 @@ const InstancedProp: React.FC<{ library: PropLibrary; model: string; matrices: T
 
 const NO_SKIP: ReadonlySet<TerrainType> = new Set();
 
-const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[] }> = ({ hexGrid }) => {
+const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[]; decor?: MapDecor }> = ({ hexGrid, decor }) => {
   const library = usePropLibrary();
   // Decorations only depend on the terrain, not on units moving around
   const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}`).join('|');
@@ -383,7 +437,7 @@ const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[] }> = ({ hexGrid }) =>
     [terrainSignature, !!library]
   );
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const props = useMemo(() => (library ? buildPropMatrices(hexesRef.current) : null), [terrainSignature, library]);
+  const props = useMemo(() => (library ? buildPropMatrices(hexesRef.current, decor) : null), [terrainSignature, library, decor]);
 
   return (
     <>

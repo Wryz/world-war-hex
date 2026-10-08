@@ -10,7 +10,7 @@ import {
   GiFlamingClaw, GiDaemonSkull, GiCowled, GiWyvern, GiDragonHead, GiBlackKnightHelm, GiSpikedDragonHead,
   GiWheat, GiPineTree, GiCactus, GiGoldMine, GiMountains, GiWaves, GiCrown, GiTwoCoins, GiCrossedSwords, GiHearts,
   GiFootprint, GiDeathSkull, GiSandsOfTime, GiCastle, GiCheckedShield, GiCampingTent, GiHills, GiSwamp, GiSnowflake1,
-  GiFountain, GiLava, GiIceCube, GiBrokenWall, GiTombstone, GiCrownCoin, GiSwordsPower, GiPadlock, GiPokerHand,
+  GiFountain, GiLava, GiIceCube, GiBrokenWall, GiVillage, GiTombstone, GiCrownCoin, GiSwordsPower, GiPadlock, GiPokerHand,
   GiTreasureMap, GiFastForwardButton, GiUpgrade, GiTrophy, GiPodium, GiOpenBook, GiTargetArrows, GiHeartPlus,
   GiAngelWings, GiRegeneration, GiChestArmor, GiSiegeRam, GiAngryEyes, GiRaiseSkeleton, GiWingfoot, GiFireRing,
   GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog
@@ -57,6 +57,7 @@ export const TERRAIN_ICON_COMPONENTS: Record<TerrainType, IconType> = {
   lava: GiLava,
   ice: GiIceCube,
   ruins: GiBrokenWall,
+  village: GiVillage,
   cursed: GiTombstone
 };
 
@@ -75,6 +76,7 @@ export const TERRAIN_ICON_COLORS: Record<TerrainType, string> = {
   lava: '#fb923c',
   ice: '#a5f3fc',
   ruins: '#d6c7a1',
+  village: '#fde68a',
   cursed: '#c084fc'
 };
 

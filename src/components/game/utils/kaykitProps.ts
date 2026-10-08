@@ -2,11 +2,12 @@ import { useEffect, useState } from 'react';
 import * as THREE from 'three';
 import { loadGltf } from './unitModelCache';
 
-// Scenery, castles and camps from KayKit's Medieval Hexagon Pack and Halloween Bits (CC0, Kay
-// Lousberg), packed into two meshopt-compressed GLBs with one named mesh per model. Every model in a
-// pack shares one small texture atlas, so each kind of prop draws as a single instanced mesh.
+// Scenery, castles and camps from KayKit's Medieval Hexagon Pack, Halloween Bits and Dungeon
+// Remastered (CC0, Kay Lousberg), packed into meshopt-compressed GLBs with one named mesh per
+// model. Every model in a pack shares one small texture atlas, so each kind of prop draws as a
+// single instanced mesh.
 
-const PACK_URLS = ['/models/kaykit/medieval.glb', '/models/kaykit/halloween.glb'];
+const PACK_URLS = ['/models/kaykit/medieval.glb', '/models/kaykit/halloween.glb', '/models/kaykit/dungeon.glb'];
 
 // KayKit's hexes are 2 units across their flat sides; ours are √3
 export const KAYKIT_HEX_SCALE = Math.sqrt(3) / 2;
