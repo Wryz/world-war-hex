@@ -45,6 +45,7 @@ import {
   getDamageTakenMultiplier,
   getFellLanding,
   getFellTargets,
+  getActionTargets,
   isImpassable
 } from '../game/gameState';
 import { FELL_DAMAGE, FIRE_DAMAGE } from '../game/battlefield';
@@ -389,6 +390,9 @@ const planTurn = (state: GameState, doctrine: AIDoctrine, recruitTypes: UnitType
     recordPlannedAttack(planner, unit, planner.destinations.get(unit.id)!);
   }
 
+  // Troops left without orders put their tools to work
+  planWork(planner);
+
   // Then spend gold on reinforcements - several per turn when the treasury and upkeep allow
   for (let i = 0; i < MAX_PURCHASES_PER_TURN; i++) {
     const purchase = decidePurchase(planner, campsWithoutCapturer);
@@ -426,6 +430,26 @@ const planFelling = (planner: Planner): void => {
     if (next === planner.state) continue;
     planner.state = next;
     taken.add(key(best.tree));
+  }
+};
+
+// Work for troops with nothing else to do this turn: Sappers tear down a gate the enemy holds, and
+// Rogues set alight the dry ground an enemy stands on (when none of the AI's own troops are near it)
+const planWork = (planner: Planner): void => {
+  const side = planner.state.players.ai;
+  const ordered = new Set(planner.state.pendingMoves.map(move => move.unitId));
+  const ownNear = (at: HexCoordinates) => [...planner.destinations.values()].some(position => getHexDistance(position, at) <= 1);
+  for (const unit of side.units) {
+    if (ordered.has(unit.id) || unit.hasMoved) continue;
+    const pick = getActionTargets(planner.state, unit).find(({ at, action }) => {
+      const hex = planner.hexes.get(key(at));
+      if (action === 'demolish') return hex?.terrain === 'gate' && hex.owner === 'player';
+      if (action === 'ignite') return planner.enemies.some(enemy => coordsMatch(enemy.position, at)) && !ownNear(at);
+      return false;
+    });
+    if (!pick) continue;
+    const next = addPendingMove(planner.state, unit.id, side.id, pick.at, pick.action);
+    if (next !== planner.state) planner.state = next;
   }
 };
 
@@ -592,7 +616,7 @@ const assignInterceptors = (planner: Planner): Map<string, Unit> => {
  */
 // What taking each building is worth to the AI, in the same rough gold terms as a camp
 const BUILDING_VALUE: Partial<Record<TerrainType, number>> = {
-  catapult: 12, tavern: TAVERN_INCOME * 3 + 3, blacksmith: 9, barracks: 6, watchtower: 5, lumbermill: 4
+  catapult: 12, tavern: TAVERN_INCOME * 3 + 3, blacksmith: 9, barracks: 6, watchtower: 5, lumbermill: 4, gate: 6
 };
 
 const findCampTargets = (state: GameState): Hex[] =>

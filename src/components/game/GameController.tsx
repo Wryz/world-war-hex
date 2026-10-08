@@ -20,11 +20,11 @@ import { SelectionCard } from './hud/SelectionCard';
 import { EventFeed } from './hud/EventFeed';
 import { TurnBanner } from './hud/TurnBanner';
 import { getUnitTypeName } from './utils/UnitHelpers';
-import { WarningIcon } from './icons';
+import { ActionIcon, ArrowIcon, WarningIcon } from './icons';
 import { EffectsLayer } from './effects/EffectsLayer';
 import { emitMoment, resetEffects } from './effects/effects';
 import { useBattleMoments } from './effects/useBattleMoments';
-import { castleHealthRatio, getMaxRounds, getSideView, getStarScore, isFogOfWar } from '@/lib/game/gameState';
+import { ACTION_NAMES, castleHealthRatio, getMaxRounds, getSideView, getStarScore, isFogOfWar } from '@/lib/game/gameState';
 import { getLevel, starsForWin, LEVEL_COUNT } from '@/lib/campaign/levels';
 import { battleTroopTypes } from '@/lib/campaign/battleSetup';
 import {
@@ -84,7 +84,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     handleCancelSelection,
     handleUndo,
     canUndo,
-    notice
+    notice,
+    actionChoice,
+    handleActionChoice
   } = useGameHandlers({ battle, resume: shouldContinueGame, isReady });
 
   useMusic(level?.isBoss ? 'boss' : 'battle');
@@ -322,6 +324,25 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           canUndo={canUndo}
           onUndo={handleUndo}
         />
+      )}
+
+      {/* Move onto the hex, or work on it? */}
+      {actionChoice && isPlayerPlanning && (
+        <div className="fixed inset-x-0 bottom-48 z-40 flex justify-center px-3">
+          <div className="animate-fadeIn flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-slate-900/95 p-2 shadow-2xl ring-1 ring-white/10" role="group" aria-label="Choose an order">
+            {actionChoice.canMove && (
+              <button onClick={() => handleActionChoice(null)} className="font-display flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-900 hover:bg-white">
+                <ArrowIcon /> Move here
+              </button>
+            )}
+            {actionChoice.actions.map(action => (
+              <button key={action} onClick={() => handleActionChoice(action)} className="font-display flex items-center gap-1.5 rounded-xl bg-amber-400 px-3 py-2 text-sm text-slate-900 hover:bg-amber-300">
+                <ActionIcon action={action} /> {ACTION_NAMES[action]}
+              </button>
+            ))}
+            <button onClick={handleCancelSelection} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-300 hover:bg-slate-800" aria-label="Cancel">✕</button>
+          </div>
+        </div>
       )}
 
       {/* Before the first turn: choose the castle's site */}

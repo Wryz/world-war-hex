@@ -30,6 +30,9 @@ const TERRAIN_HEIGHTS: Record<TerrainType, number> = {
   barracks: 1.1,
   tavern: 1.1,
   lumbermill: 1.1,
+  wall: 1.3,
+  gate: 1.2,
+  bridge: 0.2,
   cursed: 0.8
 };
 

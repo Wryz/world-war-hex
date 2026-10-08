@@ -5,7 +5,8 @@ import assert from 'node:assert/strict';
 import type { GameState, Hex, HexCoordinates, TerrainType } from '@/types/game';
 import {
   DEFAULT_SETTINGS, addPendingMove, advanceFires, createBattle, defaultRoster, executeMoves, findBaseHex, getCombatPreview,
-  getDeploymentHexes, getFellTargets, getIncome, getSightRange, getUnitAttackRange, updateHex, addPendingPurchase
+  getDeploymentHexes, getFellTargets, getIncome, getSightRange, getUnitAttackRange, updateHex, addPendingPurchase, getValidMoveTargets,
+  getActionTargets, getHeightOfHex
 } from './gameState';
 import { BARRACKS_HEALTH_BONUS, CATAPULT_CASTLE_DAMAGE, CATAPULT_DAMAGE, STRUCTURE_TERRAINS, TAVERN_INCOME, isStructure } from './structures';
 import { BURN_TURNS } from './battlefield';
@@ -24,7 +25,8 @@ test('buildings go up where neither side has the longer march, and not in the tu
     const buildings = state.hexGrid.filter(hex => isStructure(hex.terrain));
     assert.equal(buildings.filter(hex => hex.terrain === 'catapult').length, 1, `seed ${seed}: one catapult tower`);
     assert.ok(buildings.some(hex => hex.terrain === 'house'), `seed ${seed}: a hamlet`);
-    for (const hex of buildings.filter(other => other.terrain !== 'house')) {
+    // (houses, bridges and stretches of wall go where the ground lets them; the rest are fair)
+    for (const hex of buildings.filter(other => !['house', 'bridge', 'wall'].includes(other.terrain))) {
       const [toPlayer, toAi] = castles.map(castle => getHexDistance(castle.coordinates, hex.coordinates));
       assert.ok(Math.abs(toPlayer - toAi) <= 2, `seed ${seed}: ${hex.terrain} is fair (${toPlayer} vs ${toAi})`);
       assert.ok(Math.min(toPlayer, toAi) >= 3, `seed ${seed}: ${hex.terrain} not by a castle`);
@@ -132,4 +134,75 @@ test('houses burn down to ruins', () => {
   updateHex(state, centre, { fire: { stage: 'burning', turnsLeft: BURN_TURNS } });
   for (let turn = 0; turn < BURN_TURNS; turn++) advanceFires(state, false, () => 1);
   assert.equal(hexAt(state, centre).terrain, 'ruins');
+});
+
+// --- Walls, gates, bridges and work orders ---------------------------------------------------
+
+test('a gatehouse lets only the side holding it through', () => {
+  const { state, centre } = makeBattle('player');
+  build(state, at(centre, 1, 0), 'gate', 'ai');
+  const ours = makeUnit('player', centre);
+  place(state, ours);
+  assert.equal(getValidMoveTargets(state, ours).some(c => c.q === centre.q + 1 && c.r === centre.r), false, 'shut to us');
+  hexAt(state, at(centre, 1, 0)).owner = 'player';
+  assert.ok(getValidMoveTargets(state, ours).some(c => c.q === centre.q + 1 && c.r === centre.r), 'open to its holder');
+});
+
+test('stakes stop cavalry, and only slow everyone else', () => {
+  const { state, centre } = makeBattle('player');
+  updateHex(state, at(centre, 1, 0), { feature: 'stakes' });
+  const knight = makeUnit('player', centre, { type: 'helicopter', movementRange: 5 });
+  const foot = makeUnit('player', at(centre, 0, 1), { movementRange: 2 });
+  place(state, knight, foot);
+  assert.equal(getValidMoveTargets(state, knight).some(c => c.q === centre.q + 1 && c.r === centre.r), false);
+  assert.ok(getValidMoveTargets(state, foot).some(c => c.q === centre.q + 1 && c.r === centre.r));
+});
+
+test('Siege Sappers tear down a gate the enemy holds', () => {
+  const { state, centre } = makeBattle('player');
+  build(state, at(centre, 1, 0), 'gate', 'ai');
+  const sapper = makeUnit('player', centre, { type: 'sapper', abilities: ['siege', 'demolition'] });
+  place(state, sapper);
+  assert.ok(getActionTargets(state, sapper).some(t => t.action === 'demolish'));
+  const after = executeMoves(addPendingMove(state, sapper.id, state.players.player.id, at(centre, 1, 0), 'demolish'));
+  assert.equal(hexAt(after, at(centre, 1, 0)).terrain, 'ruins');
+  assert.deepEqual(find(after, sapper)!.position, centre, 'the sapper stays put');
+});
+
+test('Rogues set dry ground alight, but never under a friend', () => {
+  const { state, centre } = makeBattle('player');
+  const rogue = makeUnit('player', centre, { type: 'rogue', abilities: ['stealth', 'firebrand'] });
+  const friend = makeUnit('player', at(centre, 0, 1));
+  place(state, rogue, friend);
+  const targets = getActionTargets(state, rogue).filter(t => t.action === 'ignite');
+  assert.ok(targets.length > 0);
+  assert.equal(targets.some(t => t.at.q === friend.position.q && t.at.r === friend.position.r), false);
+  const after = executeMoves(addPendingMove(state, rogue.id, state.players.player.id, at(centre, 1, 0), 'ignite'));
+  assert.equal(hexAt(after, at(centre, 1, 0)).fire?.stage, 'smoulder');
+});
+
+test('Engineers bridge water and plant stakes, and dig in when they stand still', () => {
+  const { state, centre } = makeBattle('player');
+  updateHex(state, at(centre, 1, 0), { terrain: 'water' });
+  const engineer = makeUnit('player', centre, { type: 'engineer', abilities: ['engineering'], level: 4 });
+  place(state, engineer);
+  const bridged = executeMoves(addPendingMove(state, engineer.id, state.players.player.id, at(centre, 1, 0), 'bridge'));
+  assert.equal(hexAt(bridged, at(centre, 1, 0)).terrain, 'bridge');
+  assert.ok(getHeightOfHex(bridged, centre) > getHeightOfHex(state, centre), 'Fieldworks raised its ground');
+
+  const staked = executeMoves(addPendingMove(state, engineer.id, state.players.player.id, at(centre, -1, 0), 'stakes'));
+  assert.equal(hexAt(staked, at(centre, -1, 0)).feature, 'stakes');
+});
+
+test('walls never cut a castle off, even with the gate shut', () => {
+  for (let seed = 1; seed <= 30; seed++) {
+    const state = createBattle({ ...DEFAULT_SETTINGS, gridSize: 6, seed }, { rosters: { player: defaultRoster(), ai: defaultRoster() }, levelId: 30 });
+    const gate = state.hexGrid.find(hex => hex.terrain === 'gate');
+    if (!gate) continue;
+    gate.owner = 'ai';
+    const runner = makeUnit('player', findBaseHex(state, 'player')!.coordinates, { movementRange: 99 });
+    const reach = getValidMoveTargets({ ...state, players: { ...state.players, player: { ...state.players.player, units: [runner] }, ai: { ...state.players.ai, units: [] } } }, runner);
+    const castle = findBaseHex(state, 'ai')!.coordinates;
+    assert.ok(reach.some(c => getHexDistance(c, castle) === 1), `seed ${seed}: the enemy castle can still be reached`);
+  }
 });

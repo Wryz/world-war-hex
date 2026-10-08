@@ -6,7 +6,7 @@ import type { Ability, TroopStats } from '@/types/game';
 
 export const TROOP_IDS = [
   // Kingdom - the player's cards (the first six ids predate the card system and are kept for saves)
-  'infantry', 'artillery', 'tank', 'rogue', 'helicopter', 'medic',
+  'infantry', 'artillery', 'tank', 'rogue', 'helicopter', 'medic', 'engineer',
   'shieldbearer', 'berserker', 'longbow', 'cleric', 'sapper', 'pegasus', 'archmage',
   // Bandits
   'bandit_thug', 'bandit_archer', 'highwayman', 'bandit_raider', 'bandit_king',
@@ -106,8 +106,8 @@ export const TROOPS: Record<TroopId, TroopDef> = {
   }),
   rogue: troop({
     id: 'rogue', name: 'Rogues', faction: 'kingdom', rarity: 'common', troopClass: 'skirmisher', cost: 18, attack: 6, health: 6, move: 4,
-    abilities: ['stealth'], role: 'Sneak attacks, no strike-back', attackInterval: 0.6,
-    lore: 'They strike from the shadows and are gone before anyone can swing back.'
+    abilities: ['stealth', 'firebrand'], role: 'Sneak attacks, sets fires', attackInterval: 0.6,
+    lore: 'They strike from the shadows and are gone before anyone can swing back - leaving the hayricks burning behind them.'
   }),
   helicopter: troop({
     id: 'helicopter', name: 'Knights', faction: 'kingdom', rarity: 'rare', troopClass: 'cavalry', cost: 26, attack: 8, health: 10, move: 5,
@@ -118,6 +118,11 @@ export const TROOPS: Record<TroopId, TroopDef> = {
     id: 'medic', name: 'Mages', faction: 'kingdom', rarity: 'rare', troopClass: 'magic', cost: 20, attack: 6, health: 8, move: 2,
     abilities: ['rangedAttack', 'healing', 'magic'], role: 'Ranged spells, heals allies', attackInterval: 1.4,
     lore: 'Battle mages hurl bolts from afar and mend the wounds of the soldiers beside them.'
+  }),
+  engineer: troop({
+    id: 'engineer', name: 'Engineers', faction: 'kingdom', rarity: 'rare', troopClass: 'infantry', cost: 16, attack: 4, health: 12, move: 2,
+    abilities: ['engineering'], role: 'Builds bridges and stakes', attackInterval: 1.0,
+    lore: 'Axes, ropes and timber: give them a morning and the river has a bridge and the field a hedge of stakes.'
   }),
   shieldbearer: troop({
     id: 'shieldbearer', name: 'Shieldbearers', faction: 'kingdom', rarity: 'rare', troopClass: 'infantry', cost: 22, attack: 4, health: 20, move: 2,
@@ -141,7 +146,7 @@ export const TROOPS: Record<TroopId, TroopDef> = {
   }),
   sapper: troop({
     id: 'sapper', name: 'Siege Sappers', faction: 'kingdom', rarity: 'epic', troopClass: 'skirmisher', cost: 24, attack: 10, health: 10, move: 3,
-    abilities: ['siege', 'stealth'], role: 'Double damage to castles', attackInterval: 0.9,
+    abilities: ['siege', 'stealth', 'demolition'], role: 'Breach walls, gates and bridges', attackInterval: 0.9,
     lore: 'Powder kegs and bad intentions. Castle walls fear them most.'
   }),
   pegasus: troop({
@@ -200,7 +205,7 @@ export const TROOPS: Record<TroopId, TroopDef> = {
   }),
   goblin_sapper: troop({
     id: 'goblin_sapper', name: 'Goblin Sapper', faction: 'goblins', rarity: 'rare', troopClass: 'skirmisher', cost: 16, attack: 8, health: 6, move: 3,
-    abilities: ['siege'], role: 'Blows up castle walls', attackInterval: 0.9,
+    abilities: ['siege', 'demolition'], role: 'Blows up castle walls', attackInterval: 0.9,
     lore: 'Carries a lit bomb at all times. Life expectancy: short.'
   }),
   goblin_warchief: troop({
@@ -456,7 +461,10 @@ export const ABILITIES: Record<Ability, AbilityInfo> = {
   undead: { name: 'Undead', description: 'Cursed ground heals it instead of hurting it.', power: 0.3 },
   pathfinder: { name: 'Pathfinder', description: 'Desert, swamp, snow and ice cost only 1 movement.', power: 0.5 },
   fireborn: { name: 'Fireborn', description: 'Lava doesn\'t harm it.', power: 0.3 },
-  magic: { name: 'Spells', description: 'Spells arc over obstacles and ignore cover.', power: 0.6 }
+  magic: { name: 'Spells', description: 'Spells arc over obstacles and ignore cover.', power: 0.6 },
+  demolition: { name: 'Demolition', description: 'Instead of moving, tears down a wall, gate or bridge next to it, or clears a fallen trunk or stakes.', power: 0.6 },
+  firebrand: { name: 'Firebrand', description: 'Instead of moving, sets dry ground next to it alight: it smoulders, then burns next turn.', power: 0.6 },
+  engineering: { name: 'Engineering', description: 'Instead of moving, builds a bridge over the water next to it, or plants stakes on open ground next to it that cavalry can\'t cross.', power: 0.8 }
 };
 
 // --- Counters ------------------------------------------------------------------------------

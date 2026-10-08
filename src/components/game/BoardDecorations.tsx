@@ -313,7 +313,30 @@ const buildPropMatrices = (hexes: Hex[], decor?: MapDecor): Map<string, THREE.Ma
   };
   const pick = (models: string[], r: number) => models[Math.min(models.length - 1, Math.floor(r * models.length))];
 
+  const hexAt = new Map(hexes.map(hex => [`${hex.coordinates.q},${hex.coordinates.r}`, hex]));
+  // The heading along the first of the hex's three axes with a matching hex on both sides (or one)
+  const lineTurn = (hex: Hex, matches: (other: Hex) => boolean) => {
+    const axes = [{ q: 1, r: 0 }, { q: 0, r: 1 }, { q: 1, r: -1 }];
+    const score = (d: { q: number; r: number }) => [1, -1].filter(sign => {
+      const other = hexAt.get(`${hex.coordinates.q + sign * d.q},${hex.coordinates.r + sign * d.r}`);
+      return other && matches(other);
+    }).length;
+    const best = [...axes].sort((a, b) => score(b) - score(a))[0];
+    const [x0, , z0] = axialToWorld(hex.coordinates);
+    const [x1, , z1] = axialToWorld({ q: hex.coordinates.q + best.q, r: hex.coordinates.r + best.r });
+    return Math.atan2(x1 - x0, z1 - z0) + Math.PI / 2;
+  };
+
   for (const hex of hexes) {
+    // Stakes planted against cavalry: a hedge of sharpened fence posts
+    if (hex.feature === 'stakes') {
+      const [cx, , cz] = axialToWorld(hex.coordinates);
+      const y = getHexSurfaceHeight(hex);
+      for (let i = 0; i < 3; i++) {
+        const angle = i * Math.PI * 2 / 3 + 0.3;
+        add('fence_wood_straight', cx + Math.cos(angle) * 0.3, y, cz + Math.sin(angle) * 0.3, 0.75, -angle + Math.PI / 4);
+      }
+    }
     if (!KAYKIT_TERRAIN.has(hex.terrain) || hex.isBase || hex.isCamp) continue;
     const [cx, , cz] = axialToWorld(hex.coordinates);
     const y = getHexSurfaceHeight(hex);
@@ -360,6 +383,20 @@ const buildPropMatrices = (hexes: Hex[], decor?: MapDecor): Map<string, THREE.Ma
         add(`${building.model}_${SIDE_COLOR[hex.owner ?? 'none']}`, cx, y, cz, building.scale, Math.round(seededRandom(hex, 3) * 6) * Math.PI / 3);
         break;
       }
+      case 'wall':
+      case 'gate': {
+        // Stone wall along its line (towards the next stretch of wall or the gate); the gatehouse flies
+        // the flag of whoever holds it
+        // (a gate torn down to ruins still lines the wall up)
+        const turn = lineTurn(hex, other => other.terrain === 'wall' || other.terrain === 'gate' || other.terrain === 'ruins');
+        add(hex.terrain === 'gate' ? 'wall_straight_gate' : 'wall_straight', cx, y, cz, S * 0.98, turn);
+        if (hex.terrain === 'gate' && hex.owner) add(hex.owner === 'player' ? 'flag_blue' : 'flag_red', cx + 0.35, y, cz + 0.35, 0.9, turn);
+        break;
+      }
+      case 'bridge':
+        // Across the water, from bank to bank
+        add('building_bridge_A', cx, y, cz, S * 0.98, lineTurn(hex, other => other.terrain !== 'water' && other.terrain !== 'bridge' && other.terrain !== 'mountain'));
+        break;
       case 'house': {
         // A cottage, and a crate or barrel by the door
         const turn = Math.round(seededRandom(hex, 3) * 6) * Math.PI / 3;
@@ -471,7 +508,7 @@ const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[]; decor?: MapDecor }> 
   const library = usePropLibrary(packs);
   // Decorations only depend on the terrain, not on units moving around
   // (and on who holds each building, which shows in its colours)
-  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}${isStructure(h.terrain) ? h.owner ?? '' : ''}`).join('|');
+  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}${isStructure(h.terrain) ? h.owner ?? '' : ''}${h.feature === 'stakes' ? 's' : ''}`).join('|');
   const hexesRef = useRef(hexGrid);
   hexesRef.current = hexGrid;
 

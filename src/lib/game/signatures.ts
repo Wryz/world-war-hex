@@ -9,7 +9,7 @@ import { TroopId, getTroop } from './troops';
 
 export type SignatureId =
   | 'shoulderToShoulder' | 'steadyAim' | 'brace' | 'loneBlade' | 'charge' | 'ward' | 'challenge'
-  | 'bloodlust' | 'piercingShot' | 'holySmite' | 'undermine' | 'strafe' | 'eyeOfTheStorm';
+  | 'bloodlust' | 'piercingShot' | 'holySmite' | 'undermine' | 'strafe' | 'eyeOfTheStorm' | 'fieldworks';
 
 export interface SignatureDef {
   id: SignatureId;
@@ -66,6 +66,8 @@ export const holySmiteBonus = (rank: number) => 0.12 * rank;
 export const HOLY_SMITE_FACTIONS = ['undead', 'infernal'] as const;
 // Siege Sappers: height the ground around them sinks by at the end of a turn they didn't move
 export const undermineDepth = (rank: number) => Math.round(0.08 * rank * 100) / 100;
+// Engineers: height their own hex rises by at the end of a turn they didn't move
+export const fieldworksHeight = (rank: number) => Math.round(0.08 * rank * 100) / 100;
 // Pegasus Knights: damage dealt to every enemy they fly past
 export const strafeDamage = (rank: number) => rank + 1;
 // Archmage: extra spell damage with no enemy within EYE_OF_STORM_RADIUS hexes
@@ -132,6 +134,11 @@ export const SIGNATURES: Partial<Record<TroopId, SignatureDef>> = {
     id: 'undermine', name: 'Undermine', condition: "Hasn't moved",
     describe: rank => `At the end of a turn it didn't move, the ground around it sinks ${undermineDepth(rank).toFixed(2)} lower.`,
     short: rank => `Sinks ground ${undermineDepth(rank).toFixed(2)}`
+  },
+  engineer: {
+    id: 'fieldworks', name: 'Fieldworks', condition: "Hasn't moved",
+    describe: rank => `At the end of a turn it didn't move, it digs in: the ground of its hex rises ${fieldworksHeight(rank).toFixed(2)} higher.`,
+    short: rank => `Raises its ground ${fieldworksHeight(rank).toFixed(2)}`
   },
   pegasus: {
     id: 'strafe', name: 'Strafe', condition: 'Flies past enemies',

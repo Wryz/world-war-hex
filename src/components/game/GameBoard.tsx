@@ -26,6 +26,8 @@ import {
   isFogOfWar,
   getMovePath,
   getFellLanding,
+  getActionTargets,
+  ACTION_NAMES,
   getValidBaseLocations,
   getSiegeDamage,
   getCombatEffects,
@@ -52,7 +54,7 @@ import { getBattleStartDelay, getDeathTime, getImpactTimes, getImpactTimesUntil 
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale, getGameSpeed } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
-import { CampIcon, EmbersIcon, FallenLogIcon, FellIcon, FireIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
+import { ActionIcon, StakesIcon, CampIcon, EmbersIcon, FallenLogIcon, FellIcon, FireIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
 import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
 import { isCapturable } from '@/lib/game/structures';
 import type { UnitBuff } from './UnitMesh';
@@ -803,10 +805,17 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     [isSetupPhase, hexGrid, gameState.castleChoices]
   );
 
+  // Hexes the selected troop can work on (demolish, set alight, build), highlighted like trees to fell
+  const actionKeys = useMemo(() => {
+    const live = selectedUnit && players[selectedUnit.owner].units.find(unit => unit.id === selectedUnit.id);
+    return new Set(live && live.owner === 'player' ? getActionTargets(gameState, live).map(target => coordKey(target.at)) : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUnit, players, hexGrid, pendingMoves]);
+
   const getHighlight = (key: string): HexHighlight => {
     if (isSetupPhase) return validBaseKeys.has(key) ? 'base' : 'none';
     if (!validMoveKeys.has(key)) return 'none';
-    if (hexByKey.get(key)?.feature === 'greatTree') return 'fell';
+    if (hexByKey.get(key)?.feature === 'greatTree' || actionKeys.has(key)) return 'fell';
     return selectedUnitTypeForPurchase ? 'deploy' : 'move';
   };
 
@@ -1165,7 +1174,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const plannedPaths = useMemo(() => pendingMoves.flatMap(move => {
     const unit = allUnits.find(u => u.id === move.unitId);
     // (orders to fell a tree show where it will land instead)
-    if (!unit || hexByKey.get(coordKey(move.to))?.feature === 'greatTree') return [];
+    if (!unit || move.action || hexByKey.get(coordKey(move.to))?.feature === 'greatTree') return [];
 
     const stateWithoutMove = { ...gameState, pendingMoves: pendingMoves.filter(m => m !== move) };
     const route = getMovePath(stateWithoutMove, unit, move.to) ?? [unit.position, move.to];
@@ -1501,6 +1510,18 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         />
       ))}
 
+      {/* Work ordered this turn: what each troop will do to the hex next to it */}
+      {pendingMoves.filter(move => move.action).map(move => {
+        const hex = hexByKey.get(coordKey(move.to));
+        return hex && (
+          <Html key={`work-${move.unitId}`} position={labelPosition(hex)} center zIndexRange={[6, 0]} style={{ pointerEvents: 'none' }}>
+            <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-400 px-1.5 py-0.5 text-[0.6875rem] font-bold text-slate-900 shadow select-none">
+              <ActionIcon action={move.action!} />{ACTION_NAMES[move.action!]}
+            </span>
+          </Html>
+        );
+      })}
+
       {/* Where felled trees will land */}
       {fellMarkers.map(marker => (
         <Html key={`fell-${marker.key}`} position={labelPosition(marker.hex)} center zIndexRange={[6, 0]} style={{ pointerEvents: 'none' }}>
@@ -1582,7 +1603,9 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
           ? <><FallenLogIcon /> Fallen trunk: blocks the way</>
           : hex.feature === 'logBridge'
             ? <><FallenLogIcon /> Log bridge: troops can cross</>
-            : null;
+            : hex.feature === 'stakes'
+              ? <><StakesIcon /> Stakes: cavalry can&apos;t cross, +1 movement for others</>
+              : null;
 
   return (
     <Html position={[x, y + 0.2, z]} zIndexRange={[9, 0]} style={{ pointerEvents: 'none' }}>

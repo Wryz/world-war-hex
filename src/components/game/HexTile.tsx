@@ -36,7 +36,11 @@ const TERRAIN_COLORS: Record<TerrainType, string> = {
   blacksmith: '#c8b98f',
   barracks: '#c8b98f',
   tavern: '#d9c58e',
-  lumbermill: '#c8b98f'
+  lumbermill: '#c8b98f',
+  // A wall's ground is the stone it is built of; a bridge's the river under it
+  wall: '#a8a29e',
+  gate: '#b5ada4',
+  bridge: '#48c6ef'
 };
 
 // Ground recoloured for a map's decor style: a dungeon's stone floors, a haunted wood's dull grass

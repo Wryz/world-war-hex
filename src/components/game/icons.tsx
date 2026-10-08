@@ -15,20 +15,20 @@ import {
   GiAngelWings, GiRegeneration, GiChestArmor, GiSiegeRam, GiAngryEyes, GiRaiseSkeleton, GiWingfoot, GiFireRing,
   GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog,
   GiSparkles, GiAxeInStump, GiFire, GiBurningEmbers, GiLog, GiWatchtower, GiHouse, GiCatapult, GiAnvil, GiBarracksTent,
-  GiBeerStein, GiWoodPile
+  GiBeerStein, GiWoodPile, GiDemolish, GiTorch, GiHammerNails, GiStoneWall, GiGate, GiStoneBridge, GiSpikedFence
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
   LuVolume2, LuVolumeX, LuHouse, LuStar, LuDownload, LuUpload, LuMusic, LuShare2, LuX, LuChevronLeft, LuTrash2, LuPlay,
   LuSettings, LuBookOpen, LuGamepad2
 } from 'react-icons/lu';
-import { Ability, TerrainType, UnitType } from '@/types/game';
+import { Ability, TerrainType, UnitAction, UnitType } from '@/types/game';
 
 // SVG icons used throughout the game: Game Icons (game-icons.net) and Lucide, via react-icons
 
 export const UNIT_ICONS: Record<UnitType, IconType> = {
   infantry: GiBroadsword, artillery: GiBowArrow, tank: GiPikeman, rogue: GiHoodedAssassin, helicopter: GiMountedKnight,
-  medic: GiPointyHat, shieldbearer: GiShield, berserker: GiBattleAxe, longbow: GiBowman, cleric: GiPrayer,
+  medic: GiPointyHat, engineer: GiHammerNails, shieldbearer: GiShield, berserker: GiBattleAxe, longbow: GiBowman, cleric: GiPrayer,
   sapper: GiPowderBag, pegasus: GiPegasus, archmage: GiWizardFace,
   bandit_thug: GiBrute, bandit_archer: GiArcher, highwayman: GiBandit, bandit_raider: GiCavalry, bandit_king: GiBarbarian,
   goblin_scrapper: GiGoblinHead, goblin_slinger: GiStonePile, goblin_shaman: GiWizardStaff, goblin_sapper: GiBombingRun,
@@ -67,7 +67,10 @@ export const TERRAIN_ICON_COMPONENTS: Record<TerrainType, IconType> = {
   blacksmith: GiAnvil,
   barracks: GiBarracksTent,
   tavern: GiBeerStein,
-  lumbermill: GiWoodPile
+  lumbermill: GiWoodPile,
+  wall: GiStoneWall,
+  gate: GiGate,
+  bridge: GiStoneBridge
 };
 
 // Colours that make each terrain icon recognisable at a glance
@@ -93,7 +96,10 @@ export const TERRAIN_ICON_COLORS: Record<TerrainType, string> = {
   blacksmith: '#94a3b8',
   barracks: '#f87171',
   tavern: '#fbbf24',
-  lumbermill: '#d97706'
+  lumbermill: '#d97706',
+  wall: '#cbd5e1',
+  gate: '#e2e8f0',
+  bridge: '#d6d3d1'
 };
 
 export const ABILITY_ICON_COMPONENTS: Record<Ability, IconType> = {
@@ -111,7 +117,10 @@ export const ABILITY_ICON_COMPONENTS: Record<Ability, IconType> = {
   undead: GiRaiseSkeleton,
   pathfinder: GiFootprint,
   fireborn: GiFireRing,
-  magic: GiSpellBook
+  magic: GiSpellBook,
+  demolition: GiDemolish,
+  firebrand: GiTorch,
+  engineering: GiHammerNails
 };
 
 interface IconProps {
@@ -227,3 +236,17 @@ export const FellIcon = icon(GiAxeInStump, '#a16207');
 export const FallenLogIcon = icon(GiLog, '#92400e');
 export const FireIcon = icon(GiFire, '#f97316');
 export const EmbersIcon = icon(GiBurningEmbers, '#fb923c');
+// Stakes planted against cavalry
+export const StakesIcon = icon(GiSpikedFence, '#a16207');
+
+// Work a troop does instead of moving
+const ACTION_ICONS: Record<UnitAction, React.FC<IconProps>> = {
+  demolish: icon(GiDemolish, '#0f172a'),
+  ignite: icon(GiTorch, '#0f172a'),
+  bridge: icon(GiStoneBridge, '#0f172a'),
+  stakes: icon(GiSpikedFence, '#0f172a')
+};
+export const ActionIcon: React.FC<IconProps & { action: UnitAction }> = ({ action, ...props }) => {
+  const Icon = ACTION_ICONS[action];
+  return <Icon {...props} />;
+};
