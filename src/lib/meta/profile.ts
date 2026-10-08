@@ -384,7 +384,7 @@ export interface BattleOutcome {
   won: boolean;
   stars: number;
   rounds: number;
-  reason?: 'stormed' | 'destroyed' | 'timeout';
+  reason?: 'destroyed' | 'timeout';
   // Share of the enemy castle's health destroyed (0..1)
   enemyCastleDamage: number;
   playerStats: SideStats;
@@ -457,7 +457,8 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
     unitsDeployed: s.unitsDeployed + outcome.playerStats.recruited,
     enemiesSlain: s.enemiesSlain + outcome.playerStats.kills,
     unitsLost: s.unitsLost + outcome.playerStats.lost,
-    castlesStormed: s.castlesStormed + (outcome.won && outcome.reason === 'stormed' ? 1 : 0),
+    // (from before castles could only be destroyed; kept for old saves)
+    castlesStormed: s.castlesStormed,
     castlesDestroyed: s.castlesDestroyed + (outcome.won && outcome.reason === 'destroyed' ? 1 : 0),
     winsOnTime: s.winsOnTime + (outcome.won && outcome.reason === 'timeout' ? 1 : 0),
     bossesDefeated: s.bossesDefeated + outcome.playerStats.bossesSlain,

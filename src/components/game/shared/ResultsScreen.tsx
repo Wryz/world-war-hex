@@ -136,7 +136,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
 
   const title = won ? 'Victory!' : 'Defeat';
   const subtitle = won
-    ? reason === 'stormed' ? 'You stormed the enemy castle!' : reason === 'timeout' ? 'Time ran out - you win on points.' : 'The enemy castle has fallen!'
+    ? reason === 'timeout' ? 'Time ran out - you win on points.' : 'The enemy castle has fallen!'
     : reason === 'timeout' ? 'Time ran out - the enemy wins on points.' : 'Your castle has fallen.';
 
   return (

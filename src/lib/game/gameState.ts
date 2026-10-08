@@ -200,8 +200,6 @@ export const TERRAIN_BONUS_ATTACK_MULTIPLIER = 1.5;
 export const BERSERK_ATTACK_MULTIPLIER = 1.5;
 // Damage multiplier against castles for units with the siege ability
 export const SIEGE_MULTIPLIER = 2;
-// A castle can only be stormed once its walls are breached: at this share of its health or less
-export const STORM_BREACH_RATIO = 0.5;
 
 // How many hexes away ranged units (rangedAttack) can strike from
 export const RANGED_ATTACK_RANGE = 2;
@@ -911,8 +909,8 @@ export const isInEnemyZone = (state: GameState, side: PlayerType, coordinates: H
   getVisibleEnemies(state, side).some(enemy => getHexDistance(enemy.position, coordinates) === 1);
 
 // All hexes a unit can legally be ordered to move to this turn.
-// Units can't end on an occupied hex, impassable ground, their own base, an enemy castle whose walls
-// still stand, or a hex another order already reserved. A hex one of its own side's troops has been
+// Units can't end on an occupied hex, impassable ground, either castle, or a hex another order
+// already reserved. A hex one of its own side's troops has been
 // ordered to leave counts as free: that troop moves out first.
 export const getValidMoveTargets = (state: GameState, unit: Unit): HexCoordinates[] => {
   if (unit.hasMoved) return [];
@@ -946,9 +944,7 @@ export const getValidMoveTargets = (state: GameState, unit: Unit): HexCoordinate
 
     const occupant = hex.unit && !(hex.unit.owner === unit.owner && leaving.has(hex.unit.id)) ? hex.unit : undefined;
     if (occupant && occupant.owner === unit.owner) continue;
-    const isOwnBase = hex.isBase && hex.owner === unit.owner;
-    const isIntactCastle = hex.isBase && hex.owner !== unit.owner && !canStormCastle(state, unit.owner);
-    if (!(occupant && isUnitVisibleTo(state, unit.owner, occupant)) && !isOwnBase && !isIntactCastle && !reserved.has(key)) {
+    if (!(occupant && isUnitVisibleTo(state, unit.owner, occupant)) && !hex.isBase && !reserved.has(key)) {
       targets.push(hex.coordinates);
     }
   }
@@ -1097,12 +1093,11 @@ export const executeMoves = (state: GameState): GameState => {
         break;
       }
     }
-    // Back off along the route to a hex the unit can stand on (only the planned destination may be
-    // the enemy castle, which the plan already checked could be stormed)
+    // Back off along the route to a hex the unit can stand on (never a castle)
     const canEndAt = (index: number) => {
       const hex = findHexByCoordinates(newState.hexGrid, route[index]);
       if (!hex || isImpassable(hex) || occupied.has(coordKey(route[index]))) return false;
-      return !hex.isBase || (index === route.length - 1 && !ambusher);
+      return !hex.isBase;
     };
     while (stop > 0 && !canEndAt(stop)) stop--;
     if (ambusher) {
@@ -1184,13 +1179,6 @@ export const executeMoves = (state: GameState): GameState => {
       activePlayer,
       `${activePlayer === 'player' ? 'You' : 'The enemy'} moved ${movedCount} ${movedCount === 1 ? 'unit' : 'units'}.`
     );
-  }
-
-  // A unit standing on the enemy base captures it
-  const winner = checkBaseCapture(newState);
-  if (winner) {
-    addLog(newState, winner, winner === 'player' ? 'You stormed the enemy castle!' : 'The enemy stormed your castle!');
-    return endGame(newState, winner, 'stormed');
   }
 
   // Every unit of the side that just moved attacks one enemy unit within its reach; the rest attack
@@ -1611,21 +1599,6 @@ const detectIntercepts = (state: GameState, attackerSide: PlayerType, siege: Gam
     target.isEngagedInCombat = true;
     return [{ hexCoordinates: target.position, attackers: strikers, defenders: [target], resolved: false, intercept: true }];
   });
-};
-
-// Whether `attacker` has breached the enemy castle's walls, so its troops may storm it
-export const canStormCastle = (state: GameState, attacker: PlayerType): boolean =>
-  castleHealthRatio(state, attacker === 'player' ? 'ai' : 'player') <= STORM_BREACH_RATIO;
-
-// A unit standing on the enemy base wins the game
-const checkBaseCapture = (state: GameState): PlayerType | undefined => {
-  const playerBaseHex = findBaseHex(state, 'player');
-  const aiBaseHex = findBaseHex(state, 'ai');
-
-  if (aiBaseHex?.unit?.owner === 'player') return 'player';
-  if (playerBaseHex?.unit?.owner === 'ai') return 'ai';
-
-  return undefined;
 };
 
 // A base reduced to zero health loses the game

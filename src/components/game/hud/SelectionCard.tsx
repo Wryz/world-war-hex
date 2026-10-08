@@ -2,7 +2,7 @@ import React from 'react';
 import { GameState, Hex, Unit, UnitType } from '@/types/game';
 import { ABILITIES, TROOP_CLASSES, getTroopClass, strongAgainst, weakAgainst } from '@/lib/game/troops';
 import {
-  BASE_MAX_HEALTH, HIGH_GROUND_ELEVATION, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS, canStormCastle,
+  BASE_MAX_HEALTH, HIGH_GROUND_ELEVATION, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS,
   getSightRange, isFogOfWar,
   getCastleMaxHealth
 } from '@/lib/game/gameState';
@@ -144,11 +144,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
             <HealthBar value={hex.baseHealth ?? BASE_MAX_HEALTH} max={getCastleMaxHealth(gameState, hex.owner ?? 'player')} />
           </div>
           <div className="mt-2 text-slate-400">
-            {hex.owner === 'player'
-              ? canStormCastle(gameState, 'ai') ? 'Walls breached - guard it!' : 'Recruits deploy next to it'
-              : canStormCastle(gameState, 'player')
-                ? 'Walls breached - step on it to win!'
-                : 'Attack it to break its walls, then storm it'}
+            {hex.owner === 'player' ? 'Recruits deploy next to it' : 'Attack it until its health runs out to win'}
           </div>
         </>
       )}

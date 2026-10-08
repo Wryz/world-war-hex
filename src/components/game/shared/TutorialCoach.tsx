@@ -22,7 +22,7 @@ const STEPS: Record<Step, { text: string; target?: string; manual?: boolean }> =
     manual: true
   },
   win: {
-    text: 'Attack the enemy castle. At half health, step onto it to win!',
+    text: 'Attack the enemy castle. Bring its health down to 0 to win!',
     manual: true
   },
   points: {

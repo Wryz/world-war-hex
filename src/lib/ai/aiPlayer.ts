@@ -38,7 +38,6 @@ import {
   getRosterStats,
   getRosterTypes,
   findBaseHex,
-  canStormCastle,
   getSideView,
   getSiegeDamage,
   getTimeScore
@@ -403,10 +402,10 @@ const ENDGAME_CAUTION_BOOST = 1.6;
 
 // The AI goes all in on the enemy castle once the battle nears its round limit (or the doctrine's
 // own push round), or when it clearly has the bigger army - unless it is ahead on points near the
-// end, when it holds what it has (still storming a breached castle)
+// end, when it holds what it has
 const isPushing = (planner: Planner): boolean => {
   const { state, profile } = planner;
-  if (planner.endgame === 'ahead' && !canStormCastle(state, 'ai')) return false;
+  if (planner.endgame === 'ahead') return false;
   const mine = state.players.ai.units;
   const theirs = state.players.player.units;
   const pushRound = Math.min(profile.pushAfterRound, Math.ceil(getMaxRounds(state) * PUSH_ROUND_SHARE));
@@ -428,8 +427,7 @@ const armyValue = (units: Unit[]) =>
 interface ThreatAssessment {
   baseUnderThreat: boolean;
   enemyStrengthNearBase: number;
-  // Enemy units that could walk onto the castle (and win) on their next turn,
-  // or are already close enough to lay siege to it
+  // Enemy units close enough to lay siege to the castle on their next turn
   castleRaiders: Unit[];
 }
 
@@ -444,14 +442,12 @@ const assessThreats = (state: GameState): ThreatAssessment => {
     .map(hex => hex.unit as Unit);
   const enemyStrengthNearBase = enemyUnitsNearBase.reduce((sum, unit) => sum + unit.attackPower, 0);
 
-  const breached = canStormCastle(state, 'player');
-  // Enemies that could storm the castle next turn, or reach a hex they could attack it from
+  // Enemies that could reach a hex they could attack the castle from next turn
   const castleRaiders = state.players.player.units.filter(enemy =>
-    (breached && walkingDistance(state, enemy.position, aiBase.coordinates) <= enemy.movementRange) ||
     getHexDistance(enemy.position, aiBase.coordinates) <= getAttackRange(enemy) + 1
   );
 
-  // Base is under threat if strong enemy units are nearby or one could storm or besiege it
+  // Base is under threat if strong enemy units are nearby or one could besiege it
   const baseUnderThreat =
     enemyStrengthNearBase > 10 || // Arbitrary threshold
     enemyUnitsNearBase.length >= 2 ||
@@ -520,7 +516,7 @@ const enemyCanReach = (planner: Planner, position: HexCoordinates): boolean =>
 // ---------------------------------------------------------------------------
 
 /**
- * Meet each enemy that could storm or besiege the castle with the nearest units that can strike it,
+ * Meet each enemy that could besiege the castle with the nearest units that can strike it,
  * enough of them to take it down, while the rest of the army keeps to its own tasks
  */
 const assignInterceptors = (planner: Planner): Map<string, Unit> => {
@@ -762,7 +758,7 @@ const chooseGoal = (planner: Planner, unit: Unit): UnitGoal => {
   const goal = (position: HexCoordinates | null, weight: number, holdValue = 0, caution = profile.caution): UnitGoal =>
     ({ position, weight, holdValue, caution: caution * cautionScale });
 
-  // An enemy that could storm or besiege the castle is met by enough units to stop it
+  // An enemy that could besiege the castle is met by enough units to stop it
   const raider = planner.interceptors.get(unit.id);
   if (raider) return goal(raider.position, GOAL_WEIGHT.urgent, 0, profile.caution * 0.5);
 
@@ -923,9 +919,8 @@ const decideUnitMove = (planner: Planner, unit: Unit): HexCoordinates | null => 
       }
     }
 
-    // Standing on the enemy castle wins the game; standing where it can attack the castle wears it down
-    if (coordsMatch(position, planner.enemyBase.coordinates)) value += 1000;
-    else if (canStrikeCastleFrom(planner, unit, position, hex?.terrain ?? 'plain')) {
+    // Standing where it can attack the castle wears it down
+    if (canStrikeCastleFrom(planner, unit, position, hex?.terrain ?? 'plain')) {
       value += getSiegeDamage(unit) * (planner.isPushing ? SIEGE_VALUE.pushing : SIEGE_VALUE.normal);
       // Enemy troops in reach strike back at a castle attacker
       value -= healthValue(unit, strikeBackDamage(planner, unit, position));

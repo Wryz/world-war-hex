@@ -1,12 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { GameState, PlayerType } from '@/types/game';
-import { canStormCastle, castleHealthRatio, findBaseHex, getMaxRounds } from '@/lib/game/gameState';
+import { castleHealthRatio, findBaseHex, getMaxRounds } from '@/lib/game/gameState';
 import { playStinger, setMusicIntensity } from '@/lib/audio/music';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
 import { playBattleSound } from '../utils/battleSounds';
 import {
   emitCoins, emitConfetti, emitMoment, flashDamage, projectToScreen, shakeScreen, triggerSlowMotion
 } from './effects';
+
+// A castle down to half its health gets a moment of its own
+const HALF_HEALTH = 0.5;
+const crossedHalf = (before: GameState, after: GameState, side: 'player' | 'ai') =>
+  castleHealthRatio(before, side) > HALF_HEALTH && castleHealthRatio(after, side) <= HALF_HEALTH;
 
 // Your castle is in danger below this share of its health
 const LAST_STAND_RATIO = 0.3;
@@ -90,9 +95,9 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
       shakeScreen(Math.min(0.6, 0.15 + siegeDamage / 20));
       const from = castleOnScreen(gameState, 'ai');
       if (from) emitCoins(from, Math.min(8, Math.ceil(siegeDamage / 3)));
-      if (!canStormCastle(previous, 'player') && canStormCastle(gameState, 'player')) {
+      if (crossedHalf(previous, gameState, 'ai')) {
         playStinger('levelUp');
-        emitMoment({ title: 'Walls Breached!', subtitle: 'Storm the castle to win', tone: 'gold', big: true });
+        emitMoment({ title: 'Walls Cracking!', subtitle: 'Half its health gone - keep attacking', tone: 'gold', big: true });
       } else if (siegeDamage >= CRUSHING_BLOW) {
         emitMoment({ title: 'Crushing Blow!', subtitle: `-${siegeDamage} castle health`, tone: 'gold' });
       }
@@ -103,8 +108,8 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
     if (playerCastleAfter < playerCastleBefore && gameState.currentPhase !== 'gameOver') {
       shakeScreen(Math.min(0.7, 0.2 + (playerCastleBefore - playerCastleAfter) / 15));
       flashDamage();
-      if (!canStormCastle(previous, 'ai') && canStormCastle(gameState, 'ai')) {
-        emitMoment({ title: 'Walls Breached!', subtitle: 'Guard your castle!', tone: 'red', big: true });
+      if (crossedHalf(previous, gameState, 'player')) {
+        emitMoment({ title: 'Walls Cracking!', subtitle: 'Guard your castle!', tone: 'red', big: true });
       }
       if (!flagsRef.current.lastStand && castleHealthRatio(gameState, 'player') <= LAST_STAND_RATIO) {
         flagsRef.current.lastStand = true;
@@ -135,7 +140,7 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
       if (won) emitConfetti();
       playStinger(won ? 'victory' : 'defeat');
       emitMoment(won
-        ? { title: 'Victory!', subtitle: gameState.winReason === 'stormed' ? 'The castle is stormed!' : gameState.winReason === 'timeout' ? 'You win on points' : 'The enemy castle falls!', tone: 'gold', big: true }
+        ? { title: 'Victory!', subtitle: gameState.winReason === 'timeout' ? 'You win on points' : 'The enemy castle falls!', tone: 'gold', big: true }
         : { title: 'Defeat', subtitle: gameState.winReason === 'timeout' ? 'Time ran out' : 'Your castle has fallen', tone: 'red', big: true });
     }
   }, [gameState, isReady]);
