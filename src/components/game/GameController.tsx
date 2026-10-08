@@ -80,6 +80,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     saveGame,
     handleUnitTypeSelect,
     handleCancelSelection,
+    handleUndo,
+    canUndo,
     notice
   } = useGameHandlers({ battle, resume: shouldContinueGame, isReady });
 
@@ -137,10 +139,15 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') handleCancelSelection();
+      // Ctrl/Cmd+Z takes back the last order
+      if ((event.ctrlKey || event.metaKey) && (event.key === 'z' || event.key === 'Z') && !(event.target instanceof HTMLInputElement)) {
+        event.preventDefault();
+        handleUndo();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleCancelSelection]);
+  }, [handleCancelSelection, handleUndo]);
 
   // Warnings from the game (e.g. picking a hex a unit can't reach) appear as a brief toast
   useEffect(() => {
@@ -301,6 +308,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           hint={hint}
           onCardSelect={handleUnitTypeSelect}
           onEndTurn={handleEndTurn}
+          canUndo={canUndo}
+          onUndo={handleUndo}
         />
       )}
 

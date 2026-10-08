@@ -562,10 +562,23 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
 // The blows each troop attacking a castle lands on it in the battle being fought: one per point of
 // damage it deals (as many as it can strike in the battle). One struck down by the castle's guards
 // lands none, as it does no damage. Also the total, as the castle will take it.
-const getSiegeBlows = (state: GameState): { blows: Map<string, number[]>; damage: number; fallsAt: number | null } => {
+// A blow bigger than this shows on the castle as a quick run of smaller hits, so its health
+// visibly counts down even when one swing takes it all
+const MAX_CASTLE_HIT = 4;
+const CASTLE_HIT_GAP = 0.12;
+
+type SiegeBlows = {
+  blows: Map<string, number[]>;
+  // The hits the castle shows: when each lands and how much it takes, in order
+  hits: { time: number; amount: number }[];
+  damage: number;
+  fallsAt: number | null;
+};
+
+const getSiegeBlows = (state: GameState): SiegeBlows => {
   const blows = new Map<string, number[]>();
   const siege = state.currentPhase === 'combat' ? state.siege : undefined;
-  if (!siege) return { blows, damage: 0, fallsAt: null };
+  if (!siege) return { blows, hits: [], damage: 0, fallsAt: null };
   const doomed = new Set(state.combats
     .filter(combat => combat.intercept && !combat.resolved)
     .flatMap(combat => getCombatPreview(state, combat).defenders.filter(entry => entry.destroyed).map(entry => entry.unit.id)));
@@ -597,7 +610,24 @@ const getSiegeBlows = (state: GameState): { blows: Map<string, number[]>; damage
   if (fallsAt !== null) {
     for (const [id, times] of blows) blows.set(id, times.filter(time => time <= fallsAt!));
   }
-  return { blows, damage: Math.min(health, Math.round(total)), fallsAt };
+  const damage = Math.min(health, Math.round(total));
+  // Whole-number hits, in order, adding up to the damage the castle takes (big blows split up)
+  const hits: SiegeBlows['hits'] = [];
+  let dealt = 0;
+  let exact = 0;
+  for (const blow of all) {
+    if (fallsAt !== null && blow.time > fallsAt) break;
+    exact += blow.damage;
+    let amount = Math.min(damage, Math.round(exact)) - dealt;
+    for (let part = 0; amount > 0; part++) {
+      const piece = Math.min(MAX_CASTLE_HIT, amount);
+      hits.push({ time: blow.time + part * CASTLE_HIT_GAP, amount: piece });
+      dealt += piece;
+      amount -= piece;
+    }
+  }
+  hits.sort((a, b) => a.time - b.time);
+  return { blows, hits, damage, fallsAt };
 };
 
 interface BoardSceneProps extends GameBoardProps {
@@ -1190,12 +1220,17 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   // The castle under attack in the battle being fought, and the blows landing on it
   const castleIncoming = useMemo((): { owner: PlayerType; incoming: CastleIncoming } | null => {
     if (currentPhase !== 'combat' || !gameState.siege) return null;
-    const { blows, damage } = getSiegeBlows(gameState);
-    const times = [...blows.values()].flat().sort((a, b) => a - b);
-    if (times.length === 0 || damage === 0) return null;
+    const { hits, damage } = getSiegeBlows(gameState);
+    if (hits.length === 0 || damage === 0) return null;
     return {
       owner: gameState.siege.side === 'player' ? 'ai' : 'player',
-      incoming: { key: `${turnNumber}-${gameState.siege.side}-siege`, startDelay: getBattleStartDelay(), times, damage }
+      incoming: {
+        key: `${turnNumber}-${gameState.siege.side}-siege`,
+        startDelay: getBattleStartDelay(),
+        times: hits.map(hit => hit.time),
+        amounts: hits.map(hit => hit.amount),
+        damage
+      }
     };
     // The siege and the fights around it decide the blows
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -3,7 +3,7 @@ import { useIsNarrow } from '../../shared/useIsNarrow';
 import { GameState, UnitType } from '@/types/game';
 import { getHand, getNextCard, getRosterStats, getTroopName } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
-import { ArrowIcon, BondIcon, GoldIcon } from '../icons';
+import { ArrowIcon, BondIcon, GoldIcon, UndoIcon } from '../icons';
 import { describeBond, getBond } from '@/lib/game/bonds';
 import { PANEL_CLASS } from './styles';
 
@@ -17,11 +17,14 @@ interface CardHandProps {
   hint: string | null;
   onCardSelect: (unitType: UnitType) => void;
   onEndTurn: () => void;
+  // Take back the last order this turn
+  canUndo?: boolean;
+  onUndo?: () => void;
 }
 
 // The player's hand at the bottom of the screen: the cards they brought into battle. Pick a card,
 // then a glowing hex to play it.
-export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selectedUnitType, hint, onCardSelect, onEndTurn }) => {
+export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selectedUnitType, hint, onCardSelect, onEndTurn, canUndo = false, onUndo }) => {
   const hand = getHand(gameState);
   const nextCard = getNextCard(gameState);
   const gold = gameState.players.player.points;
@@ -127,6 +130,17 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
           <span className={`${PANEL_CLASS} font-display flex items-center justify-center gap-1 px-2 py-1 text-base text-amber-300 sm:hidden`}>
             <GoldIcon />{gold}
           </span>
+          {onUndo && (
+            <button
+              onClick={onUndo}
+              disabled={!canUndo}
+              title="Take back your last order (Ctrl+Z)"
+              aria-label="Undo last order"
+              className={`${PANEL_CLASS} flex items-center justify-center gap-1 px-2 py-1.5 text-sm font-bold text-slate-200 transition-opacity hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40`}
+            >
+              <UndoIcon /><span className="hidden sm:inline">Undo</span>
+            </button>
+          )}
           <button
             onClick={onEndTurn}
             data-tutorial="end-turn"

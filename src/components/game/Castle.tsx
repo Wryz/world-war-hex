@@ -17,7 +17,9 @@ import { CastleStyle, getCastleStyle } from '@/lib/meta/cosmetics';
 export interface CastleIncoming {
   key: string;
   startDelay: number;
+  // When each hit lands (seconds into the battle) and how much it takes off, adding up to `damage`
   times: number[];
+  amounts?: number[];
   damage: number;
 }
 
@@ -252,7 +254,9 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
       if (landed > tally.landed) {
         tally.landed = landed;
         hitRef.current = 0;
-        const shown = Math.min(incoming.damage, Math.round(incoming.damage * landed / incoming.times.length));
+        const shown = Math.min(incoming.damage, incoming.amounts
+          ? incoming.amounts.slice(0, landed).reduce((sum, amount) => sum + amount, 0)
+          : Math.round(incoming.damage * landed / incoming.times.length));
         if (shown > tally.shown) {
           showHit(shown - tally.shown);
           tally.shown = shown;
