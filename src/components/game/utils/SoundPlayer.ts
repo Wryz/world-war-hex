@@ -43,6 +43,38 @@ export const subscribeToMute = (listener: () => void) => {
 // Current mute state for React components
 export const useMuted = () => useSyncExternalStore(subscribeToMute, isMuted, () => false);
 
+// Volume of the sound effects (clicks, swords, arrows...), 0 to 1, shared with the battle sounds
+const SFX_VOLUME_STORAGE_KEY = 'wwhSfxVolume';
+let sfxVolume = 1;
+const sfxListeners = new Set<() => void>();
+if (typeof window !== 'undefined') {
+  try {
+    const stored = localStorage.getItem(SFX_VOLUME_STORAGE_KEY);
+    if (stored !== null && Number.isFinite(Number(stored))) sfxVolume = Math.min(1, Math.max(0, Number(stored)));
+  } catch {
+    // Storage unavailable: full volume
+  }
+}
+
+export const getSfxVolume = () => sfxVolume;
+
+export const setSfxVolume = (value: number) => {
+  sfxVolume = Math.min(1, Math.max(0, value));
+  try {
+    localStorage.setItem(SFX_VOLUME_STORAGE_KEY, String(sfxVolume));
+  } catch {
+    // Not remembered across visits, but still applies now
+  }
+  sfxListeners.forEach(listener => listener());
+};
+
+const subscribeToSfx = (listener: () => void) => {
+  sfxListeners.add(listener);
+  return () => sfxListeners.delete(listener);
+};
+
+export const useSfxVolume = () => useSyncExternalStore(subscribeToSfx, getSfxVolume, () => 1);
+
 /**
  * Preloads an audio file so it can be played instantly by id
  */
@@ -61,7 +93,7 @@ export const preloadSound = (url: string, id: string): void => {
  * Plays a preloaded sound
  */
 export const playSound = (id: string, volume = 0.5): void => {
-  if (muted) return;
+  if (muted || sfxVolume <= 0) return;
 
   const pool = soundPools.get(id);
   if (!pool) return;
@@ -69,7 +101,7 @@ export const playSound = (id: string, volume = 0.5): void => {
   const audio = pool.instances[pool.next];
   pool.next = (pool.next + 1) % pool.instances.length;
 
-  audio.volume = volume;
+  audio.volume = Math.min(1, volume * sfxVolume);
   audio.currentTime = 0;
   audio.play().catch(() => {
     // Browsers block audio until the player has interacted with the page

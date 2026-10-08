@@ -1,19 +1,17 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { isAnalyticsAvailable, isAnalyticsEnabled, setAnalyticsEnabled, trackEvent } from '@/lib/analytics';
+import { trackEvent } from '@/lib/analytics';
 import { isStoragePersisted } from '@/lib/offline';
 import { TroopId, MOB_IDS, TROOPS } from '@/lib/game/troops';
 import { LEVEL_COUNT } from '@/lib/campaign/levels';
 import {
   exportSave, highestCleared, parseSave, profilePower, replaceProfile, resetProfile, totalStars, useHasHydrated, useProfile
 } from '@/lib/meta/profile';
-import { setMusicVolume, useMusic, useMusicVolume } from '@/lib/audio/music';
-import { setMuted, useMuted } from '../game/utils/SoundPlayer';
+import { useMusic } from '@/lib/audio/music';
 import { clearSavedGame, readRawSave, writeRawSave } from '../game/storage/GameStorage';
-import { setGameSpeed, useGameSpeed } from '../game/effects/effects';
 import { TroopCard } from '../game/cards/TroopCard';
 import { MenuShell, CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
 import {
-  DownloadIcon, MusicIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, StatsIcon, TrashIcon, UploadIcon
+  DownloadIcon, StatsIcon, TrashIcon, UploadIcon
 } from '../game/icons';
 
 const formatTime = (seconds: number) => {
@@ -33,16 +31,11 @@ const Stat: React.FC<{ label: string; value: React.ReactNode; accent?: string }>
 export const StatsScreen: React.FC = () => {
   const profile = useProfile();
   const hydrated = useHasHydrated();
-  const musicVolume = useMusicVolume();
-  const isMuted = useMuted();
-  const speed = useGameSpeed();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [message, setMessage] = useState<{ text: string; isError?: boolean } | null>(null);
   // Read in the browser only, so the server render matches
-  const [analyticsOn, setAnalyticsOn] = useState(false);
   const [savesProtected, setSavesProtected] = useState<boolean | null>(null);
   useEffect(() => {
-    setAnalyticsOn(isAnalyticsEnabled());
     void isStoragePersisted().then(setSavesProtected);
   }, []);
   useMusic('menu');
@@ -142,52 +135,6 @@ export const StatsScreen: React.FC = () => {
           )}
         </>
       )}
-
-      {/* Settings */}
-      <section className={`${CARD_CLASS} mt-4 p-4`}>
-        <h2 className="font-display mb-3 text-2xl">Settings</h2>
-        <div className="flex flex-col gap-3">
-          <label className="flex items-center gap-3 text-sm font-bold">
-            <MusicIcon className="text-lg" /> Music
-            <input
-              type="range"
-              min={0}
-              max={1}
-              step={0.05}
-              value={musicVolume}
-              onChange={event => setMusicVolume(Number(event.target.value))}
-              className="flex-1 accent-amber-400"
-              aria-label="Music volume"
-            />
-            <span className="w-10 text-right tabular-nums">{Math.round(musicVolume * 100)}%</span>
-          </label>
-          <div className="flex flex-wrap gap-2">
-            <button onClick={() => setMuted(!isMuted)} className={`${SECONDARY_BUTTON} flex items-center gap-1.5 text-sm`} aria-pressed={isMuted}>
-              {isMuted ? <SoundOffIcon /> : <SoundOnIcon />} {isMuted ? 'Sound off' : 'Sound on'}
-            </button>
-            <button onClick={() => setGameSpeed(speed === 1 ? 2 : 1)} className={`${SECONDARY_BUTTON} flex items-center gap-1.5 text-sm`} aria-pressed={speed === 2}>
-              <SpeedIcon /> Battle speed {speed}x
-            </button>
-          </div>
-          {isAnalyticsAvailable() && (
-            <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                checked={analyticsOn}
-                onChange={event => {
-                  setAnalyticsEnabled(event.target.checked);
-                  setAnalyticsOn(event.target.checked);
-                }}
-                className="mt-1 accent-amber-400"
-              />
-              <span>
-                <b>Share anonymous gameplay stats</b>
-                <span className="block text-xs text-slate-400">Which levels are hard, which cards get played. No personal details, no recordings.</span>
-              </span>
-            </label>
-          )}
-        </div>
-      </section>
 
       {/* Saves */}
       <section className={`${CARD_CLASS} mt-4 p-4`}>

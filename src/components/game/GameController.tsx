@@ -16,7 +16,6 @@ import { TopBar } from './hud/TopBar';
 import { CardHand } from './hud/CardHand';
 import { SelectionCard } from './hud/SelectionCard';
 import { EventFeed } from './hud/EventFeed';
-import { HelpPanel } from './hud/HelpPanel';
 import { TurnBanner } from './hud/TurnBanner';
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { WarningIcon } from './icons';
@@ -289,7 +288,6 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           {/* Capped above the battle card and the hand so panels never run under them */}
           <div className="fixed right-3 top-16 z-20 hidden max-h-[calc(100vh-17rem)] w-64 flex-col gap-2 overflow-y-auto pointer-events-none sm:flex">
             <EventFeed log={gameState.log ?? []} />
-            <HelpPanel hexGrid={gameState.hexGrid} mapName={level ? `${level.id}. ${level.name}` : gameState.mapName} fog={isFogOfWar(gameState)} />
           </div>
           <TurnBanner phase={currentPhase} activePlayer={activePlayer} turnNumber={gameState.turnNumber} maxRounds={getMaxRounds(gameState)} />
         </>

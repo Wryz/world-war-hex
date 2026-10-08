@@ -1,9 +1,9 @@
 import React from 'react';
 import { GameState } from '@/types/game';
-import { CombatantPreview, getCombatPreview, getKillBounty } from '@/lib/game/gameState';
+import { CombatantPreview, getCombatPreview, getKillBounty, getSiegeDamage } from '@/lib/game/gameState';
 import { getUnitTypeName } from '../utils/UnitHelpers';
 import { PANEL_CLASS, SIDE_COLORS } from '../hud/styles';
-import { AttackIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from '../icons';
+import { AttackIcon, CrownIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from '../icons';
 
 interface CombatResolverProps {
   gameState: GameState;
@@ -58,13 +58,32 @@ const Side: React.FC<{ label: string; color: string; power: number; entries: Com
 // Battles resolve automatically - this card just shows what is happening.
 export const CombatResolver: React.FC<CombatResolverProps> = ({ gameState }) => {
   const combats = gameState.combats.filter(c => !c.resolved);
-  if (combats.length === 0) return null;
+  const siege = gameState.siege;
+  const siegeAttackers = siege
+    ? gameState.players[siege.side].units.filter(unit => siege.attackerIds.includes(unit.id))
+    : [];
+  const siegeDamage = Math.round(siegeAttackers.reduce((sum, unit) => sum + getSiegeDamage(unit), 0));
+  if (combats.length === 0 && siegeAttackers.length === 0) return null;
 
   return (
     <div className={`${PANEL_CLASS} fixed right-3 bottom-3 z-30 hidden max-h-[50vh] w-80 max-w-[calc(100vw-1.5rem)] overflow-y-auto p-3 text-xs sm:block`}>
       <div className="mb-2 flex items-center justify-between">
-        <span className="font-display flex items-center gap-1.5 text-base"><AttackIcon /> {combats.length === 1 ? 'Battle' : `${combats.length} Battles`}</span>
+        <span className="font-display flex items-center gap-1.5 text-base">
+          <AttackIcon /> {combats.length === 0 ? 'Castle attack' : combats.length === 1 ? 'Battle' : `${combats.length} Battles`}
+        </span>
       </div>
+
+      {/* Troops attacking the enemy castle this turn */}
+      {siegeAttackers.length > 0 && siege && (
+        <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-800/80 px-2.5 py-2">
+          <CrownIcon color={SIDE_COLORS[siege.side === 'player' ? 'ai' : 'player']} />
+          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
+            {siegeAttackers.map(unit => <UnitIcon key={unit.id} type={unit.type} />)}
+            <span className="text-slate-300">{siege.side === 'player' ? 'strike the enemy castle' : 'strike your castle'}</span>
+          </span>
+          <span className="font-display text-sm text-rose-300">-{siegeDamage}</span>
+        </div>
+      )}
 
       <div className="flex flex-col gap-2">
         {combats.map(combat => {

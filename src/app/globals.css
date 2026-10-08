@@ -8,14 +8,14 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-nunito);
+  --font-sans: 'Fredoka Variable', 'Fredoka', ui-rounded, Arial, sans-serif;
   --font-display: var(--font-dyna-puff);
 }
 
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: var(--font-nunito), Arial, Helvetica, sans-serif;
+  font-family: 'Fredoka Variable', 'Fredoka', ui-rounded, Arial, Helvetica, sans-serif;
 }
 
 /* Toasts and panels sliding into view */

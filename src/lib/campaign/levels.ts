@@ -206,7 +206,7 @@ export const getLevel = (levelId: number): LevelDef => {
     planningPhaseTime: 30,
     aiDifficulty: isTutorial || id <= 6 ? 'easy' : id <= 35 ? 'medium' : 'hard',
     resourceHexCount: gridSize === 4 ? 3 : 4,
-    castleHealth: gridSize === 4 ? 45 : 54,
+    castleHealth: gridSize === 4 ? 26 : 32,
     startingGold: 30,
     aiIncomeBonus: isTutorial ? -2 : Math.floor((id - 1) / 25),
     maxRounds,

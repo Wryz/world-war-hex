@@ -34,18 +34,17 @@ export const DEFAULT_SETTINGS: GameSettings = {
   planningPhaseTime: 30,
   aiDifficulty: 'medium',
   resourceHexCount: 3,
-  castleHealth: 45,
+  castleHealth: 26,
   startingGold: 30,
   aiIncomeBonus: 0,
   maxRounds: 10
 };
 
 // Default castle health (each battle's settings may change it)
-export const BASE_MAX_HEALTH = 45;
+export const BASE_MAX_HEALTH = 26;
 // Gold each side receives at the end of each of its turns (once per round)
 export const TURN_INCOME = 5;
 // Units within this many hexes of the enemy base damage it at the end of their side's turn
-export const BASE_ATTACK_RANGE = 3;
 // Cards in the player's hand; playing one moves it to the bottom of the deck
 export const HAND_SIZE = 4;
 
@@ -1010,7 +1009,7 @@ export const cancelPendingMove = (state: GameState, unitId: string): GameState =
 // ---------------------------------------------------------------------------
 
 const endGame = (state: GameState, winner: PlayerType, reason: WinReason): GameState =>
-  ({ ...state, winner, winReason: reason, currentPhase: 'gameOver', combats: [] });
+  ({ ...state, winner, winReason: reason, currentPhase: 'gameOver', combats: [], siege: undefined });
 
 // Execute all pending moves and then purchases, then either start combat or end the turn
 export const executeMoves = (state: GameState): GameState => {
@@ -1149,15 +1148,20 @@ export const executeMoves = (state: GameState): GameState => {
     return endGame(newState, winner, 'stormed');
   }
 
-  // Every unit of the side that just moved attacks one enemy unit within its reach
+  // Every unit of the side that just moved attacks one enemy unit within its reach; the rest attack
+  // the enemy castle if they can reach it
   const combats = detectCombat(newState, activePlayer);
+  const siege = detectSiege(newState, activePlayer, combats);
   if (combats.length > 0) {
     addLog(
       newState,
       activePlayer,
       `${combats.length} ${combats.length === 1 ? 'battle breaks' : 'battles break'} out!`
     );
-    return { ...newState, combats, currentPhase: 'combat' };
+  }
+  if (combats.length > 0 || siege) {
+    syncHexUnits(newState);
+    return { ...newState, combats, siege, currentPhase: 'combat' };
   }
 
   return finishTurn(newState);
@@ -1402,7 +1406,8 @@ const compareIds = (a: Unit, b: Unit) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 
 // Every unit of the attacking side strikes exactly one enemy within its reach: one it can finish off
 // (together with the attackers that already picked it) if there is one, otherwise the weakest, then
-// the nearest. Each defender then fights one combat against the attackers that picked it, so no unit
+// the nearest. Troops that can reach the enemy castle attack it instead unless they can finish an
+// enemy off (see detectSiege). Each defender then fights one combat against the attackers that picked it, so no unit
 // fights twice in a turn and the order the battles are fought in doesn't matter.
 const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
   const defenderSide = getOpponent(attackerSide);
@@ -1445,6 +1450,10 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
       compareIds(a.target, b.target)
     );
 
+    // A troop that can strike the enemy castle attacks it instead, unless it can finish off an enemy
+    // troop. Siege troops always go for the walls.
+    if (canStrikeCastle(state, unit) && (hasAbility(unit, 'siege') || !options[0].kills)) continue;
+
     const { target, strike } = options[0];
     targetOf.set(unit.id, target.id);
     assignedDamage.set(target.id, (assignedDamage.get(target.id) ?? 0) + strike);
@@ -1478,6 +1487,25 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
   }
 
   return combats;
+};
+
+// Whether a troop can attack the enemy castle from where it stands: the castle is within its attack
+// reach and, for shots beyond the next hex, in its line of sight (spells arc over anything)
+export const canStrikeCastle = (state: GameState, unit: Unit): boolean => {
+  const castle = findBaseHex(state, getOpponent(unit.owner));
+  if (!castle) return false;
+  const distance = getHexDistance(unit.position, castle.coordinates);
+  if (distance > getUnitAttackRange(state, unit)) return false;
+  return distance <= 1 || hasAbility(unit, 'magic') || hasLineOfSight(state.hexGrid, unit.position, castle.coordinates);
+};
+
+// The troops of the side that just moved that attack the enemy castle: those that can reach it and
+// didn't pick an enemy troop to fight
+const detectSiege = (state: GameState, side: PlayerType, combats: Combat[]): GameState['siege'] => {
+  const fighting = new Set(combats.flatMap(combat => combat.attackers.map(unit => unit.id)));
+  const attackers = state.players[side].units.filter(unit => !fighting.has(unit.id) && canStrikeCastle(state, unit));
+  for (const unit of attackers) unit.revealed = true;
+  return attackers.length > 0 ? { side, attackerIds: attackers.map(unit => unit.id) } : undefined;
 };
 
 // Whether `attacker` has breached the enemy castle's walls, so its troops may storm it
@@ -1620,6 +1648,7 @@ const finishTurn = (state: GameState): GameState => {
   noteSightings(newState);
   return {
     ...newState,
+    siege: undefined,
     activePlayer: getOpponent(activePlayer),
     currentPhase: 'planning',
     turnNumber: activePlayer === 'ai' ? newState.turnNumber + 1 : newState.turnNumber,
@@ -1637,9 +1666,9 @@ const processDamageToBase = (state: GameState, besieger: PlayerType): void => {
   const baseHex = findBaseHex(state, side);
   if (!baseHex) return;
 
-  const besiegers = state.players[besieger].units.filter(unit =>
-    getHexDistance(unit.position, baseHex.coordinates) <= BASE_ATTACK_RANGE
-  );
+  // The troops that attacked the castle this turn (and still stand)
+  const attackerIds = new Set(state.siege?.side === besieger ? state.siege.attackerIds : []);
+  const besiegers = state.players[besieger].units.filter(unit => attackerIds.has(unit.id));
 
   // Each unit in range deals damage equal to its attack power (double for siege troops), and is seen doing it
   const totalDamage = Math.round(besiegers.reduce((sum, unit) => sum + getSiegeDamage(unit), 0));
@@ -1871,6 +1900,8 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
 
 // Fight every battle of the turn at once (they never share a unit, so order doesn't matter)
 export const resolveAllCombats = (state: GameState): GameState => {
+  // Only the castle is under attack: the turn simply ends, and the castle takes the blows
+  if (state.currentPhase === 'combat' && state.combats.every(combat => combat.resolved)) return finishTurn(state);
   let current = state;
   for (let index = 0; index < state.combats.length; index++) {
     if (current.currentPhase !== 'combat') break;

@@ -61,6 +61,67 @@ const subscribeToVolume = (listener: () => void) => {
 // Current music volume for React components
 export const useMusicVolume = () => useSyncExternalStore(subscribeToVolume, getMusicVolume, () => DEFAULT_VOLUME);
 
+// ---- Mix: a level for each kind of music, under the overall music volume ----
+
+export type MusicChannel = MusicTrack | 'jingles';
+export const MUSIC_CHANNELS: { id: MusicChannel; label: string; detail: string }[] = [
+  { id: 'menu', label: 'Menu', detail: 'Main menu, army and shop' },
+  { id: 'map', label: 'World map', detail: 'The campaign map' },
+  { id: 'battle', label: 'Battle', detail: 'Ordinary battles' },
+  { id: 'boss', label: 'Boss', detail: 'Boss battles' },
+  { id: 'jingles', label: 'Jingles', detail: 'Victory, defeat, stars and unlocks' }
+];
+
+const MIX_STORAGE_KEY = 'wwhMusicMix';
+type MusicMix = Record<MusicChannel, number>;
+const DEFAULT_MIX: MusicMix = { menu: 1, map: 1, battle: 1, boss: 1, jingles: 1 };
+let mix: MusicMix | null = null;
+
+export const getMusicMix = (): MusicMix => {
+  if (mix === null) {
+    mix = { ...DEFAULT_MIX };
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = JSON.parse(localStorage.getItem(MIX_STORAGE_KEY) ?? '{}') as Partial<Record<string, unknown>>;
+        for (const channel of Object.keys(DEFAULT_MIX) as MusicChannel[]) {
+          const value = Number(stored[channel]);
+          if (stored[channel] !== undefined && Number.isFinite(value)) mix[channel] = Math.min(1, Math.max(0, value));
+        }
+      } catch {
+        // Unreadable: every channel at full level
+      }
+    }
+  }
+  return mix;
+};
+
+// The gain of each channel, between its players and the music (or jingle) bus
+const channelGains = new Map<MusicChannel, GainNode>();
+const channelGain = (rt: Runtime, channel: MusicChannel): GainNode => {
+  let gain = channelGains.get(channel);
+  if (!gain) {
+    gain = rt.ctx.createGain();
+    gain.gain.value = getMusicMix()[channel];
+    gain.connect(channel === 'jingles' ? rt.mixer.stingers : rt.mixer.music);
+    channelGains.set(channel, gain);
+  }
+  return gain;
+};
+
+export const setChannelVolume = (channel: MusicChannel, value: number) => {
+  mix = { ...getMusicMix(), [channel]: Math.min(1, Math.max(0, value)) };
+  try {
+    localStorage.setItem(MIX_STORAGE_KEY, JSON.stringify(mix));
+  } catch {
+    // Not remembered across visits, but still applies now
+  }
+  const gain = channelGains.get(channel);
+  if (gain && runtime) gain.gain.setTargetAtTime(mix[channel], runtime.ctx.currentTime, 0.05);
+  volumeListeners.forEach(listener => listener());
+};
+
+export const useMusicMix = () => useSyncExternalStore(subscribeToVolume, getMusicMix, () => DEFAULT_MIX);
+
 // ---- Audio context lifecycle ----
 
 interface Runtime {
@@ -244,11 +305,11 @@ const startTrack = (track: MusicTrack, url: string | null) => {
   const { ctx, mixer } = runtime;
   let player: TrackPlayer;
   if (url) {
-    player = new FileTrackPlayer(ctx, url, mixer.music, track === 'battle', intensity);
+    player = new FileTrackPlayer(ctx, url, channelGain(runtime, track), track === 'battle', intensity);
   } else {
     const compiled = getCompiled(track);
     if (!compiled) return;
-    player = new SynthTrackPlayer(mixer, compiled, mixer.music, ctx.currentTime + START_DELAY_SECONDS, intensity);
+    player = new SynthTrackPlayer(mixer, compiled, channelGain(runtime, track), ctx.currentTime + START_DELAY_SECONDS, intensity);
   }
   if (!shouldRun()) player.pause();
   retireCurrent();
@@ -310,7 +371,7 @@ export const playStinger = (stinger: Stinger) => {
       if (!buffer) return;
       const source = ctx.createBufferSource();
       source.buffer = buffer;
-      source.connect(mixer.stingers);
+      source.connect(channelGain(rt, 'jingles'));
       source.onended = () => source.disconnect();
       source.start();
       mixer.duck(buffer.duration);
@@ -318,7 +379,7 @@ export const playStinger = (stinger: Stinger) => {
     }
     const compiled = getCompiled(stinger);
     if (!compiled) return;
-    const player = new SynthTrackPlayer(mixer, compiled, mixer.stingers, ctx.currentTime + 0.02, 2);
+    const player = new SynthTrackPlayer(mixer, compiled, channelGain(rt, 'jingles'), ctx.currentTime + 0.02, 2);
     retiring.push({ player, until: player.endTime + REVERB_TAIL_SECONDS });
     mixer.duck(compiled.duration + 0.3);
     ensureScheduler();

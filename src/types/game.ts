@@ -149,6 +149,8 @@ export interface GameState {
   deck?: UnitType[];
   // Bonds the player's cards complete this battle (already applied to their roster)
   bonds?: BondId[];
+  // Troops attacking the enemy castle this turn (they strike it when the turn ends)
+  siege?: { side: PlayerType; attackerIds: string[] };
   // In the fog of war: the enemy troops each side has seen, as last seen, and the round it saw them
   sightings?: Record<PlayerType, Sighting[]>;
   battleStats?: Record<PlayerType, SideStats>;

@@ -64,12 +64,12 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
           Auto-pick
         </button>
       </div>
-      <p className="mb-2 text-[11px] text-slate-400">
+      <p className="mb-4 text-xs leading-relaxed text-slate-400">
         {isFull ? 'Tap a card to leave it behind, then pick another.' : 'Tap cards to bring them into battle.'}
         {' '}<span className="font-bold text-emerald-300">Good pick</span> cards counter this enemy, and
         {' '}<span className="font-bold text-amber-300">bonded</span> cards fight better together.
       </p>
-      <div className="flex flex-wrap gap-2.5">
+      <div className="flex flex-wrap gap-x-4 gap-y-6 pl-1.5 pt-2">
         {owned.map(id => {
           const inDeck = profile.deck.includes(id);
           const matchup = matchupScore(id, enemies);
@@ -104,7 +104,7 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
           );
         })}
       </div>
-      <div className="mt-3">
+      <div className="mt-5">
         <BondList deck={profile.deck} owned={owned} />
       </div>
     </div>

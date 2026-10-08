@@ -10,6 +10,7 @@ import { TroopCard, RARITY_STYLES } from '../game/cards/TroopCard';
 import { MenuShell, CARD_CLASS } from './MenuShell';
 import { AttackIcon, BondIcon, CardsIcon, CoinIcon, HealthIcon, LockIcon, PowerIcon, UnitIcon, UpgradeIcon } from '../game/icons';
 import { BondList } from '../game/cards/BondList';
+import { useIsNarrow } from '../shared/useIsNarrow';
 import { BONDS, describeBond } from '@/lib/game/bonds';
 
 // Stat gains from the next upgrade, e.g. "+0.2 atk +1 hp"
@@ -26,6 +27,7 @@ export const ArmyScreen: React.FC = () => {
   const profile = useProfile();
   const hydrated = useHasHydrated();
   const [flash, setFlash] = useState<{ id: TroopId; text: string } | null>(null);
+  const isNarrow = useIsNarrow();
   useMusic('menu');
 
   const announce = (id: TroopId, text: string) => {
@@ -62,25 +64,25 @@ export const ArmyScreen: React.FC = () => {
           <h2 className="font-display text-2xl">Battle cards <span className="text-base text-slate-400">{profile.deck.length}/{MAX_DECK_SIZE}</span></h2>
           <span className="font-display flex items-center gap-1 text-xl text-orange-300"><PowerIcon /> {profilePower(profile)} power</span>
         </div>
-        <p className="text-xs text-slate-400">
+        <p className="mt-1 text-sm leading-relaxed text-slate-400">
           You bring four cards into each battle - change them here or before any fight. Tap a card below to bring it or leave it
           behind. Mix your troops: spears beat cavalry,
           cavalry beats ranged and casters, ranged beats spears and brutes, infantry beats spears and skirmishers, skirmishers hunt
           the back line, and brutes smash infantry. Bring bonded cards together and they fight better.
         </p>
-        <div className="mt-3 flex flex-wrap gap-3">
+        <div className="mt-4 flex flex-wrap gap-x-4 gap-y-3 pl-1.5 pt-1.5">
           {Array.from({ length: MAX_DECK_SIZE }, (_, i) => {
             const id = profile.deck[i];
             return id ? (
-              <TroopCard key={id} type={id} level={profile.cards[id]} size="sm" onClick={() => toggleDeckCard(id)} title="Leave this card behind" />
+              <TroopCard key={id} type={id} level={profile.cards[id]} size={isNarrow ? 'xs' : 'sm'} onClick={() => toggleDeckCard(id)} title="Leave this card behind" />
             ) : (
-              <div key={`empty-${i}`} className="flex items-center justify-center rounded-xl border-2 border-dashed border-slate-600 text-xs font-bold text-slate-500" style={{ width: 88, aspectRatio: '5 / 7' }}>
+              <div key={`empty-${i}`} className="flex items-center justify-center rounded-xl border-2 border-dashed border-slate-600 text-xs font-bold text-slate-500" style={{ width: isNarrow ? 64 : 88, aspectRatio: '5 / 7' }}>
                 Empty
               </div>
             );
           })}
         </div>
-        <div className="mt-3">
+        <div className="mt-5">
           <BondList deck={profile.deck} owned={owned} />
         </div>
       </section>
@@ -88,7 +90,7 @@ export const ArmyScreen: React.FC = () => {
       {/* Collection */}
       <section className="mt-6">
         <h2 className="font-display mb-3 text-2xl text-slate-800">Your cards</h2>
-        <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
           {owned.map(id => {
             const level = profile.cards[id]!;
             const cost = upgradeCost(id, level);
@@ -117,7 +119,7 @@ export const ArmyScreen: React.FC = () => {
                     title={`Upgrade to level ${level + 1}`}
                   >
                     <span className="font-display flex items-center gap-1 text-sm"><UpgradeIcon color="currentColor" /> Lv{level + 1} · <CoinIcon />{cost}</span>
-                    <span className="flex gap-2 text-[10px] font-bold opacity-90">
+                    <span className="flex gap-2 text-[11px] font-bold opacity-90">
                       {gains.attack > 0 && <span className="flex items-center gap-0.5"><AttackIcon />+{gains.attack}</span>}
                       {gains.health > 0 && <span className="flex items-center gap-0.5"><HealthIcon />+{gains.health}</span>}
                       <span className="flex items-center gap-0.5"><PowerIcon />+{gains.power}</span>
@@ -163,7 +165,7 @@ export const ArmyScreen: React.FC = () => {
         <section className="mt-8">
           <h2 className="font-display mb-1 text-2xl text-slate-800">Recruit new cards</h2>
           <p className="mb-3 text-sm font-semibold text-slate-700">New cards join the shop as you push through the campaign.</p>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {forSale.map(id => {
               const price = cardPrice(id);
               return (
@@ -188,7 +190,7 @@ export const ArmyScreen: React.FC = () => {
                   <span className="flex w-[128px] items-center justify-center gap-1 rounded-xl bg-slate-800/80 px-2 py-2 text-center text-[11px] font-bold text-slate-300">
                     <LockIcon /> Beat level {unlockAt}
                   </span>
-                  <span className="text-[10px] text-slate-700">{getLevel(unlockAt).name} ({unlockAt - cleared > 0 ? `${unlockAt - cleared} to go` : 'ready'})</span>
+                  <span className="text-center text-xs font-semibold text-slate-700">{getLevel(unlockAt).name} ({unlockAt - cleared > 0 ? `${unlockAt - cleared} to go` : 'ready'})</span>
                 </div>
               );
             })}

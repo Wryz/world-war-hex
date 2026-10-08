@@ -43,14 +43,14 @@ const MobDetail: React.FC<{ id: TroopId; onClose: () => void }> = ({ id, onClose
               {FACTIONS[troop.faction].name}{troop.isBoss ? ' · Boss' : ''}
             </div>
             <h2 className="font-display text-3xl">{troop.name}</h2>
-            <p className="mt-1 text-sm italic text-slate-300">{troop.lore}</p>
+            <p className="mt-2 text-sm italic leading-relaxed text-slate-300">{troop.lore}</p>
             <CounterLine type={id} />
-            <ul className="mt-3 flex flex-col gap-1 text-xs text-slate-300">
+            <ul className="mt-3 flex flex-col gap-1.5 text-sm leading-snug text-slate-300">
               {troop.abilities.map(ability => (
                 <li key={ability} className="flex gap-1.5"><AbilityIcon ability={ability} className="mt-0.5" /><span><b>{ABILITIES[ability].name}:</b> {ABILITIES[ability].description}</span></li>
               ))}
             </ul>
-            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+            <div className="mt-4 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-slate-800 px-2 py-1">Met {entry?.seen ?? 0} times</span>
               <span className="flex items-center gap-1 rounded-full bg-slate-800 px-2 py-1"><SkullIcon /> {entry?.slain ?? 0} slain</span>
               {region && <span className="rounded-full bg-slate-800 px-2 py-1">Found in {region.name}</span>}
@@ -84,12 +84,12 @@ export const BestiaryScreen: React.FC = () => {
           <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-slate-700">
             <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-amber-400" style={{ width: `${(hydrated ? discovered.length : 0) / MOB_IDS.length * 100}%` }} />
           </div>
-          <p className="mt-1 text-xs text-slate-400">Meet a monster on the battlefield to add it here. Tap a card to see it up close.</p>
+          <p className="mt-2 text-sm leading-relaxed text-slate-400">Meet a monster on the battlefield to add it here. Tap a card to see it up close.</p>
         </div>
       </div>
 
       {/* Faction filter */}
-      <div className="mt-4 flex flex-wrap gap-2" role="tablist" aria-label="Faction">
+      <div className="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Faction">
         {(['all', ...ENEMY_FACTIONS] as const).map(option => (
           <button
             key={option}
@@ -105,20 +105,22 @@ export const BestiaryScreen: React.FC = () => {
         ))}
       </div>
 
-      <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
+      <div className="mt-6 grid grid-cols-2 gap-x-4 gap-y-6 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {shown.map(id => {
           const seen = hydrated && (profile.bestiary[id]?.seen ?? 0) > 0;
           return (
-            <div key={id} className="flex flex-col items-center gap-1">
+            <div key={id} className="flex flex-col items-center gap-2">
               <TroopCard
                 type={id}
-                size="sm"
+                size="md"
                 hidden={!seen}
                 hideLevel
                 onClick={seen ? () => setSelected(id) : undefined}
                 title={seen ? TROOPS[id].name : `Undiscovered - roams ${regionOf(TROOPS[id].faction)?.name ?? 'somewhere'}`}
               />
-              <span className="text-center text-[10px] font-bold text-slate-700">{seen ? `${profile.bestiary[id]?.slain ?? 0} slain` : regionOf(TROOPS[id].faction)?.name}</span>
+              <span className="rounded-full bg-slate-900/75 px-2.5 py-0.5 text-center text-xs font-semibold text-slate-200">
+                {seen ? `${profile.bestiary[id]?.slain ?? 0} slain` : regionOf(TROOPS[id].faction)?.name}
+              </span>
             </div>
           );
         })}

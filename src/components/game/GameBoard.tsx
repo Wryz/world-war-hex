@@ -108,7 +108,10 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
           <BoardScene {...props} assetsLoaded={assetsLoaded} />
 
           <PerspectiveCamera makeDefault fov={CAMERA_FOV} near={0.1} far={3000} position={[0, 35, 14]} />
-          <CameraRig gameState={props.gameState} />
+          <CameraRig
+            gameState={props.gameState}
+            focus={props.selectedUnit?.position ?? (props.selectedHex && (props.selectedHex.isCamp || props.selectedHex.isBase) ? props.selectedHex.coordinates : null)}
+          />
         </Suspense>
       </Canvas>
     </div>
@@ -132,7 +135,13 @@ const angleDelta = (from: number, to: number) => {
 
 // Camera that looks down on the board from behind the castle of the side whose turn it is,
 // swinging smoothly around the board when the turn changes. Players can drag to orbit/tilt and scroll to zoom.
-const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
+// Selections this close to the middle of the board (as a share of its radius) don't move the camera
+const CAMERA_FOCUS_MIN_RADIUS = 0.35;
+
+// The camera views the board from one of four sides: behind the active castle (side 0), or a quarter,
+// half or three-quarter turn around the board, each framed the same way. Selecting something on
+// another side of the board swings the camera round to the side nearest it.
+const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null }> = ({ gameState, focus }) => {
   const { camera, size, gl } = useThree();
 
   // Let the HUD place things (flying coins) over points on the board
@@ -210,13 +219,37 @@ const CameraRig: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   }, [camera, viewRadius, nearEdgeDistance, targetAzimuth, nearEdgeMargin]);
   const defaultLookAt = useMemo(() => getDefaultLookAt(), [getDefaultLookAt]);
 
-  // New turn (or castles placed): swing to the active side's default view
-  useEffect(() => {
-    desiredLookAtRef.current = defaultLookAt.clone();
+  // The default view, from one of the four sides of the board
+  const showSide = useCallback((side: number) => {
+    const turn = side * Math.PI / 2;
+    desiredLookAtRef.current = defaultLookAt.clone().applyAxisAngle(Y_AXIS, turn);
     desiredZoomRef.current = CAMERA_DEFAULT_ZOOM;
-    azimuthOffsetRef.current = 0;
+    azimuthOffsetRef.current = turn;
     desiredElevationRef.current = CAMERA_ELEVATION;
   }, [defaultLookAt]);
+
+  // New turn (or castles placed): swing to the active side's default view
+  useEffect(() => showSide(0), [showSide]);
+
+  // A selection on another side of the board: swing round to the side nearest it
+  const focusKey = focus ? `${focus.q},${focus.r}` : null;
+  useEffect(() => {
+    if (!focus || gameState.currentPhase !== 'planning') return;
+    const [x, , z] = axialToWorld(focus);
+    if (Math.hypot(x, z) < viewRadiusRef.current * CAMERA_FOCUS_MIN_RADIUS) return;
+    const angle = Math.atan2(x, z);
+    const nearestSide = (azimuth: number) => {
+      let best = 0;
+      for (let side = 1; side < 4; side++) {
+        if (Math.abs(angleDelta(azimuth, targetAzimuth + side * Math.PI / 2)) < Math.abs(angleDelta(azimuth, targetAzimuth + best * Math.PI / 2))) best = side;
+      }
+      return best;
+    };
+    const side = nearestSide(angle);
+    if (side !== nearestSide(targetAzimuth + azimuthOffsetRef.current)) showSide(side);
+    // Only reacts to a new selection
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey]);
 
   // The battle is won: swoop down on the losing castle as it falls
   const loser = gameState.currentPhase === 'gameOver' && gameState.winner
@@ -621,6 +654,18 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       });
     }
 
+    // Troops attacking a castle strike at it for the whole battle
+    if (currentPhase === 'combat' && gameState.siege) {
+      const castle = findBaseHex(gameState, gameState.siege.side === 'player' ? 'ai' : 'player');
+      if (castle) {
+        const target = surfacePosition(castle);
+        for (const id of gameState.siege.attackerIds) {
+          combatFacing.set(id, castle.coordinates);
+          battles.set(id, { key: `${turnNumber}-${gameState.siege.side}-siege`, target, startDelay: getBattleStartDelay() });
+        }
+      }
+    }
+
     const plannedUnitIds = new Set(pendingMoves.map(m => m.unitId));
 
     return allUnits.map(unit => {
@@ -659,7 +704,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     });
     // gameState is only used to find the bases
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [allUnits, hexByKey, combats, currentPhase, pendingMoves, players, turnNumber, activePlayerSide]);
+  }, [allUnits, hexByKey, combats, currentPhase, pendingMoves, players, turnNumber, activePlayerSide, gameState.siege]);
 
   // Keep prop identities stable between renders so memoised units can skip re-rendering
   const unitPropsCache = useRef(new Map<string, (typeof unitRenderData)[number]>());

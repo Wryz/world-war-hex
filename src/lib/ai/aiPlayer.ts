@@ -14,7 +14,6 @@ import {
   getHexesInRange
 } from '../game/hexUtils';
 import {
-  BASE_ATTACK_RANGE,
   TERRAIN_EFFECTS,
   CAMP_INCOME,
   FREE_UPKEEP_UNITS,
@@ -37,7 +36,8 @@ import {
   getRosterTypes,
   findBaseHex,
   canStormCastle,
-  getSideView
+  getSideView,
+  getSiegeDamage
 } from '../game/gameState';
 import { TroopClass, getTroopClass } from '../game/troops';
 
@@ -182,7 +182,7 @@ const UNLISTED_CLASS_SHARE = 0.75;
 // know where their friends will be
 const MOVE_ORDER: TroopClass[] = ['ranged', 'skirmisher', 'cavalry', 'spear', 'brute', 'infantry', 'magic'];
 // Bosses guard the castle and only join the final push from this round on, relative to the round limit
-const PUSH_ROUND_SHARE = 0.55;
+const PUSH_ROUND_SHARE = 0.45;
 
 // Most units the AI recruits in a single turn
 const MAX_PURCHASES_PER_TURN = 3;
@@ -202,6 +202,8 @@ const HOLD_LINE = 0.5;
 
 // How much (in gold) a turn of progress towards a unit's goal is worth, by kind of goal
 const GOAL_WEIGHT = { urgent: 6, objective: 4, march: 3, station: 2.5 } as const;
+// Value of each point of damage a unit could deal the enemy castle from where it ends its move
+const SIEGE_VALUE = { normal: 2, pushing: 3 } as const;
 
 const getDifficultySettings = (state: GameState, difficulty = state.settings?.aiDifficulty): AIDifficultySettings =>
   DIFFICULTY_SETTINGS[difficulty ?? 'medium'] ?? DIFFICULTY_SETTINGS.medium;
@@ -419,9 +421,10 @@ const assessThreats = (state: GameState): ThreatAssessment => {
   const enemyStrengthNearBase = enemyUnitsNearBase.reduce((sum, unit) => sum + unit.attackPower, 0);
 
   const breached = canStormCastle(state, 'player');
+  // Enemies that could storm the castle next turn, or reach a hex they could attack it from
   const castleRaiders = state.players.player.units.filter(enemy =>
     (breached && walkingDistance(state, enemy.position, aiBase.coordinates) <= enemy.movementRange) ||
-    getHexDistance(enemy.position, aiBase.coordinates) <= BASE_ATTACK_RANGE
+    getHexDistance(enemy.position, aiBase.coordinates) <= getAttackRange(enemy) + 1
   );
 
   // Base is under threat if strong enemy units are nearby or one could storm or besiege it
@@ -777,7 +780,7 @@ const chooseGoal = (planner: Planner, unit: Unit): UnitGoal => {
     if (support) return goal(support, GOAL_WEIGHT.station);
   }
 
-  if (planner.isPushing) return goal(enemyBase.coordinates, GOAL_WEIGHT.march, 0, profile.caution * 0.6);
+  if (planner.isPushing) return goal(enemyBase.coordinates, GOAL_WEIGHT.urgent, 0, profile.caution * 0.3);
 
   if (profile.posture === 'hold') {
     const anchor = planner.anchors.get(unit.id);
@@ -790,6 +793,14 @@ const chooseGoal = (planner: Planner, unit: Unit): UnitGoal => {
   }
 
   return goal(enemyBase.coordinates, GOAL_WEIGHT.march);
+};
+
+// Whether a unit standing at `position` could attack the enemy castle (as canStrikeCastle)
+const canStrikeCastleFrom = (planner: Planner, unit: Unit, position: HexCoordinates, terrain: TerrainType): boolean => {
+  const castle = planner.enemyBase.coordinates;
+  const distance = getHexDistance(position, castle);
+  if (distance > getAttackRange(unit, terrain)) return false;
+  return distance <= 1 || unit.abilities.includes('magic') || hasLineOfSight(planner.state.hexGrid, position, castle);
 };
 
 /**
@@ -866,10 +877,10 @@ const decideUnitMove = (planner: Planner, unit: Unit): HexCoordinates | null => 
       }
     }
 
-    // Standing on the enemy castle wins the game; standing near it lays siege to it
+    // Standing on the enemy castle wins the game; standing where it can attack the castle wears it down
     if (coordsMatch(position, planner.enemyBase.coordinates)) value += 1000;
-    else if (getHexDistance(position, planner.enemyBase.coordinates) <= BASE_ATTACK_RANGE) {
-      value += unit.attackPower * (planner.isPushing ? 2 : 1);
+    else if (canStrikeCastleFrom(planner, unit, position, hex?.terrain ?? 'plain')) {
+      value += getSiegeDamage(unit) * (planner.isPushing ? SIEGE_VALUE.pushing : SIEGE_VALUE.normal);
     }
 
     // Recruits appear next to the castle, so don't park there unless defending it

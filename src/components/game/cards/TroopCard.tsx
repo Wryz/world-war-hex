@@ -131,7 +131,7 @@ export const TroopCard: React.FC<TroopCardProps> = ({
 
         {/* Name banner */}
         <div
-          className={`font-display mt-1 truncate text-center leading-tight text-slate-100 ${dims.name}`}
+          className={`font-display mt-1 text-center leading-tight text-slate-100 ${size === 'xs' ? 'truncate' : 'line-clamp-2'} ${dims.name}`}
           style={{ textShadow: '0 1px 0 #0f172a' }}
         >
           {hidden ? '???' : troop.name}

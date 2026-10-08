@@ -219,7 +219,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
   // All of the turn's battles play out together, then resolve at once
   useEffect(() => {
     if (!isReady || currentPhase !== 'combat') return;
-    if (!gameState.combats.some(c => !c.resolved)) return;
+    if (!gameState.combats.some(c => !c.resolved) && !gameState.siege) return;
 
     // Troops walk to the fight first, then it plays out
     const battleDelay = setTimeout(() => {
@@ -227,7 +227,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     }, (getBattleStartDelay() * 1000 + BATTLE_DURATION_MS) / getGameSpeed());
 
     return () => clearTimeout(battleDelay);
-  }, [isReady, currentPhase, gameState.combats, commitState]);
+  }, [isReady, currentPhase, gameState.combats, gameState.siege, commitState]);
 
   // Fight the same battle again from the start
   const handleRestart = () => {

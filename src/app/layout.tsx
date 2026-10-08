@@ -1,13 +1,9 @@
 import type { Metadata } from "next";
-import { Nunito, DynaPuff } from "next/font/google";
+import { DynaPuff } from "next/font/google";
+// Rounded, playful body text that still reads clearly at small sizes (self-hosted)
+import "@fontsource-variable/fredoka";
 import "./globals.css";
 import { AppBoot } from "@/components/shared/AppBoot";
-
-// Readable body font
-const nunito = Nunito({
-  variable: "--font-nunito",
-  subsets: ["latin"],
-});
 
 // Playful display font for titles, buttons and big numbers
 const dynaPuff = DynaPuff({
@@ -28,7 +24,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body
-        className={`${nunito.variable} ${dynaPuff.variable} antialiased`}
+        className={`${dynaPuff.variable} antialiased`}
       >
         <AppBoot />
         {children}

@@ -17,7 +17,8 @@ import {
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuChevronDown, LuRotateCcw, LuTriangleAlert,
-  LuVolume2, LuVolumeX, LuHouse, LuStar, LuDownload, LuUpload, LuMusic, LuShare2, LuX, LuChevronLeft, LuTrash2, LuPlay
+  LuVolume2, LuVolumeX, LuHouse, LuStar, LuDownload, LuUpload, LuMusic, LuShare2, LuX, LuChevronLeft, LuTrash2, LuPlay,
+  LuSettings, LuBookOpen, LuGamepad2
 } from 'react-icons/lu';
 import { Ability, TerrainType, UnitType } from '@/types/game';
 
@@ -179,6 +180,9 @@ export const LaurelIcon = icon(GiLaurelCrown, '#facc15');
 export const MedalIcon = icon(GiStarMedal, '#facc15');
 export const SaveIcon = icon(LuSave);
 export const HelpIcon = icon(LuCircleHelp);
+export const SettingsIcon = icon(LuSettings);
+export const GuideIcon = icon(LuBookOpen);
+export const GameplayIcon = icon(LuGamepad2);
 export const LogIcon = icon(LuScrollText);
 export const ArrowIcon = icon(LuArrowRight);
 export const BackIcon = icon(LuChevronLeft);

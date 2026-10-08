@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useIsNarrow } from '../../shared/useIsNarrow';
 import { GameState, UnitType } from '@/types/game';
 import { getHand, getNextCard, getRosterStats, getTroopName } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
@@ -7,13 +8,6 @@ import { describeBond, getBond } from '@/lib/game/bonds';
 import { PANEL_CLASS } from './styles';
 
 // Phones get smaller cards so a full hand and the End Turn button fit across the screen
-const NARROW_QUERY = '(max-width: 520px)';
-const subscribeToWidth = (listener: () => void) => {
-  const query = window.matchMedia(NARROW_QUERY);
-  query.addEventListener('change', listener);
-  return () => query.removeEventListener('change', listener);
-};
-const useIsNarrow = () => useSyncExternalStore(subscribeToWidth, () => window.matchMedia(NARROW_QUERY).matches, () => false);
 
 interface CardHandProps {
   gameState: GameState;

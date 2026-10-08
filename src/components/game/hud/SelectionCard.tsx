@@ -2,7 +2,7 @@ import React from 'react';
 import { GameState, Hex, Unit, UnitType } from '@/types/game';
 import { ABILITIES, TROOP_CLASSES, getTroopClass, strongAgainst, weakAgainst } from '@/lib/game/troops';
 import {
-  BASE_ATTACK_RANGE, BASE_MAX_HEALTH, HIGH_GROUND_ELEVATION, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS, canStormCastle,
+  BASE_MAX_HEALTH, HIGH_GROUND_ELEVATION, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS, canStormCastle,
   getSightRange, isFogOfWar,
   getCastleMaxHealth
 } from '@/lib/game/gameState';
@@ -148,7 +148,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
               ? canStormCastle(gameState, 'ai') ? 'Walls breached - guard it or the enemy can storm it!' : 'Recruits deploy next to it'
               : canStormCastle(gameState, 'player')
                 ? 'Walls breached - move a unit onto it to win!'
-                : `Besiege it from ${BASE_ATTACK_RANGE} hexes; at half health its walls break and you can storm it`}
+                : 'Attack it: troops next to it, or archers and mages in range, wear it down. At half health its walls break and you can storm it'}
           </div>
         </>
       )}

@@ -102,7 +102,7 @@ if (tune) {
   process.exit(0);
 }
 
-console.log('level  region                 power  scale  win%  avgRounds  recruits  peakArmy  storm/destroy/time');
+console.log('level  region                 power  scale  win%  avgRounds  recruits  peakArmy  storm/destroy/time  castleHit%');
 for (const levelId of levels) {
   const level = getLevel(levelId);
   let wins = 0;
@@ -110,6 +110,8 @@ for (const levelId of levels) {
   let recruits = 0;
   let peak = 0;
   const reasons = { stormed: 0, destroyed: 0, timeout: 0 };
+  // Battles in which either castle was attacked at all
+  let castleHits = 0;
   for (let i = 0; i < battlesPerLevel; i++) {
     const result = playBattle(levelId, fixedStrength);
     if (result.winner === 'player') wins++;
@@ -117,6 +119,7 @@ for (const levelId of levels) {
     recruits += ((result.battleStats?.player.recruited ?? 0) + (result.battleStats?.ai.recruited ?? 0)) / 2;
     peak += peakArmy;
     if (result.winReason) reasons[result.winReason]++;
+    if ((result.battleStats?.player.siegeDamage ?? 0) + (result.battleStats?.ai.siegeDamage ?? 0) > 0) castleHits++;
   }
   console.log(
     String(levelId).padStart(5),
@@ -127,6 +130,7 @@ for (const levelId of levels) {
     (rounds / battlesPerLevel).toFixed(1).padStart(10),
     (recruits / battlesPerLevel).toFixed(1).padStart(9),
     (peak / battlesPerLevel).toFixed(1).padStart(9),
-    `   ${reasons.stormed}/${reasons.destroyed}/${reasons.timeout}`
+    `   ${reasons.stormed}/${reasons.destroyed}/${reasons.timeout}`.padEnd(20),
+    String(Math.round(castleHits / battlesPerLevel * 100)).padStart(9)
   );
 }

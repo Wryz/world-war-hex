@@ -1,7 +1,7 @@
 // Battle sound effects synthesised with ZzFX (https://github.com/KilledByAPixel/ZzFX, MIT).
 // ZzFX generates each sound from a list of parameters, so no audio files are needed.
 
-import { isMuted } from './SoundPlayer';
+import { getSfxVolume, isMuted } from './SoundPlayer';
 
 export type BattleSound = 'swordClash' | 'swordHit' | 'bowShot' | 'arrowHit' | 'spellCast' | 'spellHit' | 'unitFalls' | 'bounty' | 'blocked';
 
@@ -51,7 +51,7 @@ const loadZzfx = () => {
 };
 
 export const playBattleSound = (sound: BattleSound, volume = 1) => {
-  if (isMuted()) return;
+  if (isMuted() || getSfxVolume() <= 0) return;
 
   const now = performance.now();
   if (now - (lastPlayed[sound] ?? -Infinity) < MIN_REPEAT_MS) return;
@@ -65,7 +65,7 @@ export const playBattleSound = (sound: BattleSound, volume = 1) => {
       if (context.state === 'suspended') context.resume().catch(() => {});
 
       const preset = [...PRESETS[sound]];
-      preset[0] = (preset[0] ?? 1) * volume;
+      preset[0] = (preset[0] ?? 1) * volume * getSfxVolume();
       module.zzfx(...preset);
     } catch (error) {
       console.warn('Could not play battle sound:', error);

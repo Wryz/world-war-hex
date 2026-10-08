@@ -1,0 +1,254 @@
+import React, { useEffect, useState } from 'react';
+import {
+  CAMP_INCOME, FLANK_BONUS, FREE_UPKEEP_UNITS, MAX_FLANKERS, SIGHT_RANGE, STORM_BREACH_RATIO,
+  TERRAIN_EFFECTS, TURN_INCOME, UPKEEP_PER_UNIT
+} from '@/lib/game/gameState';
+import { TROOP_CLASSES, TroopClass, strongAgainst } from '@/lib/game/troops';
+import { FOG_FROM_LEVEL } from '@/lib/campaign/levels';
+import { MUSIC_CHANNELS, setChannelVolume, setMusicVolume, useMusicMix, useMusicVolume } from '@/lib/audio/music';
+import { isAnalyticsAvailable, isAnalyticsEnabled, setAnalyticsEnabled } from '@/lib/analytics';
+import { setMuted, setSfxVolume, useMuted, useSfxVolume } from '../game/utils/SoundPlayer';
+import { setGameSpeed, useGameSpeed } from '../game/effects/effects';
+import { TERRAIN_ORDER, TERRAIN_SHORT_EFFECTS } from '../game/hud/terrainInfo';
+import { CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
+import {
+  AttackIcon, BondIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
+  SettingsIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon
+} from '../game/icons';
+
+type Tab = 'sound' | 'gameplay' | 'guide';
+
+const TABS: { id: Tab; label: string; Icon: React.FC<{ className?: string }> }[] = [
+  { id: 'sound', label: 'Sound', Icon: MusicIcon },
+  { id: 'gameplay', label: 'Gameplay', Icon: GameplayIcon },
+  { id: 'guide', label: 'Guide', Icon: GuideIcon }
+];
+
+const Slider: React.FC<{ label: string; detail?: string; value: number; onChange: (value: number) => void; disabled?: boolean }> = ({
+  label, detail, value, onChange, disabled = false
+}) => (
+  <label className={`grid grid-cols-[minmax(0,9rem)_1fr_3rem] items-center gap-3 ${disabled ? 'opacity-50' : ''}`}>
+    <span className="min-w-0">
+      <span className="block text-sm font-semibold text-slate-100">{label}</span>
+      {detail && <span className="block truncate text-xs text-slate-400">{detail}</span>}
+    </span>
+    <input
+      type="range"
+      min={0}
+      max={1}
+      step={0.05}
+      value={value}
+      disabled={disabled}
+      onChange={event => onChange(Number(event.target.value))}
+      className="w-full accent-amber-400"
+      aria-label={`${label} volume`}
+    />
+    <span className="text-right text-sm tabular-nums text-slate-300">{Math.round(value * 100)}%</span>
+  </label>
+);
+
+const SoundTab: React.FC = () => {
+  const muted = useMuted();
+  const music = useMusicVolume();
+  const mix = useMusicMix();
+  const sfx = useSfxVolume();
+  return (
+    <div className="flex flex-col gap-5">
+      <button onClick={() => setMuted(!muted)} className={`${SECONDARY_BUTTON} flex w-fit items-center gap-2 text-sm`} aria-pressed={muted}>
+        {muted ? <SoundOffIcon /> : <SoundOnIcon />} {muted ? 'Sound is off' : 'Sound is on'}
+      </button>
+      <section className="flex flex-col gap-3">
+        <h3 className="font-display text-lg text-amber-300">Music</h3>
+        <Slider label="All music" value={music} onChange={setMusicVolume} disabled={muted} />
+        <div className="ml-1 flex flex-col gap-3 border-l-2 border-slate-700 pl-4">
+          {MUSIC_CHANNELS.map(channel => (
+            <Slider
+              key={channel.id}
+              label={channel.label}
+              detail={channel.detail}
+              value={mix[channel.id]}
+              onChange={value => setChannelVolume(channel.id, value)}
+              disabled={muted}
+            />
+          ))}
+        </div>
+      </section>
+      <section className="flex flex-col gap-3">
+        <h3 className="font-display text-lg text-amber-300">Effects</h3>
+        <Slider label="Sound effects" detail="Swords, arrows, clicks" value={sfx} onChange={setSfxVolume} disabled={muted} />
+      </section>
+    </div>
+  );
+};
+
+const GameplayTab: React.FC = () => {
+  const speed = useGameSpeed();
+  // Read in the browser only, so the server render matches
+  const [analyticsOn, setAnalyticsOn] = useState(false);
+  useEffect(() => setAnalyticsOn(isAnalyticsEnabled()), []);
+  return (
+    <div className="flex flex-col gap-4 text-sm">
+      <div className="flex items-center justify-between gap-3">
+        <span>
+          <b className="block text-slate-100">Battle speed</b>
+          <span className="text-xs text-slate-400">How fast troops walk and fight. Also on the battle&apos;s top bar.</span>
+        </span>
+        <button onClick={() => setGameSpeed(speed === 1 ? 2 : 1)} className={`${SECONDARY_BUTTON} flex shrink-0 items-center gap-1.5`} aria-pressed={speed === 2}>
+          <SpeedIcon /> {speed}x
+        </button>
+      </div>
+      {isAnalyticsAvailable() && (
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={analyticsOn}
+            onChange={event => {
+              setAnalyticsEnabled(event.target.checked);
+              setAnalyticsOn(event.target.checked);
+            }}
+            className="mt-1 accent-amber-400"
+          />
+          <span>
+            <b className="block text-slate-100">Share anonymous gameplay stats</b>
+            <span className="text-xs text-slate-400">Which levels are hard and which cards get played. No personal details, no recordings.</span>
+          </span>
+        </label>
+      )}
+      <p className="text-xs text-slate-400">Your progress, save file and lifetime stats live in Stats &amp; Save on the main menu.</p>
+    </div>
+  );
+};
+
+const GuideSection: React.FC<{ title: string; icon?: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
+  <section>
+    <h3 className="font-display mb-2 flex items-center gap-2 text-lg text-amber-300">{icon}{title}</h3>
+    <div className="flex flex-col gap-2 text-sm leading-relaxed text-slate-200">{children}</div>
+  </section>
+);
+
+const CLASS_ORDER: TroopClass[] = ['spear', 'cavalry', 'ranged', 'infantry', 'skirmisher', 'brute', 'magic'];
+
+const GuideTab: React.FC = () => (
+  <div className="flex flex-col gap-6">
+    <GuideSection title="Winning a battle" icon={<CrownIcon />}>
+      <p>
+        Attack the enemy castle: a troop that can reach it strikes the castle - from the next hex for most troops, from 2-3
+        hexes for archers and mages with a clear line of sight - unless it can finish off an enemy troop instead. Guards next to
+        a castle block the way in and hit back on their own turn. Once its walls are breached ({Math.round(STORM_BREACH_RATIO * 100)}% health or less), march a troop onto it to storm it and win at once.
+        When the last round ends, the castle in better shape wins.
+      </p>
+    </GuideSection>
+    <GuideSection title="Your turn" icon={<AttackIcon />}>
+      <ol className="ml-5 list-decimal space-y-1.5">
+        <li>Tap a card, then a glowing hex next to your castle or a camp you hold, to deploy it.</li>
+        <li>Tap a troop, then a highlighted hex, to move it. Rough ground costs more; water and mountains block the way.</li>
+        <li>End your turn. Troops in range fight automatically, each picking one enemy it can reach.</li>
+      </ol>
+    </GuideSection>
+    <GuideSection title="Gold" icon={<GoldIcon />}>
+      <p>
+        You earn {TURN_INCOME} gold a turn, plus whatever gold mines your troops stand on and {CAMP_INCOME} for each camp you
+        hold. Armies of more than {FREE_UPKEEP_UNITS} troops cost {UPKEEP_PER_UNIT} gold upkeep for each extra troop.
+        Destroying an enemy pays half its cost, and damaging the enemy castle plunders gold.
+      </p>
+    </GuideSection>
+    <GuideSection title="Tactics" icon={<ThreatIcon />}>
+      <ul className="ml-5 list-disc space-y-1.5">
+        <li><b>Zones of control:</b> stepping next to an enemy ends a troop&apos;s move. Fliers pass over enemy lines.</li>
+        <li><b>Flanking:</b> each other troop of yours next to the enemy you attack adds +{Math.round(FLANK_BONUS * 100)}% damage, up to +{Math.round(FLANK_BONUS * MAX_FLANKERS * 100)}%.</li>
+        <li><b>Height:</b> attacking downhill hits 25% harder per level, uphill 25% weaker. Ridges and forests block arrows from below.</li>
+        <li><b>Threat preview:</b> press <kbd className="rounded bg-slate-700 px-1">T</kbd> in battle (or the crosshair) to see where enemies can strike next turn, and how much a selected troop would take.</li>
+      </ul>
+    </GuideSection>
+    <GuideSection title="Fog of war" icon={<FogIcon />}>
+      <p>
+        From level {FOG_FROM_LEVEL} you only see enemy troops your own troops, castle and camps can see: {SIGHT_RANGE} hexes,
+        one more from hills and snow, and one more for scouts (skirmishers and fliers). Forests hide troops unless you are
+        right next to them. A troop that attacks gives itself away, and walking into a hidden enemy stops you short - an ambush.
+      </p>
+    </GuideSection>
+    <GuideSection title="Counters" icon={<AttackIcon />}>
+      <p>Every troop belongs to a class, and each class hits some others 50% harder (spears hit cavalry twice as hard):</p>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {CLASS_ORDER.map(troopClass => (
+          <li key={troopClass} className="rounded-lg bg-slate-800/80 px-3 py-2">
+            <b>{TROOP_CLASSES[troopClass].plural}</b>
+            <span className="text-slate-400"> beat </span>
+            {strongAgainst(troopClass).length > 0
+              ? strongAgainst(troopClass).map(other => TROOP_CLASSES[other].plural).join(', ')
+              : <span className="text-slate-400">no one - but their spells ignore cover</span>}
+          </li>
+        ))}
+      </ul>
+    </GuideSection>
+    <GuideSection title="Cards and bonds" icon={<BondIcon />}>
+      <p>
+        You bring four cards into each battle. Some pairs of cards form bonds: bring both and their troops fight better.
+        The Army screen lists every bond.
+      </p>
+    </GuideSection>
+    <GuideSection title="Terrain" icon={<CampIcon />}>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {TERRAIN_ORDER.map(terrain => (
+          <li key={terrain} className="flex items-start gap-2 rounded-lg bg-slate-800/80 px-3 py-2" title={TERRAIN_EFFECTS[terrain].description}>
+            <TerrainIcon terrain={terrain} className="mt-0.5 shrink-0 text-base" />
+            <span className="min-w-0">
+              <b className="block">{TERRAIN_EFFECTS[terrain].name}</b>
+              <span className="text-xs text-slate-400">{TERRAIN_SHORT_EFFECTS[terrain]}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </GuideSection>
+  </div>
+);
+
+// Settings, opened from the main menu: sound levels for each kind of music, gameplay options and the guide
+export const SettingsPanel: React.FC<{ onClose: () => void; initialTab?: Tab }> = ({ onClose, initialTab = 'sound' }) => {
+  const [tab, setTab] = useState<Tab>(initialTab);
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
+      <div
+        className={`${CARD_CLASS} animate-fadeIn flex max-h-[92vh] w-full max-w-2xl flex-col rounded-b-none sm:rounded-2xl`}
+        onClick={event => event.stopPropagation()}
+        role="dialog"
+        aria-label="Settings"
+      >
+        <div className="flex items-center gap-3 border-b border-white/10 px-5 py-4">
+          <h2 className="font-display flex items-center gap-2 text-2xl"><SettingsIcon /> Settings</h2>
+          <button onClick={onClose} className="ml-auto rounded-md p-1 text-slate-400 hover:bg-slate-700 hover:text-white" aria-label="Close">
+            <CloseIcon className="text-lg" />
+          </button>
+        </div>
+        <div className="flex gap-2 border-b border-white/10 px-5 py-3" role="tablist">
+          {TABS.map(({ id, label, Icon }) => (
+            <button
+              key={id}
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setTab(id)}
+              className={`flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-bold transition-colors ${
+                tab === id ? 'bg-amber-400 text-slate-900' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'
+              }`}
+            >
+              <Icon /> {label}
+            </button>
+          ))}
+        </div>
+        <div className="overflow-y-auto px-5 py-5">
+          {tab === 'sound' && <SoundTab />}
+          {tab === 'gameplay' && <GameplayTab />}
+          {tab === 'guide' && <GuideTab />}
+        </div>
+      </div>
+    </div>
+  );
+};

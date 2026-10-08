@@ -11,8 +11,9 @@ import { CARD_CLASS, PRIMARY_BUTTON, ResourceBadges, SKY_BACKGROUND } from '@/co
 import { TroopCard } from '../cards/TroopCard';
 import {
   AttackIcon, BookIcon, BossIcon, CardsIcon, MapIcon, ResumeIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon,
-  StarIcon, StatsIcon, StyleIcon
+  StarIcon, StatsIcon, StyleIcon, SettingsIcon, GuideIcon
 } from '../icons';
+import { SettingsPanel } from '../../menu/SettingsPanel';
 import { BattleConfig, Difficulty } from '../storage/GameStorage';
 
 // The 3D island needs WebGL, so it only renders in the browser
@@ -60,6 +61,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
   const isMuted = useMuted();
   const [difficulty, setDifficulty] = useState<Difficulty>('medium');
   const [themeName, setThemeName] = useState<string | null>(null);
+  const [settingsTab, setSettingsTab] = useState<'sound' | 'guide' | null>(null);
   useMusic('menu');
 
   const nextLevel = getLevel(hydrated ? highestUnlocked(profile) : 1);
@@ -98,7 +100,16 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
         >
           {isMuted ? <SoundOffIcon /> : <SoundOnIcon />}
         </button>
+        <button
+          onClick={() => setSettingsTab('sound')}
+          className={`${CARD_CLASS} p-2.5`}
+          aria-label="Settings"
+          title="Settings: sound, gameplay and the guide"
+        >
+          <SettingsIcon />
+        </button>
       </div>
+      {settingsTab && <SettingsPanel initialTab={settingsTab} onClose={() => setSettingsTab(null)} />}
 
       <main className="relative z-10 order-1 flex flex-col justify-center px-4 pt-16 pb-4 sm:px-8 lg:min-h-screen lg:max-w-[40rem] lg:px-14 lg:py-10 pointer-events-none">
         <div className="pointer-events-auto">
@@ -167,7 +178,18 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
             <MenuTile href="/army" icon={<CardsIcon />} title="Army" detail="Build your deck, upgrade cards" />
             <MenuTile href="/bestiary" icon={<BookIcon />} title="Bestiary" detail={`${hydrated ? discovered : 0}/${MOB_IDS.length} monsters discovered`} />
             <MenuTile href="/style" icon={<StyleIcon />} title="Style" detail="Card frames, castle styles" />
-            <MenuTile href="/stats" icon={<StatsIcon />} title="Stats & Save" detail="Records, settings, save file" />
+            <MenuTile href="/stats" icon={<StatsIcon />} title="Stats & Save" detail="Records and save file" />
+            <button
+              type="button"
+              onClick={() => setSettingsTab('guide')}
+              className={`${CARD_CLASS} group flex items-center gap-3 px-3 py-3 text-left transition-transform hover:-translate-y-1`}
+            >
+              <span className="text-3xl transition-transform group-hover:scale-110"><GuideIcon /></span>
+              <span className="min-w-0">
+                <span className="font-display block text-lg leading-tight">How to play</span>
+                <span className="block truncate text-[11px] text-slate-400">Rules, terrain, tactics</span>
+              </span>
+            </button>
           </div>
 
           {/* Quick battle */}
