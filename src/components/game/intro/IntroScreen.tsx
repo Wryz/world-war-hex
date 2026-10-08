@@ -18,6 +18,10 @@ import { BattleConfig, Difficulty } from '../storage/GameStorage';
 
 // The 3D island needs WebGL, so it only renders in the browser
 const IslandDiorama = dynamic(() => import('./IslandDiorama'), { ssr: false });
+// Its first island's terrain as a picture (scripts/render-hero-poster.mjs), drawn this many times
+// wider than tall: the camera keeps its height, so a wider hero only shows more sky either side
+const HERO_POSTER = '/hero-island.webp';
+const HERO_POSTER_ASPECT = 2;
 
 export interface IntroScreenProps {
   onStartQuickBattle: (difficulty: Difficulty) => void;
@@ -54,6 +58,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
   const hydrated = useHasHydrated();
   const isMuted = useMuted();
   const [themeName, setThemeName] = useState<string | null>(null);
+  const [islandReady, setIslandReady] = useState(false);
   const [settingsTab, setSettingsTab] = useState<SettingsTab | null>(null);
   useMusic('menu');
 
@@ -71,7 +76,22 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
 
       {/* A living battlefield made of the game's own pieces */}
       <div className="relative order-2 h-[40vh] min-h-[260px] lg:absolute lg:inset-y-0 lg:left-[40%] lg:right-0 lg:h-auto">
-        <IslandDiorama onThemeChange={setThemeName} />
+        {/* A picture of the island's terrain shows at once; the live island fades in over it once its
+            own terrain and scenery are ready, and its troops arrive after */}
+        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={HERO_POSTER}
+            alt=""
+            fetchPriority="high"
+            draggable={false}
+            className={`absolute left-1/2 top-0 h-full w-auto max-w-none -translate-x-1/2 transition-opacity duration-500 ${islandReady ? 'opacity-0' : 'opacity-100'}`}
+            style={{ aspectRatio: `${HERO_POSTER_ASPECT}` }}
+          />
+        </div>
+        <div className={`absolute inset-0 transition-opacity duration-500 ${islandReady ? 'opacity-100' : 'opacity-0'}`}>
+          <IslandDiorama onThemeChange={setThemeName} onReady={() => setIslandReady(true)} />
+        </div>
         {themeName && (
           <div className="pointer-events-none absolute bottom-4 right-4 lg:bottom-8 lg:right-8">
             <div key={themeName} className={`${CARD_CLASS} animate-fadeIn px-5 py-2.5 text-right`}>

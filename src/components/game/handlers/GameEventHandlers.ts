@@ -19,11 +19,13 @@ import {
   getRosterStats,
   getTroopName,
   getValidMoveTargets,
+  getFellTargets,
+  isImpassable,
   TERRAIN_EFFECTS,
   resolveAllCombats
 } from '@/lib/game/gameState';
+import { getHexDistance } from '@/lib/game/hexUtils';
 import { planAITurn } from '@/lib/ai/aiPlayer';
-import { canPlayTactic, getTacticHand, getTacticTargets, needsTarget, playTactic, whyCantPlay } from '@/lib/game/battleTactics';
 import { trackEvent } from '@/lib/analytics';
 import { buildBattle } from '@/lib/campaign/battleSetup';
 import { getProfile } from '@/lib/meta/profile';
@@ -43,7 +45,16 @@ const describeInvalidMove = (state: GameState, unit: Unit, hex: Hex): string => 
   const name = getTroopName(unit.type);
   if (unit.hasMoved) return `${name} just arrived and can't move until next turn`;
   if (coordsEqual(unit.position, hex.coordinates)) return `${name} is already here`;
-  if (TERRAIN_EFFECTS[hex.terrain].moveCost === null) {
+  if (hex.feature === 'greatTree') {
+    return unit.abilities.includes('flying')
+      ? `${name} can't swing an axe - send a troop on foot next to the tree`
+      : getHexDistance(unit.position, hex.coordinates) === 1
+        ? "The tree can't fall that way - chop it from another side"
+        : `Move ${name} next to the great tree to chop it down`;
+  }
+  if (hex.feature === 'log') return 'A fallen trunk blocks that hex';
+  if (hex.fire?.stage === 'burning') return "That hex is on fire - wait for it to burn out";
+  if (isImpassable(hex)) {
     return `${name} can't stop on ${TERRAIN_EFFECTS[hex.terrain].name.toLowerCase()} - pick another hex`;
   }
   if (hex.unit) return 'An enemy holds that hex - move next to it to attack';
@@ -98,8 +109,6 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
   const [selectedHex, setSelectedHex] = useState<Hex | null>(null);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   const [selectedUnitTypeForPurchase, setSelectedUnitTypeForPurchase] = useState<UnitType | null>(null);
-  // A tactic card being aimed (its uid): the highlighted hexes are its targets
-  const [selectedTactic, setSelectedTactic] = useState<string | null>(null);
   const [validMoves, setValidMoves] = useState<HexCoordinates[]>([]);
   const [timer, setTimer] = useState(initialGame.gameState.planningTimeRemaining);
   // Short warning shown to the player, e.g. when they pick a hex a unit can't move to
@@ -148,7 +157,6 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     setSelectedHex(null);
     setSelectedUnit(null);
     setSelectedUnitTypeForPurchase(null);
-    setSelectedTactic(null);
     setValidMoves([]);
   }, []);
 
@@ -302,32 +310,6 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     return true;
   };
 
-  // Pick a tactic card: cards without a target are played at once, the others highlight their targets.
-  // Picking the card being aimed again puts it back.
-  const handleTacticSelect = (uid: string) => {
-    const current = stateRef.current;
-    if (!isPlayerPlanning()) return;
-    if (selectedTactic === uid) {
-      clearSelection();
-      return;
-    }
-    const card = getTacticHand(current, 'player').find(held => held.uid === uid);
-    if (!card) return;
-    if (!canPlayTactic(current, 'player', card.id)) {
-      showNotice(whyCantPlay(current, 'player', card.id));
-      return;
-    }
-    if (!needsTarget(card.id)) {
-      clearSelection();
-      commitOrder(playTactic(current, 'player', uid));
-      trackEvent('tactic_played', { tactic: card.id, level: card.level, round: current.turnNumber });
-      return;
-    }
-    clearSelection();
-    setSelectedTactic(uid);
-    setValidMoves(getTacticTargets(current, 'player', card.id).map(c => ({ ...c })));
-  };
-
   // Handle hex click
   const handleHexClick = (hex: Hex) => {
     const current = stateRef.current;
@@ -344,21 +326,6 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     }
     if (current.currentPhase !== 'planning') {
       setSelectedHex(hex);
-      return;
-    }
-
-    // Aiming a tactic card: a highlighted hex plays it; anything else puts it back
-    if (selectedTactic && isPlayerPlanning()) {
-      const card = getTacticHand(current, 'player').find(held => held.uid === selectedTactic);
-      const isTarget = validMoves.some(c => coordsEqual(c, hex.coordinates));
-      if (card && isTarget) {
-        const played = playTactic(current, 'player', card.uid, hex.coordinates);
-        if (played !== current) {
-          commitOrder(played);
-          trackEvent('tactic_played', { tactic: card.id, level: card.level, round: current.turnNumber });
-        }
-      }
-      clearSelection();
       return;
     }
 
@@ -443,7 +410,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
       }
 
       setSelectedUnit(hex.unit);
-      setValidMoves(getValidMoveTargets(current, hex.unit));
+      setValidMoves([...getValidMoveTargets(current, hex.unit), ...getFellTargets(current, hex.unit)]);
       return;
     }
 
@@ -497,7 +464,5 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     handleUndo,
     canUndo,
     notice,
-    selectedTactic,
-    handleTacticSelect
   };
 };

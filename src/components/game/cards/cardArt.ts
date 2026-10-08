@@ -1,8 +1,8 @@
 import type { TroopId } from '@/lib/game/troops';
 
-// Card art: a portrait of each troop's own 3D model, on a transparent background - the card draws its
-// own background (its faction's colour and its frame's pattern) behind it. The portraits are rendered
-// once by scripts/render-card-art.mjs (from the dev page /dev/card-art) into public/cards/.
+// Card art: a picture of each troop on a transparent background - the card draws its own background
+// (its faction's colour and its frame's pattern) behind it, in public/cards/: for now each troop's own
+// 3D model, rendered by scripts/render-card-art.mjs from the dev page /dev/card-art.
 
 export const cardArtUrl = (type: TroopId) => `/cards/${type}.webp`;
 

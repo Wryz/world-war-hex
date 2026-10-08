@@ -1,6 +1,6 @@
 import React from 'react';
 import { GameState } from '@/types/game';
-import { CombatantPreview, getCombatPreview, getKillBounty, getSiegeDamage } from '@/lib/game/gameState';
+import { CombatEffect, CombatantPreview, describeEffect, getCombatPreview, getKillBounty, getSiegeDamage, strongestEffects } from '@/lib/game/gameState';
 import { getUnitTypeName } from '../utils/UnitHelpers';
 import { PANEL_CLASS, SIDE_COLORS } from '../hud/styles';
 import { AttackIcon, CrownIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from '../icons';
@@ -9,13 +9,19 @@ interface CombatResolverProps {
   gameState: GameState;
 }
 
+// Modifier chips shown per unit at most (the biggest); the rest are counted, and all are in its tooltip
+const MAX_CHIPS = 3;
+
 // Bonuses read green and penalties red, so it's clear why a fight went the way it did
-const modifierTone = (modifier: string) =>
-  /^-|uphill/.test(modifier) ? 'text-rose-300' : /^\+|^x|less damage|ignore|no damage|armored/.test(modifier) ? 'text-emerald-300' : 'text-slate-400';
+const TONE_CLASS: Record<CombatEffect['tone'], string> = {
+  good: 'bg-emerald-500/15 text-emerald-300',
+  bad: 'bg-rose-500/15 text-rose-300',
+  neutral: 'bg-slate-700 text-slate-300'
+};
 
 // One unit in the battle: health now, the damage it is about to take, and what is helping or hurting it
 const Combatant: React.FC<{ entry: CombatantPreview }> = ({ entry }) => (
-  <div className="rounded-md bg-slate-800 px-2 py-1" title={[getUnitTypeName(entry.unit.type), ...entry.modifiers].join(' · ')}>
+  <div className="rounded-md bg-slate-800 px-2 py-1" title={[getUnitTypeName(entry.unit.type), ...entry.modifiers.map(describeEffect)].join(' · ')}>
     <div className="flex items-center gap-1.5">
       <UnitIcon type={entry.unit.type} className="text-base" color={SIDE_COLORS[entry.unit.owner]} />
       <span className="flex items-center gap-0.5 tabular-nums"><HealthIcon />{entry.unit.lifespan}</span>
@@ -31,8 +37,15 @@ const Combatant: React.FC<{ entry: CombatantPreview }> = ({ entry }) => (
       </span>
     </div>
     {entry.modifiers.length > 0 && (
-      <div className="mt-0.5 flex flex-col text-[0.625rem] leading-tight">
-        {entry.modifiers.map(modifier => <span key={modifier} className={modifierTone(modifier)}>{modifier}</span>)}
+      <div className="mt-1 flex flex-wrap gap-0.5 text-[0.5625rem] font-bold leading-none">
+        {strongestEffects(entry.modifiers, MAX_CHIPS).map(modifier => (
+          <span key={modifier.label} className={`whitespace-nowrap rounded px-1 py-0.5 ${TONE_CLASS[modifier.tone]}`}>
+            {modifier.value ? <><span className="tabular-nums">{modifier.value}</span> {modifier.label}</> : modifier.label}
+          </span>
+        ))}
+        {entry.modifiers.length > MAX_CHIPS && (
+          <span className="rounded px-1 py-0.5 text-slate-400">+{entry.modifiers.length - MAX_CHIPS}</span>
+        )}
       </div>
     )}
   </div>

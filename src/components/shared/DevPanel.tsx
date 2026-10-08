@@ -74,7 +74,7 @@ export const DevPanel: React.FC = () => {
             <button className={BUTTON} onClick={run('Campaign reset', devLockAllLevels)}>Lock all</button>
           </div>
 
-          <div className="mb-1 text-[0.625rem] font-bold uppercase tracking-widest text-slate-400">Cards and tactics</div>
+          <div className="mb-1 text-[0.625rem] font-bold uppercase tracking-widest text-slate-400">Cards</div>
           <div className="mb-2 flex flex-wrap gap-1.5">
             <button className={BUTTON} onClick={run('Everything owned', devOwnEverything)}>Own all</button>
             <button className={BUTTON} onClick={run('Cards reset', devResetCards)}>Reset cards</button>

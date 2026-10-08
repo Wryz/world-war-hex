@@ -30,9 +30,7 @@ import { battleTroopTypes } from '@/lib/campaign/battleSetup';
 import {
   BattleRecordResult, completeTutorial, getProfile, profilePower, recordBattle
 } from '@/lib/meta/profile';
-import { playStinger, setMusicIntensity, useMusic } from '@/lib/audio/music';
-import { TACTICS } from '@/lib/game/tactics';
-import { getTacticHand } from '@/lib/game/battleTactics';
+import { setMusicIntensity, useMusic } from '@/lib/audio/music';
 
 interface GameControllerProps {
   battle: BattleConfig;
@@ -86,9 +84,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     handleCancelSelection,
     handleUndo,
     canUndo,
-    notice,
-    selectedTactic,
-    handleTacticSelect
+    notice
   } = useGameHandlers({ battle, resume: shouldContinueGame, isReady });
 
   useMusic(level?.isBoss ? 'boss' : 'battle');
@@ -104,7 +100,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     if (!isReady || startedRef.current) return;
     startedRef.current = true;
     if (isFogOfWar(gameState)) {
-      setTimeout(() => emitMoment({ title: 'Fog of War', subtitle: 'You only see what your troops can see', tone: 'purple' }), 1200);
+      setTimeout(() => emitMoment({ title: 'Fog of War', subtitle: 'You only see what your troops can see', tone: 'purple', explain: true }), 1200);
     }
     if (shouldContinueGame && gameState.turnNumber > 1) return;
     const profile = getProfile();
@@ -266,40 +262,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Tactic cards: announce each one played, and each new one drawn into the player's hand
-  const lastTactic = gameState.lastTactic;
-  useEffect(() => {
-    if (!lastTactic || !isReady) return;
-    const tactic = TACTICS[lastTactic.id];
-    emitMoment({
-      title: lastTactic.side === 'player' ? tactic.name : `Enemy: ${tactic.name}`,
-      subtitle: tactic.describe(lastTactic.level),
-      tone: lastTactic.side === 'player' ? 'purple' : 'red'
-    });
-    // Announced once per card played
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastTactic?.serial]);
-  const playerTactics = getTacticHand(gameState, 'player');
-  const drawnCount = gameState.tactics?.player.drawn ?? 0;
-  const drawnRef = useRef(drawnCount);
-  useEffect(() => {
-    if (drawnCount > drawnRef.current && isReady) {
-      const card = playerTactics[playerTactics.length - 1];
-      if (card) {
-        setToast({ id: Date.now(), text: `New tactic card: ${TACTICS[card.id].name}` });
-        playStinger('unlock');
-      }
-    }
-    drawnRef.current = drawnCount;
-    // Only a new draw announces itself
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawnCount]);
-
   // Short instruction while the player is in the middle of an action
-  const aimedTactic = selectedTactic ? playerTactics.find(card => card.uid === selectedTactic) : undefined;
-  const hint = aimedTactic
-    ? `Tap a pink hex to play ${TACTICS[aimedTactic.id].name} · tap the card again to put it back`
-    : selectedUnitTypeForPurchase
+  const hint = selectedUnitTypeForPurchase
     ? `Tap a glowing hex to deploy ${getUnitTypeName(selectedUnitTypeForPurchase)} · Esc to cancel`
     : selectedUnit?.owner === 'player' && isPlayerPlanning
       ? validMoves.length > 0
@@ -313,7 +277,6 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         gameState={viewState}
         unitIds={unitIds}
         showThreats={showThreats && isPlayerPlanning}
-        targetingTactic={!!selectedTactic}
         selectedHex={selectedHex ?? undefined}
         selectedUnit={selectedUnit}
         validMoves={validMoves}
@@ -358,9 +321,6 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           onEndTurn={handleEndTurn}
           canUndo={canUndo}
           onUndo={handleUndo}
-          tactics={playerTactics}
-          selectedTactic={selectedTactic}
-          onTacticSelect={handleTacticSelect}
         />
       )}
 

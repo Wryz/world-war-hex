@@ -1,11 +1,11 @@
 import React, { useEffect, useState } from 'react';
+import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
 import {
   CAMP_INCOME, FLANK_BONUS, HEIGHT_DAMAGE_PER_UNIT, MAX_HEIGHT_BONUS, FREE_UPKEEP_UNITS, MAX_FLANKERS, SIGHT_RANGE,
   SPEED_POINTS_PER_ROUND, TERRAIN_EFFECTS, TIME_SCORE_WEIGHTS, TURN_INCOME, UPKEEP_PER_UNIT
 } from '@/lib/game/gameState';
 import { PLAYER_CARD_IDS, TROOPS, TROOP_CLASSES, TroopClass, strongAgainst } from '@/lib/game/troops';
 import { SIGNATURE_UNLOCK_LEVEL, getSignature } from '@/lib/game/signatures';
-import { FIRST_TACTIC_ROUND, TACTICS, TACTIC_HAND_LIMIT, TACTIC_IDS, TACTIC_LOADOUT_SIZE } from '@/lib/game/tactics';
 import { FOG_FROM_LEVEL } from '@/lib/campaign/levels';
 import { MUSIC_CHANNELS, setChannelVolume, setMusicVolume, useMusicMix, useMusicVolume } from '@/lib/audio/music';
 import { isAnalyticsAvailable, isAnalyticsEnabled, setAnalyticsEnabled } from '@/lib/analytics';
@@ -15,7 +15,7 @@ import { TERRAIN_ORDER, TERRAIN_SHORT_EFFECTS } from '../game/hud/terrainInfo';
 import { CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
 import {
   AttackIcon, BondIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
-  SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon, TacticBackIcon, TacticIcon, TACTIC_COLORS
+  SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon, FellIcon
 } from '../game/icons';
 import type { Difficulty } from '../game/storage/GameStorage';
 import { UI_SIZES, setUiSize, useUiSize } from '@/lib/uiSize';
@@ -229,6 +229,18 @@ const GuideTab: React.FC = () => (
         <li><b>Threat preview:</b> press <kbd className="rounded bg-slate-700 px-1">T</kbd> in battle (or the crosshair) to see where enemies can strike next turn, and how much a selected troop would take.</li>
       </ul>
     </GuideSection>
+    <GuideSection title="The battlefield" icon={<FellIcon />}>
+      <p>
+        <b>Great trees</b> tower over some forests: nothing walks through one, and they block arrows. Move a troop next to one,
+        then tap the tree (it glows gold) to chop it down. It falls away from your troop onto the hex beyond, dealing {FELL_DAMAGE} damage
+        to whoever stands there, friend or foe, and its trunk blocks that hex for the rest of the battle. Felled across water, it makes a bridge.
+      </p>
+      <p>
+        <b>Wildfire</b>: lava sets the grass and woods around it alight now and then. Glowing embers warn you a turn ahead; then the hex
+        burns for a round and a half: nothing can enter it, its smoke blocks arrows, and troops caught in it lose {FIRE_DAMAGE} health a turn.
+        Fire spreads through forest and burns it down to open ground - cover can go up in smoke.
+      </p>
+    </GuideSection>
     <GuideSection title="Fog of war" icon={<FogIcon />}>
       <p>
         From level {FOG_FROM_LEVEL} you only see enemy troops your own troops, castle and camps can see: {SIGHT_RANGE} hexes,
@@ -270,21 +282,6 @@ const GuideTab: React.FC = () => (
             </li>
           );
         })}
-      </ul>
-    </GuideSection>
-    <GuideSection title="Tactic cards" icon={<TacticBackIcon />}>
-      <p>
-        Bring {TACTIC_LOADOUT_SIZE} tactic cards into battle (pick them before the fight). From round {FIRST_TACTIC_ROUND}, every second round you draw one of them at random -
-        you can hold {TACTIC_HAND_LIMIT} - and play it on your turn: tap it, and tap a pink hex if it needs a target. The enemy draws its own and plays them too.
-        Tactic cards level up in the Army; more unlock as you advance.
-      </p>
-      <ul className="grid gap-1.5 sm:grid-cols-2">
-        {TACTIC_IDS.map(id => (
-          <li key={id} className="flex items-start gap-2 rounded-lg bg-slate-800/80 px-3 py-2">
-            <TacticIcon id={id} className="mt-0.5 shrink-0 text-base" color={TACTIC_COLORS[id]} />
-            <span><b>{TACTICS[id].name}</b><span className="block text-slate-400">{TACTICS[id].describe(1)}</span></span>
-          </li>
-        ))}
       </ul>
     </GuideSection>
     <GuideSection title="Your castle" icon={<CrownIcon />}>

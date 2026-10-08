@@ -2,7 +2,7 @@ import React from 'react';
 import { GameState } from '@/types/game';
 import { BASE_MAX_HEALTH, getCastleMaxHealth, getIncome, getMaxRounds, getTimeScore, isFogOfWar } from '@/lib/game/gameState';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
-import { CrownIcon, FogIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TacticBackIcon, ThreatIcon } from '../icons';
+import { CrownIcon, FogIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon } from '../icons';
 import { setGameSpeed, useCastleShownDamage, useGameSpeed } from '../effects/effects';
 
 // The time-up points show for this many final rounds
@@ -81,12 +81,6 @@ export const TopBar: React.FC<TopBarProps> = ({
         {showTimer && (
           <span className={`font-mono text-xs font-bold tabular-nums ${timer <= 10 ? 'text-red-400 animate-pulse' : 'text-slate-300'}`}>
             {timer}s
-          </span>
-        )}
-        {/* Tactic cards the enemy holds (face down) */}
-        {(gameState.tactics?.ai.hand.length ?? 0) > 0 && (
-          <span className="flex items-center gap-0.5 text-xs font-bold text-rose-200" title="Tactic cards the enemy holds">
-            <TacticBackIcon color="#fda4af" />×{gameState.tactics!.ai.hand.length}
           </span>
         )}
         {/* Near the end: the points that decide the battle if time runs out */}

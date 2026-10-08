@@ -1,5 +1,4 @@
 import { getHexHeightOf } from '../game/hexHeight';
-import { planTactics } from './aiTactics';
 import {
   GameState,
   Player,
@@ -44,8 +43,11 @@ import {
   getTimeScore,
   getSituationalMultiplier,
   getDamageTakenMultiplier,
-  isSmoked
+  getFellLanding,
+  getFellTargets,
+  isImpassable
 } from '../game/gameState';
+import { FELL_DAMAGE, FIRE_DAMAGE } from '../game/battlefield';
 import { TroopClass, getTroopClass } from '../game/troops';
 
 /**
@@ -244,8 +246,6 @@ const mirrorSides = (state: GameState): GameState => {
     winner: flipSide(state.winner),
     rosters: state.rosters && { player: state.rosters.ai, ai: state.rosters.player },
     battleStats: state.battleStats && { player: state.battleStats.ai, ai: state.battleStats.player },
-    tactics: state.tactics && { player: state.tactics.ai, ai: state.tactics.player },
-    effects: state.effects?.map(effect => ({ ...effect, side: flipSide(effect.side) })),
     // The deck only limits the real player's recruits; the planner is told which cards it holds instead
     deck: undefined,
     // A campaign enemy's income bonus doesn't belong to the side being planned for
@@ -266,8 +266,7 @@ const mirrorSides = (state: GameState): GameState => {
 export const planAITurn = (initial: GameState, options: AIPlanOptions = {}): GameState => {
   const doctrine = options.doctrine ?? 'balanced';
   const side = options.side ?? 'ai';
-  // Tactic cards first: they change the board the moves are planned on
-  const state = planTactics(initial, side, options.difficulty ?? initial.settings?.aiDifficulty);
+  const state = initial;
   // In the fog of war the planner only knows about the enemy troops its side can see, and remembers
   // where it last saw the others
   const view = getSideView(state, side, true);
@@ -365,9 +364,14 @@ const planTurn = (state: GameState, doctrine: AIDoctrine, recruitTypes: UnitType
   const takenCamps = [...planner.objectives.values()].filter(hex => hex.isCamp).length;
   const campsWithoutCapturer = { count: findCampTargets(state).length - takenCamps };
 
+  // Troops next to a great tree that would fall on an enemy chop it down (they stay put, and still
+  // strike whatever is in reach)
+  planFelling(planner);
+  const felling = new Set(planner.state.pendingMoves.map(move => move.unitId));
+
   // Move existing units first (hexes next to the castle they leave can then take recruits)
   const units = [...state.players.ai.units]
-    .filter(unit => !unit.hasMoved)
+    .filter(unit => !unit.hasMoved && !felling.has(unit.id))
     .sort((a, b) => MOVE_ORDER.indexOf(getTroopClass(a.type)) - MOVE_ORDER.indexOf(getTroopClass(b.type)));
 
   // Fresh recruits can't move but still strike whatever is in reach
@@ -395,6 +399,33 @@ const planTurn = (state: GameState, doctrine: AIDoctrine, recruitTypes: UnitType
   }
 
   return planner.state;
+};
+
+// Great trees: a troop chops down a tree next to it when the tree would fall on an enemy it can see
+// (and not on one of its own), the bigger the blow the better
+const planFelling = (planner: Planner): void => {
+  const side = planner.state.players.ai;
+  const ordered = new Set(planner.state.pendingMoves.map(move => move.unitId));
+  const taken = new Set<string>();
+  const ownAt = new Set([...planner.destinations.values()].map(key));
+  for (const unit of side.units) {
+    if (ordered.has(unit.id) || unit.hasMoved) continue;
+    let best: { tree: HexCoordinates; value: number } | null = null;
+    for (const tree of getFellTargets(planner.state, unit)) {
+      if (taken.has(key(tree))) continue;
+      const landing = getFellLanding(planner.state, unit.position, tree);
+      if (!landing || ownAt.has(key(landing))) continue;
+      const victim = planner.enemies.find(enemy => coordsMatch(enemy.position, landing));
+      if (!victim) continue;
+      const value = healthValue(victim, FELL_DAMAGE);
+      if (!best || value > best.value) best = { tree, value };
+    }
+    if (!best) continue;
+    const next = addPendingMove(planner.state, unit.id, side.id, best.tree);
+    if (next === planner.state) continue;
+    planner.state = next;
+    taken.add(key(best.tree));
+  }
 };
 
 // In the last rounds, how the AI stands on the points that decide the battle when time runs out
@@ -474,7 +505,6 @@ const canStrikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, a
   const distance = getHexDistance(from, at);
   if (distance > getAttackRange(attacker, terrainAt(planner, from))) return false;
   if (distance <= 1) return true;
-  if (isSmoked(planner.state, at)) return false;
   return attacker.abilities.includes('magic') || hasLineOfSight(planner.state.hexGrid, from, at);
 };
 
@@ -645,7 +675,7 @@ const assignAnchors = (planner: Planner): Map<string, HexCoordinates> => {
   const holdings = state.hexGrid.filter(hex => (hex.isResourceHex || hex.isCamp) && onOurSide(hex));
 
   const scored = state.hexGrid
-    .filter(hex => TERRAIN_EFFECTS[hex.terrain].moveCost !== null && !hex.isBase && !hex.isResourceHex)
+    .filter(hex => !isImpassable(hex) && !hex.isBase && !hex.isResourceHex)
     .map(hex => {
       const toMine = walkingDistance(state, hex.coordinates, myBase.coordinates);
       const toTheirs = walkingDistance(state, hex.coordinates, enemyBase.coordinates);
@@ -664,7 +694,7 @@ const assignAnchors = (planner: Planner): Map<string, HexCoordinates> => {
         const offRoad = toMine + toTheirs - castleDistance;
         if (offRoad > 3 || !onOurSide(hex) || toMine < 2) return null;
         const openNeighbors = getHexesInRange(state.hexGrid, hex.coordinates, 1)
-          .filter(other => other !== hex && TERRAIN_EFFECTS[other.terrain].moveCost !== null).length;
+          .filter(other => other !== hex && !isImpassable(other)).length;
         score = (isForest ? 4 : 0) + (elevation >= 2 ? 3 : 0) + (elevation < 1 ? -4 : 0) + guards +
           (6 - openNeighbors) * 0.6 - offRoad * 0.8 - 0.4 * Math.abs(toTheirs - castleDistance * HOLD_LINE);
       }
@@ -924,6 +954,10 @@ const decideUnitMove = (planner: Planner, unit: Unit): HexCoordinates | null => 
       if (coordsMatch(position, goal.position)) value += goal.weight * 0.5;
     }
     if (isStay) value += goal.holdValue;
+    // Embers: the hex will be on fire next turn
+    if (hex?.fire?.stage === 'smoulder' && !unit.abilities.includes('fireborn')) value -= healthValue(unit, FIRE_DAMAGE * 2);
+    // Already on fire (a troop caught in it): get out
+    if (isStay && hex?.fire?.stage === 'burning' && !unit.abilities.includes('fireborn')) value -= healthValue(unit, FIRE_DAMAGE * 2);
 
     // Mages heal the wounded friends they end up next to
     if (unit.abilities.includes('healing')) {

@@ -79,9 +79,17 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
       emitMoment({ title: 'Ambush Sprung!', subtitle: 'The enemy walked into your hidden troops', tone: 'gold' });
     }
 
+    // A great tree crashing down
+    const felled = gameState.lastFell;
+    if (felled && felled.serial !== previous.lastFell?.serial) {
+      shakeScreen(0.45);
+      playBattleSound('unitFalls', 0.9);
+      emitMoment({ title: 'Timber!', tone: felled.side === 'player' ? 'gold' : 'red' });
+    }
+
     if (after.player.campsCaptured > before.player.campsCaptured) {
       playBattleSound('bounty', 0.7);
-      emitMoment({ title: 'Camp Captured!', subtitle: 'Deploy your cards there now', tone: 'green' });
+      emitMoment({ title: 'Camp Captured!', subtitle: 'Deploy your cards there now', tone: 'green', explain: true });
     }
     if (after.ai.campsCaptured > before.ai.campsCaptured) {
       emitMoment({ title: 'Camp Lost!', tone: 'red' });

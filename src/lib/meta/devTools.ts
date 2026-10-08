@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LEVEL_COUNT } from '../campaign/levels';
 import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId } from '../game/troops';
-import { MAX_TACTIC_LEVEL, STARTER_TACTICS, TACTIC_IDS, TacticId } from '../game/tactics';
 import { MAX_DECK_SIZE, STARTER_CARDS } from './economy';
 import { Profile, getProfile, replaceProfile } from './profile';
 
@@ -72,30 +71,22 @@ export const devLockAllLevels = () => update(() => ({ levels: {} }));
 
 // --- Cards ---------------------------------------------------------------------------------
 
-// Own every troop card and tactic card (new ones join at level 1)
+// Own every troop card (new ones join at level 1)
 export const devOwnEverything = () => update(profile => ({
-  cards: Object.fromEntries(PLAYER_CARD_IDS.map(id => [id, profile.cards[id] ?? 1])),
-  tactics: Object.fromEntries(TACTIC_IDS.map(id => [id, profile.tactics[id] ?? 1]))
+  cards: Object.fromEntries(PLAYER_CARD_IDS.map(id => [id, profile.cards[id] ?? 1]))
 }));
 
-// Set every owned card (and tactic card, up to its own maximum) to one level
+// Set every owned card to one level
 export const devSetAllLevels = (level: number) => update(profile => ({
-  cards: Object.fromEntries((Object.keys(profile.cards) as TroopId[]).map(id => [id, Math.min(MAX_CARD_LEVEL, Math.max(1, level))])),
-  tactics: Object.fromEntries((Object.keys(profile.tactics) as TacticId[]).map(id => [id, Math.min(MAX_TACTIC_LEVEL, Math.max(1, level))]))
+  cards: Object.fromEntries((Object.keys(profile.cards) as TroopId[]).map(id => [id, Math.min(MAX_CARD_LEVEL, Math.max(1, level))]))
 }));
 
 export const devSetCardLevel = (id: TroopId, level: number) => update(profile => ({
   cards: { ...profile.cards, [id]: Math.min(MAX_CARD_LEVEL, Math.max(1, level)) }
 }));
 
-export const devSetTacticLevel = (id: TacticId, level: number) => update(profile => ({
-  tactics: { ...profile.tactics, [id]: Math.min(MAX_TACTIC_LEVEL, Math.max(1, level)) }
-}));
-
-// Back to the four starter cards and three starter tactics, all at level 1
+// Back to the four starter cards, all at level 1
 export const devResetCards = () => update(() => ({
   cards: Object.fromEntries(STARTER_CARDS.map(id => [id, 1])),
-  deck: STARTER_CARDS.slice(0, MAX_DECK_SIZE),
-  tactics: Object.fromEntries(STARTER_TACTICS.map(id => [id, 1])),
-  tacticLoadout: [...STARTER_TACTICS]
+  deck: STARTER_CARDS.slice(0, MAX_DECK_SIZE)
 }));

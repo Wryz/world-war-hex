@@ -29,6 +29,8 @@ export const makeBattle = (activePlayer: PlayerType = 'ai', extra: Partial<GameS
   const state = { ...createBattle({ ...DEFAULT_SETTINGS, gridSize: 5, fogOfWar: false, seed: 7 }), ...extra };
   for (const hex of state.hexGrid) {
     if (!hex.isBase) hex.terrain = 'plain';
+    hex.feature = undefined;
+    hex.fire = undefined;
     hex.isResourceHex = false;
     hex.isCamp = false;
     hex.unit = undefined;
