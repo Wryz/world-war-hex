@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -7,6 +7,15 @@ import { OWNER_COLORS } from './UnitMesh';
 import { CrownIcon } from './icons';
 import { getTimeScale } from './effects/effects';
 import { CastleStyle, getCastleStyle } from '@/lib/meta/cosmetics';
+
+// Blows landing on a castle during a battle: when each lands (seconds after the battle starts, once
+// the troops walking into it arrive) and the damage they add up to
+export interface CastleIncoming {
+  key: string;
+  startDelay: number;
+  times: number[];
+  damage: number;
+}
 
 interface CastleProps {
   owner: PlayerType;
@@ -20,6 +29,8 @@ interface CastleProps {
   fallen?: boolean;
   // How it looks (your castle wears the style you picked)
   look?: CastleStyle;
+  // Blows landing on it in the battle being fought
+  incoming?: CastleIncoming;
 }
 
 
@@ -157,7 +168,9 @@ const CastleDecor: React.FC<{ look: CastleStyle; angles: number[] }> = ({ look, 
   }
 };
 
-const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHealth, hideLabel = false, fallen = false, look = getCastleStyle(undefined) }) => {
+const HIT_NUMBER_DURATION = 1200;
+
+const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHealth, hideLabel = false, fallen = false, look = getCastleStyle(undefined), incoming }) => {
   const crownRef = useRef<THREE.Group>(null);
   const structureRef = useRef<THREE.Group>(null);
   const debrisRef = useRef<THREE.Group>(null);
@@ -174,9 +187,36 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
     return new THREE.Vector3(Math.cos(angle) * speed, 2.2 + (i % 5) * 0.5, Math.sin(angle) * speed);
   }), []);
 
+  // Damage shown so far in the battle being fought, so the health bar drops blow by blow, and
+  // floating numbers for recent hits
+  const [shownDamage, setShownDamage] = useState(0);
+  const [hitNumbers, setHitNumbers] = useState<{ id: number; amount: number }[]>([]);
+  const tallyRef = useRef<{ key: string; time: number; landed: number; shown: number } | null>(null);
+  const hitTimeoutsRef = useRef(new Set<ReturnType<typeof setTimeout>>());
   useEffect(() => {
-    if (health < previousHealthRef.current) hitRef.current = 0;
+    const timeouts = hitTimeoutsRef.current;
+    return () => timeouts.forEach(clearTimeout);
+  }, []);
+  const incomingKey = incoming?.key ?? null;
+  useEffect(() => {
+    setShownDamage(0);
+    tallyRef.current = null;
+  }, [incomingKey]);
+  const showHit = (amount: number) => {
+    const id = Date.now() + Math.random();
+    setHitNumbers(current => [...current, { id, amount }]);
+    const timeout = setTimeout(() => {
+      hitTimeoutsRef.current.delete(timeout);
+      setHitNumbers(current => current.filter(hit => hit.id !== id));
+    }, HIT_NUMBER_DURATION);
+    hitTimeoutsRef.current.add(timeout);
+  };
+
+  useEffect(() => {
+    // Hits already shown blow by blow don't shake it again when the battle's result is applied
+    if (health < previousHealthRef.current && shownDamage === 0) hitRef.current = 0;
     previousHealthRef.current = health;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [health]);
 
   useEffect(() => {
@@ -184,13 +224,32 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
     if (!fallen) collapseRef.current = null;
   }, [fallen]);
   const ownerColor = OWNER_COLORS[owner];
-  const healthRatio = maxHealth > 0 ? Math.max(0, health) / maxHealth : 0;
+  const shownHealth = Math.max(0, health - (incoming ? shownDamage : 0));
+  const healthRatio = maxHealth > 0 ? shownHealth / maxHealth : 0;
   const healthColor = healthRatio > 0.6 ? '#22c55e' : healthRatio > 0.3 ? '#eab308' : '#ef4444';
 
   useFrame((state, rawDelta) => {
     const delta = Math.min(rawDelta, 0.1) * getTimeScale();
     const time = state.clock.getElapsedTime();
     const structure = structureRef.current;
+
+    // Blows landing during a battle: drop the health bar a step at a time, and shudder at each
+    if (incoming && incoming.damage > 0 && incoming.times.length > 0) {
+      if (tallyRef.current?.key !== incoming.key) tallyRef.current = { key: incoming.key, time: -incoming.startDelay, landed: 0, shown: 0 };
+      const tally = tallyRef.current;
+      tally.time += delta;
+      const landed = incoming.times.filter(at => at <= tally.time).length;
+      if (landed > tally.landed) {
+        tally.landed = landed;
+        hitRef.current = 0;
+        const shown = Math.min(incoming.damage, Math.round(incoming.damage * landed / incoming.times.length));
+        if (shown > tally.shown) {
+          showHit(shown - tally.shown);
+          tally.shown = shown;
+          setShownDamage(shown);
+        }
+      }
+    }
 
     // A hit makes the castle shudder
     let wobble = 0;
@@ -318,7 +377,23 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
             <span className="w-10 h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block">
               <span className="block h-full" style={{ width: `${healthRatio * 100}%`, background: healthColor }} />
             </span>
-            <span>{health}</span>
+            <span>{shownHealth}</span>
+          </div>
+        </Html>
+      )}
+      {/* A number pops up for every blow that lands during a battle */}
+      {!hideLabel && !fallen && hitNumbers.length > 0 && (
+        <Html position={[0, 2.75, 0]} center zIndexRange={[8, 0]} style={{ pointerEvents: 'none' }}>
+          <div className="relative h-0 w-0">
+            {hitNumbers.map((hit, index) => (
+              <span
+                key={hit.id}
+                className="animate-float-up font-display absolute -translate-x-1/2 whitespace-nowrap text-lg font-bold text-red-400 select-none"
+                style={{ left: `${(index % 3 - 1) * 12}px`, textShadow: '0 1px 2px rgba(0,0,0,0.7)' }}
+              >
+                -{hit.amount}
+              </span>
+            ))}
           </div>
         </Html>
       )}

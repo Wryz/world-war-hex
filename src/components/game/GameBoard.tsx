@@ -5,7 +5,7 @@ import * as THREE from 'three';
 import { GameState, Hex, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
 import { HexTile, HexHighlight } from './HexTile';
 import { UnitMesh, UnitBattle, OWNER_COLORS, DEATH_DURATION } from './UnitMesh';
-import { Castle } from './Castle';
+import { Castle, CastleIncoming } from './Castle';
 import { Camp } from './Camp';
 import { BoardDecorations } from './BoardDecorations';
 import { MovePath } from './MovePath';
@@ -25,6 +25,7 @@ import {
   isFogOfWar,
   getMovePath,
   getValidBaseLocations,
+  getSiegeDamage,
   HIGH_GROUND_ELEVATION
 } from '@/lib/game/gameState';
 import { getHexDistance } from '@/lib/game/hexUtils';
@@ -36,7 +37,7 @@ import { playSound } from './utils/SoundPlayer';
 import { playBattleSound } from './utils/battleSounds';
 import { getCastleStyle } from '@/lib/meta/cosmetics';
 import { useProfile } from '@/lib/meta/profile';
-import { getBattleStartDelay, getDeathTime, getImpactTimesUntil } from './utils/battleTiming';
+import { getBattleStartDelay, getDeathTime, getImpactTimes, getImpactTimesUntil } from './utils/battleTiming';
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale, getGameSpeed } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
@@ -545,6 +546,30 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
   return null;
 };
 
+// The blows each troop attacking a castle lands on it in the battle being fought: one per point of
+// damage it deals (as many as it can strike in the battle). One struck down by the castle's guards
+// lands none, as it does no damage. Also the total, as the castle will take it.
+const getSiegeBlows = (state: GameState): { blows: Map<string, number[]>; damage: number } => {
+  const blows = new Map<string, number[]>();
+  const siege = state.currentPhase === 'combat' ? state.siege : undefined;
+  if (!siege) return { blows, damage: 0 };
+  const doomed = new Set(state.combats
+    .filter(combat => combat.intercept && !combat.resolved)
+    .flatMap(combat => getCombatPreview(state, combat).defenders.filter(entry => entry.destroyed).map(entry => entry.unit.id)));
+  let total = 0;
+  for (const id of siege.attackerIds) {
+    const unit = state.players[siege.side].units.find(candidate => candidate.id === id);
+    if (!unit || doomed.has(id)) {
+      blows.set(id, []);
+      continue;
+    }
+    const damage = getSiegeDamage(unit);
+    total += damage;
+    blows.set(id, getImpactTimes(unit).slice(0, Math.max(1, Math.round(damage))));
+  }
+  return { blows, damage: Math.round(total) };
+};
+
 interface BoardSceneProps extends GameBoardProps {
   assetsLoaded: boolean;
 }
@@ -824,7 +849,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       });
     }
 
-    // Troops attacking a castle strike at it for the whole battle
+    // Troops attacking a castle strike at it, one blow per point of damage they deal
+    const siegeBlows = getSiegeBlows(gameState);
     if (currentPhase === 'combat' && gameState.siege) {
       const castle = findBaseHex(gameState, gameState.siege.side === 'player' ? 'ai' : 'player');
       if (castle) {
@@ -838,6 +864,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             target,
             startDelay: getBattleStartDelay(),
             incoming: struck?.incoming,
+            strikes: siegeBlows.blows.get(id)?.length ?? 0,
             diesAt: struck?.diesAt ?? null
           });
         }
@@ -1066,6 +1093,19 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const playerBase = findBaseHex(gameState, 'player');
   const aiBase = findBaseHex(gameState, 'ai');
   const playerCastlePosition = useMemo(() => playerBase ? surfacePosition(playerBase) : null, [playerBase]);
+  // The castle under attack in the battle being fought, and the blows landing on it
+  const castleIncoming = useMemo((): { owner: PlayerType; incoming: CastleIncoming } | null => {
+    if (currentPhase !== 'combat' || !gameState.siege) return null;
+    const { blows, damage } = getSiegeBlows(gameState);
+    const times = [...blows.values()].flat().sort((a, b) => a - b);
+    if (times.length === 0 || damage === 0) return null;
+    return {
+      owner: gameState.siege.side === 'player' ? 'ai' : 'player',
+      incoming: { key: `${turnNumber}-${gameState.siege.side}-siege`, startDelay: getBattleStartDelay(), times, damage }
+    };
+    // The siege and the fights around it decide the blows
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPhase, gameState.siege, combats, players, turnNumber]);
   const aiCastlePosition = useMemo(() => aiBase ? surfacePosition(aiBase) : null, [aiBase]);
 
   const campSignature = hexGrid.filter(hex => hex.isCamp).map(hex => `${coordKey(hex.coordinates)}:${hex.owner ?? ''}`).join('|');
@@ -1166,6 +1206,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           position={playerCastlePosition}
           health={players.player.baseHealth ?? BASE_MAX_HEALTH}
           maxHealth={players.player.maxBaseHealth ?? BASE_MAX_HEALTH}
+          incoming={castleIncoming?.owner === 'player' ? castleIncoming.incoming : undefined}
           fallen={currentPhase === 'gameOver' && gameState.winner === 'ai'}
         />
       )}
@@ -1175,6 +1216,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           position={aiCastlePosition}
           health={players.ai.baseHealth ?? BASE_MAX_HEALTH}
           maxHealth={players.ai.maxBaseHealth ?? BASE_MAX_HEALTH}
+          incoming={castleIncoming?.owner === 'ai' ? castleIncoming.incoming : undefined}
           fallen={currentPhase === 'gameOver' && gameState.winner === 'player'}
         />
       )}
