@@ -140,13 +140,13 @@ export const StatsScreen: React.FC = () => {
       <section className={`${CARD_CLASS} mt-4 p-4`}>
         <h2 className="font-display text-2xl">Your save</h2>
         <p className="mt-1 text-xs text-slate-400">
-          Progress saves automatically in this browser, and the game keeps working offline once it has loaded. Download a save file to keep a backup on your computer or carry your campaign to another one.
+          Progress saves in this browser. Download a save file to back it up or move it to another computer.
         </p>
         {savesProtected !== null && (
           <p className={`mt-1 text-xs ${savesProtected ? 'text-emerald-300' : 'text-slate-400'}`}>
             {savesProtected
-              ? 'Your browser keeps this save safe from automatic clean-up.'
-              : 'Your browser may clear this save if space runs low - download a backup now and then.'}
+              ? 'Protected from browser clean-up.'
+              : 'Your browser may clear this if space runs low - keep a backup.'}
           </p>
         )}
         <div className="mt-3 flex flex-wrap gap-2">

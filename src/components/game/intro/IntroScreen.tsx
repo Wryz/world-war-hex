@@ -127,7 +127,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
             </h1>
           </div>
           <p className="mt-3 max-w-lg text-lg font-semibold text-slate-700">
-            Play your troop cards, read the land and topple the enemy castle - in under five minutes.
+            Play your cards, read the land, topple the castle.
           </p>
 
           {/* Campaign */}

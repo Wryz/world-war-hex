@@ -8,17 +8,17 @@ import { ArrowIcon, CloseIcon } from '../icons';
 type Step = 'playCard' | 'deploy' | 'endTurn' | 'waitForTurn' | 'move' | 'fight' | 'win';
 
 const STEPS: Record<Step, { text: string; target?: string; manual?: boolean }> = {
-  playCard: { text: 'Your troops are cards - you brought four into this battle. Tap one to play it.', target: 'first-card' },
-  deploy: { text: 'Now tap a glowing hex next to your castle to deploy it there.' },
-  endTurn: { text: 'Press End Turn. Your troops arrive, then the enemy takes its turn.', target: 'end-turn' },
-  waitForTurn: { text: 'The enemy is moving. Troops in range fight automatically at the end of every turn.' },
-  move: { text: 'Tap one of your troops, then a highlighted hex to march it towards the enemy castle.' },
+  playCard: { text: 'Your troops are cards. Tap one to play it.', target: 'first-card' },
+  deploy: { text: 'Tap a glowing hex to deploy it.' },
+  endTurn: { text: 'Press End Turn.', target: 'end-turn' },
+  waitForTurn: { text: 'Enemy turn. Troops in range fight automatically.' },
+  move: { text: 'Tap a troop, then a hex to march it.' },
   fight: {
-    text: 'Capture the tents (camps) to deploy cards closer to the front. Forests give cover, hills give height.',
+    text: 'Capture tents to deploy closer to the front. Forests give cover, hills give height.',
     manual: true
   },
   win: {
-    text: 'Win by attacking the enemy castle - march next to it, or shoot it from range. Once its walls are breached (half health), march onto it to storm it. Good luck, commander!',
+    text: 'Attack the enemy castle. At half health, step onto it to win!',
     manual: true
   }
 };

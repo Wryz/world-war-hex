@@ -141,6 +141,16 @@ const CHAMPION_STRENGTH = 0.55;
 // First level fought in the fog of war
 export const FOG_FROM_LEVEL = 11;
 
+// Share of battles the model player should win at each level (what the balance simulator tunes
+// for): the first battles are gentle while the basics sink in, easing to the usual challenge by
+// the middle of the second region
+const BEGINNER_TARGET = 0.9;
+const STANDARD_TARGET = 0.65;
+const BEGINNER_LEVELS = 15;
+export const targetWinRate = (levelId: number): number =>
+  levelId > BEGINNER_LEVELS ? STANDARD_TARGET
+    : BEGINNER_TARGET - (BEGINNER_TARGET - STANDARD_TARGET) * (levelId - 1) / BEGINNER_LEVELS;
+
 const regularsOf = (faction: Faction): TroopId[] =>
   MOB_IDS.filter(id => TROOPS[id].faction === faction && !TROOPS[id].isBoss);
 
@@ -252,6 +262,12 @@ export const starGoals = (level: LevelDef): string[] => [
   'Win with your castle above half health',
   `Win within ${level.fastRounds} rounds`
 ];
+
+// The same goals as short labels, with the full wording for a tooltip
+export const starGoalLabels = (level: LevelDef): { short: string; full: string }[] => {
+  const full = starGoals(level);
+  return [`Win`, `Castle over ½`, `≤ ${level.fastRounds} rounds`].map((short, i) => ({ short, full: full[i] }));
+};
 
 // Stars earned for a won battle
 export const starsForWin = (level: LevelDef, castleRatio: number, rounds: number): number =>

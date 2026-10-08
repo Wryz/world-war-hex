@@ -70,7 +70,7 @@ export const StyleScreen: React.FC = () => {
   return (
     <MenuShell title="Style" icon={<StyleIcon />} wide>
       <p className={`${CARD_CLASS} p-4 text-sm text-slate-300`}>
-        Dress up your army with coins from your battles. Styles only change how things look - never how they fight.
+        Styles change how your army looks, never how it fights.
       </p>
 
       {/* Card frames */}

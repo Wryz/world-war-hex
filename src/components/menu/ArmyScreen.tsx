@@ -64,12 +64,7 @@ export const ArmyScreen: React.FC = () => {
           <h2 className="font-display text-2xl">Battle cards <span className="text-base text-slate-400">{profile.deck.length}/{MAX_DECK_SIZE}</span></h2>
           <span className="font-display flex items-center gap-1 text-xl text-orange-300"><PowerIcon /> {profilePower(profile)} power</span>
         </div>
-        <p className="mt-1 text-sm leading-relaxed text-slate-400">
-          You bring four cards into each battle - change them here or before any fight. Tap a card below to bring it or leave it
-          behind. Mix your troops: spears beat cavalry,
-          cavalry beats ranged and casters, ranged beats spears and brutes, infantry beats spears and skirmishers, skirmishers hunt
-          the back line, and brutes smash infantry. Bring bonded cards together and they fight better.
-        </p>
+        <p className="mt-1 text-sm text-slate-400">Tap a card to bring it or leave it behind. Counters are in the guide.</p>
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-3 pl-1.5 pt-1.5">
           {Array.from({ length: MAX_DECK_SIZE }, (_, i) => {
             const id = profile.deck[i];
@@ -137,7 +132,7 @@ export const ArmyScreen: React.FC = () => {
       {/* Every bond, so players know what to work towards */}
       <section className="mt-8">
         <h2 className="font-display mb-1 flex items-center gap-2 text-2xl text-slate-800"><BondIcon /> Bonds</h2>
-        <p className="mb-3 text-sm font-semibold text-slate-700">Bring both cards of a bond into a battle and they fight better together.</p>
+        <p className="mb-3 text-sm font-semibold text-slate-700">Bring both cards to fight better together.</p>
         <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
           {BONDS.map(bond => {
             const ready = bond.cards.every(card => profile.cards[card] !== undefined);
@@ -164,7 +159,7 @@ export const ArmyScreen: React.FC = () => {
       {(forSale.length > 0 || locked.length > 0) && (
         <section className="mt-8">
           <h2 className="font-display mb-1 text-2xl text-slate-800">Recruit new cards</h2>
-          <p className="mb-3 text-sm font-semibold text-slate-700">New cards join the shop as you push through the campaign.</p>
+          <p className="mb-3 text-sm font-semibold text-slate-700">More cards unlock as you advance.</p>
           <div className="grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {forSale.map(id => {
               const price = cardPrice(id);

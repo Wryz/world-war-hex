@@ -122,7 +122,7 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 
 ### Balance
 
-`npm run simulate` plays AI-vs-AI battles in which one side uses the deck the progression model expects at each level, and reports win rates and battle lengths. `npm run simulate -- --tune 20 1 2 3` searches for the enemy strength at which that deck wins 65% of the time. The constants in `src/lib/campaign/levels.ts` were tuned with it.
+`npm run simulate` plays AI-vs-AI battles in which one side uses the deck the progression model expects at each level, and reports win rates and battle lengths. `npm run simulate -- --tune 20 1 2 3` searches for the enemy strength at which that deck wins its level's target share of battles: 90% on level 1, easing to 65% from level 16 on (`targetWinRate` in `levels.ts`). The constants in `src/lib/campaign/levels.ts` were tuned with it.
 
 ## Analytics
 

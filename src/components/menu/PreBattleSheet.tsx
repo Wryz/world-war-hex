@@ -1,6 +1,6 @@
 import React from 'react';
 import Link from 'next/link';
-import { LevelDef, levelEnemies, starGoals, enemyRosterStats } from '@/lib/campaign/levels';
+import { LevelDef, levelEnemies, starGoalLabels, enemyRosterStats } from '@/lib/campaign/levels';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
 import { FACTIONS, TROOPS, scaleTroop } from '@/lib/game/troops';
 import { TERRAIN_EFFECTS } from '@/lib/game/gameState';
@@ -64,12 +64,7 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
           Auto-pick
         </button>
       </div>
-      <p className="mb-4 text-xs leading-relaxed text-slate-400">
-        {isFull ? 'Tap a card to leave it behind, then pick another.' : 'Tap cards to bring them into battle.'}
-        {' '}<span className="font-bold text-emerald-300">Good pick</span> cards counter this enemy, and
-        {' '}<span className="font-bold text-amber-300">bonded</span> cards fight better together.
-      </p>
-      <div className="flex flex-wrap gap-x-4 gap-y-6 pl-1.5 pt-2">
+      <div className="flex flex-wrap gap-x-4 gap-y-6 pl-1.5 pt-3">
         {owned.map(id => {
           const inDeck = profile.deck.includes(id);
           const matchup = matchupScore(id, enemies);
@@ -83,7 +78,7 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
                 selected={inDeck}
                 disabled={!inDeck && isFull}
                 onClick={() => toggleDeckCard(id)}
-                title={inDeck ? 'Bringing this card - tap to leave it behind' : isFull ? 'Your hand is full - leave a card behind first' : 'Tap to bring this card'}
+                title={`${inDeck ? 'Tap to leave behind' : isFull ? 'Hand full - leave a card behind first' : 'Tap to bring'}${matchup > 0.05 ? ' · counters this enemy' : matchup < -0.05 ? ' · weak against this enemy' : ''}`}
               />
               {bonded && (
                 <span className="pointer-events-none absolute -left-1.5 -top-1.5 rounded-full bg-slate-900 p-0.5 shadow ring-1 ring-amber-300" title="Part of a bond">
@@ -105,7 +100,7 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
         })}
       </div>
       <div className="mt-5">
-        <BondList deck={profile.deck} owned={owned} />
+        <BondList deck={profile.deck} owned={owned} brief />
       </div>
     </div>
   );
@@ -142,16 +137,16 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
         <h2 className="font-display mt-0.5 flex items-center gap-2 text-3xl text-slate-50">
           {level.isBoss && <BossIcon />}{level.isElite && <ShieldIcon color="#a78bfa" />}{level.name}
         </h2>
-        <p className="mt-1 text-sm text-slate-400">
-          {level.isBoss ? `Boss battle: ${TROOPS[level.region.boss].name} guards the castle.`
-            : level.isElite ? 'Elite battle: a champion guards the enemy castle.'
-              : `Defeat ${faction.title.toLowerCase()}.`}
-        </p>
+        {(level.isBoss || level.isElite) && (
+          <span className={`mt-1.5 inline-block rounded-full px-2.5 py-0.5 text-xs font-bold ${level.isBoss ? 'bg-rose-500/20 text-rose-200' : 'bg-violet-500/20 text-violet-200'}`}>
+            {level.isBoss ? `Boss: ${TROOPS[level.region.boss].name}` : 'Elite: a champion guards the castle'}
+          </span>
+        )}
 
         {/* Power check */}
         <div className="mt-4 rounded-xl bg-slate-800 p-3">
           <div className="flex items-center justify-between text-sm">
-            <span className="flex items-center gap-1.5 font-bold"><PowerIcon /> Your power <span className="font-display text-lg">{power}</span></span>
+            <span className="flex items-center gap-1.5 font-bold" title="Your power: the four cards you bring"><PowerIcon /> <span className="font-display text-lg">{power}</span></span>
             <span className="font-bold text-slate-400">Recommended <span className="font-display text-lg text-slate-100">{level.recommendedPower}</span></span>
           </div>
           <div className="relative mt-2 h-3 overflow-hidden rounded-full bg-slate-700">
@@ -161,7 +156,7 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
           </div>
           <div className="mt-1.5 flex items-center justify-between text-xs">
             <span className="font-display text-base" style={{ color: verdict.color }}>{verdict.label}</span>
-            {ratio < 0.97 && <Link href="/army" className="font-bold text-sky-300 hover:underline">Upgrade your cards →</Link>}
+            {ratio < 0.97 && <Link href="/army" className="font-bold text-sky-300 hover:underline">Upgrade →</Link>}
           </div>
         </div>
 
@@ -182,7 +177,7 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
                   level={level.enemyTier}
                   stats={guard?.stats ?? roster[id] ?? scaleTroop(TROOPS[id], level.enemyScale)}
                   hidden={!seen && !guard}
-                  title={seen || guard ? `${TROOPS[id].name}: ${TROOPS[id].role}` : 'Not yet seen - meet it in battle to add it to your Bestiary'}
+                  title={seen || guard ? `${TROOPS[id].name}: ${TROOPS[id].role}` : 'Not yet seen'}
                 />
               );
             })}
@@ -192,39 +187,29 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
         {/* Cards to bring */}
         <LoadoutPicker enemies={enemies} />
 
-        {/* The map */}
-        <div className="mt-4">
-          <div className="mb-1.5 text-xs font-bold uppercase tracking-widest text-slate-400">Battlefield</div>
-          <div className="flex flex-wrap gap-1.5">
-            {themeTerrain(level.region.theme).map(terrain => (
-              <span key={terrain} className="flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-xs" title={TERRAIN_EFFECTS[terrain].description}>
-                <TerrainIcon terrain={terrain} /> {TERRAIN_EFFECTS[terrain].name}
-              </span>
-            ))}
-          </div>
-          <div className="mt-1.5 text-xs text-slate-400">
-            {level.settings.maxRounds} rounds · {level.settings.planningPhaseTime}s per turn
-            {level.settings.fogOfWar && (
-              <span className="ml-1 inline-flex items-center gap-1 font-bold text-slate-200" title="You only see enemy troops your own troops can see; forests hide troops unless you're right next to them">
-                · <FogIcon /> Fog of war
-              </span>
-            )}
-          </div>
+        {/* The map, the stars and the reward */}
+        <div className="mt-4 flex flex-wrap items-center gap-1.5 text-xs">
+          {themeTerrain(level.region.theme).map(terrain => (
+            <span key={terrain} className="rounded-full bg-slate-800 p-1 text-sm" title={`${TERRAIN_EFFECTS[terrain].name}: ${TERRAIN_EFFECTS[terrain].description}`}>
+              <TerrainIcon terrain={terrain} />
+            </span>
+          ))}
+          <span className="ml-1 text-slate-400">{level.settings.maxRounds} rounds</span>
+          {level.settings.fogOfWar && (
+            <span className="inline-flex items-center gap-1 font-bold text-slate-200" title="You only see enemies your troops can see">
+              · <FogIcon /> Fog
+            </span>
+          )}
         </div>
-
-        {/* Stars and reward */}
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <ul className="flex flex-col gap-1 text-xs">
-            {starGoals(level).map((goal, i) => (
-              <li key={goal} className={`flex items-center gap-1.5 ${i < stars ? 'text-slate-100' : 'text-slate-400'}`}>
-                <StarIcon color={i < stars ? '#facc15' : '#475569'} /> {goal}
-              </li>
-            ))}
-          </ul>
-          <div className="flex flex-col items-start justify-center rounded-xl bg-slate-800 px-3 py-2 sm:items-end">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">{stars === 0 ? 'Reward up to' : 'Replay reward up to'}</span>
-            <span className="font-display flex items-center gap-1 text-2xl text-yellow-300"><CoinIcon /> {reward}</span>
-          </div>
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          {starGoalLabels(level).map(({ short, full }, i) => (
+            <span key={short} title={full} className={`flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-bold ${i < stars ? 'bg-amber-400/20 text-amber-100' : 'bg-slate-800 text-slate-400'}`}>
+              <StarIcon color={i < stars ? '#facc15' : '#475569'} /> {short}
+            </span>
+          ))}
+          <span className="font-display ml-auto flex items-center gap-1 text-xl text-yellow-300" title={stars === 0 ? 'Reward up to' : 'Replay reward up to'}>
+            <CoinIcon /> {reward}
+          </span>
         </div>
 
         <div className="mt-5 flex gap-2">

@@ -5,12 +5,12 @@
 //   npx tsx scripts/simulate-balance.ts --tune [battlesPerLevel] [level ...]
 //
 // --tune searches, for each level, for the enemy strength (relative to the current setting) at which
-// the model player wins TARGET_WIN_RATE of battles.
+// the model player wins its level's target share of battles (targetWinRate in levels.ts).
 
 import { GameState } from '@/types/game';
 import { createBattle, executeMoves, resolveAllCombats } from '@/lib/game/gameState';
 import { planAITurn } from '@/lib/ai/aiPlayer';
-import { getLevel, enemyRosterStats, LEVEL_COUNT } from '@/lib/campaign/levels';
+import { getLevel, enemyRosterStats, LEVEL_COUNT, targetWinRate } from '@/lib/campaign/levels';
 import { expectedProgression } from '@/lib/meta/economy';
 import { deckRoster } from '@/lib/campaign/battleSetup';
 import { TROOPS, cardStats, scaleTroop } from '@/lib/game/troops';
@@ -25,7 +25,6 @@ const fixedStrength = strengthAt >= 0 ? Number(args[strengthAt + 1]) : 1;
 if (strengthAt >= 0) args.splice(strengthAt, 2);
 const tune = args[0] === '--tune';
 if (tune) args.shift();
-const TARGET_WIN_RATE = 0.65;
 const battlesPerLevel = Number(args[0] ?? 12);
 const requested = args.slice(1).map(Number).filter(n => n >= 1 && n <= LEVEL_COUNT);
 const levels = requested.length > 0 ? requested : [1, 2, 3, 5, 8, 10, 12, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 70, 80, 90, 100];
@@ -87,14 +86,14 @@ const winRate = (levelId: number, strength: number, battles: number) => {
 };
 
 if (tune) {
-  console.log('level  strength-for-' + Math.round(TARGET_WIN_RATE * 100) + '%-wins');
+  console.log('level  strength-for-target-wins');
   for (const levelId of levels) {
     // Win rate falls as strength rises: bisect on a log scale
     let low = 0.3;
     let high = 2.6;
     for (let step = 0; step < 7; step++) {
       const mid = Math.sqrt(low * high);
-      if (winRate(levelId, mid, battlesPerLevel) > TARGET_WIN_RATE) low = mid;
+      if (winRate(levelId, mid, battlesPerLevel) > targetWinRate(levelId)) low = mid;
       else high = mid;
     }
     console.log(String(levelId).padStart(5), Math.sqrt(low * high).toFixed(2).padStart(8));
@@ -102,7 +101,7 @@ if (tune) {
   process.exit(0);
 }
 
-console.log('level  region                 power  scale  win%  avgRounds  recruits  peakArmy  storm/destroy/time  castleHit%');
+console.log('level  region                 power  scale  win% target  avgRounds  recruits  peakArmy  storm/destroy/time  castleHit%');
 for (const levelId of levels) {
   const level = getLevel(levelId);
   let wins = 0;
@@ -127,6 +126,7 @@ for (const levelId of levels) {
     String(expectedProgression(levelId).power).padStart(5),
     level.enemyScale.toFixed(2).padStart(6),
     String(Math.round(wins / battlesPerLevel * 100)).padStart(5),
+    String(Math.round(targetWinRate(levelId) * 100)).padStart(6),
     (rounds / battlesPerLevel).toFixed(1).padStart(10),
     (recruits / battlesPerLevel).toFixed(1).padStart(9),
     (peak / battlesPerLevel).toFixed(1).padStart(9),

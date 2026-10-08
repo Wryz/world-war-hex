@@ -84,7 +84,7 @@ export const BestiaryScreen: React.FC = () => {
           <div className="mt-1 h-2.5 overflow-hidden rounded-full bg-slate-700">
             <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-amber-400" style={{ width: `${(hydrated ? discovered.length : 0) / MOB_IDS.length * 100}%` }} />
           </div>
-          <p className="mt-2 text-sm leading-relaxed text-slate-400">Meet a monster on the battlefield to add it here. Tap a card to see it up close.</p>
+          <p className="mt-2 text-sm leading-relaxed text-slate-400">Meet monsters in battle to add them. Tap one for details.</p>
         </div>
       </div>
 

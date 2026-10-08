@@ -1,9 +1,9 @@
 // Per-level fine tuning of enemy strength, measured with the balance simulator
-// (npm run simulate -- --tune): each level's strength for a 65% win rate relative to its
+// (npm run simulate -- --tune): each level's strength for its target win rate (targetWinRate in levels.ts) relative to its
 // region's typical level. It evens out the luck of each level's roster mix and map.
 export const LEVEL_TUNING: readonly number[] = [
-  1.03, 0.95, 1.04, 0.91, 0.84, 1.02, 0.97, 0.97, 1.03, 0.88,
-  0.73, 0.86, 0.87, 0.94, 0.74, 1.07, 1.36, 1.23, 1.28, 0.70,
+  1.00, 0.89, 0.95, 0.84, 0.74, 0.93, 0.92, 0.90, 0.91, 0.77,
+  0.71, 0.68, 0.75, 0.94, 0.74, 1.04, 1.36, 1.23, 1.28, 0.66,
   0.98, 1.00, 1.00, 0.97, 0.92, 1.05, 0.90, 1.12, 1.06, 0.86,
   1.00, 1.05, 1.17, 0.99, 0.88, 0.90, 1.00, 0.98, 1.11, 0.89,
   1.38, 0.97, 1.08, 1.05, 0.82, 1.00, 0.89, 1.00, 0.86, 0.88,

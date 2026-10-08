@@ -102,9 +102,11 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
           </div>
           <CounterLine type={unit.type} />
           {unit.abilities.filter(ability => ability !== 'rapidMovement').length > 0 && (
-            <ul className="mt-2 flex flex-col gap-0.5 text-[11px] text-slate-300">
+            <ul className="mt-2 flex flex-wrap gap-1 text-[11px] text-slate-200">
               {unit.abilities.filter(ability => ability !== 'rapidMovement').map(ability => (
-                <li key={ability} className="flex gap-1"><AbilityIcon ability={ability} className="mt-0.5" /><span><b>{ABILITIES[ability].name}:</b> {ABILITIES[ability].description}</span></li>
+                <li key={ability} className="flex items-center gap-1 rounded-full bg-slate-800 px-1.5 py-0.5" title={ABILITIES[ability].description}>
+                  <AbilityIcon ability={ability} /> {ABILITIES[ability].name}
+                </li>
               ))}
             </ul>
           )}
@@ -117,12 +119,12 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
             </div>
           )}
           {unit.owner === 'player' && (gameState.bonds ?? []).map(getBond).filter(bond => bond.bonuses[unit.type]).map(bond => (
-            <div key={bond.id} className="mt-1.5 flex items-center gap-1 text-[11px] text-amber-200">
-              <BondIcon /> <b>{bond.name}:</b> {describeBonus(unit.type, bond.bonuses[unit.type]!)}
+            <div key={bond.id} className="mt-1.5 flex items-center gap-1 text-[11px] text-amber-200" title={describeBonus(unit.type, bond.bonuses[unit.type]!)}>
+              <BondIcon /> <b>{bond.name}</b>
             </div>
           ))}
           {unit.owner === 'player' && unit.hasMoved && gameState.currentPhase === 'planning' && (
-            <div className="mt-2 text-slate-400">Just deployed · moves next turn</div>
+            <div className="mt-2 text-slate-400">Moves next turn</div>
           )}
         </>
       ) : hex.isCamp ? (
@@ -132,9 +134,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
             {hex.owner === 'player' ? 'Your camp' : hex.owner === 'ai' ? 'Enemy camp' : 'Neutral camp'}
           </div>
           <div className="mt-2 text-slate-400">
-            {hex.owner === 'player'
-              ? 'Recruits can deploy on and around it'
-              : 'Move a unit onto it to capture it and deploy recruits there'}
+            {hex.owner === 'player' ? 'Recruits deploy here' : 'Step on it to capture it'}
           </div>
         </>
       ) : (
@@ -145,10 +145,10 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
           </div>
           <div className="mt-2 text-slate-400">
             {hex.owner === 'player'
-              ? canStormCastle(gameState, 'ai') ? 'Walls breached - guard it or the enemy can storm it!' : 'Recruits deploy next to it'
+              ? canStormCastle(gameState, 'ai') ? 'Walls breached - guard it!' : 'Recruits deploy next to it'
               : canStormCastle(gameState, 'player')
-                ? 'Walls breached - move a unit onto it to win!'
-                : 'Attack it: troops next to it, or archers and mages in range, wear it down. At half health its walls break and you can storm it'}
+                ? 'Walls breached - step on it to win!'
+                : 'Attack it to break its walls, then storm it'}
           </div>
         </>
       )}
