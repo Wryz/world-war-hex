@@ -6,6 +6,7 @@ import { GameBoard } from './GameBoard';
 import { CombatResolver } from './combat/CombatResolver';
 import { ResultsScreen } from './shared/ResultsScreen';
 import { TutorialCoach } from './shared/TutorialCoach';
+import { RuleTips } from './shared/RuleTips';
 import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
 import { LoadingManagerProvider } from './utils/LoadingManager';
@@ -321,6 +322,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
       {currentPhase === 'combat' && <CombatResolver gameState={viewState} />}
 
+      {/* First-time tips for the newer rules (not while the first battle's tutorial is running) */}
+      {!showTutorial && isReady && currentPhase !== 'gameOver' && <RuleTips gameState={gameState} />}
       {showTutorial && isReady && currentPhase !== 'gameOver' && (
         <TutorialCoach
           gameState={gameState}
