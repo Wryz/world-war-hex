@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { loadGltf } from './unitModelCache';
 
 // Scenery, castles and camps from KayKit's Medieval Hexagon Pack, Halloween Bits and Dungeon
@@ -7,7 +8,15 @@ import { loadGltf } from './unitModelCache';
 // model. Every model in a pack shares one small texture atlas, so each kind of prop draws as a
 // single instanced mesh.
 
-const PACK_URLS = ['/models/kaykit/medieval.glb', '/models/kaykit/halloween.glb', '/models/kaykit/dungeon.glb'];
+// Each pack downloads only when a battle needs it: the medieval one always (castles, camps, most
+// scenery), the others for haunted ground and dungeon maps
+export type PropPack = 'medieval' | 'halloween' | 'dungeon';
+const PACK_URLS: Record<PropPack, string> = {
+  medieval: '/models/kaykit/medieval.glb',
+  halloween: '/models/kaykit/halloween.glb',
+  dungeon: '/models/kaykit/dungeon.glb'
+};
+const MEDIEVAL_ONLY: PropPack[] = ['medieval'];
 
 // KayKit's hexes are 2 units across their flat sides; ours are √3
 export const KAYKIT_HEX_SCALE = Math.sqrt(3) / 2;
@@ -21,45 +30,84 @@ export interface PropModel {
 
 export type PropLibrary = Map<string, PropModel>;
 
-let library: PropLibrary | null = null;
-let loading: Promise<PropLibrary> | null = null;
+// The packs store positions and normals as small quantized integers, scaled back up by each model's
+// node. Baking that scale into a quantized attribute would clip it, so copy them out as floats first.
+const toFloatGeometry = (source: THREE.BufferGeometry): THREE.BufferGeometry => {
+  const geometry = source.clone();
+  for (const name of Object.keys(geometry.attributes)) {
+    const attribute = geometry.getAttribute(name);
+    if (!(attribute instanceof THREE.InterleavedBufferAttribute) && attribute.array instanceof Float32Array && !attribute.normalized) continue;
+    const values = new Float32Array(attribute.count * attribute.itemSize);
+    const read = [attribute.getX, attribute.getY, attribute.getZ, attribute.getW];
+    for (let i = 0; i < attribute.count; i++) {
+      for (let k = 0; k < attribute.itemSize; k++) values[i * attribute.itemSize + k] = read[k].call(attribute, i);
+    }
+    geometry.setAttribute(name, new THREE.BufferAttribute(values, attribute.itemSize));
+  }
+  return geometry;
+};
 
-export const loadPropLibrary = (): Promise<PropLibrary> => {
-  loading ??= Promise.all(PACK_URLS.map(url => loadGltf(url))).then(packs => {
+const loadedPacks = new Map<PropPack, PropLibrary>();
+const loadingPacks = new Map<PropPack, Promise<PropLibrary>>();
+
+const loadPack = (name: PropPack): Promise<PropLibrary> => {
+  const cached = loadingPacks.get(name);
+  if (cached) return cached;
+  const loading = loadGltf(PACK_URLS[name]).then(pack => {
     const props: PropLibrary = new Map();
-    for (const pack of packs) {
-      pack.scene.updateMatrixWorld(true);
-      pack.scene.traverse(object => {
+    pack.scene.updateMatrixWorld(true);
+    // Each top-level node is one model, named after it; some (a windmill and its sails, a chest and
+    // its lid) are made of several meshes, merged here into one
+    for (const model of pack.scene.children) {
+      if (!model.name || props.has(model.name)) continue;
+      const parts: THREE.BufferGeometry[] = [];
+      let material: THREE.MeshStandardMaterial | null = null;
+      model.traverse(object => {
         const mesh = object as THREE.Mesh;
         if (!mesh.isMesh) return;
-        // Each model is one mesh, named after it (or sitting under a node that is)
-        const name = mesh.name || mesh.parent?.name;
-        if (!name || props.has(name)) return;
-        const geometry = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
-        const material = mesh.material as THREE.MeshStandardMaterial;
-        material.roughness = 1;
-        material.metalness = 0;
-        // Lift KayKit's palette to the board's brighter colours
-        material.color.setScalar(PALETTE_LIFT);
-        props.set(name, { geometry, material });
+        const geometry = toFloatGeometry(mesh.geometry).applyMatrix4(mesh.matrixWorld);
+        parts.push(geometry.index ? geometry.toNonIndexed() : geometry);
+        material ??= mesh.material as THREE.MeshStandardMaterial;
       });
+      if (parts.length === 0 || !material) continue;
+      const geometry = parts.length === 1 ? parts[0] : mergeGeometries(parts);
+      if (!geometry) continue;
+      const shared = material as THREE.MeshStandardMaterial;
+      shared.roughness = 1;
+      shared.metalness = 0;
+      // Lift KayKit's palette to the board's brighter colours
+      shared.color.setScalar(PALETTE_LIFT);
+      props.set(model.name, { geometry, material: shared });
     }
-    library = props;
+    loadedPacks.set(name, props);
     return props;
   });
+  loadingPacks.set(name, loading);
   // Allow a retry if a pack failed to download
-  loading.catch(() => { loading = null; });
+  loading.catch(() => { loadingPacks.delete(name); });
   return loading;
 };
 
-// The prop library once it has loaded (null until then, so callers can show a fallback)
-export const usePropLibrary = (): PropLibrary | null => {
-  const [props, setProps] = useState<PropLibrary | null>(library);
+// Every model of the given packs, in one library
+const combine = (packs: PropPack[]): PropLibrary | null => {
+  if (!packs.every(pack => loadedPacks.has(pack))) return null;
+  return new Map(packs.flatMap(pack => [...loadedPacks.get(pack)!]));
+};
+
+export const loadPropLibrary = (packs: PropPack[] = MEDIEVAL_ONLY): Promise<PropLibrary> =>
+  Promise.all(packs.map(loadPack)).then(() => combine(packs)!);
+
+// The models of the given packs once they have loaded (null until then, so callers can show a fallback)
+export const usePropLibrary = (packs: PropPack[] = MEDIEVAL_ONLY): PropLibrary | null => {
+  const key = [...packs].sort().join(',');
+  const [state, setState] = useState<{ key: string; library: PropLibrary | null }>(() => ({ key, library: combine(packs) }));
+  const library = state.key === key ? state.library : combine(packs);
   useEffect(() => {
-    if (props) return;
+    if (library) return;
     let cancelled = false;
-    loadPropLibrary().then(loaded => { if (!cancelled) setProps(loaded); }).catch(() => {});
+    const wanted = key.split(',') as PropPack[];
+    loadPropLibrary(wanted).then(loaded => { if (!cancelled) setState({ key, library: loaded }); }).catch(() => {});
     return () => { cancelled = true; };
-  }, [props]);
-  return props;
+  }, [key, library]);
+  return library;
 };

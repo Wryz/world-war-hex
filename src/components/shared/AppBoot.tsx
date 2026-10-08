@@ -4,11 +4,13 @@ import { useEffect } from 'react';
 import { initAnalytics, trackEvent } from '@/lib/analytics';
 import { initAds } from '@/lib/ads';
 import { registerServiceWorker } from '@/lib/offline';
+import { applyUiSize } from '@/lib/uiSize';
 import { getProfile, highestCleared, profilePower } from '@/lib/meta/profile';
 
 // Starts the background services once the game has loaded in the browser
 export const AppBoot: React.FC = () => {
   useEffect(() => {
+    applyUiSize();
     registerServiceWorker();
     initAnalytics();
     initAds();

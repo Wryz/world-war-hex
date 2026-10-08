@@ -20,6 +20,8 @@ import {
   FREE_UPKEEP_UNITS,
   UPKEEP_PER_UNIT,
   HEALER_HEAL_AMOUNT,
+  FLANK_BONUS,
+  MAX_FLANKERS,
   addPendingMove,
   addPendingPurchase,
   getAttackRange,
@@ -307,6 +309,8 @@ interface Planner {
   isPushing: boolean;
   // Expected damage on enemy units from the orders given so far this turn
   plannedDamage: Map<string, number>;
+  // How many of the AI's units are set to attack each enemy (joining them flanks it)
+  plannedAttackers: Map<string, number>;
   // Where each of the AI's units will stand once its orders are carried out
   destinations: Map<string, HexCoordinates>;
   // Camps and gold mines units have been sent to take
@@ -338,6 +342,7 @@ const planTurn = (state: GameState, doctrine: AIDoctrine, recruitTypes: UnitType
     threat: assessThreats(state),
     isPushing: false,
     plannedDamage: new Map(),
+    plannedAttackers: new Map(),
     destinations: new Map(state.players.ai.units.map(unit => [unit.id, unit.position])),
     objectives: new Map(),
     anchors: new Map(),
@@ -837,7 +842,10 @@ const attackValueFrom = (planner: Planner, unit: Unit, position: HexCoordinates)
     const health = remainingHealth(planner, enemy);
     if (health <= 0 || !canStrikeFrom(planner, unit, position, enemy.position)) continue;
 
-    const damage = strikeFrom(planner, unit, position, enemy, enemy.position);
+    // Ganging up flanks: joining the troops already set on this enemy adds to this strike and to theirs
+    const joining = planner.plannedAttackers.get(enemy.id) ?? 0;
+    const allyBoost = joining > 0 && joining <= MAX_FLANKERS ? (planner.plannedDamage.get(enemy.id) ?? 0) * FLANK_BONUS / (1 + FLANK_BONUS * (joining - 1)) : 0;
+    const damage = strikeFrom(planner, unit, position, enemy, enemy.position) * (1 + FLANK_BONUS * Math.min(MAX_FLANKERS, joining)) + allyBoost;
     let value = healthValue(enemy, damage, health);
     // Removing a unit also removes the damage it would have done next turn
     if (damage >= health) value += enemy.attackPower;
@@ -869,7 +877,9 @@ const STRIKE_BACK_WEIGHT = 0.7;
 // pick other targets (or help finish this one) and don't fear an enemy that is about to fall
 const recordPlannedAttack = (planner: Planner, unit: Unit, position: HexCoordinates) => {
   const { target, damage } = attackValueFrom(planner, unit, position);
-  if (target) planner.plannedDamage.set(target.id, (planner.plannedDamage.get(target.id) ?? 0) + Math.max(1, Math.round(damage)));
+  if (!target) return;
+  planner.plannedDamage.set(target.id, (planner.plannedDamage.get(target.id) ?? 0) + Math.max(1, Math.round(damage)));
+  planner.plannedAttackers.set(target.id, (planner.plannedAttackers.get(target.id) ?? 0) + 1);
 };
 
 /**

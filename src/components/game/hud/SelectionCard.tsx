@@ -37,7 +37,7 @@ export const CounterLine: React.FC<{ type: UnitType }> = ({ type }) => {
   const strong = strongAgainst(troopClass);
   const weak = weakAgainst(troopClass);
   return (
-    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[11px]">
+    <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-[0.6875rem]">
       <span className="font-bold text-slate-300">{TROOP_CLASSES[troopClass].name}</span>
       {strong.length > 0 && (
         <span className="text-emerald-300">Strong vs {strong.map(c => TROOP_CLASSES[c].plural).join(', ')}</span>
@@ -83,10 +83,10 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
             <span className="flex min-w-0 items-center gap-1.5 text-sm font-bold">
               {unit.isBoss && <CrownIcon />}<UnitIcon type={unit.type} className="text-base" />
               <span className="truncate">{getUnitTypeName(unit.type)}</span>
-              {unit.level && unit.level > 1 && <span className="text-[10px] text-slate-400">Lv{unit.level}</span>}
+              {unit.level && unit.level > 1 && <span className="text-[0.625rem] text-slate-400">Lv{unit.level}</span>}
             </span>
             <span
-              className="rounded-full px-2 py-0.5 text-[10px] font-bold text-white"
+              className="rounded-full px-2 py-0.5 text-[0.625rem] font-bold text-white"
               style={{ background: SIDE_COLORS[unit.owner] }}
             >
               {unit.owner === 'player' ? 'You' : 'Enemy'}
@@ -102,7 +102,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
           </div>
           <CounterLine type={unit.type} />
           {unit.abilities.filter(ability => ability !== 'rapidMovement').length > 0 && (
-            <ul className="mt-2 flex flex-wrap gap-1 text-[11px] text-slate-200">
+            <ul className="mt-2 flex flex-wrap gap-1 text-[0.6875rem] text-slate-200">
               {unit.abilities.filter(ability => ability !== 'rapidMovement').map(ability => (
                 <li key={ability} className="flex items-center gap-1 rounded-full bg-slate-800 px-1.5 py-0.5" title={ABILITIES[ability].description}>
                   <AbilityIcon ability={ability} /> {ABILITIES[ability].name}
@@ -111,7 +111,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
             </ul>
           )}
           {isFogOfWar(gameState) && (
-            <div className="mt-1.5 flex items-center gap-1 text-[11px] text-slate-400">
+            <div className="mt-1.5 flex items-center gap-1 text-[0.6875rem] text-slate-400">
               <FogIcon />
               {unit.owner === 'player'
                 ? <>Sees {getSightRange(gameState, unit)} hexes{TERRAIN_EFFECTS[hex.terrain].conceals && !unit.revealed ? ' · hidden in the trees' : unit.revealed ? ' · spotted by the enemy' : ''}</>
@@ -119,7 +119,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
             </div>
           )}
           {unit.owner === 'player' && (gameState.bonds ?? []).map(getBond).filter(bond => bond.bonuses[unit.type]).map(bond => (
-            <div key={bond.id} className="mt-1.5 flex items-center gap-1 text-[11px] text-amber-200" title={describeBonus(unit.type, bond.bonuses[unit.type]!)}>
+            <div key={bond.id} className="mt-1.5 flex items-center gap-1 text-[0.6875rem] text-amber-200" title={describeBonus(unit.type, bond.bonuses[unit.type]!)}>
               <BondIcon /> <b>{bond.name}</b>
             </div>
           ))}

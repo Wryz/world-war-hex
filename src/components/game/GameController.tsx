@@ -7,6 +7,7 @@ import { GameBoard } from './GameBoard';
 import { CombatResolver } from './combat/CombatResolver';
 import { ResultsScreen } from './shared/ResultsScreen';
 import { TutorialCoach } from './shared/TutorialCoach';
+import { RuleTips } from './shared/RuleTips';
 import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
 import { LoadingManagerProvider } from './utils/LoadingManager';
@@ -81,6 +82,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     saveGame,
     handleUnitTypeSelect,
     handleCancelSelection,
+    handleUndo,
+    canUndo,
     notice
   } = useGameHandlers({ battle, resume: shouldContinueGame, isReady });
 
@@ -134,14 +137,25 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const onBoardUnitClick = useStableCallback(handleUnitSelect);
   const onBoardUnitPurchase = useStableCallback(handleUnitPurchase);
 
+  // Marks the page as a battle while it is open (phones keep the battle at normal size: see globals.css)
+  useEffect(() => {
+    document.documentElement.dataset.screen = 'battle';
+    return () => { delete document.documentElement.dataset.screen; };
+  }, []);
+
   // Escape cancels the current selection
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape') handleCancelSelection();
+      // Ctrl/Cmd+Z takes back the last order
+      if ((event.ctrlKey || event.metaKey) && (event.key === 'z' || event.key === 'Z') && !(event.target instanceof HTMLInputElement)) {
+        event.preventDefault();
+        handleUndo();
+      }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [handleCancelSelection]);
+  }, [handleCancelSelection, handleUndo]);
 
   // Warnings from the game (e.g. picking a hex a unit can't reach) appear as a brief toast
   useEffect(() => {
@@ -305,11 +319,15 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           hint={hint}
           onCardSelect={handleUnitTypeSelect}
           onEndTurn={handleEndTurn}
+          canUndo={canUndo}
+          onUndo={handleUndo}
         />
       )}
 
       {currentPhase === 'combat' && <CombatResolver gameState={viewState} />}
 
+      {/* First-time tips for the newer rules (not while the first battle's tutorial is running) */}
+      {!showTutorial && isReady && currentPhase !== 'gameOver' && <RuleTips gameState={gameState} />}
       {showTutorial && isReady && currentPhase !== 'gameOver' && (
         <TutorialCoach
           gameState={gameState}

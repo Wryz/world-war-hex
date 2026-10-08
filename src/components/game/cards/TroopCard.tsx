@@ -19,10 +19,10 @@ export const RARITY_STYLES: Record<Rarity, { frame: string; label: string; text:
 };
 
 const SIZES: Record<CardSize, { width: number; icon: string; name: string; stats: string; gem: string; pad: string }> = {
-  xs: { width: 64, icon: 'text-2xl', name: 'text-[8px]', stats: 'text-[9px]', gem: 'h-4 min-w-4 text-[9px]', pad: 'p-[3px]' },
+  xs: { width: 64, icon: 'text-2xl', name: 'text-[0.5rem]', stats: 'text-[0.5625rem]', gem: 'h-4 min-w-4 text-[0.5625rem]', pad: 'p-[3px]' },
   // Between xs and sm: a phone's battle hand
-  xm: { width: 70, icon: 'text-3xl', name: 'text-[9px]', stats: 'text-[10px]', gem: 'h-[18px] min-w-[18px] text-[10px]', pad: 'p-[3px]' },
-  sm: { width: 88, icon: 'text-4xl', name: 'text-[10px]', stats: 'text-[10px]', gem: 'h-5 min-w-5 text-[11px]', pad: 'p-1' },
+  xm: { width: 70, icon: 'text-3xl', name: 'text-[0.5625rem]', stats: 'text-[0.625rem]', gem: 'h-[1.125rem] min-w-[1.125rem] text-[0.625rem]', pad: 'p-[3px]' },
+  sm: { width: 88, icon: 'text-4xl', name: 'text-[0.625rem]', stats: 'text-[0.625rem]', gem: 'h-5 min-w-5 text-[0.6875rem]', pad: 'p-1' },
   md: { width: 128, icon: 'text-5xl', name: 'text-xs', stats: 'text-xs', gem: 'h-6 min-w-6 text-xs', pad: 'p-1.5' },
   lg: { width: 200, icon: 'text-7xl', name: 'text-base', stats: 'text-sm', gem: 'h-8 min-w-8 text-base', pad: 'p-2' }
 };
@@ -94,7 +94,8 @@ export const TroopCard: React.FC<TroopCardProps> = ({
         isInteractive ? 'cursor-pointer hover:-translate-y-2 focus:outline-none focus-visible:-translate-y-2' : ''
       } ${selected ? '-translate-y-3' : ''} ${troop.rarity === 'legendary' && !hidden ? 'card-shine overflow-hidden' : ''} ${className}`}
       style={{
-        width: fill ? '100%' : dims.width,
+        // (in rem, so cards grow with the UI size setting)
+        width: fill ? '100%' : `${dims.width / 16}rem`,
         aspectRatio: '5 / 7',
         background: hidden ? '#475569' : rarity.frame,
         padding: size === 'xs' || size === 'xm' ? 2 : 3,
@@ -151,16 +152,16 @@ export const TroopCard: React.FC<TroopCardProps> = ({
 
         {/* Abilities (the row keeps its height when empty so every card lines up) */}
         {!hidden && size !== 'xs' && (
-          <div className={`mt-0.5 flex justify-center gap-1 text-slate-300 ${size === 'lg' ? 'min-h-4' : 'min-h-[11px]'}`}>
+          <div className={`mt-0.5 flex justify-center gap-1 text-slate-300 ${size === 'lg' ? 'min-h-4' : 'min-h-[0.6875rem]'}`}>
             {shown.abilities.filter(ability => ability !== 'rapidMovement').slice(0, 4).map(ability => (
               <span key={ability} title={`${ABILITIES[ability].name}: ${ABILITIES[ability].description}`}>
-                <AbilityIcon ability={ability} className={size === 'lg' ? 'text-base' : 'text-[11px]'} />
+                <AbilityIcon ability={ability} className={size === 'lg' ? 'text-base' : 'text-[0.6875rem]'} />
               </span>
             ))}
           </div>
         )}
         {size === 'lg' && !hidden && (
-          <div className="mt-1 text-center text-[11px] leading-tight text-slate-400">
+          <div className="mt-1 text-center text-[0.6875rem] leading-tight text-slate-400">
             <span className="font-bold text-slate-300">{TROOP_CLASSES[troop.troopClass].name}</span> · {troop.role}
           </div>
         )}

@@ -98,7 +98,7 @@ const CampComponent: React.FC<CampProps> = ({ owner, position, hideLabel = false
       {!hideLabel && (
         <Html position={[0, 1.3, 0]} center zIndexRange={[4, 0]} style={{ pointerEvents: 'none' }}>
           <div
-            className="flex items-center rounded-full p-1 text-[13px] leading-none shadow select-none"
+            className="flex items-center rounded-full p-1 text-[0.8125rem] leading-none shadow select-none"
             style={{ background: 'rgba(15, 23, 42, 0.8)', border: `2px solid ${color}` }}
             title={owner ? (owner === 'player' ? 'Your camp' : 'Enemy camp') : 'Neutral camp'}
           >

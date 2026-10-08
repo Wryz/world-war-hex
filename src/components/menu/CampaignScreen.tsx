@@ -26,7 +26,7 @@ const RegionBand: React.FC<{ region: Region; onSelect: (level: LevelDef) => void
       {/* Region title */}
       <div className={`${CARD_CLASS} m-3 flex flex-wrap items-center gap-3 p-3`}>
         <div className="min-w-0 flex-1">
-          <div className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Region {region.id + 1} · Levels {levels[0].id}-{levels[9].id}</div>
+          <div className="text-[0.625rem] font-bold uppercase tracking-widest text-slate-400">Region {region.id + 1} · Levels {levels[0].id}-{levels[9].id}</div>
           <h2 className="font-display text-2xl" style={{ color: region.colors[0] }}>{region.name}</h2>
           <p className="text-xs text-slate-300">{region.blurb}</p>
         </div>

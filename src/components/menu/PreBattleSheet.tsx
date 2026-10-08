@@ -87,12 +87,12 @@ const LoadoutPicker: React.FC<{ enemies: TroopId[] }> = ({ enemies }) => {
                 </span>
               )}
               {matchup > 0.05 && (
-                <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-emerald-500 px-1.5 text-[9px] font-bold text-slate-900 shadow">
+                <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-emerald-500 px-1.5 text-[0.5625rem] font-bold text-slate-900 shadow">
                   Good pick
                 </span>
               )}
               {matchup < -0.05 && (
-                <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-rose-500 px-1.5 text-[9px] font-bold text-white shadow">
+                <span className="pointer-events-none absolute -bottom-1.5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full bg-rose-500 px-1.5 text-[0.5625rem] font-bold text-white shadow">
                   Weak here
                 </span>
               )}

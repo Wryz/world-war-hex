@@ -128,27 +128,42 @@ const BuffIcon: React.FC<{ buff: UnitBuff }> = ({ buff }) =>
     : <TerrainIcon terrain={buff.terrain ?? 'plain'} />;
 
 // A unit's buffs as a row of icons; tapping it opens each one's name and numbers
+// Only the icons take clicks: the open details let clicks through to the board, and close on the
+// next click anywhere else
 const BuffRow: React.FC<{ buffs: UnitBuff[]; open: boolean; setOpen: (update: (open: boolean) => boolean) => void }> = ({ buffs, open, setOpen }) => {
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: PointerEvent) => {
+      if (!buttonRef.current?.contains(event.target as Node)) setOpen(() => false);
+    };
+    window.addEventListener('pointerdown', close);
+    return () => window.removeEventListener('pointerdown', close);
+  }, [open, setOpen]);
   return (
-    <div className="flex flex-col items-center gap-0.5" style={{ pointerEvents: 'auto' }}>
+    <div className="flex flex-col items-center gap-0.5">
       <button
+        ref={buttonRef}
         type="button"
+        style={{ pointerEvents: 'auto' }}
         onClick={() => setOpen(value => !value)}
         aria-expanded={open}
         title="Buffs - tap for details"
-        className="flex items-center gap-0.5 rounded-full bg-slate-900/75 px-1 py-px text-[11px] leading-none shadow hover:bg-slate-800"
+        className="flex items-center gap-0.5 rounded-full bg-slate-900/75 px-1 py-px text-[0.6875rem] leading-none shadow hover:bg-slate-800"
       >
         {buffs.map(buff => (
           <span key={buff.id} className={buff.good ? '' : 'opacity-80 grayscale-[30%]'}><BuffIcon buff={buff} /></span>
         ))}
       </button>
       {open && (
-        <div className="flex flex-col gap-0.5 rounded-lg bg-slate-900/90 px-2 py-1 text-[10px] leading-tight shadow-lg">
+        <div className="flex flex-col gap-0.5 rounded-lg bg-slate-900/90 px-2 py-1 text-[0.625rem] leading-tight shadow-lg">
           {buffs.map(buff => (
             <div key={buff.id} className="flex items-center gap-1 whitespace-nowrap">
               <BuffIcon buff={buff} />
               <b className="text-slate-100">{buff.label}</b>
-              <span className={buff.good ? 'text-emerald-300' : 'text-rose-300'}>{buff.value}</span>
+              <span className={buff.good ? 'text-emerald-300' : 'text-rose-300'}>
+                <span aria-hidden>{buff.good ? '▲ ' : '▼ '}</span>{buff.value}
+              </span>
             </div>
           ))}
         </div>
@@ -752,15 +767,15 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
         >
           <div className="flex flex-col items-center gap-0.5">
           <div
-            className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[11px] leading-none font-bold text-white whitespace-nowrap shadow select-none"
+            className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.6875rem] leading-none font-bold text-white whitespace-nowrap shadow select-none"
             style={{
               background: 'rgba(15, 23, 42, 0.8)',
               border: `2px solid ${ownerColor}`,
               opacity: isPendingPurchase ? 0.7 : 1
             }}
           >
-            {unit.isBoss && <CrownIcon className="text-[13px]" />}
-            <UnitIcon type={unit.type} className="text-[13px]" />
+            {unit.isBoss && <CrownIcon className="text-[0.8125rem]" />}
+            <UnitIcon type={unit.type} className="text-[0.8125rem]" />
             {isPendingPurchase ? (
               <WaitIcon title="Arrives at the end of the turn" />
             ) : (

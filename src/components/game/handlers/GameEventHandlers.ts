@@ -118,6 +118,21 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     setGameState(newState);
   }, []);
 
+  // The player's orders this turn, so the last one can be taken back: the state before each
+  const orderHistoryRef = useRef<GameState[]>([]);
+  const [canUndo, setCanUndo] = useState(false);
+  const commitOrder = useCallback((newState: GameState) => {
+    if (newState === stateRef.current) return;
+    orderHistoryRef.current.push(stateRef.current);
+    setCanUndo(true);
+    commitState(newState);
+  }, [commitState]);
+  // A new turn (or a new battle) starts with nothing to undo
+  useEffect(() => {
+    orderHistoryRef.current = [];
+    setCanUndo(false);
+  }, [gameState.turnNumber, gameState.activePlayer, gameState.currentPhase]);
+
   const isAITurn = (gameState.activePlayer ?? 'player') === 'ai';
   const { currentPhase, turnNumber } = gameState;
   // Whether the player may act right now (read from the ref so it's correct even before a re-render)
@@ -276,7 +291,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     const newState = addPendingPurchase(current, current.players.player.id, unitType, hex.coordinates);
     if (newState === current) return false;
 
-    commitState(newState);
+    commitOrder(newState);
     clearSelection();
     return true;
   };
@@ -313,10 +328,19 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
 
     // Move the selected unit to a valid destination
     if (selectedUnit && validMoves.some(c => coordsEqual(c, hex.coordinates))) {
-      commitState(addPendingMove(current, selectedUnit.id, playerId, hex.coordinates));
+      commitOrder(addPendingMove(current, selectedUnit.id, playerId, hex.coordinates));
       setSelectedHex(hex);
       setSelectedUnit(null);
       setValidMoves([]);
+      return;
+    }
+
+    // Sending a troop onto the hex of one heading to this troop's hex: they would swap places
+    const occupantMove = hex.unit && hex.unit.owner === 'player' && hex.unit.id !== selectedUnit?.id
+      ? current.pendingMoves.find(move => move.unitId === hex.unit!.id)
+      : undefined;
+    if (selectedUnit && occupantMove && coordsEqual(occupantMove.to, selectedUnit.position)) {
+      showNotice("Two troops can't swap places - send one somewhere else first");
       return;
     }
 
@@ -334,7 +358,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
       p => p.playerId === playerId && coordsEqual(p.position, hex.coordinates)
     );
     if (pendingPurchaseHere) {
-      commitState(cancelPendingPurchase(current, playerId, hex.coordinates));
+      commitOrder(cancelPendingPurchase(current, playerId, hex.coordinates));
       setSelectedUnit(null);
       setValidMoves([]);
       return;
@@ -345,7 +369,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
       move => move.playerId === playerId && coordsEqual(move.to, hex.coordinates)
     );
     if (pendingMoveToThisHex) {
-      commitState(cancelPendingMove(current, pendingMoveToThisHex.unitId));
+      commitOrder(cancelPendingMove(current, pendingMoveToThisHex.unitId));
       setSelectedUnit(null);
       setValidMoves([]);
       return;
@@ -369,6 +393,17 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     setSelectedUnit(null);
     setValidMoves([]);
   };
+
+  // Take back the last order given this turn (a move, a card played, or a cancel)
+  const handleUndo = useCallback(() => {
+    if (!isPlayerPlanning()) return;
+    const previous = orderHistoryRef.current.pop();
+    setCanUndo(orderHistoryRef.current.length > 0);
+    if (!previous) return;
+    clearSelection();
+    // Keep the clock running from where it is now
+    commitState({ ...previous, planningTimeRemaining: stateRef.current.planningTimeRemaining });
+  }, [clearSelection, commitState]);
 
   // Handle unit selection by clicking a unit on the board
   const handleUnitSelect = (unit: Unit) => {
@@ -401,6 +436,8 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     handleRestart,
     saveGame,
     handleCancelSelection: clearSelection,
+    handleUndo,
+    canUndo,
     notice
   };
 };

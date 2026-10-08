@@ -16,7 +16,7 @@ import {
   GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog
 } from 'react-icons/gi';
 import {
-  LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuChevronDown, LuRotateCcw, LuTriangleAlert,
+  LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
   LuVolume2, LuVolumeX, LuHouse, LuStar, LuDownload, LuUpload, LuMusic, LuShare2, LuX, LuChevronLeft, LuTrash2, LuPlay,
   LuSettings, LuBookOpen, LuGamepad2
 } from 'react-icons/lu';
@@ -187,6 +187,7 @@ export const GuideIcon = icon(LuBookOpen);
 export const GameplayIcon = icon(LuGamepad2);
 export const LogIcon = icon(LuScrollText);
 export const ArrowIcon = icon(LuArrowRight);
+export const UndoIcon = icon(LuUndo2);
 export const BackIcon = icon(LuChevronLeft);
 export const ChevronIcon = icon(LuChevronDown);
 export const ResumeIcon = icon(LuRotateCcw);

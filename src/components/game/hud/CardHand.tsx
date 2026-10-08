@@ -3,7 +3,7 @@ import { useIsNarrow } from '../../shared/useIsNarrow';
 import { GameState, UnitType } from '@/types/game';
 import { getHand, getNextCard, getRosterStats, getTroopName } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
-import { ArrowIcon, BondIcon, GoldIcon } from '../icons';
+import { ArrowIcon, BondIcon, GoldIcon, UndoIcon } from '../icons';
 import { describeBond, getBond } from '@/lib/game/bonds';
 import { PANEL_CLASS } from './styles';
 
@@ -17,11 +17,14 @@ interface CardHandProps {
   hint: string | null;
   onCardSelect: (unitType: UnitType) => void;
   onEndTurn: () => void;
+  // Take back the last order this turn
+  canUndo?: boolean;
+  onUndo?: () => void;
 }
 
 // The player's hand at the bottom of the screen: the cards they brought into battle. Pick a card,
 // then a glowing hex to play it.
-export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selectedUnitType, hint, onCardSelect, onEndTurn }) => {
+export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selectedUnitType, hint, onCardSelect, onEndTurn, canUndo = false, onUndo }) => {
   const hand = getHand(gameState);
   const nextCard = getNextCard(gameState);
   const gold = gameState.players.player.points;
@@ -62,7 +65,7 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
           {bonds.map(bond => (
             <span
               key={bond.id}
-              className="flex items-center gap-1 rounded-full bg-slate-900/85 px-2.5 py-1 text-[11px] font-bold text-amber-200 shadow ring-1 ring-amber-300/50"
+              className="flex items-center gap-1 rounded-full bg-slate-900/85 px-2.5 py-1 text-[0.6875rem] font-bold text-amber-200 shadow ring-1 ring-amber-300/50"
               title={`${bond.name}: ${describeBond(bond)}`}
             >
               <BondIcon /> {bond.name}
@@ -79,7 +82,7 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
       <div className="flex max-w-full items-end gap-1.5 sm:gap-3">
         {/* Treasury */}
         <div className={`${PANEL_CLASS} pointer-events-auto hidden flex-col items-center px-3 py-2 sm:flex`}>
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Gold</span>
+          <span className="text-[0.625rem] font-bold uppercase tracking-widest text-slate-400">Gold</span>
           <span className="font-display flex items-center gap-1 text-2xl text-amber-300"><GoldIcon />{gold}</span>
         </div>
 
@@ -116,7 +119,7 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
           {/* The card that will be drawn next */}
           {nextCard && (
             <div className="hidden flex-col items-center opacity-80 md:flex" title="Next card">
-              <span className="mb-1 text-[9px] font-bold uppercase tracking-widest text-slate-200 drop-shadow">Next</span>
+              <span className="mb-1 text-[0.5625rem] font-bold uppercase tracking-widest text-slate-200 drop-shadow">Next</span>
               <TroopCard type={nextCard} level={getRosterStats(gameState, 'player', nextCard)?.level ?? 1} size="xs" hideLevel />
             </div>
           )}
@@ -127,6 +130,17 @@ export const CardHand: React.FC<CardHandProps> = ({ gameState, isAITurn, selecte
           <span className={`${PANEL_CLASS} font-display flex items-center justify-center gap-1 px-2 py-1 text-base text-amber-300 sm:hidden`}>
             <GoldIcon />{gold}
           </span>
+          {onUndo && (
+            <button
+              onClick={onUndo}
+              disabled={!canUndo}
+              title="Take back your last order (Ctrl+Z)"
+              aria-label="Undo last order"
+              className={`${PANEL_CLASS} flex items-center justify-center gap-1 px-2 py-1.5 text-sm font-bold text-slate-200 transition-opacity hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40`}
+            >
+              <UndoIcon /><span className="hidden sm:inline">Undo</span>
+            </button>
+          )}
           <button
             onClick={onEndTurn}
             data-tutorial="end-turn"

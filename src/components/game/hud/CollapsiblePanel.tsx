@@ -54,7 +54,7 @@ export const CollapsiblePanel: React.FC<CollapsiblePanelProps> = ({
         aria-expanded={open}
         className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left"
       >
-        <span className="text-[11px] font-bold uppercase tracking-wide text-slate-300">{title}</span>
+        <span className="text-[0.6875rem] font-bold uppercase tracking-wide text-slate-300">{title}</span>
         <ChevronIcon className={`text-slate-400 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open ? (
