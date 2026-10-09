@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { SideStats, WinReason } from '@/types/game';
 import type { LevelDef } from '@/lib/campaign/levels';
 import { starThresholds } from '@/lib/campaign/levels';
-import { grantBonusCoins, type BattleRecordResult } from '@/lib/meta/profile';
+import { getProfile, grantBonusCoins, type BattleRecordResult } from '@/lib/meta/profile';
+import { challengeBonus, levelChallenge } from '@/lib/campaign/challenges';
 import { adBonusCoins } from '@/lib/meta/economy';
 import { useRewardedAd } from '@/lib/ads';
 import { TROOPS } from '@/lib/game/troops';
@@ -11,7 +12,7 @@ import { SPEED_POINTS_PER_ROUND, StarScore, TIME_SCORE_WEIGHTS } from '@/lib/gam
 import { TroopCard } from '../cards/TroopCard';
 import { emitCoins } from '../effects/effects';
 import {
-  ArrowIcon, CardsIcon, CoinIcon, FilledStarIcon, LaurelIcon, MapIcon, PlayIcon, PowerIcon, ResumeIcon, ShareIcon, SkullIcon, StarIcon
+  ArrowIcon, CardsIcon, CoinIcon, FilledStarIcon, LaurelIcon, MapIcon, MedalIcon, PlayIcon, PowerIcon, ResumeIcon, ShareIcon, SkullIcon, StarIcon
 } from '../icons';
 
 interface ResultsScreenProps {
@@ -33,6 +34,8 @@ interface ResultsScreenProps {
   // Each side's points: kills, gold and camps (which decide a battle when time runs out) and the
   // speed bonus (which counts towards stars)
   points?: { you: StarScore; enemy: StarScore };
+  // The level's optional challenge was met this battle
+  challengeMet?: boolean;
 }
 
 const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds) % 60).padStart(2, '0')}`;
@@ -98,7 +101,7 @@ const StarProgress: React.FC<{ level: LevelDef; points: number; won: boolean }> 
 };
 
 export const ResultsScreen: React.FC<ResultsScreenProps> = ({
-  won, reason, level, stars, record, rounds, stats, durationSeconds, coinsTotal, power, onNext, onRetry, onMap, onArmy, points
+  won, reason, level, stars, record, rounds, stats, durationSeconds, coinsTotal, power, onNext, onRetry, onMap, onArmy, points, challengeMet
 }) => {
   const rewardDelay = won ? 600 + stars * STAR_DELAY : 600;
   const coins = useCountUp(record.reward.coins, 900, rewardDelay);
@@ -217,6 +220,27 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           </div>
         )}
 
+        {/* The level's optional challenge */}
+        {level && levelChallenge(level) && (() => {
+          const challenge = levelChallenge(level)!;
+          const doneBefore = !record.challengeCompleted && !!getProfile().levels[level.id]?.challenge && !challengeMet;
+          return (
+            <div
+              className={`mt-4 flex items-center gap-2 rounded-xl px-4 py-2 text-sm ${record.challengeCompleted ? 'challenge-complete bg-amber-500/20 ring-2 ring-amber-400' : 'bg-slate-800'}`}
+              title={challenge.description}
+            >
+              <MedalIcon className={`text-2xl ${record.challengeCompleted || challengeMet ? '' : 'opacity-40 grayscale'}`} />
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Challenge</div>
+                <div className="font-bold text-slate-100">{challenge.description}</div>
+              </div>
+              <span className={`font-display shrink-0 text-base ${record.challengeCompleted ? 'text-amber-300' : challengeMet || doneBefore ? 'text-emerald-300' : 'text-slate-400'}`}>
+                {record.challengeCompleted ? <span className="flex items-center gap-1"><CoinIcon />+{challengeBonus(level.id)}</span>
+                  : challengeMet ? 'Done again!' : doneBefore ? 'Done before' : 'Missed'}
+              </span>
+            </div>
+          );
+        })()}
 
         {/* Reward */}
         <div ref={rewardRef} className="mt-4 flex items-center justify-between rounded-xl bg-slate-800 px-4 py-3">

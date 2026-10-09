@@ -13,6 +13,7 @@ import { GameState } from '@/types/game';
 import { createBattle, executeMoves, resolveAllCombats } from '@/lib/game/gameState';
 import { planAITurn } from '@/lib/ai/aiPlayer';
 import { getLevel, enemyRosterStats, LEVEL_COUNT, targetWinRate } from '@/lib/campaign/levels';
+import { challengeMet, levelChallenge } from '@/lib/campaign/challenges';
 import { expectedProgression } from '@/lib/meta/economy';
 import { deckRoster } from '@/lib/campaign/battleSetup';
 
@@ -108,7 +109,8 @@ if (tune) {
   process.exit(0);
 }
 
-console.log('level  region                 power  scale  win% target  avgRounds  recruits  peakArmy  destroy/time        castleHit%');
+// challenge%: share of the wins that met the level's optional challenge (without trying to)
+console.log('level  region                 power  scale  win% target  avgRounds  recruits  peakArmy  destroy/time        castleHit%  challenge%');
 for (const levelId of levels) {
   const level = getLevel(levelId);
   let wins = 0;
@@ -118,9 +120,11 @@ for (const levelId of levels) {
   const reasons = { destroyed: 0, timeout: 0 };
   // Battles in which either castle was attacked at all
   let castleHits = 0;
+  let challenges = 0;
   for (let i = 0; i < battlesPerLevel; i++) {
     const result = playBattle(levelId, fixedStrength);
     if (result.winner === 'player') wins++;
+    if (challengeMet(result)) challenges++;
     rounds += result.turnNumber;
     recruits += ((result.battleStats?.player.recruited ?? 0) + (result.battleStats?.ai.recruited ?? 0)) / 2;
     peak += peakArmy;
@@ -138,6 +142,8 @@ for (const levelId of levels) {
     (recruits / battlesPerLevel).toFixed(1).padStart(9),
     (peak / battlesPerLevel).toFixed(1).padStart(9),
     `   ${reasons.destroyed}/${reasons.timeout}`.padEnd(20),
-    String(Math.round(castleHits / battlesPerLevel * 100)).padStart(9)
+    String(Math.round(castleHits / battlesPerLevel * 100)).padStart(9),
+    String(wins > 0 ? Math.round(challenges / wins * 100) : 0).padStart(10),
+    ` ${levelChallenge(levelId)?.id ?? ''}`
   );
 }

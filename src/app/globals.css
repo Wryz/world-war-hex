@@ -300,3 +300,12 @@ html[data-ui-size="xl"] { font-size: 125%; }
 @media (prefers-reduced-motion: reduce) {
   .weather-veil-sandstorm, .weather-veil-blizzard { animation: none; }
 }
+
+/* A challenge just completed on the results screen */
+.challenge-complete {
+  animation: challengeGlow 1.6s ease-in-out 2;
+}
+@keyframes challengeGlow {
+  0%, 100% { box-shadow: 0 0 0 rgba(251, 191, 36, 0); }
+  50% { box-shadow: 0 0 22px rgba(251, 191, 36, 0.7); }
+}

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { FactionTrait, WEATHER, getFactionTrait } from '@/lib/game/regionRules';
+import { challengeBonus, levelChallenge } from '@/lib/campaign/challenges';
 import { LevelDef, levelEnemies, starGoalLabels, enemyRosterStats } from '@/lib/campaign/levels';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
 import { FACTIONS, TROOPS, scaleTroop } from '@/lib/game/troops';
@@ -13,7 +14,7 @@ import { PLAYER_CARD_IDS, TroopId } from '@/lib/game/troops';
 import { TroopCard } from '../game/cards/TroopCard';
 import { CARD_CLASS, PRIMARY_BUTTON, SECONDARY_BUTTON } from './MenuShell';
 import {
-  AttackIcon, BossIcon, CardsIcon, CloseIcon, CoinIcon, PowerIcon, ShieldIcon, StarIcon, TerrainIcon, FogIcon, TraitIcon, WeatherIcon
+  AttackIcon, BossIcon, CardsIcon, CloseIcon, CoinIcon, PowerIcon, ShieldIcon, StarIcon, TerrainIcon, FogIcon, TraitIcon, WeatherIcon, MedalIcon
 } from '../game/icons';
 import { TerrainType } from '@/types/game';
 
@@ -106,6 +107,7 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
   const record = profile.levels[level.id];
   const stars = record?.stars ?? 0;
   const reward = levelWinReward(level.id, 3, stars).coins;
+  const challenge = levelChallenge(level);
   const roster = enemyRosterStats(level);
   const enemies = levelEnemies(level);
   const traits = [...new Map(enemies.filter(id => !TROOPS[id].isBoss).map(getFactionTrait)
@@ -243,6 +245,19 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
             <CoinIcon /> {reward}
           </span>
         </div>
+        {/* The optional challenge */}
+        {challenge && (
+          <div
+            className={`mt-2 flex items-center gap-2 rounded-lg px-3 py-1.5 text-xs ${record?.challenge ? 'bg-amber-400/15 text-amber-100' : 'bg-slate-800 text-slate-300'}`}
+            title="An optional harder way to win, for a bonus the first time"
+          >
+            <MedalIcon className={`text-base ${record?.challenge ? '' : 'opacity-50 grayscale'}`} />
+            <span className="flex-1"><b className="text-slate-100">Challenge:</b> {challenge.description}</span>
+            {record?.challenge
+              ? <span className="font-bold text-emerald-300">Done</span>
+              : <span className="flex items-center gap-1 font-display text-sm text-yellow-300">+<CoinIcon />{challengeBonus(level.id)}</span>}
+          </div>
+        )}
 
         <div className="mt-5 flex gap-2">
           <button onClick={onFight} disabled={profile.deck.length === 0} className={`${PRIMARY_BUTTON} flex-1`} autoFocus>

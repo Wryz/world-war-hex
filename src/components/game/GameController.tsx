@@ -10,6 +10,7 @@ import { TUTORIAL_BATTLES, TutorialOverlay, useTutorial } from './shared/Tutoria
 import { RuleTips } from './shared/RuleTips';
 import { BossBar } from './hud/BossBar';
 import { WeatherVeil } from './WeatherEffects';
+import { challengeMet } from '@/lib/campaign/challenges';
 import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
 import { LoadingManagerProvider } from './utils/LoadingManager';
@@ -200,7 +201,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       reason: gameState.winReason,
       enemyCastleDamage: 1 - castleHealthRatio(gameState, 'ai'),
       playerStats,
-      durationSeconds: elapsedRef.current
+      durationSeconds: elapsedRef.current,
+      challengeMet: challengeMet(gameState)
     });
     trackEvent('battle_ended', {
       mode: battle.mode,
@@ -213,7 +215,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       duration_seconds: Math.round(elapsedRef.current),
       kills: playerStats.kills,
       lost: playerStats.lost,
-      coins_earned: record.reward.coins
+      coins_earned: record.reward.coins,
+      challenge_completed: record.challengeCompleted
     });
     // Now there's progress worth keeping, ask the browser not to clear it
     void requestPersistentStorage();
@@ -406,6 +409,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           onMap={leaveResults(exitPath)}
           onArmy={leaveResults('/army')}
           points={{ you: getStarScore(gameState, 'player'), enemy: getStarScore(gameState, 'ai') }}
+          challengeMet={challengeMet(gameState)}
         />
       )}
 
