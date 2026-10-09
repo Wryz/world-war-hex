@@ -17,7 +17,10 @@ import { MELEE_IMPACT_POINT, PROJECTILE_FLIGHT_TIME, RANGED_RELEASE_POINT, WALK_
 import { playBattleSound, BattleSound } from './utils/battleSounds';
 import { DRAG_CLICK_TOLERANCE } from './HexTile';
 import { instantiateUnitModel, findAnimationClip, disposeUnitModel, UnitModelInstance } from './utils/unitModelCache';
-import { ArrowIcon, AttackIcon, CrownIcon, PinnedIcon, GoldIcon, FireIcon, ShieldIcon, SignatureIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
+import {
+  ArrowIcon, AttackIcon, CrownIcon, PinnedIcon, GoldIcon, FireIcon, ShieldIcon, SignatureIcon, TerrainIcon, UnitIcon, WaitIcon, ShakenIcon,
+  UndyingIcon, FuryIcon, PackIcon
+} from './icons';
 
 // Small lift so the unit's indicator doesn't z-fight with the tile surface
 const UNIT_ELEVATION = 0.02;
@@ -115,7 +118,7 @@ const DustPuff: React.FC<{ delay: number }> = ({ delay }) => {
 export interface UnitBuff {
   id: string;
   terrain?: TerrainType;
-  icon?: 'gold' | 'attack' | 'signature' | 'shield' | 'fire' | 'pinned';
+  icon?: 'gold' | 'attack' | 'signature' | 'shield' | 'fire' | 'pinned' | 'shaken' | 'undying' | 'fury' | 'pack';
   label: string;
   value: string;
   good: boolean;
@@ -131,6 +134,7 @@ const NO_BUFFS: UnitBuff[] = [];
 const BuffIcon: React.FC<{ buff: UnitBuff }> = ({ buff }) =>
   buff.icon === 'gold' ? <GoldIcon /> : buff.icon === 'attack' ? <AttackIcon />
     : buff.icon === 'signature' ? <SignatureIcon /> : buff.icon === 'shield' ? <ShieldIcon /> : buff.icon === 'fire' ? <FireIcon /> : buff.icon === 'pinned' ? <PinnedIcon />
+    : buff.icon === 'shaken' ? <ShakenIcon /> : buff.icon === 'undying' ? <UndyingIcon /> : buff.icon === 'fury' ? <FuryIcon /> : buff.icon === 'pack' ? <PackIcon />
       : <TerrainIcon terrain={buff.terrain ?? 'plain'} />;
 
 // A unit's buffs as a short row of icons (the first few, then a count); tapping it opens each one's

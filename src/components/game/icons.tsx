@@ -16,7 +16,8 @@ import {
   GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog,
   GiSparkles, GiAxeInStump, GiFire, GiBurningEmbers, GiLog, GiWatchtower, GiHouse, GiCatapult, GiAnvil, GiBarracksTent,
   GiBeerStein, GiWoodPile, GiPointing, GiTargeted, GiDemolish, GiTorch, GiHammerNails, GiStoneWall, GiGate, GiStoneBridge, GiSpikedFence,
-  GiThreeFriends, GiUnlitBomb, GiSandstorm, GiStomp, GiTrumpet, GiMeteorImpact, GiFireBreath
+  GiThreeFriends, GiUnlitBomb, GiSandstorm, GiStomp, GiTrumpet, GiMeteorImpact, GiFireBreath, GiDespair, GiPawPrint, GiSnowing,
+  GiSmokingVolcano, GiGoblinCamp, GiWingedShield
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuCheck, LuSkipForward, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
@@ -25,6 +26,7 @@ import {
 } from 'react-icons/lu';
 import { Ability, TerrainType, UnitAction, UnitType } from '@/types/game';
 import type { BossPowerId } from '@/lib/game/bosses';
+import type { FactionTraitId, WeatherId } from '@/lib/game/regionRules';
 
 // SVG icons used throughout the game: Game Icons (game-icons.net) and Lucide, via react-icons
 
@@ -197,6 +199,11 @@ export const FogIcon = icon(GiFog, '#cbd5e1');
 // Formations: troops fighting together, and an enemy pinned in place
 export const FormationIcon = icon(GiLinkedRings, '#fbbf24');
 export const PinnedIcon = icon(GiCrossedSwords, '#f87171');
+// Morale and faction traits
+export const ShakenIcon = icon(GiDespair, '#a5b4fc');
+export const UndyingIcon = icon(GiRaiseSkeleton, '#c4b5fd');
+export const FuryIcon = icon(GiAngryEyes, '#f87171');
+export const PackIcon = icon(GiPawPrint, '#d6d3d1');
 // Cosmetics: card frames and castle styles
 export const StyleIcon = icon(GiPaintBrush, '#f0abfc');
 export const MapIcon = icon(GiTreasureMap, '#fcd34d');
@@ -275,5 +282,27 @@ const BOSS_POWER_ICON_COMPONENTS = Object.fromEntries(
 ) as Record<BossPowerId, React.FC<IconProps>>;
 export const BossPowerIcon: React.FC<IconProps & { power: BossPowerId }> = ({ power, ...props }) => {
   const Icon = BOSS_POWER_ICON_COMPONENTS[power];
+  return <Icon {...props} />;
+};
+
+// Weather, in its own colour
+export const WEATHER_COLORS: Record<WeatherId, string> = { fogBanks: '#e2e8f0', sandstorm: '#fcd34d', blizzard: '#bae6fd', ashfall: '#fb923c' };
+const WEATHER_ICON_COMPONENTS: Record<WeatherId, React.FC<IconProps>> = {
+  fogBanks: icon(GiFog, WEATHER_COLORS.fogBanks), sandstorm: icon(GiSandstorm, WEATHER_COLORS.sandstorm),
+  blizzard: icon(GiSnowing, WEATHER_COLORS.blizzard), ashfall: icon(GiSmokingVolcano, WEATHER_COLORS.ashfall)
+};
+export const WeatherIcon: React.FC<IconProps & { weather: WeatherId }> = ({ weather, ...props }) => {
+  const Icon = WEATHER_ICON_COMPONENTS[weather];
+  return <Icon {...props} />;
+};
+
+// Faction traits
+const TRAIT_ICON_COMPONENTS: Record<FactionTraitId, React.FC<IconProps>> = {
+  swarm: icon(GiGoblinCamp, '#a3e635'), pack: PackIcon, bogborn: icon(GiSwamp, '#5eead4'), sandborn: icon(GiSandstorm, '#fcd34d'),
+  frostborn: icon(GiSnowflake1, '#bae6fd'), undying: UndyingIcon, fury: FuryIcon, fireborn: icon(GiFireRing, '#fb923c'),
+  skyborne: icon(GiWingedShield, '#fda4af')
+};
+export const TraitIcon: React.FC<IconProps & { trait: FactionTraitId }> = ({ trait, ...props }) => {
+  const Icon = TRAIT_ICON_COMPONENTS[trait];
   return <Icon {...props} />;
 };

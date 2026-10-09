@@ -1,8 +1,9 @@
 import React from 'react';
 import { GameState } from '@/types/game';
 import { BASE_MAX_HEALTH, getCastleMaxHealth, getIncome, getMaxRounds, getTimeScore, isFogOfWar } from '@/lib/game/gameState';
+import { WEATHER, activeWeather, stormForecast } from '@/lib/game/regionRules';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
-import { CrownIcon, FogIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon } from '../icons';
+import { CrownIcon, FogIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon, WeatherIcon } from '../icons';
 import { setGameSpeed, useCastleShownDamage, useGameSpeed } from '../effects/effects';
 
 // The time-up points show for this many final rounds
@@ -79,6 +80,23 @@ export const TopBar: React.FC<TopBarProps> = ({
         >
           {isAITurn ? 'Enemy turn' : 'Your turn'}
         </span>
+        {/* The weather: lit while a storm rages, with a word when it is about to change */}
+        {gameState.settings?.weather && (() => {
+          const weather = gameState.settings.weather;
+          const info = WEATHER[weather];
+          const raging = activeWeather(gameState) === weather;
+          const forecast = stormForecast(gameState);
+          return (
+            <span
+              className={`flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-xs font-bold ${raging ? 'bg-amber-500/25 text-amber-100' : 'text-slate-400'}`}
+              title={`${info.name}${info.storm ? (raging ? ' (raging)' : ' (calm)') : ''}: ${info.description}${forecast === 'coming' ? ' A storm blows up next round.' : forecast === 'ending' ? ' It blows over next round.' : ''}`}
+              aria-label={info.name}
+            >
+              <WeatherIcon weather={weather} className={`text-base ${raging ? 'animate-pulse' : ''}`} />
+              {forecast && <span className="text-[0.625rem] uppercase">{forecast === 'coming' ? 'Next' : 'Ends'}</span>}
+            </span>
+          );
+        })()}
         {showTimer && (
           <span className={`font-mono text-xs font-bold tabular-nums ${timer <= 10 ? 'text-red-400 animate-pulse' : 'text-slate-300'}`}>
             {timer}s

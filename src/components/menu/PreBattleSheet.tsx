@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
+import { FactionTrait, WEATHER, getFactionTrait } from '@/lib/game/regionRules';
 import { LevelDef, levelEnemies, starGoalLabels, enemyRosterStats } from '@/lib/campaign/levels';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
 import { FACTIONS, TROOPS, scaleTroop } from '@/lib/game/troops';
@@ -12,7 +13,7 @@ import { PLAYER_CARD_IDS, TroopId } from '@/lib/game/troops';
 import { TroopCard } from '../game/cards/TroopCard';
 import { CARD_CLASS, PRIMARY_BUTTON, SECONDARY_BUTTON } from './MenuShell';
 import {
-  AttackIcon, BossIcon, CardsIcon, CloseIcon, CoinIcon, PowerIcon, ShieldIcon, StarIcon, TerrainIcon, FogIcon
+  AttackIcon, BossIcon, CardsIcon, CloseIcon, CoinIcon, PowerIcon, ShieldIcon, StarIcon, TerrainIcon, FogIcon, TraitIcon, WeatherIcon
 } from '../game/icons';
 import { TerrainType } from '@/types/game';
 
@@ -107,6 +108,8 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
   const reward = levelWinReward(level.id, 3, stars).coins;
   const roster = enemyRosterStats(level);
   const enemies = levelEnemies(level);
+  const traits = [...new Map(enemies.filter(id => !TROOPS[id].isBoss).map(getFactionTrait)
+    .filter((trait): trait is FactionTrait => !!trait).map(trait => [trait.id, trait])).values()];
   const terrains = themeTerrain(level.region.theme);
   const [openTerrain, setOpenTerrain] = useState<TerrainType | null>(null);
 
@@ -152,6 +155,11 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
                 </button>
               ))}
             </div>
+            {level.settings.weather && (
+              <span className="inline-flex items-center gap-1 text-right text-xs font-bold text-slate-200" title={WEATHER[level.settings.weather].description}>
+                <WeatherIcon weather={level.settings.weather} /> {WEATHER[level.settings.weather].name}
+              </span>
+            )}
             {level.settings.fogOfWar && (
               <span className="inline-flex items-center gap-1 text-xs font-bold text-slate-200" title="You only see enemies your troops can see">
                 <FogIcon /> Fog of war
@@ -159,6 +167,12 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
             )}
           </div>
         </div>
+        {level.settings.weather && (
+          <p className="mt-2 text-xs leading-snug text-slate-400">
+            <b className="text-slate-200"><WeatherIcon weather={level.settings.weather} /> {WEATHER[level.settings.weather].name}:</b>{' '}
+            {WEATHER[level.settings.weather].description}{WEATHER[level.settings.weather].storm ? ' It blows for two rounds in every four, from round 3.' : ''}
+          </p>
+        )}
         {openTerrain && (
           <div className="mt-2 rounded-lg bg-slate-800 px-3 py-2 text-xs leading-snug text-slate-300">
             <b className="text-amber-200"><TerrainIcon terrain={openTerrain} /> {TERRAIN_EFFECTS[openTerrain].name}:</b> {TERRAIN_EFFECTS[openTerrain].description}
@@ -187,6 +201,14 @@ export const PreBattleSheet: React.FC<PreBattleSheetProps> = ({ level, onFight, 
           <div className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-widest text-slate-400">
             <AttackIcon /> {faction.title}
           </div>
+          {/* What the enemy's troops do differently */}
+          {traits.length > 0 && (
+            <ul className="mb-2 flex flex-col gap-1 text-xs leading-snug text-slate-300">
+              {traits.map(trait => (
+                <li key={trait.id}><b className="text-slate-100"><TraitIcon trait={trait.id} /> {trait.name}:</b> {trait.description}</li>
+              ))}
+            </ul>
+          )}
           <div className="grid grid-cols-4 gap-3 sm:gap-4">
             {enemies.map(id => {
               const guard = level.guards.find(g => g.type === id);

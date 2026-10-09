@@ -9,6 +9,7 @@ import { ResultsScreen } from './shared/ResultsScreen';
 import { TUTORIAL_BATTLES, TutorialOverlay, useTutorial } from './shared/TutorialGuide';
 import { RuleTips } from './shared/RuleTips';
 import { BossBar } from './hud/BossBar';
+import { WeatherVeil } from './WeatherEffects';
 import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
 import { LoadingManagerProvider } from './utils/LoadingManager';
@@ -289,6 +290,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   return (
     <div className="relative w-full h-full">
+      <WeatherVeil gameState={gameState} />
       <GameBoard
         gameState={viewState}
         unitIds={unitIds}
