@@ -52,8 +52,15 @@ export const planTutorialTurn = (state: GameState): PlanStep[] => {
     return [{ unit, to: move.to, intent }];
   });
 
-  const plan: PlanStep[] = moves.map(({ unit, to, intent }) =>
-    ({ kind: 'move', unitId: unit.id, to, caption: explainMove(state, unit, to, intent, destination) }));
+  const plan: PlanStep[] = moves.flatMap(({ unit, to, intent }): PlanStep[] => {
+    const caption = explainMove(state, unit, to, intent, destination);
+    // A march that doesn't get any nearer the enemy castle isn't one: a hurt troop is stepping back
+    // from the front, and a healthy one has nothing to show for it, so it holds
+    if (/^(March on|All-out)/.test(caption) && stepsTo(to) > stepsTo(unit.position)) {
+      return unit.lifespan <= unit.maxLifespan * HURT ? [{ kind: 'move', unitId: unit.id, to, caption: 'Hurt: step back from the front' }] : [];
+    }
+    return [{ kind: 'move', unitId: unit.id, to, caption }];
+  });
   for (const purchase of planned.pendingPurchases.slice(state.pendingPurchases.length)) {
     plan.push({
       kind: 'buy', unitType: purchase.unitType, at: purchase.position,
@@ -72,40 +79,48 @@ export const explainCard = (state: GameState, type: UnitType): string => {
   return prey ? `Play ${name}: strong against their ${getTroopName(prey.type)}` : `Play ${name} to raise a troop`;
 };
 
-// Why the plan sends a troop to a hex: the attack it makes from there (and what favours it), or else
-// what the AI set out to do with it
+// Why the plan sends a troop to a hex, in a few words that always match the move itself (what the AI
+// set out to do with the troop only colours them): the attack it makes from there and what favours
+// it; the enemy castle; the spring it heals at, or the reach it falls back out of; the camp or gold
+// mine it takes or is heading for; otherwise the march on the enemy castle
 export const explainMove = (
   state: GameState, unit: Unit, to: HexCoordinates, intent: GoalKind, destination: Map<string, HexCoordinates>
 ): string => {
-  const hex = state.hexGrid.find(other => same(other.coordinates, to));
+  const hexAt = (c: HexCoordinates) => state.hexGrid.find(other => same(other.coordinates, c));
+  const hex = hexAt(to);
   const there = { ...unit, position: to };
   const foes = getVisibleEnemies(state, 'player');
+  const nearestFoe = (c: HexCoordinates) => Math.min(99, ...foes.map(foe => getHexDistance(foe.position, c)));
+  const nearest = (c: HexCoordinates, wanted: (hex: GameState['hexGrid'][number]) => boolean) =>
+    Math.min(99, ...state.hexGrid.filter(wanted).map(other => getHexDistance(other.coordinates, c)));
+  const closerTo = (wanted: (hex: GameState['hexGrid'][number]) => boolean) => nearest(to, wanted) < nearest(unit.position, wanted);
+  const isPrize = (other: GameState['hexGrid'][number]) => (other.isCamp || !!other.isResourceHex) && other.owner !== 'player';
+  const hurt = unit.lifespan < unit.maxLifespan;
   const friendsThere = state.players.player.units
     .filter(friend => friend.id !== unit.id)
     .map(friend => ({ ...friend, position: destination.get(friend.id) ?? friend.position }));
 
-  if (intent === 'retreat') return hex?.terrain === 'spring' ? 'Hurt: fall back to the spring to heal' : 'Hurt: fall back out of reach';
-  if (intent === 'heal') return 'Hurt: heal at the spring, then back into the fight';
-
   const targets = foes.filter(foe => canStrike(state, there, foe));
   if (targets.length > 0) {
     const target = [...targets].sort((a, b) => getCounterMultiplier(unit.type, b.type) - getCounterMultiplier(unit.type, a.type) || a.lifespan - b.lifespan)[0];
+    if (intent === 'intercept') return `Stop the ${getTroopName(target.type)} before it reaches your castle`;
     const reasons: string[] = [];
     if (getCounterMultiplier(unit.type, target.type) > 1) reasons.push(`${getTroopName(unit.type)} beat ${getTroopName(target.type)}`);
     if (getHeightDifference(state, to, target.position) > 0) reasons.push('from higher ground');
     if (friendsThere.some(friend => canStrike(state, friend, target))) reasons.push('together they flank it');
     if (strikesPinned(unit) && isPinned(target.position, friendsThere)) reasons.push("it's pinned in place");
-    if (intent === 'intercept') return `Stop the ${getTroopName(target.type)} before it reaches your castle`;
     return `Attack the ${getTroopName(target.type)}${reasons.length > 0 ? `: ${reasons.join(', ')}` : ''}`;
   }
   if (canStrikeCastle(state, there)) return 'Attack the enemy castle!';
-  switch (intent) {
-    case 'intercept': return 'Head off the enemy marching on your castle';
-    case 'objective': return hex?.isCamp ? 'Take the camp: gold every turn, and a new place to deploy' : hex?.isResourceHex ? 'Take the gold mine: gold every turn' : 'Go and take the camp ahead';
-    case 'support': return 'Stay just behind the front line, to heal it';
-    case 'push': return 'All-out attack: march on the enemy castle!';
-    default: return hex?.terrain === 'forest' ? 'March on, through the woods for cover' : 'March on the enemy castle';
-  }
+  if (hurt && hex?.terrain === 'spring') return 'Hurt: heal at the spring, then back into the fight';
+  if (intent === 'retreat' && nearestFoe(to) > nearestFoe(unit.position)) return 'Hurt: fall back out of reach';
+  if (hurt && (intent === 'heal' || intent === 'retreat') && closerTo(other => other.terrain === 'spring')) return 'Hurt: make for the spring to heal';
+  if (hex && isPrize(hex)) return hex.isCamp ? 'Take the camp: gold every turn, and a new place to deploy' : 'Take the gold mine: gold every turn';
+  if (intent === 'objective' && closerTo(isPrize)) return 'Head for the camp ahead: take it next turn';
+  if (intent === 'intercept' && foes.length > 0 && nearestFoe(to) < nearestFoe(unit.position)) return 'Head off the enemy marching on your castle';
+  if (intent === 'support') return 'Stay just behind the front line, to heal it';
+  if (intent === 'push') return 'All-out attack: march on the enemy castle!';
+  return hex?.terrain === 'forest' ? 'March on, through the woods for cover' : 'March on the enemy castle';
 };
 
 // The castle site to suggest: the one with the most camps, gold and high ground near it

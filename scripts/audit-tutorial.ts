@@ -6,7 +6,8 @@
 
 import { GameState } from '@/types/game';
 import {
-  addPendingMove, addPendingPurchase, chooseCastle, executeMoves, getVisibleEnemies, resolveAllCombats
+  addPendingMove, addPendingPurchase, canStrike, canStrikeCastle, chooseCastle, executeMoves, findBaseHex, getTerrainDistanceMap,
+  getVisibleEnemies, resolveAllCombats
 } from '@/lib/game/gameState';
 import { planAITurn } from '@/lib/ai/aiPlayer';
 import { buildBattle } from '@/lib/campaign/battleSetup';
@@ -24,6 +25,7 @@ for (const levelId of levels) {
   let rounds = 0;
   const captions = new Map<string, number>();
   const odd: string[] = [];
+  const mismatched: string[] = [];
   for (let battle = 0; battle < battles; battle++) {
     let state: GameState = buildBattle({ mode: 'campaign', levelId }, createProfile());
     if (state.castleChoices) state = chooseCastle(state, bestCastleSite(state)!);
@@ -39,6 +41,28 @@ for (const levelId of levels) {
             const nearest = (c: { q: number; r: number }) => Math.min(99, ...foes.map(foe => getHexDistance(foe.position, c)));
             if (unit.lifespan > unit.maxLifespan / 2 && foes.length > 0 && nearest(item.to) > nearest(unit.position) + 1 && !/Attack|Stop|castle|camp|mine/.test(item.caption)) {
               odd.push(`L${levelId} r${state.turnNumber} ${unit.type} ${unit.lifespan}/${unit.maxLifespan}: ${item.caption} (nearest foe ${nearest(unit.position)} -> ${nearest(item.to)})`);
+            }
+            // Does the caption describe the move?
+            const hexAt = (c: { q: number; r: number }) => state.hexGrid.find(hex => hex.coordinates.q === c.q && hex.coordinates.r === c.r);
+            const there = { ...unit, position: item.to };
+            const near = (c: { q: number; r: number }, wanted: (hex: GameState['hexGrid'][number]) => boolean) =>
+              Math.min(99, ...state.hexGrid.filter(wanted).map(hex => getHexDistance(hex.coordinates, c)));
+            const castle = findBaseHex(state, 'ai')!.coordinates;
+            const steps = getTerrainDistanceMap(state.hexGrid, castle);
+            const stepsTo = (c: { q: number; r: number }) => steps.get(`${c.q},${c.r}`) ?? 99;
+            const checks: [RegExp, boolean][] = [
+              [/^Attack the (?!enemy castle)|^Stop the/, foes.some(foe => canStrike(state, there, foe))],
+              [/^Attack the enemy castle/, canStrikeCastle(state, there)],
+              [/heal at the spring/, hexAt(item.to)?.terrain === 'spring'],
+              [/make for the spring/, near(item.to, hex => hex.terrain === 'spring') < near(unit.position, hex => hex.terrain === 'spring')],
+              [/fall back/, nearest(item.to) > nearest(unit.position)],
+              [/^Take the camp/, !!hexAt(item.to)?.isCamp],
+              [/^Take the gold mine/, !!hexAt(item.to)?.isResourceHex],
+              [/^Head off/, nearest(item.to) < nearest(unit.position)],
+              [/^March on|^All-out/, stepsTo(item.to) <= stepsTo(unit.position)]
+            ];
+            for (const [pattern, holds] of checks) {
+              if (pattern.test(item.caption) && !holds) mismatched.push(`L${levelId} r${state.turnNumber} ${unit.type} ${unit.lifespan}/${unit.maxLifespan}: "${item.caption}"`);
             }
             state = addPendingMove(state, item.unitId, state.players.player.id, item.to);
           } else {
@@ -59,4 +83,6 @@ for (const levelId of levels) {
   for (const [label, count] of [...captions].sort((a, b) => b[1] - a[1])) console.log(`  ${String(count).padStart(4)}  ${label}`);
   console.log(`  ${odd.length} steps send a healthy troop away from the fight:`);
   for (const line of odd.slice(0, 12)) console.log(`    ${line}`);
+  console.log(`  ${mismatched.length} captions that don't match their move:`);
+  for (const line of mismatched.slice(0, 12)) console.log(`    ${line}`);
 }

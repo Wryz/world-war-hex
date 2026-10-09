@@ -163,14 +163,17 @@ const nextStep = (
     return (getRosterStats(state, 'player', step.unitType)?.cost ?? Infinity) <= state.players.player.points &&
       getHand(state).includes(step.unitType);
   });
+  // The plan's moves still to give - and still possible exactly as planned (a hex since taken by
+  // another order is dropped, rather than pointing somewhere the caption doesn't describe)
   const moves = plan.filter((step): step is Extract<PlanStep, { kind: 'move' }> => step.kind === 'move').filter(step => {
     const unit = units.find(other => other.id === step.unitId);
-    return !!unit && !unit.hasMoved && !ordered.has(unit.id);
+    return !!unit && !unit.hasMoved && !ordered.has(unit.id) &&
+      getValidMoveTargets(state, unit).some(c => c.q === step.to.q && c.r === step.to.r);
   });
 
   if (selectedUnitType && validMoves.length > 0) {
     const buy = buys.find(step => step.unitType === selectedUnitType);
-    if (buy) return { hex: nearestOf(validMoves, buy.at), caption: buy.placeCaption };
+    if (buy && validMoves.some(c => c.q === buy.at.q && c.r === buy.at.r)) return { hex: buy.at, caption: buy.placeCaption };
     const enemy = findBaseHex(state, 'ai')?.coordinates;
     return { hex: enemy ? nearestOf(validMoves, enemy) : validMoves[0], caption: 'Deploy it beside your castle' };
   }
@@ -178,8 +181,7 @@ const nextStep = (
   const live = selectedUnit && units.find(unit => unit.id === selectedUnit.id);
   if (live && !live.hasMoved && !ordered.has(live.id)) {
     const move = moves.find(step => step.unitId === live.id);
-    const reach = getValidMoveTargets(state, live);
-    if (move && reach.length > 0) return { hex: nearestOf(reach, move.to), caption: move.caption };
+    if (move) return { hex: move.to, caption: move.caption };
   }
 
   const next = moves[0];
