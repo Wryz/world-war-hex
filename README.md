@@ -4,9 +4,9 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 
 ## The game in a nutshell
 
-- **Cards.** Your troops are playing cards. You start with four and bring four into every battle, picked before each fight (the pre-battle screen marks the cards that counter that enemy, and Auto-pick chooses a strong set). In battle, tap a card, then a glowing hex next to your castle (or a camp you hold) to deploy it.
+- **Cards.** Your troops are playing cards. You start with four and bring four into every battle, picked in the Army (an empty slot is filled with a strong pick for the battle when you go in). In battle, tap a card, then a glowing hex next to your castle (or a camp you hold) to deploy it.
 - **Fighting together.** Troops fight better for where they stand, not which cards they are: archers and mages screened by a front-line troop between them and the attacker take 40% less damage (50% behind armour), an enemy pinned next to one of your front-line troops takes 25% more from your archers and riders, front-line troops side by side form a shield wall (15% less damage), and a troop holding a bridge or gateway can't be flanked. The enemy forms up the same way.
-- **Enemies that fight their own way.** Every faction has a trait: goblins come cheap and swarm (but packed together a blow on one hurts its neighbours), beasts hunt in packs, swamp folk, the Sand Court and the Frostborn cross their own ground freely, the undead rise again once unless a War Cleric or fire finishes them, orcs hit harder the more they are hurt, demons shrug off fire, and dragonkin flyers soar over walls and gatehouses. The pre-battle screen lists the traits you'll face.
+- **Enemies that fight their own way.** Every faction has a trait: goblins come cheap and swarm (but packed together a blow on one hurts its neighbours), beasts hunt in packs, swamp folk, the Sand Court and the Frostborn cross their own ground freely, the undead rise again once unless a War Cleric or fire finishes them, orcs hit harder the more they are hurt, demons shrug off fire, and dragonkin flyers soar over walls and gatehouses.
 - **Weather.** Fog banks drift across Mirefen Marsh, hiding the troops inside them; sandstorms in the Sunscorch Desert cut every shot's reach; blizzards in Frostpeak Pass and Rimeholt slow everyone; and ash on the Emberforge wind spreads fire faster. Storms blow two rounds in every four, and the top bar warns when one is coming.
 - **Morale.** When a boss or champion falls its army is shaken, and a badly hurt troop surrounded with no friend beside it wavers: shaken troops hit 30% softer until their side's next turn is over (two turns after a boss falls). Bosses and the undead are fearless.
 - **Challenges.** Every level past the first two has an optional harder way to win - by a round, without losses, with the castle near whole, taking both camps, with few troops, by toppling the castle or slaying the boss - for bonus coins the first time, and a medal on the campaign map.
@@ -33,7 +33,7 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 
 ## How to Play
 
-1. **Pick a battle.** Open the campaign map, pick the next level, choose the four cards to bring, compare your power with the recommended power, then press **Fight!** Then tap one of the glowing sites to build your castle.
+1. **Pick a battle.** Open the campaign map and tap the next level: the battle starts straight away. Tap one of the glowing sites to build your castle.
 2. **Play cards.** Tap a card in your hand, then a glowing hex next to your castle or a camp you hold. Its gold cost comes out of your treasury. Tap a troop you queued this turn to take it back.
 3. **Move.** Tap one of your troops, then a highlighted hex. Rough ground costs more movement; water and mountains block the way (flyers pass over them).
 4. **End your turn.** Troops arrive and move, then every troop in range attacks one enemy it can reach automatically - preferring one it can finish off, then one it is strong against. A defender splits its strike-back between the attackers it can reach, so archers shooting from 2 hexes and sneak attacks take no damage. The other side's troops strike back too: any troop of theirs that can reach an attacker (and isn't in a fight of its own) hits it, and the attacker, busy with its own target, can't hit back. The battle card shows every modifier, and health bars count down blow by blow. Then the enemy takes its turn.
@@ -119,7 +119,7 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 ### Screens (`src/app`)
 
 - `page.tsx`: Main menu (`components/game/intro/IntroScreen`, with a 3D island of troops and monsters)
-- `campaign`: The campaign map (each region an island of map tiles, laid out in `lib/campaign/mapArt.ts` and drawn by `components/menu/RegionMap`) and the pre-battle sheet: recommended power and picking your four cards (`components/menu/CampaignScreen`, `PreBattleSheet`; suggestions in `lib/meta/loadout.ts`)
+- `campaign`: The campaign map (each region an island of map tiles, laid out in `lib/campaign/mapArt.ts` and drawn by `components/menu/RegionMap`) tapping a level goes straight into its battle, with any empty deck slots filled for it (`components/menu/CampaignScreen`, `lib/campaign/startLevel.ts`; suggestions in `lib/meta/loadout.ts`)
 - `army`: Your cards, the card shop and upgrades (`components/menu/ArmyScreen`)
 - `bestiary`: The bestiary and its 3D model viewer (`components/menu/BestiaryScreen`, `TroopModelViewer`)
 - `stats`: Stats and save files (`components/menu/StatsScreen`); the main menu's settings and guide are in `components/menu/SettingsPanel`

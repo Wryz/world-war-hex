@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { GameState, HexCoordinates, Unit } from '@/types/game';
-import { findBaseHex, getFellTargets, getValidMoveTargets, getVisibleHexKeys, isFellOrder, isFogOfWar } from '@/lib/game/gameState';
+import { findBaseHex, getFellTargets, getValidMoveTargets, isFellOrder, isFogOfWar } from '@/lib/game/gameState';
 import { CATAPULT_RANGE } from '@/lib/game/structures';
 import { SANDSTORM_REACH } from '@/lib/game/regionRules';
 import { getHexDistance } from '@/lib/game/hexUtils';
@@ -9,6 +9,8 @@ import { getHexDistance } from '@/lib/game/hexUtils';
 // brings, the first time it turns up: the fog of war, a boss's marked strike, a great tree a troop
 // could fell, a catapult tower and a gatehouse. It points at it with a few words (and for a tree,
 // walks through felling it), until the player does it or ends the turn; then it never shows again.
+// The fog has no one spot to point at (and a hand on an empty hex reads as "tap here"), so its few
+// words show on their own, across the top of the board.
 
 export type MechanicId = 'fog' | 'bossPower' | 'felling' | 'catapult' | 'gate';
 
@@ -32,7 +34,8 @@ const markSeen = (id: MechanicId) => {
 
 export interface MechanicPointer {
   id: MechanicId;
-  hex: HexCoordinates;
+  // (none: the words show on their own)
+  hex?: HexCoordinates;
   caption: string;
 }
 
@@ -72,10 +75,7 @@ const pointerFor = (id: MechanicId, state: GameState, selected: Unit | null): Me
     }
     case 'fog': {
       if (!isFogOfWar(state) || state.turnNumber > 1) return null;
-      const visible = getVisibleHexKeys(state, 'player');
-      const hidden = state.hexGrid.filter(hex => !visible.has(`${hex.coordinates.q},${hex.coordinates.r}`) && !hex.isBase).map(hex => hex.coordinates);
-      if (hidden.length === 0) return null;
-      return { id, hex: nearestTo(hidden, castle)!, caption: 'Fog of war: you only see what your troops can see. Woods hide troops until you\'re beside them' };
+      return { id, caption: 'Fog of war: the shaded ground is hidden. You only see what your troops can see, and woods hide troops until you\'re beside them' };
     }
   }
 };

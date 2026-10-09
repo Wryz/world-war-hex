@@ -5,6 +5,7 @@ import { WEATHER, activeWeather, stormForecast } from '@/lib/game/regionRules';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
 import { CrownIcon, FogIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon, WeatherIcon } from '../icons';
 import { setGameSpeed, useCastleShownDamage, useGameSpeed } from '../effects/effects';
+import { useShownCastleHealth } from '../effects/healthTimeline';
 
 // The time-up points show for this many final rounds
 const POINTS_SHOWN_ROUNDS = 3;
@@ -55,6 +56,9 @@ export const TopBar: React.FC<TopBarProps> = ({
   const castleHits = useCastleShownDamage();
   // (only while the attack is being fought, so it never counts twice once its result is in)
   const shownDamage = gameState.currentPhase === 'combat' && gameState.siege ? castleHits : { player: 0, ai: 0 };
+  // (and a stone from a catapult once it has landed)
+  const yourCastle = useShownCastleHealth('player', Math.max(0, (players.player.baseHealth ?? BASE_MAX_HEALTH) - shownDamage.player));
+  const enemyCastle = useShownCastleHealth('ai', Math.max(0, (players.ai.baseHealth ?? BASE_MAX_HEALTH) - shownDamage.ai));
   const maxRounds = getMaxRounds(gameState);
   const isFinalRound = turnNumber >= maxRounds;
   const speed = useGameSpeed();
@@ -122,14 +126,14 @@ export const TopBar: React.FC<TopBarProps> = ({
       <div className={`${PANEL_CLASS} pointer-events-auto hidden md:flex items-center gap-3 px-3 py-2`}>
         <CastleHealth
           title="Your castle"
-          health={Math.max(0, (players.player.baseHealth ?? BASE_MAX_HEALTH) - shownDamage.player)}
+          health={yourCastle}
           max={getCastleMaxHealth(gameState, 'player')}
           color={SIDE_COLORS.player}
         />
         <span className="text-xs font-bold text-slate-500">VS</span>
         <CastleHealth
           title="Enemy castle"
-          health={Math.max(0, (players.ai.baseHealth ?? BASE_MAX_HEALTH) - shownDamage.ai)}
+          health={enemyCastle}
           max={getCastleMaxHealth(gameState, 'ai')}
           color={SIDE_COLORS.ai}
           alignRight

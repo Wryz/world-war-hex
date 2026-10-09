@@ -72,14 +72,17 @@ const GreatTree: React.FC<{
     return new THREE.Vector3(direction.z, 0, -direction.x);
   }, [base, toward]);
 
+  // (the axis it was last laid to rest about: once down, it has nothing more to do each frame)
+  const restedRef = useRef<THREE.Vector3 | null>(null);
   useFrame((_, delta) => {
     const pivot = pivotRef.current;
-    if (!pivot || !axis) return;
+    if (!pivot || !axis || restedRef.current === axis) return;
     // (following the game speed, so it lands when the board shows its crush)
     progressRef.current = Math.min(1, progressRef.current + Math.min(delta, 0.1) * getTimeScale() / FALL_SECONDS);
     // Slow to start, then crashing down
     const t = progressRef.current;
     pivot.quaternion.setFromAxisAngle(axis, t * t * LYING_ANGLE);
+    if (t >= 1) restedRef.current = axis;
   });
 
   return (

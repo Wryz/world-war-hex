@@ -246,6 +246,9 @@ export interface HealthEvent {
   from?: HexCoordinates;
   // Its place in a sweep (a dragon's breath lands hex by hex)
   order?: number;
+  // The number to float over the troop when it isn't `amount` (a blow an undead rises from: the
+  // blow, not the health it rises with)
+  shown?: number;
 }
 
 export interface Sighting {

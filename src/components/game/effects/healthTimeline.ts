@@ -35,15 +35,32 @@ interface Scheduled {
   showAt: number;
 }
 
-// The latest time anything scheduled shows, for the turn that follows to wait for
-let busyUntil = 0;
-export const getTimelineBusyUntil = () => busyUntil;
+// When each change seen so far shows (performance.now()), by serial, so that how long the board
+// still needs can be told from a state alone - whether or not the board has scheduled its changes yet
+const showsAt = new Map<number, number>();
+// (changes up to this serial have been scheduled: one no longer listed showed a while ago)
+let scheduledThrough = 0;
 
-// Each troop's health as the board shows it right now (the HUD reads it too)
+// How long (ms) until the board has shown every change in a state (or those of them `which` picks):
+// for one it hasn't scheduled yet, its full delay from now
+export const pendingHealthWait = (state: GameState, which: (event: HealthEvent) => boolean = () => true): number => {
+  const now = performance.now();
+  const scale = Math.max(0.1, getTimeScale());
+  return Math.max(0, ...(state.healthEvents ?? []).filter(which).map(event => {
+    const at = showsAt.get(event.serial);
+    if (at !== undefined) return at - now;
+    return event.serial <= scheduledThrough ? 0 : healthEventDelay(event) * 1000 / scale;
+  }));
+};
+
+// Each troop's health as the board shows it right now, and how much of each castle's change is
+// still to show (the HUD reads them too)
 let shownHealth = new Map<string, number>();
+let shownCastleOwed: Record<PlayerType, number> = { player: 0, ai: 0 };
 const listeners = new Set<() => void>();
-const publishShownHealth = (next: Map<string, number>) => {
-  shownHealth = next;
+const publish = (health: Map<string, number>, owed: Record<PlayerType, number>) => {
+  shownHealth = health;
+  if (owed.player !== shownCastleOwed.player || owed.ai !== shownCastleOwed.ai) shownCastleOwed = owed;
   listeners.forEach(listener => listener());
 };
 const subscribe = (listener: () => void) => {
@@ -54,15 +71,28 @@ export const useShownHealth = (unit: Pick<Unit, 'id' | 'lifespan'> | null | unde
   const map = useSyncExternalStore(subscribe, () => shownHealth, () => shownHealth);
   return unit ? map.get(unit.id) ?? unit.lifespan : undefined;
 };
+// A castle's health as the board shows it
+export const useShownCastleHealth = (side: PlayerType, health: number): number => {
+  const owed = useSyncExternalStore(subscribe, () => shownCastleOwed, () => shownCastleOwed);
+  return Math.max(0, health - owed[side]);
+};
+
+export interface LandedChange {
+  serial: number;
+  // The number to float (negative for damage)
+  amount: number;
+  fatal?: boolean;
+}
 
 export interface HealthTimeline {
   // The units to draw: health as shown so far, plus troops already destroyed whose fatal blow
   // hasn't landed yet
   units: Unit[];
-  // Each castle's health as shown so far
+  // Each castle's health as shown so far, and how much of its change is still to show
   castleHealth: (side: PlayerType, health: number) => number;
+  castleOwed: Record<PlayerType, number>;
   // Changes that have just landed on each troop, for its floating numbers
-  landed: Map<string, { serial: number; amount: number }[]>;
+  landed: Map<string, LandedChange[]>;
 }
 
 // How long a landed change keeps its floating number listed
@@ -70,18 +100,20 @@ const LANDED_KEEP_MS = 1500;
 
 export const useHealthTimeline = (gameState: GameState, units: Unit[]): HealthTimeline => {
   const scheduledRef = useRef<Scheduled[]>([]);
-  // Changes from before the board appeared aren't replayed
-  const seenSerialRef = useRef(gameState.healthSerial ?? 0);
-  const gameIdRef = useRef(gameState.players.player.id);
+  // Changes from before the board appeared aren't replayed (set as the first render starts afresh)
+  const seenSerialRef = useRef(0);
+  const gameIdRef = useRef<string | null>(null);
   const [now, setNow] = useState(() => performance.now());
   // Troops drawn last time, so a troop already out of sight isn't brought back to die
   const drawnRef = useRef(new Set<string>());
 
-  // A new battle: start afresh
+  // The board appearing, or a new battle: start afresh
   if (gameIdRef.current !== gameState.players.player.id) {
     gameIdRef.current = gameState.players.player.id;
     scheduledRef.current = [];
     seenSerialRef.current = gameState.healthSerial ?? 0;
+    showsAt.clear();
+    scheduledThrough = seenSerialRef.current;
   }
 
   // Schedule new changes as soon as they arrive (during the render that brings them, so the board
@@ -93,9 +125,10 @@ export const useHealthTimeline = (gameState: GameState, units: Unit[]): HealthTi
     for (const event of fresh) {
       const showAt = arrived + healthEventDelay(event) * 1000 / scale;
       scheduledRef.current.push({ event, showAt });
-      busyUntil = Math.max(busyUntil, showAt);
+      showsAt.set(event.serial, showAt);
     }
     seenSerialRef.current = Math.max(...fresh.map(event => event.serial));
+    scheduledThrough = seenSerialRef.current;
   }
 
   const seenSerial = seenSerialRef.current;
@@ -128,38 +161,43 @@ export const useHealthTimeline = (gameState: GameState, units: Unit[]): HealthTi
     const castleOwed: Record<PlayerType, number> = { player: 0, ai: 0 };
     for (const { event } of pending) if (event.castle) castleOwed[event.castle] += event.amount;
 
-    const landed = new Map<string, { serial: number; amount: number }[]>();
+    const landed = new Map<string, LandedChange[]>();
     for (const { event, showAt } of scheduled) {
       if (showAt > now || !event.unit) continue;
       const list = landed.get(event.unit.id) ?? [];
-      list.push({ serial: event.serial, amount: event.amount });
+      list.push({ serial: event.serial, amount: event.shown ?? event.amount, ...(event.fatal ? { fatal: true } : {}) });
       landed.set(event.unit.id, list);
     }
 
     return {
       units: drawn,
       castleHealth: (side, health) => Math.max(0, health - castleOwed[side]),
+      castleOwed,
       landed
     };
     // (recomputed when the units change, a change arrives or one lands)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [units, now, seenSerial]);
 
-  // Re-render when the next pending change is due, and forget changes shown a while ago
+  // Re-render when the next pending change is due, and forget changes shown a while ago (once the
+  // last has shown, when its number is done)
   useEffect(() => {
-    const due = scheduledRef.current.filter(item => item.showAt > now).map(item => item.showAt);
-    if (due.length === 0) return;
+    const scheduled = scheduledRef.current;
+    if (scheduled.length === 0) return;
+    const due = scheduled.filter(item => item.showAt > now).map(item => item.showAt);
+    const at = due.length > 0 ? Math.min(...due) : Math.min(...scheduled.map(item => item.showAt)) + LANDED_KEEP_MS;
     const timeout = setTimeout(() => {
-      const at = performance.now();
-      scheduledRef.current = scheduledRef.current.filter(item => item.showAt > at - LANDED_KEEP_MS);
-      setNow(at);
-    }, Math.max(0, Math.min(...due) - performance.now()) + 5);
+      const time = performance.now();
+      scheduledRef.current = scheduledRef.current.filter(item => item.showAt > time - LANDED_KEEP_MS);
+      for (const [serial, showAt] of showsAt) if (showAt < time - LANDED_KEEP_MS) showsAt.delete(serial);
+      setNow(time);
+    }, Math.max(0, at - performance.now()) + 5);
     return () => clearTimeout(timeout);
   }, [now, seenSerial]);
 
-  // Share the shown health with the HUD
+  // Share what's shown with the HUD
   useEffect(() => {
-    publishShownHealth(new Map(timeline.units.map(unit => [unit.id, unit.lifespan])));
+    publish(new Map(timeline.units.map(unit => [unit.id, unit.lifespan])), timeline.castleOwed);
   }, [timeline]);
 
   return timeline;

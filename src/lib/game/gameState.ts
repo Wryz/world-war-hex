@@ -1012,7 +1012,7 @@ export const getOwnedCamps = (state: GameState, playerType: PlayerType): Hex[] =
   state.hexGrid.filter(hex => hex.isCamp && hex.owner === playerType);
 
 // Where a side's recruits may appear: next to its castle, and on or next to any camp it holds
-const getDeploymentSpots = (state: GameState, playerType: PlayerType): HexCoordinates[] => {
+export const getDeploymentSpots = (state: GameState, playerType: PlayerType): HexCoordinates[] => {
   const baseHex = findBaseHex(state, playerType);
   const spots = baseHex ? getNeighbors(baseHex.coordinates) : [];
   for (const camp of [...getOwnedCamps(state, playerType), ...getHeldBuildings(state, playerType, 'barracks')]) {
@@ -3189,9 +3189,9 @@ const creditKill = (state: GameState, unit: Unit, killer: PlayerType): void => {
 // animation lands. `unit` is the troop as it was just before.
 export const noteHealth = (
   state: GameState, unit: Unit | null, amount: number, cause: HealthCause,
-  extra: { from?: HexCoordinates; order?: number; fatal?: boolean; castle?: PlayerType } = {}
+  extra: { from?: HexCoordinates; order?: number; fatal?: boolean; castle?: PlayerType; shown?: number } = {}
 ): void => {
-  if (amount === 0) return;
+  if (amount === 0 && !extra.shown) return;
   const serial = (state.healthSerial ?? 0) + 1;
   state.healthSerial = serial;
   const event: HealthEvent = { serial, cause, amount, ...(unit ? { unit: { ...unit } } : {}), ...extra };
@@ -3220,7 +3220,7 @@ export const inflictDamage = (
     // (struck down all the same: the bounty is paid, as in a fight)
     if (by && by !== live.owner) earnGold(state, by, getKillBounty(live));
     riseAgain(state, live);
-    noteHealth(state, before, live.lifespan - before.lifespan, cause, event);
+    noteHealth(state, before, live.lifespan - before.lifespan, cause, { ...event, shown: -damage });
     return { damage, destroyed: false };
   }
   noteHealth(state, before, -before.lifespan, cause, { ...event, fatal: true });

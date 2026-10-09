@@ -16,7 +16,7 @@ export const BossBar: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   if (!boss) return null;
   const power = getBossPower(boss.type);
   const ratio = Math.max(0, health) / Math.max(1, boss.maxLifespan);
-  const enraged = isBossEnraged(boss);
+  const enraged = isBossEnraged({ ...boss, lifespan: health });
   const waiting = boss.threat ? 0 : boss.powerCooldown ?? 0;
   const name = getTroopName(boss.type).split(/,| the /)[0];
 

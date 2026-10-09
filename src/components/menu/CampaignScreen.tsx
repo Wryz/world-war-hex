@@ -1,11 +1,11 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
-import { REGIONS, Region, getRegionLevels, getLevel, LevelDef } from '@/lib/campaign/levels';
+import { REGIONS, Region, getRegionLevels, LevelDef } from '@/lib/campaign/levels';
+import { topUpDeck } from '@/lib/campaign/startLevel';
 import { FACTIONS, TROOPS } from '@/lib/game/troops';
 import { highestUnlocked, useHasHydrated, useProfile } from '@/lib/meta/profile';
 import { useMusic } from '@/lib/audio/music';
 import { MenuShell, CARD_CLASS } from './MenuShell';
-import { PreBattleSheet } from './PreBattleSheet';
 import { LockIcon, MapIcon, StarIcon, TerrainIcon, UnitIcon } from '../game/icons';
 import { RegionMap } from './RegionMap';
 import { MAP_SEA_URL } from '@/lib/campaign/mapArt';
@@ -63,35 +63,32 @@ const RegionBand: React.FC<{ region: Region; onSelect: (level: LevelDef) => void
   );
 };
 
-// The campaign map: fifteen regions of ten battles, from Greenvale to the Last Bastion
+// The campaign map: fifteen regions of ten battles, from Greenvale to the Last Bastion. Tapping a
+// level goes straight into its battle.
 export const CampaignScreen: React.FC<{ initialLevel?: number }> = ({ initialLevel }) => {
   const router = useRouter();
   const profile = useProfile();
   const hydrated = useHasHydrated();
-  const [selected, setSelected] = useState<LevelDef | null>(null);
   const scrolledRef = useRef(false);
   useMusic('map');
 
-  // Open the requested level (or scroll to the next one) once progress has loaded
+  // Scroll to the requested level (or the next one) once progress has loaded
   useEffect(() => {
     if (!hydrated || scrolledRef.current) return;
     scrolledRef.current = true;
     const next = highestUnlocked(profile);
     const focus = initialLevel && initialLevel <= next ? initialLevel : next;
     document.querySelector(`[data-level="${focus}"]`)?.scrollIntoView({ block: 'center' });
-    if (initialLevel && initialLevel <= next) setSelected(getLevel(initialLevel));
   }, [hydrated, profile, initialLevel]);
+
+  const fight = (level: LevelDef) => {
+    topUpDeck(level);
+    router.push(`/play?level=${level.id}`);
+  };
 
   return (
     <MenuShell title="Campaign" icon={<MapIcon />}>
-      {REGIONS.map(region => <RegionBand key={region.id} region={region} onSelect={setSelected} />)}
-      {selected && (
-        <PreBattleSheet
-          level={selected}
-          onClose={() => setSelected(null)}
-          onFight={() => router.push(`/play?level=${selected.id}`)}
-        />
-      )}
+      {REGIONS.map(region => <RegionBand key={region.id} region={region} onSelect={fight} />)}
     </MenuShell>
   );
 };

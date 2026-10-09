@@ -35,7 +35,7 @@ import { buildBattle } from '@/lib/campaign/battleSetup';
 import { getProfile } from '@/lib/meta/profile';
 import { playBattleSound } from '../utils/battleSounds';
 import { getGameSpeed } from '../effects/effects';
-import { getTimelineBusyUntil } from '../effects/healthTimeline';
+import { pendingHealthWait } from '../effects/healthTimeline';
 import { BATTLE_DURATION_MS, getArrivalTime, getBattleStartDelay, setBattleStartDelay } from '../utils/battleTiming';
 import {
   BattleConfig,
@@ -85,7 +85,8 @@ const executeTurn = (state: GameState): GameState => {
 };
 
 // How long until the board has shown everything still to land (a tree, a stone, a boss's strike)
-const timelineWait = () => Math.max(0, getTimelineBusyUntil() - performance.now());
+// in a state
+const timelineWait = (state: GameState) => pendingHealthWait(state);
 // A short beat once the troops have arrived, before the end of the turn
 const TURN_END_PAUSE_MS = 250;
 
@@ -258,7 +259,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
       executionTimeout = setTimeout(() => {
         commitState(executeTurn(stateRef.current));
       }, AI_EXECUTION_DELAY / speed);
-    }, Math.max(AI_PLANNING_DELAY / speed, timelineWait()));
+    }, Math.max(AI_PLANNING_DELAY / speed, timelineWait(stateRef.current)));
 
     return () => {
       clearTimeout(planningTimeout);
@@ -271,7 +272,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     if (!isReady || currentPhase !== 'execution') return;
     const timeout = setTimeout(() => {
       commitState(endTurn(stateRef.current));
-    }, Math.max((getBattleStartDelay() * 1000 + TURN_END_PAUSE_MS) / getGameSpeed(), timelineWait()));
+    }, Math.max((getBattleStartDelay() * 1000 + TURN_END_PAUSE_MS) / getGameSpeed(), timelineWait(stateRef.current)));
     return () => clearTimeout(timeout);
   }, [isReady, currentPhase, turnNumber, commitState]);
 
@@ -496,7 +497,10 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     const unitHex = current.hexGrid.find(hex => hex.unit && hex.unit.id === unit.id);
     if (!unitHex) return;
     const live = current.players.player.units.find(other => other.id === unit.id);
-    if (live && isPlayerPlanning() && !selectedUnitTypeForPurchase) {
+    // (a troop already picked can be ordered onto a friend's hex - to work on it, or swap places:
+    // that's the hex's to decide)
+    const orderedOnto = !!selectedUnit && selectedUnit.id !== unit.id && validMoves.some(c => coordsEqual(c, unitHex.coordinates));
+    if (live && isPlayerPlanning() && !selectedUnitTypeForPurchase && !orderedOnto) {
       setSelectedHex(unitHex);
       if (selectedUnit?.id === live.id) {
         setSelectedUnit(null);

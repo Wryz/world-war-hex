@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { GameState, HexCoordinates, Unit, UnitType } from '@/types/game';
-import { findBaseHex, findTerrainPath, getHand, getMovePath, getRosterStats, getValidMoveTargets } from '@/lib/game/gameState';
-import { PlanStep, bestCastleSite, deployCaption, deploySpot, planTutorialTurn } from '@/lib/game/tutorialPlan';
+import { findBaseHex, findTerrainPath, getDeploymentHexes, getHand, getMovePath, getRosterStats, getValidMoveTargets } from '@/lib/game/gameState';
+import { PlanStep, bestCastleSite, deployCaption, deploySpot, planTutorialTurn, withPlannedMoves } from '@/lib/game/tutorialPlan';
 import { getHexDistance } from '@/lib/game/hexUtils';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
 import { projectToScreen } from '../effects/effects';
@@ -171,17 +171,18 @@ const nextStep = (
       getValidMoveTargets(state, unit).some(c => c.q === step.to.q && c.r === step.to.r);
   });
 
+  // The card picked: the spot nearest the fight among those it can go on now, on the board as it will
+  // be once the plan's moves still to come are given (the hexes those troops will march onto are
+  // spoken for)
   if (selectedUnitType && validMoves.length > 0) {
-    const buy = buys.find(step => step.unitType === selectedUnitType);
-    if (buy && validMoves.some(c => c.q === buy.at.q && c.r === buy.at.r)) return { hex: buy.at, caption: buy.placeCaption };
-    // (the planned spot has been taken: the next best, towards the fight, leaving the spots the
-    // plan's moves and other cards will use)
-    const spoken = new Set([...moves.map(step => key(step.to)), ...buys.filter(step => step !== buy).map(step => key(step.at))]);
-    const spot = deploySpot(state, selectedUnitType, spoken);
-    if (spot && validMoves.some(c => c.q === spot.q && c.r === spot.r)) return { hex: spot, caption: deployCaption(state, spot) };
+    const board = withPlannedMoves(state, moves);
+    const now = new Set(validMoves.map(key));
+    const notNow = new Set(getDeploymentHexes(board, 'player').map(hex => key(hex.coordinates)).filter(at => !now.has(at)));
+    const spot = deploySpot(board, selectedUnitType, notNow);
+    if (spot) return { hex: spot, caption: deployCaption(board, spot, notNow) };
     const enemy = findBaseHex(state, 'ai')?.coordinates;
     const nearest = enemy ? nearestOf(validMoves, enemy) : validMoves[0];
-    return { hex: nearest, caption: deployCaption(state, nearest) };
+    return { hex: nearest, caption: deployCaption(board, nearest, notNow) };
   }
 
   const live = selectedUnit && units.find(unit => unit.id === selectedUnit.id);
