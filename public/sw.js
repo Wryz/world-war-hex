@@ -6,8 +6,9 @@
  *
  * sw-manifest.js (written by scripts/build-sw-manifest.mjs after each build) lists every built
  * file to cache on install, and the models and art to cache later, when the page says the game is
- * idle ('warm'), so a first visit on a slow connection gets the bandwidth; a new build changes it,
- * which installs a fresh copy of this worker.
+ * idle ('warm'), so a first visit on a slow connection gets the bandwidth. A new build changes it,
+ * which installs a fresh copy of this worker: it re-checks everything the old one had cached
+ * before taking over, then deletes the old cache.
  */
 self.__PRECACHE = { version: 'dev', files: [], later: [] };
 try {
@@ -37,30 +38,44 @@ self.addEventListener('install', event => {
         .then(response => (response.ok ? cache.put(url, response) : undefined))
         .catch(() => undefined)
     ));
-    // An older version's models and art are carried over (no download), so they keep working
-    // offline once its cache is deleted; this happens while the older version still answers the
-    // page, so nothing waits on it. The warm step checks them with the server later.
+    // A returning player: everything an older version had cached that keeps its name from build to
+    // build (models, art, sounds, music) is fetched again now - checked with the server, so an
+    // unchanged file isn't downloaded again, and never served stale - while the older version still
+    // answers the page; taking charge then deletes the older caches. A first visit leaves the
+    // models and art for the warm step.
+    const had = new Set();
     for (const key of (await caches.keys()).filter(key => key.startsWith('wwh-') && key !== CACHE)) {
-      await carryOver(key, cache).catch(() => undefined);
+      for (const request of await (await caches.open(key)).keys()) {
+        const url = new URL(request.url);
+        if (!url.pathname.startsWith('/_next/static/') && !PAGES.includes(url.pathname)) had.add(url.pathname + url.search);
+      }
+    }
+    for (const url of had) {
+      if (await cache.match(url)) continue;
+      try {
+        const response = await fetch(url, { cache: 'no-cache' });
+        if (response.ok && response.status === 200) await cache.put(url, response);
+      } catch {
+        // Offline again: the rest are cached as they're used
+        break;
+      }
     }
     await self.skipWaiting();
   })());
 });
 
-// The models and art, one at a time, when the page says it's idle: those not yet cached, and those
-// carried over from an older version (checked with the server, in case they changed) - again next
-// time it asks, if the connection dropped part-way
-const INHERITED = 'x-wwh-inherited';
+// The models and art not yet cached, one at a time, when the page says it's idle (checked with the
+// server, so a stale browser copy isn't kept) - again next time it asks, if the connection dropped
+// part-way
 let warming = null;
 self.addEventListener('message', event => {
   if (event.data?.type !== 'warm' || warming) return;
   warming = (async () => {
     const cache = await caches.open(CACHE);
     for (const url of self.__PRECACHE.later ?? []) {
-      const hit = await cache.match(url);
-      if (hit && !hit.headers.has(INHERITED)) continue;
+      if (await cache.match(url)) continue;
       try {
-        const response = await fetch(url, { cache: hit ? 'no-cache' : 'default' });
+        const response = await fetch(url, { cache: 'no-cache' });
         if (response.ok) await cache.put(url, response);
       } catch {
         // Offline again: the rest are cached as they're used
@@ -70,21 +85,6 @@ self.addEventListener('message', event => {
   })().finally(() => { warming = null; });
   event.waitUntil(warming);
 });
-
-// Copies an older version's cached models and art into this version's cache, marked as inherited
-const carryOver = async (fromKey, cache) => {
-  const later = new Set(self.__PRECACHE.later ?? []);
-  const old = await caches.open(fromKey);
-  for (const request of await old.keys()) {
-    const path = new URL(request.url).pathname;
-    if (!later.has(path) || (await cache.match(path))) continue;
-    const response = await old.match(request);
-    if (!response || response.status !== 200) continue;
-    const headers = new Headers(response.headers);
-    headers.set(INHERITED, '1');
-    await cache.put(path, new Response(await response.blob(), { status: 200, headers }));
-  }
-};
 
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
