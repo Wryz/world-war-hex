@@ -66,7 +66,8 @@ interface TutorialArgs {
 }
 
 export const useTutorial = ({ active, ready, gameState, selectedUnit, selectedUnitType, validMoves }: TutorialArgs) => {
-  const [stage, setStage] = useState<IntroStage>('home');
+  // (a battle resumed part-way through skips the opening flight)
+  const [stage, setStage] = useState<IntroStage>(() => (gameState.turnNumber > 1 ? 'done' : 'home'));
   const started = active && ready && gameState.currentPhase === 'planning';
   useEffect(() => {
     if (!started || stage === 'done') return;

@@ -67,7 +67,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const level = battle.mode === 'campaign' ? getLevel(battle.levelId) : undefined;
 
   // The first battle is a tutorial for new players (see TutorialGuide)
-  const [showTutorial, setShowTutorial] = useState(() => battle.mode === 'campaign' && battle.levelId === 1 && !getProfile().tutorialDone);
+  // The first battle is always the tutorial, however often it is played
+  const [showTutorial, setShowTutorial] = useState(() => battle.mode === 'campaign' && battle.levelId === 1);
   const {
     gameState,
     selectedHex,
