@@ -69,7 +69,7 @@ const pointerFor = (id: MechanicId, state: GameState, selected: Unit | null): Me
       const live = selected && units.find(unit => unit.id === selected.id);
       const reachable = live && getValidMoveTargets(state, live).some(c => same(c, site));
       const caption = id === 'catapult'
-        ? `Catapult tower: hold it with a troop and it hurls stones at enemies within ${CATAPULT_RANGE} hexes${state.settings?.weather === 'sandstorm' ? ` (${CATAPULT_RANGE - SANDSTORM_REACH} in a sandstorm)` : ''}`
+        ? `Catapult tower: keep a troop in it and it hurls stones at enemies you can see within ${CATAPULT_RANGE} hexes${state.settings?.weather === 'sandstorm' ? ` (${CATAPULT_RANGE - SANDSTORM_REACH} in a sandstorm)` : ''}`
         : 'Gatehouse: hold it with a troop and only your side can pass the wall';
       return { id, hex: site, caption: reachable ? `${caption} - move here to take it` : caption };
     }

@@ -235,7 +235,7 @@ export const TERRAIN_EFFECTS: Record<TerrainType, TerrainEffect> = {
     elevation: 1,
     sightHeight: 2,
     damageTakenMultiplier: 0.8,
-    description: 'A troop in the tower bombards the weakest enemy within 4 hexes at the end of each of its turns (5 damage), or the enemy castle when no troop is in reach (2). Step onto it to take it.'
+    description: 'A troop in the tower bombards the weakest enemy your side can see within 4 hexes at the end of each of its turns (5 damage), or the enemy castle if it can see that and no troop is in reach (2). Empty, or with nothing in sight, it stays quiet. Step onto it to take it.'
   },
   blacksmith: {
     name: 'Blacksmith',
@@ -2721,19 +2721,28 @@ const minionStats = (state: GameState, side: PlayerType, type: UnitType): TroopS
 
 // The besieging side's units near the enemy base damage it, plundering gold as they do
 // Catapult towers: a troop of the side whose turn it is standing in one hurls a stone at the weakest
-// enemy troop it can see within reach, or at the enemy castle when no troop is in reach
+// enemy troop within reach that the side can actually see - from where its troops, castle, camps and
+// towers stand, in the fog or not - or at the enemy castle, if it can see that. An empty tower, or
+// one with nothing in sight, stays quiet; one that throws gives its crew away.
 const bombard = (state: GameState, side: PlayerType): void => {
   const enemySide = getOpponent(side);
-  for (const tower of state.hexGrid.filter(hex => hex.terrain === 'catapult')) {
+  const towers = state.hexGrid.filter(hex => hex.terrain === 'catapult');
+  if (towers.length === 0) return;
+  const lookouts = lookoutsOf(state, side);
+  const fog = isFogOfWar(state) ? getFogBankKeys(state) : undefined;
+  const inSight = (at: HexCoordinates) => lookouts.some(lookout => canSpot(state, lookout.position, lookout.range, at, fog));
+  for (const tower of towers) {
     const crew = state.players[side].units.find(unit => coordsEqual(unit.position, tower.coordinates));
     if (!crew) continue;
     // (a sandstorm shortens its throw like every other shot - unless the Sand Court crews it)
     const range = CATAPULT_RANGE - weatherReachPenalty(state, crew);
     const target = state.players[enemySide].units
-      .filter(enemy => getHexDistance(enemy.position, tower.coordinates) <= range && isUnitVisibleTo(state, side, enemy))
+      .filter(enemy => getHexDistance(enemy.position, tower.coordinates) <= range &&
+        (inSight(enemy.position) || enemy.isBoss || (!!fog && !!enemy.revealed)))
       .sort((a, b) => a.lifespan - b.lifespan || getHexDistance(a.position, tower.coordinates) - getHexDistance(b.position, tower.coordinates))[0];
     const serial = (state.lastBombard?.serial ?? 0) + 1;
     if (target) {
+      crew.revealed = true;
       const hit = inflictDamage(state, target, CATAPULT_DAMAGE, side, 'catapult', { from: tower.coordinates });
       state.lastBombard = { side, from: tower.coordinates, to: target.position, serial };
       addLog(state, side, `The catapult hurls a stone at ${unitLabel(target).replace(/^Your|^Enemy/, side === 'player' ? 'the enemy' : 'your')}` +
@@ -2741,7 +2750,8 @@ const bombard = (state: GameState, side: PlayerType): void => {
       continue;
     }
     const castle = findBaseHex(state, enemySide);
-    if (!castle || getHexDistance(castle.coordinates, tower.coordinates) > range) continue;
+    if (!castle || getHexDistance(castle.coordinates, tower.coordinates) > range || !inSight(castle.coordinates)) continue;
+    crew.revealed = true;
     const before = state.players[enemySide].baseHealth ?? BASE_MAX_HEALTH;
     const after = Math.max(0, before - CATAPULT_CASTLE_DAMAGE);
     state.players[enemySide].baseHealth = after;

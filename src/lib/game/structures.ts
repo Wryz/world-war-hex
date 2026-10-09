@@ -7,8 +7,9 @@ import type { TerrainType } from '@/types/game';
 //   watch from it even when it stands empty.
 // - Houses are cover: a troop garrisoned inside takes much less damage, can't be flanked and is
 //   hidden from anyone not right next to it - but houses burn, and fire smokes defenders out.
-// - A catapult tower bombards: a troop in it hurls a stone at the weakest enemy within reach at the
-//   end of each of its turns, or at the enemy castle when no troop is in reach.
+// - A catapult tower bombards: a troop in it hurls a stone at the weakest enemy within reach that its
+//   side can see at the end of each of its turns, or at the enemy castle (if seen) when no troop is
+//   in reach. Empty, or with nothing in sight, it stays quiet.
 // - Workshops are prizes, held like camps (step on one to take it) for as long as nobody takes them
 //   back: a blacksmith sharpens every blade, barracks drill the recruits who march out of them, a
 //   tavern pays, and a lumber mill teaches your troops to fell great trees from 2 hexes away.
