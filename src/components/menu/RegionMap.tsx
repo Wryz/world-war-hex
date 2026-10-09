@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { LevelDef } from '@/lib/campaign/levels';
 import { MAP_COLS, MAP_ROWS, MAP_SHEET_URL, SHEET_TILE, RegionMap as RegionMapData, buildRegionMap } from '@/lib/campaign/mapArt';
-import { BossIcon, FilledStarIcon, LockIcon, ShieldIcon, StarIcon } from '../game/icons';
+import { BossIcon, FilledStarIcon, LockIcon, MedalIcon, ShieldIcon, StarIcon } from '../game/icons';
 
 // The map art, loaded once for every region
 let sheet: Promise<HTMLImageElement> | null = null;
@@ -51,10 +51,12 @@ const drawRegion = (canvas: HTMLCanvasElement, image: HTMLImageElement, map: Reg
 const LevelNode: React.FC<{
   level: LevelDef;
   stars: number;
+  // Its challenge has been met
+  medal?: boolean;
   unlocked: boolean;
   isNext: boolean;
   onSelect: () => void;
-}> = ({ level, stars, unlocked, isNext, onSelect }) => {
+}> = ({ level, stars, medal, unlocked, isNext, onSelect }) => {
   const diamond = !unlocked ? '#94a3b8' : level.isBoss ? '#ef4444' : stars > 0 ? '#f59e0b' : level.isElite ? '#8b5cf6' : '#2ecc71';
   return (
     <button
@@ -79,6 +81,7 @@ const LevelNode: React.FC<{
           {!unlocked ? <LockIcon color="#ffffff" /> : level.isBoss ? <BossIcon color="#fff" /> : level.id}
         </span>
         {level.isElite && unlocked && <ShieldIcon className="absolute -right-2 -top-2 text-sm" color="#a78bfa" />}
+        {medal && <MedalIcon className="absolute -left-2 -top-2 text-sm drop-shadow-[0_1px_0_#0f172a]" />}
       </span>
       {unlocked && (
         <span className="mt-0.5 flex gap-px rounded-full bg-slate-900/75 px-1 py-px">
@@ -96,12 +99,14 @@ export const RegionMap: React.FC<{
   regionId: number;
   levels: LevelDef[];
   starsFor: (level: LevelDef) => number;
+  // Whether a level's challenge has been met
+  medalFor?: (level: LevelDef) => boolean;
   unlockedUpTo: number;
   isNext: (level: LevelDef) => boolean;
   locked: boolean;
   lockedLabel?: React.ReactNode;
   onSelect: (level: LevelDef) => void;
-}> = ({ regionId, levels, starsFor, unlockedUpTo, isNext, locked, lockedLabel, onSelect }) => {
+}> = ({ regionId, levels, starsFor, medalFor, unlockedUpTo, isNext, locked, lockedLabel, onSelect }) => {
   const map = useMemo(() => buildRegionMap(regionId), [regionId]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(0);
@@ -153,6 +158,7 @@ export const RegionMap: React.FC<{
             <LevelNode
               level={level}
               stars={starsFor(level)}
+              medal={medalFor?.(level)}
               unlocked={level.id <= unlockedUpTo}
               isNext={isNext(level)}
               onSelect={() => onSelect(level)}

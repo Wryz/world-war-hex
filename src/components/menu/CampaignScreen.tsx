@@ -47,6 +47,7 @@ const RegionBand: React.FC<{ region: Region; onSelect: (level: LevelDef) => void
           regionId={region.id}
           levels={levels}
           starsFor={level => profile.levels[level.id]?.stars ?? 0}
+          medalFor={level => !!profile.levels[level.id]?.challenge}
           unlockedUpTo={unlockedUpTo}
           isNext={level => level.id === unlockedUpTo && !(profile.levels[level.id]?.wins)}
           locked={!regionUnlocked}

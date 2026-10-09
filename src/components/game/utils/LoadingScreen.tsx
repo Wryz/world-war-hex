@@ -70,7 +70,7 @@ const LoadingScreen: React.FC<LoadingScreenProps> = ({ onLoadingComplete }) => {
     >
       <div className={`${PANEL_CLASS} w-full max-w-sm p-6 text-center`}>
         <div className="relative mx-auto mb-3 h-20 w-40">
-          <Image src="/world-war-hex-logo.png" alt="World War Hex" fill sizes="160px" style={{ objectFit: 'contain' }} priority />
+          <Image src="/logo.png" alt="Hex Hordes" fill sizes="160px" style={{ objectFit: 'contain' }} priority />
         </div>
         <div className="font-display text-lg text-slate-200">{isComplete ? 'Ready!' : 'Preparing the battlefield'}</div>
 

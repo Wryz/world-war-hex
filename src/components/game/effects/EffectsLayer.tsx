@@ -14,10 +14,11 @@ const TONE_COLORS: Record<MomentTone, { text: string; glow: string }> = {
 };
 
 // Where coins fly to: the gold counter in the battle HUD, or the coin counter on the results screen
+// (whichever gold counter is showing: the top bar's, or the one beside the hand on a phone)
 const targetPoint = (target: CoinBurst['target']) => {
-  const element = document.getElementById(target === 'gold' ? 'hud-gold' : 'hud-coins');
-  if (!element) return { x: window.innerWidth - 80, y: 30 };
-  const rect = element.getBoundingClientRect();
+  const ids = target === 'gold' ? ['hud-gold', 'hud-gold-phone'] : ['hud-coins'];
+  const rect = ids.map(id => document.getElementById(id)?.getBoundingClientRect()).find(box => box && box.width > 0);
+  if (!rect) return { x: window.innerWidth - 80, y: 30 };
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 };
 

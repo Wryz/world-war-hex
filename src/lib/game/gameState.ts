@@ -49,6 +49,11 @@ import {
   challengePulls, challengeRange, chargeBonus, eyeOfStormBonus, holySmiteBonus, isSmitable, loneBladeBonus,
   piercingShare, rankOf, fieldworksHeight, shoulderBonusPerAlly, steadyAimBonus, strafeDamage, undermineDepth, wardReduction
 } from './signatures';
+import {
+  ASH_FLARE, ASH_SPREAD, BOSS_FALL_SHAKE, CHAMPION_FALL_SHAKE, MAX_PACK, PACK_BONUS, SWARM_SPLASH, activeWeather, canRise,
+  furyMultiplier, getFogBankKeys, hasTrait, isFearless, isInFogBank, isNativeGround, isSurrounded, moraleMultiplier, riseHealth,
+  traitAbilities, traitOf, weatherMovePenalty, weatherReachPenalty
+} from './regionRules';
 
 // Default game settings: a small board and short turns so a battle takes a few minutes
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -357,6 +362,8 @@ export interface GuardSpec {
   type: UnitType;
   stats: TroopStats;
   isBoss?: boolean;
+  // A champion: a strong regular whose fall shakes its army
+  isChampion?: boolean;
 }
 
 export interface BattleSetup {
@@ -472,8 +479,8 @@ export const hexMoveCost = (hex: Hex): number | null => {
 
 // Whether a hex is shut to a side's troops whatever their movement: a gatehouse the enemy holds, and
 // for cavalry on the ground, stakes
-export const isClosedTo = (hex: Hex, unit: Pick<Unit, 'owner' | 'type' | 'abilities'>): boolean =>
-  (hex.terrain === 'gate' && !!hex.owner && hex.owner !== unit.owner) ||
+export const isClosedTo = (hex: Hex, unit: Pick<Unit, 'owner' | 'type' | 'abilities' | 'isBoss'>): boolean =>
+  (hex.terrain === 'gate' && !!hex.owner && hex.owner !== unit.owner && !(hasAbility(unit, 'flying') && hasTrait(unit, 'skyborne'))) ||
   (hex.feature === 'stakes' && !hasAbility(unit, 'flying') && getTroopClass(unit.type) === 'cavalry');
 
 export const isImpassable = (hex: Hex) => hexMoveCost(hex) === null;
@@ -605,7 +612,7 @@ export const createUnit = (type: UnitType, owner: PlayerType, position: HexCoord
   lifespan: stats.maxLifespan,
   maxLifespan: stats.maxLifespan,
   cost: stats.cost,
-  abilities: [...stats.abilities],
+  abilities: [...new Set([...stats.abilities, ...traitAbilities(type)])],
   level: stats.level,
   isBoss: isBoss || undefined,
   // Freshly deployed units can't move until their next turn
@@ -977,6 +984,7 @@ export const placeGuards = (state: GameState, guards: GuardSpec[]): GameState =>
     occupied.add(coordKey(spot.coordinates));
     const unit = createUnit(guard.type, 'ai', spot.coordinates, guard.stats, guard.isBoss);
     unit.hasMoved = false;
+    if (guard.isChampion) unit.isChampion = true;
     newState.players.ai.units.push(unit);
     if (guard.isBoss) addLog(newState, 'ai', `${getTroopName(guard.type)} guards the enemy castle!`);
   }
@@ -1126,13 +1134,18 @@ const enterCost: StepCost = (_from, to) => hexMoveCost(to) ?? Infinity;
 
 // What it costs a particular unit to enter a hex: flyers pay 1 for anything (even water and
 // mountains, which they can cross but not stop on), pathfinders pay 1 for rough ground
-export const unitEnterCost = (unit: { abilities: Ability[] }, hex: Hex): number => {
+export const unitEnterCost = (unit: { abilities: Ability[]; type?: UnitType; isBoss?: boolean }, hex: Hex): number => {
   if (hasAbility(unit, 'flying')) return 1;
   const cost = hexMoveCost(hex);
   if (cost === null) return Infinity;
-  if (TERRAIN_EFFECTS[hex.terrain].isRough && featureMoveCost(hex) === undefined && hasAbility(unit, 'pathfinder')) return 1;
+  if (TERRAIN_EFFECTS[hex.terrain].isRough && featureMoveCost(hex) === undefined &&
+    (hasAbility(unit, 'pathfinder') || (unit.type && isNativeGround({ type: unit.type, isBoss: unit.isBoss }, hex.terrain)))) return 1;
   return cost;
 };
+
+// How far a unit can walk this turn: its movement, less what the weather takes (a blizzard)
+export const getMovementRange = (state: GameState, unit: Unit): number =>
+  Math.max(1, unit.movementRange - weatherMovePenalty(state, unit));
 
 // Cheapest-path search over the board. By default entering a hex costs its terrain's movement cost.
 // `canEnter` decides which hexes may be walked through at all.
@@ -1204,14 +1217,15 @@ const getReachableHexes = (state: GameState, unit: Unit) => {
   const enemies = getVisibleEnemies(state, unit.owner);
   const enemyHexes = new Set(enemies.map(enemy => coordKey(enemy.position)));
   const zone = ignoresZoneOfControl(unit) ? new Set<string>() : zoneOfControl(enemies);
+  const movement = getMovementRange(state, unit);
   return searchPaths(
     state.hexGrid,
     unit.position,
-    unit.movementRange,
+    movement,
     hex => (hasAbility(unit, 'flying') || !isImpassable(hex)) && !isClosedTo(hex, unit) && !enemyHexes.has(coordKey(hex.coordinates)),
     (from, to) => {
       const cost = unitEnterCost(unit, to);
-      return coordsEqual(from.coordinates, unit.position) ? Math.min(cost, unit.movementRange) : cost;
+      return coordsEqual(from.coordinates, unit.position) ? Math.min(cost, movement) : cost;
     },
     hex => !zone.has(coordKey(hex.coordinates))
   );
@@ -1706,15 +1720,19 @@ const terrainUnder = (state: GameState, unit: Unit): TerrainType =>
 export const getElevation = (terrain: TerrainType) => TERRAIN_EFFECTS[terrain].elevation;
 
 // How far a unit can strike from the terrain it stands on: ranged units reach 2 hexes (3 with long
-// range), one more from high ground; everyone else 1
-export const getAttackRange = (unit: { abilities: Ability[] }, terrain: TerrainType = 'plain'): number =>
+// range), one more from high ground, one less in a sandstorm (pass the battle as `weather`); everyone
+// else 1
+export const getAttackRange = (
+  unit: { abilities: Ability[]; type?: UnitType; isBoss?: boolean }, terrain: TerrainType = 'plain', weather?: Pick<GameState, 'settings' | 'turnNumber'>
+): number =>
   hasAbility(unit, 'rangedAttack')
-    ? RANGED_ATTACK_RANGE + (hasAbility(unit, 'longRange') ? 1 : 0) + (getElevation(terrain) >= HIGH_GROUND_ELEVATION ? 1 : 0)
+    ? Math.max(1, RANGED_ATTACK_RANGE + (hasAbility(unit, 'longRange') ? 1 : 0) + (getElevation(terrain) >= HIGH_GROUND_ELEVATION ? 1 : 0) -
+      (weather && unit.type ? weatherReachPenalty(weather, { type: unit.type, isBoss: unit.isBoss }) : 0))
     : 1;
 
 // A unit's reach where it stands right now
 export const getUnitAttackRange = (state: GameState, unit: Unit): number =>
-  getAttackRange(unit, terrainUnder(state, unit));
+  getAttackRange(unit, terrainUnder(state, unit), state);
 
 // Hexes a straight line between two hexes passes through, excluding both ends. The line is nudged
 // slightly to one side; checking both nudges lets a shot squeeze between two hexes it grazes.
@@ -1797,36 +1815,42 @@ const lookoutsOf = (state: GameState, side: PlayerType): { position: HexCoordina
 
 // Whether a lookout can see a troop standing on a hex: within its sight and line of sight, and
 // right next to it if the hex hides troops (forest)
-const canSpot = (state: GameState, from: HexCoordinates, range: number, target: HexCoordinates): boolean => {
+// (or the hex is in a fog bank)
+const canSpot = (state: GameState, from: HexCoordinates, range: number, target: HexCoordinates, fog?: Set<string>): boolean => {
   const distance = getHexDistance(from, target);
   if (distance <= 1) return true;
   if (distance > range) return false;
   const hex = findHexByCoordinates(state.hexGrid, target);
   if (hex && TERRAIN_EFFECTS[hex.terrain].conceals) return false;
+  if (fog && isInFogBank(fog, target)) return false;
   return hasLineOfSight(state.hexGrid, from, target);
 };
 
 // Whether a side can see a unit: always its own, and enemies its lookouts spot (or that gave
 // themselves away this turn)
 // (bosses tower over the battlefield: they are always seen, and so is the ground they mark)
-export const isUnitVisibleTo = (state: GameState, side: PlayerType, unit: Unit): boolean =>
-  unit.owner === side || !isFogOfWar(state) || !!unit.revealed || !!unit.isBoss ||
-  lookoutsOf(state, side).some(lookout => canSpot(state, lookout.position, lookout.range, unit.position));
+export const isUnitVisibleTo = (state: GameState, side: PlayerType, unit: Unit): boolean => {
+  if (unit.owner === side || !isFogOfWar(state) || unit.revealed || unit.isBoss) return true;
+  const fog = getFogBankKeys(state);
+  return lookoutsOf(state, side).some(lookout => canSpot(state, lookout.position, lookout.range, unit.position, fog));
+};
 
 export const getVisibleEnemies = (state: GameState, side: PlayerType): Unit[] => {
   const enemies = state.players[getOpponent(side)].units;
   if (!isFogOfWar(state)) return enemies;
   const lookouts = lookoutsOf(state, side);
+  const fog = getFogBankKeys(state);
   return enemies.filter(unit =>
-    unit.revealed || unit.isBoss || lookouts.some(lookout => canSpot(state, lookout.position, lookout.range, unit.position)));
+    unit.revealed || unit.isBoss || lookouts.some(lookout => canSpot(state, lookout.position, lookout.range, unit.position, fog)));
 };
 
 // The hexes where a side would spot an enemy troop (everything, without fog)
 export const getVisibleHexKeys = (state: GameState, side: PlayerType): Set<string> => {
   if (!isFogOfWar(state)) return new Set(state.hexGrid.map(hex => coordKey(hex.coordinates)));
   const lookouts = lookoutsOf(state, side);
+  const fog = getFogBankKeys(state);
   return new Set(state.hexGrid
-    .filter(hex => lookouts.some(lookout => canSpot(state, lookout.position, lookout.range, hex.coordinates)))
+    .filter(hex => lookouts.some(lookout => canSpot(state, lookout.position, lookout.range, hex.coordinates, fog)))
     .map(hex => coordKey(hex.coordinates)));
 };
 
@@ -1867,11 +1891,13 @@ export const getFlankers = (attackersOnTarget: number): number =>
 const isEnraged = (unit: Unit) => hasAbility(unit, 'berserk') && unit.lifespan * 2 <= unit.maxLifespan;
 
 // Attack power before the matchup: Pikemen (terrainBonus) strike harder from a forest, berserkers
-// when badly hurt
+// when badly hurt, orcs the more they are hurt (Fury); a shaken troop softer
 const getBasePower = (unit: Unit, terrain: TerrainType): number =>
   unit.attackPower *
   (hasAbility(unit, 'terrainBonus') && terrain === 'forest' ? TERRAIN_BONUS_ATTACK_MULTIPLIER : 1) *
-  (isEnraged(unit) ? BERSERK_ATTACK_MULTIPLIER : 1);
+  (isEnraged(unit) ? BERSERK_ATTACK_MULTIPLIER : 1) *
+  furyMultiplier(unit) *
+  moraleMultiplier(unit);
 
 // Damage multiplier from standing higher (or lower) than the target, by how much taller the
 // attacker's hex is (negative when it stands lower), to the nearest whole percent
@@ -2018,6 +2044,12 @@ export const getFormationEffects = (
   const screen = screenReduction(findScreen(target, at, from, guards));
   if (screen > 0) effects.push({ label: 'Screened', share: -screen });
   if (inShieldWall(target, at, guards)) effects.push({ label: 'Shield wall', share: -SHIELD_WALL_REDUCTION });
+  // Pack Hunters: beasts are harder for every other beast beside their prey
+  if (hasTrait(attacker, 'pack')) {
+    const pack = Math.min(MAX_PACK, strikers.filter(friend =>
+      friend.id !== attacker.id && traitOf(friend) === 'pack' && getHexDistance(friend.position, at) === 1).length);
+    if (pack > 0) effects.push({ label: 'Pack', share: PACK_BONUS * pack });
+  }
   return effects;
 };
 
@@ -2296,6 +2328,7 @@ const turnEndHealthChange = (state: GameState, unit: Unit, healers: Unit[]): { s
 export const advanceFires = (state: GameState, roundEnds: boolean, random: (salt: number) => number = salt =>
   seededRandom((state.battleSeed ?? 0) + state.turnNumber * 7919 + (roundEnds ? 104729 : 0) + salt * 31)): void => {
   const hexByKey = new Map(state.hexGrid.map(hex => [coordKey(hex.coordinates), hex]));
+  const ashfall = activeWeather(state) === 'ashfall';
   const burning = state.hexGrid.filter(hex => hex.fire?.stage === 'burning');
   const smouldering = state.hexGrid.filter(hex => hex.fire?.stage === 'smoulder');
   let salt = 0;
@@ -2332,7 +2365,7 @@ export const advanceFires = (state: GameState, roundEnds: boolean, random: (salt
   for (const hex of burning) {
     for (const c of getNeighbors(hex.coordinates)) {
       const next = hexByKey.get(coordKey(c));
-      const chance = next && isFlammable(next) ? SPREAD_CHANCE[next.terrain] ?? 0 : 0;
+      const chance = (next && isFlammable(next) ? SPREAD_CHANCE[next.terrain] ?? 0 : 0) * (ashfall ? ASH_SPREAD : 1);
       if (chance > 0 && random(salt++) < chance) ignite(c);
     }
   }
@@ -2340,7 +2373,7 @@ export const advanceFires = (state: GameState, roundEnds: boolean, random: (salt
   let flared = 0;
   if (roundEnds) {
     for (const lava of state.hexGrid.filter(hex => hex.terrain === 'lava')) {
-      if (random(salt++) >= LAVA_FLARE_CHANCE) continue;
+      if (random(salt++) >= LAVA_FLARE_CHANCE * (ashfall ? ASH_FLARE : 1)) continue;
       const dry = getNeighbors(lava.coordinates).map(c => hexByKey.get(coordKey(c))).filter((hex): hex is Hex => !!hex && isFlammable(hex));
       if (dry.length > 0 && ignite(dry[Math.floor(random(salt++) * dry.length)].coordinates)) flared++;
     }
@@ -2385,9 +2418,11 @@ const finishTurn = (state: GameState): GameState => {
         lifespan = Math.max(0, Math.min(unit.maxLifespan, mended + change.terrain));
       }
       // A side's troops slip back into the fog when its own turn comes round again
+      // ...and a shaken troop steadies a little at the end of each of its side's turns
       const updated = {
         ...unit, lifespan, hasMoved: false, isEngagedInCombat: false, movedHexes: 0, frozen: undefined,
-        revealed: side === activePlayer ? unit.revealed : false
+        revealed: side === activePlayer ? unit.revealed : false,
+        shaken: side === activePlayer && unit.shaken ? unit.shaken - 1 || undefined : unit.shaken
       };
       if (lifespan <= 0) burned.push(updated);
       return updated;
@@ -2403,6 +2438,13 @@ const finishTurn = (state: GameState): GameState => {
       : `${unitLabel(unit)} perished on the ${TERRAIN_EFFECTS[terrainUnder(newState, unit)].name.toLowerCase()}.`);
   }
   scatterMinions(newState);
+  // Morale: the other side's badly hurt troops caught alone among this side's waver
+  const opponent = getOpponent(activePlayer);
+  for (const unit of newState.players[opponent].units) {
+    if (unit.shaken || !isSurrounded(unit, newState.players[activePlayer].units, newState.players[opponent].units)) continue;
+    unit.shaken = 1;
+    addLog(newState, opponent, `${unitLabel(unit)} is surrounded and wavers!`);
+  }
   syncHexUnits(newState);
   const sideTroops = activePlayer === 'player' ? 'Your' : 'Enemy';
   if (healedAtSprings > 0) {
@@ -2729,6 +2771,8 @@ export interface CombatantPreview {
   // Damage this unit takes in the fight
   damageTaken: number;
   destroyed: boolean;
+  // Slain, but it rises again (Undying)
+  rises?: boolean;
   // False for attackers out of the defender's reach (e.g. archers shooting from 2 hexes)
   canBeHitBack: boolean;
   // What helps or hinders this unit in the fight (good and bad as it sees them)
@@ -2769,6 +2813,9 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
       modifiers.push(mod('Forest', 'good', percent(TERRAIN_BONUS_ATTACK_MULTIPLIER), size(TERRAIN_BONUS_ATTACK_MULTIPLIER)));
     }
     if (isEnraged(unit)) modifiers.push(mod('Berserk', 'good', percent(BERSERK_ATTACK_MULTIPLIER), size(BERSERK_ATTACK_MULTIPLIER)));
+    const fury = furyMultiplier(unit);
+    if (fury >= 1.05) modifiers.push(mod('Fury', 'good', percent(fury), size(fury)));
+    if (moraleMultiplier(unit) < 1) modifiers.push(mod('Shaken', 'bad', percent(moraleMultiplier(unit)), size(moraleMultiplier(unit))));
     const height = getHeightMultiplier(getHeightDifference(state, unit.position, target.position));
     if (height !== 1) modifiers.push(mod(height > 1 ? 'High ground' : 'Uphill', height > 1 ? 'good' : 'bad', percent(height), size(height)));
     const counter = getCounterMultiplier(unit.type, target.type);
@@ -2834,18 +2881,23 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     ? distributeDamage(attackers.map(a => a.canBeHitBack ? getStrikePower(state, defenders[0].unit, a.unit) : null))
     : attackers.map(() => 0);
 
+  // An undying troop slain rises again, unless a War Cleric or a firebrand among its foes finishes it
+  const finishesUndead = (foes: Unit[]) => foes.some(foe => rankOf(foe, 'holySmite') > 0 || hasAbility(foe, 'firebrand'));
   const withDamage = (
     entry: { unit: Unit; terrain: TerrainType; power: number; modifiers: CombatEffect[] },
     rawDamage: number,
-    canBeHitBack: boolean
+    canBeHitBack: boolean,
+    foes: Unit[]
   ): CombatantPreview => {
     const damageTaken = applyArmor(entry.unit, rawDamage);
-    return { ...entry, canBeHitBack, damageTaken, destroyed: damageTaken >= entry.unit.lifespan };
+    const slain = damageTaken >= entry.unit.lifespan;
+    const rises = slain && canRise(entry.unit) && !finishesUndead(foes);
+    return { ...entry, canBeHitBack, damageTaken, destroyed: slain && !rises, rises: rises || undefined };
   };
 
   return {
-    attackers: attackers.map((a, index) => withDamage(a, attackerDamage[index], a.canBeHitBack)),
-    defenders: defenders.map((d, index) => withDamage(d, defenderDamage[index], true)),
+    attackers: attackers.map((a, index) => withDamage(a, attackerDamage[index], a.canBeHitBack, defenderUnits)),
+    defenders: defenders.map((d, index) => withDamage(d, defenderDamage[index], true, attackerUnits)),
     attackerPower: attackers.reduce((sum, a) => sum + a.power, 0),
     defenderPower: defenders.reduce((sum, d) => sum + d.power, 0)
   };
@@ -2908,6 +2960,8 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     if (counter < 1) add('Bad matchup', 'bad', `x${counter}`, size(counter));
     if (hasAbility(unit, 'terrainBonus') && terrain === 'forest') add('Forest pikes', 'good', `+${pct(TERRAIN_BONUS_ATTACK_MULTIPLIER)}`, size(TERRAIN_BONUS_ATTACK_MULTIPLIER));
     if (isEnraged(unit)) add('Berserk', 'good', `+${pct(BERSERK_ATTACK_MULTIPLIER)}`, size(BERSERK_ATTACK_MULTIPLIER));
+    if (furyMultiplier(unit) >= 1.05) add('Fury', 'good', `+${pct(furyMultiplier(unit))}`, size(furyMultiplier(unit)));
+    if (moraleMultiplier(unit) < 1) add('Shaken', 'bad', `-${pct(moraleMultiplier(unit))}`, size(moraleMultiplier(unit)));
     if (getPointBlankMultiplier(unit, getHexDistance(unit.position, target.position)) < 1) add('Point blank', 'bad', `-${pct(RANGED_POINT_BLANK_MULTIPLIER)}`, size(RANGED_POINT_BLANK_MULTIPLIER));
     const cover = TERRAIN_EFFECTS[targetTerrain].damageTakenMultiplier;
     if (cover < 1) {
@@ -2924,6 +2978,7 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     add(bonuses.size === 1 ? [...bonuses.keys()][0] : 'Bonuses', 'good', `+${total}%`, total);
   }
   if (hasAbility(target, 'armored')) add('Armored', 'bad', `-${ARMOR_REDUCTION}`, 15);
+  if (canRise(target)) add('Undying', 'bad', undefined, 10);
   for (const protection of getProtections(state, target)) {
     add(protection.label, 'bad', `-${Math.round(protection.reduction * 100)}%`, Math.round(protection.reduction * 100));
   }
@@ -2948,7 +3003,11 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
       if (!unit) continue;
 
       unit.lifespan = Math.max(0, unit.lifespan - entry.damageTaken);
-      if (unit.lifespan <= 0) {
+      if (entry.rises) {
+        // Struck down all the same: the bounty is paid, and paid again when it falls for good
+        bounties[getOpponent(unit.owner)] += getKillBounty(unit);
+        riseAgain(newState, unit);
+      } else if (unit.lifespan <= 0) {
         removeUnit(newState, unit);
         const killer = getOpponent(unit.owner);
         bounties[killer] += getKillBounty(unit);
@@ -2968,6 +3027,16 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
         unit.lifespan += healed;
         addLog(newState, unit.owner, `Bloodlust! ${unitLabel(unit)} recovers ${healed} health.`);
       }
+    }
+    // Swarm: goblins packed beside a goblin that was hit take a share of the blow
+    const fighting = new Set([...preview.attackers, ...preview.defenders].map(entry => entry.unit.id));
+    for (const entry of [...preview.attackers, ...preview.defenders]) {
+      if (entry.damageTaken <= 0 || !hasTrait(entry.unit, 'swarm')) continue;
+      const splash = Math.max(1, Math.round(entry.damageTaken * SWARM_SPLASH));
+      const crowd = newState.players[entry.unit.owner].units.filter(other =>
+        !fighting.has(other.id) && hasTrait(other, 'swarm') && getHexDistance(other.position, entry.unit.position) === 1);
+      for (const goblin of crowd) inflictDamage(newState, goblin, splash, getOpponent(goblin.owner));
+      if (crowd.length > 0) addLog(newState, entry.unit.owner, `Packed together: ${crowd.length === 1 ? 'the goblin beside it takes' : `${crowd.length} goblins beside it take`} ${splash} too.`);
     }
     syncHexUnits(newState);
 
@@ -3023,6 +3092,23 @@ export const resolveAllCombats = (state: GameState): GameState => {
 const removeUnit = (state: GameState, unit: Unit): void => {
   state.players[unit.owner].units = state.players[unit.owner].units.filter(u => u.id !== unit.id);
   if (unit.isBoss) scatterMinions(state);
+  if (unit.isBoss || unit.isChampion) shakeArmy(state, unit.owner, unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE, unit);
+  syncHexUnits(state);
+};
+
+// Morale: a side's troops lose heart when its boss or champion falls, for `turns` of its turns
+const shakeArmy = (state: GameState, side: PlayerType, turns: number, fallen: Unit): void => {
+  const shaken = state.players[side].units.filter(unit => !isFearless(unit));
+  for (const unit of shaken) unit.shaken = Math.max(unit.shaken ?? 0, turns);
+  if (shaken.length > 0) addLog(state, side, `With ${getTroopName(fallen.type)} fallen, ${side === 'player' ? 'your' : 'the enemy'} army is shaken!`);
+};
+
+// Undying: a slain troop rises again (once) with part of its health
+const riseAgain = (state: GameState, unit: Unit): void => {
+  unit.lifespan = riseHealth(unit);
+  unit.risen = true;
+  unit.revealed = true;
+  addLog(state, unit.owner, `${unitLabel(unit)} rises again!`);
   syncHexUnits(state);
 };
 
@@ -3061,6 +3147,10 @@ export const inflictDamage = (state: GameState, unit: Unit, amount: number, by: 
   live.revealed = true;
   if (live.lifespan > 0) {
     syncHexUnits(state);
+    return { damage, destroyed: false };
+  }
+  if (canRise(live)) {
+    riseAgain(state, live);
     return { damage, destroyed: false };
   }
   removeUnit(state, live);

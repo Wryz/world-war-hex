@@ -5,7 +5,8 @@ import {
   CAMP_INCOME, FLANK_BONUS, HEIGHT_DAMAGE_PER_UNIT, MAX_HEIGHT_BONUS, FREE_UPKEEP_UNITS, MAX_FLANKERS, SIGHT_RANGE,
   SPEED_POINTS_PER_ROUND, TERRAIN_EFFECTS, TIME_SCORE_WEIGHTS, TURN_INCOME, UPKEEP_PER_UNIT
 } from '@/lib/game/gameState';
-import { PLAYER_CARD_IDS, TROOPS, TROOP_CLASSES, TroopClass, strongAgainst } from '@/lib/game/troops';
+import { FACTIONS, Faction, PLAYER_CARD_IDS, TROOPS, TROOP_CLASSES, TroopClass, strongAgainst } from '@/lib/game/troops';
+import { FACTION_TRAITS, SHAKEN_ATTACK, WEATHER, WeatherId } from '@/lib/game/regionRules';
 import { SIGNATURE_UNLOCK_LEVEL, getSignature } from '@/lib/game/signatures';
 import { FOG_FROM_LEVEL } from '@/lib/campaign/levels';
 import { MUSIC_CHANNELS, setChannelVolume, setMusicVolume, useMusicMix, useMusicVolume } from '@/lib/audio/music';
@@ -15,7 +16,7 @@ import { setGameSpeed, useGameSpeed } from '../game/effects/effects';
 import { TERRAIN_ORDER, TERRAIN_SHORT_EFFECTS } from '../game/hud/terrainInfo';
 import { CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
 import {
-  AttackIcon, FormationIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
+  AttackIcon, FormationIcon, ShakenIcon, TraitIcon, WeatherIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
   SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon, FellIcon, AbilityIcon
 } from '../game/icons';
 import type { Difficulty } from '../game/storage/GameStorage';
@@ -291,6 +292,34 @@ const GuideTab: React.FC = () => (
         <li><b>Shield wall:</b> front-line troops side by side take {Math.round(SHIELD_WALL_REDUCTION * 100)}% less damage.</li>
         <li><b>Hold the crossing:</b> a troop on a bridge, log bridge or gateway can&apos;t be flanked.</li>
       </ul>
+    </GuideSection>
+    <GuideSection title="Enemies, weather and morale" icon={<ShakenIcon />}>
+      <p>Every enemy faction fights its own way:</p>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {Object.entries(FACTION_TRAITS).map(([faction, trait]) => trait && (
+          <li key={faction} className="rounded-lg bg-slate-800/80 px-3 py-2">
+            <b><TraitIcon trait={trait.id} /> {FACTIONS[faction as Faction].name} - {trait.name}:</b>
+            <span className="block text-slate-400">{trait.description}</span>
+          </li>
+        ))}
+      </ul>
+      <p>Some regions have weather. Storms blow two rounds in every four, from round 3; the top bar shows when one is coming.</p>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        {(Object.keys(WEATHER) as WeatherId[]).map(id => (
+          <li key={id} className="rounded-lg bg-slate-800/80 px-3 py-2">
+            <b><WeatherIcon weather={id} /> {WEATHER[id].name}:</b> <span className="text-slate-400">{WEATHER[id].description}</span>
+          </li>
+        ))}
+      </ul>
+      <p>
+        <b>Morale:</b> when a boss or champion falls, its army is shaken; and a badly hurt troop surrounded by two enemies with no friend
+        beside it wavers. Shaken troops hit {Math.round((1 - SHAKEN_ATTACK) * 100)}% softer until their side&apos;s next turn is over.
+        Bosses and the undead are fearless.
+      </p>
+      <p>
+        <b>Challenges:</b> every level past the first two has an optional harder way to win (shown before the battle), worth bonus
+        coins the first time. Met challenges earn a medal on the campaign map.
+      </p>
     </GuideSection>
     <GuideSection title="Signature abilities" icon={<SignatureIcon />}>
       <p>

@@ -6,9 +6,12 @@ import { useRouter } from 'next/navigation';
 import { GameBoard } from './GameBoard';
 import { CombatResolver } from './combat/CombatResolver';
 import { ResultsScreen } from './shared/ResultsScreen';
-import { TUTORIAL_BATTLES, TutorialOverlay, useTutorial } from './shared/TutorialGuide';
+import { TUTORIAL_BATTLES, TutorialOverlay, TutorialVisuals, useTutorial } from './shared/TutorialGuide';
 import { RuleTips } from './shared/RuleTips';
 import { BossBar } from './hud/BossBar';
+import { WeatherVeil } from './WeatherEffects';
+import { challengeMet } from '@/lib/campaign/challenges';
+import { useMechanicGuide } from './shared/MechanicGuide';
 import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
 import { LoadingManagerProvider } from './utils/LoadingManager';
@@ -142,10 +145,18 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const tutorial = useTutorial({
     active: showTutorial, intro: battle.mode === 'campaign' && battle.levelId === 1, ready: isReady, choosingOrder: !!actionChoice, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
   });
+  // Later battles: the hand points out each new mechanic the first time it turns up
+  const mechanic = useMechanicGuide({
+    active: isReady && !showTutorial && !showBossIntro && !finished && battle.mode === 'campaign', gameState, selectedUnit
+  });
   // (the board only redraws its marks when they actually change)
-  const tutorialVisualsKey = JSON.stringify(tutorial.visuals);
+  // (a mechanic being pointed out gets the same gold ring, kept in view)
+  const boardGuide: TutorialVisuals | null = tutorial.visuals ?? (mechanic
+    ? { showcase: null, rings: [{ at: mechanic.hex, tone: 'tap' }], path: null, target: null, keepInView: mechanic.hex }
+    : null);
+  const tutorialVisualsKey = JSON.stringify(boardGuide);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const tutorialVisuals = useMemo(() => tutorial.visuals, [tutorialVisualsKey]);
+  const tutorialVisuals = useMemo(() => boardGuide, [tutorialVisualsKey]);
 
   // Stable handlers so the memoised 3D board doesn't re-render on every timer tick
   const onBoardHexClick = useStableCallback(handleHexClick);
@@ -199,7 +210,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       reason: gameState.winReason,
       enemyCastleDamage: 1 - castleHealthRatio(gameState, 'ai'),
       playerStats,
-      durationSeconds: elapsedRef.current
+      durationSeconds: elapsedRef.current,
+      challengeMet: challengeMet(gameState)
     });
     trackEvent('battle_ended', {
       mode: battle.mode,
@@ -212,7 +224,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       duration_seconds: Math.round(elapsedRef.current),
       kills: playerStats.kills,
       lost: playerStats.lost,
-      coins_earned: record.reward.coins
+      coins_earned: record.reward.coins,
+      challenge_completed: record.challengeCompleted
     });
     // Now there's progress worth keeping, ask the browser not to clear it
     void requestPersistentStorage();
@@ -289,6 +302,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   return (
     <div className="relative w-full h-full">
+      <WeatherVeil gameState={gameState} />
       <GameBoard
         gameState={viewState}
         unitIds={unitIds}
@@ -318,7 +332,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
             onQuit={handleQuit}
           />
           <BossBar gameState={gameState} />
-          <div className="fixed left-3 top-16 z-20 pointer-events-none">
+          {/* (on a phone it sits just above the hand, clear of the boss bar and tips at the top) */}
+          <div className="fixed bottom-[10.75rem] left-2 z-20 pointer-events-none sm:bottom-auto sm:left-3 sm:top-16">
             <SelectionCard gameState={viewState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
           </div>
           {/* Capped above the battle card and the hand so panels never run under them */}
@@ -380,9 +395,10 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       {showTutorial && isReady && currentPhase !== 'gameOver' && (
         <TutorialOverlay gameState={gameState} pointer={tutorial.pointer} introRunning={tutorial.introRunning} introCaption={tutorial.introCaption} onSkipIntro={tutorial.skipIntro} />
       )}
+      {mechanic && <TutorialOverlay gameState={gameState} pointer={mechanic} introRunning={false} onSkipIntro={() => undefined} />}
 
       {showBossIntro && isReady && level && (
-        <BossIntro boss={level.region.boss} level={level.enemyTier} onDone={() => setShowBossIntro(false)} />
+        <BossIntro boss={level.region.boss} level={level.enemyTier} stats={level.guards.find(guard => guard.isBoss)?.stats} onDone={() => setShowBossIntro(false)} />
       )}
 
       <EffectsLayer />
@@ -404,6 +420,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           onMap={leaveResults(exitPath)}
           onArmy={leaveResults('/army')}
           points={{ you: getStarScore(gameState, 'player'), enemy: getStarScore(gameState, 'ai') }}
+          challengeMet={challengeMet(gameState)}
         />
       )}
 

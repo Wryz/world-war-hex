@@ -540,7 +540,7 @@ const isRanged = (unit: Unit) => getAttackRange(unit) > 1;
 // Whether `attacker` standing at `from` could strike a target standing at `at`
 const canStrikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, at: HexCoordinates): boolean => {
   const distance = getHexDistance(from, at);
-  if (distance > getAttackRange(attacker, terrainAt(planner, from))) return false;
+  if (distance > getAttackRange(attacker, terrainAt(planner, from), planner.state)) return false;
   if (distance <= 1) return true;
   return attacker.abilities.includes('magic') || hasLineOfSight(planner.state.hexGrid, from, at);
 };
@@ -918,7 +918,7 @@ const chooseGoal = (planner: Planner, unit: Unit): UnitGoal => {
 const canStrikeCastleFrom = (planner: Planner, unit: Unit, position: HexCoordinates, terrain: TerrainType): boolean => {
   const castle = planner.enemyBase.coordinates;
   const distance = getHexDistance(position, castle);
-  if (distance > getAttackRange(unit, terrain)) return false;
+  if (distance > getAttackRange(unit, terrain, planner.state)) return false;
   return distance <= 1 || unit.abilities.includes('magic') || hasLineOfSight(planner.state.hexGrid, position, castle);
 };
 

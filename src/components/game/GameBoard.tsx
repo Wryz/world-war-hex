@@ -11,7 +11,9 @@ import { BoardDecorations } from './BoardDecorations';
 import { BattlefieldObjects } from './BattlefieldObjects';
 import { BossPowerBursts, BossThreats } from './BossPowers';
 import { FormationLinks } from './FormationLinks';
+import { WeatherEffects } from './WeatherEffects';
 import { PIN_BONUS, SCREEN_REDUCTION, SHIELD_WALL_REDUCTION, hasScreenBeside, inShieldWall, isPinned } from '@/lib/game/formations';
+import { PACK_BONUS, SHAKEN_ATTACK, canRise, furyMultiplier, hasTrait, isShaken } from '@/lib/game/regionRules';
 import { MovePath } from './MovePath';
 import {
   DEFAULT_SETTINGS,
@@ -808,6 +810,15 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   if (isPinned(unit.position, foes)) {
     buffs.push({ id: 'pinned', icon: 'pinned', label: 'Pinned', value: `Archers and riders deal +${pct(PIN_BONUS)}`, good: false });
   }
+  // Morale and its faction's trait
+  if (isShaken(unit)) {
+    buffs.push({ id: 'shaken', icon: 'shaken', label: 'Shaken', value: `-${pct(1 - SHAKEN_ATTACK)} attack until its next turn is over`, good: false });
+  }
+  if (canRise(unit)) buffs.push({ id: 'undying', icon: 'undying', label: 'Undying', value: 'Rises again once (not against Clerics or fire)', good: true, quiet: true });
+  if (furyMultiplier(unit) >= 1.05) buffs.push({ id: 'fury', icon: 'fury', label: 'Fury', value: `+${pct(furyMultiplier(unit) - 1)} attack`, good: true });
+  if (hasTrait(unit, 'pack') && friends.some(friend => friend.id !== unit.id && hasTrait(friend, 'pack') && getHexDistance(friend.position, unit.position) <= 2)) {
+    buffs.push({ id: 'pack', icon: 'pack', label: 'Pack Hunters', value: `+${pct(PACK_BONUS)} attack for each other beast beside its prey`, good: true, quiet: true });
+  }
   // Its own fury
   if (unit.abilities.includes('berserk') && unit.lifespan * 2 <= unit.maxLifespan) {
     buffs.push({ id: 'berserk', icon: 'attack', label: 'Berserk', value: `+${pct(BERSERK_ATTACK_MULTIPLIER - 1)} attack`, good: true });
@@ -1557,6 +1568,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {/* Bosses' powers: the ground they have marked to strike, and each power as it lands */}
       <BossThreats units={players.ai.units} hexByKey={hexByKey} />
       <BossPowerBursts last={gameState.lastBossPower} hexByKey={hexByKey} />
+      <WeatherEffects gameState={gameState} />
 
       {/* Castles */}
       {playerCastlePosition && (

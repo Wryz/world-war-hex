@@ -64,6 +64,41 @@ must be credited as composed by Jonathan Shaw (www.jshaw.co.uk). Sources on Open
 /colossal-boss-battle-theme. Each was trimmed of silence, levelled to about -16.5 LUFS like the
 other tracks and re-encoded at 128 kbps.
 
+### Boss music for each region
+
+| Faction    | Boss            | Boss file           | Track                                                   | Composer                          | Licence   |
+| ---------- | --------------- | ------------------- | ------------------------------------------------------- | --------------------------------- | --------- |
+| `bandits`  | Bandit King     | `boss-bandits.mp3`  | A Slave To No One (RPG Orchestral Essentials)           | Jonathan Shaw (InspectorJ)        | CC-BY 3.0 |
+| `goblins`  | Goblin Warchief | `boss-goblins.mp3`  | Drums in the Deepwood                                   | Elyvilon                          | CC-BY 4.0 |
+| `beasts`   | Alpha Direwolf  | `boss-beasts.mp3`   | Determined Pursuit (epic orchestra loop)                | Emma_MA                           | CC0       |
+| `swamp`    | Bog Hydra       | `boss-swamp.mp3`    | Showdown of Misdeeds (RPG Orchestral Essentials)        | Jonathan Shaw (InspectorJ)        | CC-BY 3.0 |
+| `desert`   | Pharaoh         | `boss-desert.mp3`   | Jrpg Desert Boss Theme                                  | ProjectHelmet                     | CC-BY 4.0 |
+| `frost`    | Frost Giant     | `boss-frost.mp3`    | Ragnarök (Epic Fight Music)                             | William Hector                    | CC-BY 4.0 |
+| `undead`   | Lich King       | `boss-undead.mp3`   | The Desecrated Temple                                   | Insydnis                          | CC-BY 3.0 |
+| `orcs`     | Orc Warlord     | `boss-orcs.mp3`     | Wasteland Showdown                                      | Matthew Pablo                     | CC-BY 3.0 |
+| `infernal` | Demon Lord      | `boss-infernal.mp3` | Theme of Com-Mecha ("Welcome to Com-Mecha" variation)   | Matthew Pablo                     | CC-BY 3.0 |
+| `dragons`  | Elder Dragon    | `boss-dragons.mp3`  | The March Upon the Red Mountain                         | Hitctrl                           | CC-BY 3.0 |
+
+Sources on OpenGameArt: /content/a-slave-to-no-one-rpg-orchestral-essentials-boss-music,
+/dark-forest-tribal-troll-folk-shamanic-music-drums-in-the-deepwood (track 9 of the album),
+/determined-pursuit-epic-orchestra-loop, /showdown-of-misdeeds-rpg-orchestral-essentials-boss-music,
+/jrpg-desert-boss-theme, /ragnar%C3%B6k-epic-fight-music, /the-descecrated-temple,
+/wasteland-showdown-battle-music, /theme-of-com-mecha and /fantasy-the-march-upon-the-red-mountain.
+
+Attribution required by the pages: "A Slave To No One" and "Showdown of Misdeeds" must be credited
+as composed by Jonathan Shaw (www.jshaw.co.uk); ProjectHelmet asks to be credited ("Free to use but
+you must credit me"); Matthew Pablo's pages point to www.matthewpablo.com/services, which asks games
+to credit "Music by Matthew Pablo, www.matthewpablo.com". The other CC-BY tracks state no special
+form, so credit title, composer, licence and source. Credit them in the game with the battle
+tracks (Stats & Save > Credits).
+
+Processing: each was levelled to about -16.5 LUFS and re-encoded at 128 kbps like the other
+tracks. Where a track was long or had a quiet intro it was cut to one loop of its intense part, at
+a point where the music repeats so the loop is seamless: "A Slave To No One" 0:26–3:09,
+"Showdown of Misdeeds" 0:12–1:56, "Jrpg Desert Boss Theme" 0:45–3:49, "Welcome to Com-Mecha"
+0:47–3:05, "Wasteland Showdown" 1:21–2:56 (its climax) and "Drums in the Deepwood" 0:01–2:21.
+The others are used whole, trimmed of silence.
+
 ## Stingers (play once, over the music)
 
 | File              | Plays when                     |

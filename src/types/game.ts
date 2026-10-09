@@ -1,5 +1,6 @@
 import type { TroopId } from '@/lib/game/troops';
 import type { BossPowerId } from '@/lib/game/bosses';
+import type { WeatherId } from '@/lib/game/regionRules';
 
 export type TerrainType =
   | 'plain'
@@ -99,6 +100,12 @@ export interface Unit {
   summonedBy?: string;
   // Frozen in place (the Frost Giant's Ice Stomp): it can't move this turn
   frozen?: boolean;
+  // A champion guarding the enemy castle (its fall shakes its army)
+  isChampion?: boolean;
+  // Undying: it has already risen once
+  risen?: boolean;
+  // Shaken (morale): its side's turns left until it steadies; it hits softer meanwhile
+  shaken?: number;
 }
 
 // Every troop - the player's cards and the campaign's monsters - is identified by its troop id
@@ -202,7 +209,7 @@ export interface GameState {
   // Before the first turn: the sites the player may build their castle on, and the enemy's starting
   // guards, posted once the castles stand
   castleChoices?: HexCoordinates[];
-  pendingGuards?: { type: UnitType; stats: TroopStats; isBoss?: boolean }[];
+  pendingGuards?: { type: UnitType; stats: TroopStats; isBoss?: boolean; isChampion?: boolean }[];
   // Seeds the battle's chance events (fires flaring up around lava)
   battleSeed?: number;
   // The catapult's most recent stone, for the board to show it flying (serial counts stones)
@@ -280,4 +287,6 @@ export interface GameSettings {
   // Map theme to use instead of a random one, and a fixed seed for the map
   themeName?: string;
   seed?: number;
+  // The region's weather (regionRules.ts)
+  weather?: WeatherId;
 }

@@ -35,7 +35,7 @@ work, remove the background afterwards.
 ## Style setup (paste once at the start of each chat)
 
 ```
-I'm making card art for "World War Hex", a cheerful fantasy strategy card game with chunky, toy-like
+I'm making card art for "Hex Hordes", a cheerful fantasy strategy card game with chunky, toy-like
 3D pieces on a bright hex board. Its UI is deep navy with bright, rounded, playful type. For each
 card I'll attach a 3D render of the troop's game model. Repaint it as a 2D illustration that is
 clearly the same character: same silhouette, proportions, pose, colours, gear and colour placement.

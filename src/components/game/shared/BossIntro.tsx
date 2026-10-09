@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { TROOPS, TroopId } from '@/lib/game/troops';
+import type { TroopStats } from '@/types/game';
 import { playStinger } from '@/lib/audio/music';
 import { TroopCard } from '../cards/TroopCard';
 import { getBossPower } from '@/lib/game/bosses';
@@ -8,13 +9,15 @@ import { BossIcon, BossPowerIcon } from '../icons';
 interface BossIntroProps {
   boss: TroopId;
   level: number;
+  // The boss's own stats in this battle (its card's would mislead: a boss is scaled apart from its army)
+  stats?: TroopStats;
   onDone: () => void;
 }
 
 const INTRO_DURATION = 3200;
 
 // Dramatic card announcing the boss before a boss battle
-export const BossIntro: React.FC<BossIntroProps> = ({ boss, level, onDone }) => {
+export const BossIntro: React.FC<BossIntroProps> = ({ boss, level, stats, onDone }) => {
   const troop = TROOPS[boss];
   const power = getBossPower(boss);
   // The parent re-renders every second (turn timer), so hold on to the latest callback
@@ -38,7 +41,7 @@ export const BossIntro: React.FC<BossIntroProps> = ({ boss, level, onDone }) => 
         <div className="font-display flex items-center gap-2 text-xl tracking-widest text-red-400">
           <BossIcon /> BOSS BATTLE <BossIcon />
         </div>
-        <TroopCard type={boss} level={level} size="lg" className="mt-4 rotate-[-3deg]" />
+        <TroopCard type={boss} level={level} stats={stats} size="lg" className="mt-4 rotate-[-3deg]" />
         <h2
           className="font-display mt-4 text-3xl text-amber-300 sm:text-4xl"
           style={{ WebkitTextStroke: '2px #0f172a', paintOrder: 'stroke fill', textShadow: '0 4px 0 #0f172a' }}

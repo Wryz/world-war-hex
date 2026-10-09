@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { GameState, PlayerType } from '@/types/game';
 import { BOSS_POWERS, isBossEnraged } from '@/lib/game/bosses';
+import { WEATHER, activeWeather } from '@/lib/game/regionRules';
 import { castleHealthRatio, findBaseHex, getMaxRounds } from '@/lib/game/gameState';
 import { playStinger, setMusicIntensity } from '@/lib/audio/music';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
@@ -85,6 +86,23 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
     if (boss && bossBefore && isBossEnraged(boss) && !isBossEnraged(bossBefore)) {
       shakeScreen(0.5);
       emitMoment({ title: 'Enraged!', tone: 'red' });
+    }
+
+    // A storm blowing up, or blowing over
+    const weather = gameState.settings?.weather;
+    if (weather && WEATHER[weather].storm && activeWeather(gameState) !== activeWeather(previous)) {
+      emitMoment(activeWeather(gameState)
+        ? { title: `${WEATHER[weather].name}!`, subtitle: WEATHER[weather].description, tone: 'purple', explain: true }
+        : { title: 'The storm passes', tone: 'green' });
+    }
+    // Undead rising again, and troops losing their nerve
+    const rose = gameState.players.ai.units.filter(unit => unit.risen && !previous.players.ai.units.find(other => other.id === unit.id)?.risen).length;
+    if (rose > 0) emitMoment({ title: 'They Rise Again!', subtitle: 'Finish the undead with War Clerics or fire', tone: 'purple' });
+    const wavering = (side: PlayerType) => gameState.players[side].units.filter(unit =>
+      unit.shaken && !previous.players[side].units.find(other => other.id === unit.id)?.shaken && !unit.isBoss).length;
+    if (!(after.player.bossesSlain > before.player.bossesSlain)) {
+      if (wavering('ai') > 0) emitMoment({ title: 'Wavering!', subtitle: 'Surrounded and alone, it hits softer', tone: 'gold' });
+      else if (wavering('player') > 0) emitMoment({ title: 'Your troop wavers!', subtitle: 'Surrounded and alone: send help', tone: 'red' });
     }
 
     // Ambushes in the fog of war

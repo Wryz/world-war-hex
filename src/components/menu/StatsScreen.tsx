@@ -51,7 +51,7 @@ export const StatsScreen: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `world-war-hex-save-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `hex-hordes-save-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
     trackEvent('save_exported');
@@ -61,7 +61,7 @@ export const StatsScreen: React.FC = () => {
   const handleImport = async (file: File) => {
     const parsed = parseSave(await file.text());
     if (!parsed) {
-      setMessage({ text: 'That file isn\'t a World War Hex save.', isError: true });
+      setMessage({ text: 'That file isn\'t a Hex Hordes save.', isError: true });
       return;
     }
     if (!window.confirm('Load this save? Your current progress on this computer will be replaced.')) return;
@@ -185,6 +185,14 @@ export const StatsScreen: React.FC = () => {
             &ldquo;Demonium&rdquo; by Alexandr Zhelanov (soundcloud.com/alexandr-zhelanov); &ldquo;Dark Descent&rdquo; and &ldquo;Colossal Boss
             Battle Theme&rdquo; by Matthew Pablo (www.matthewpablo.com)
           </li>
+          <li>
+            <b>Region boss music</b> (OpenGameArt): &ldquo;A Slave To No One&rdquo; and &ldquo;Showdown of Misdeeds&rdquo; composed by Jonathan Shaw
+            (www.jshaw.co.uk, CC BY 3.0); &ldquo;Drums in the Deepwood&rdquo; by Elyvilon (CC BY 4.0); &ldquo;Determined Pursuit&rdquo; by Emma_MA (CC0);
+            &ldquo;Jrpg Desert Boss Theme&rdquo; by ProjectHelmet (CC BY 4.0); &ldquo;Ragnar&ouml;k&rdquo; by William Hector (CC BY 4.0); &ldquo;The
+            Desecrated Temple&rdquo; by Insydnis (CC BY 3.0); &ldquo;Wasteland Showdown&rdquo; and &ldquo;Theme of Com-Mecha&rdquo;, music by Matthew
+            Pablo (www.matthewpablo.com, CC BY 3.0); &ldquo;The March Upon the Red Mountain&rdquo; by Hitctrl (CC BY 3.0)
+          </li>
+          <li>Music tracks were trimmed to loop and levelled in volume; sources at opengameart.org</li>
           <li><b>Characters:</b> KayKit Adventurers and Skeletons by Kay Lousberg (CC0); horse from the three.js examples (MIT)</li>
           <li><b>Battlefield:</b> KayKit Medieval Hexagon Pack, Halloween Bits and Dungeon Remastered by Kay Lousberg (CC0)</li>
           <li><b>Campaign map:</b> Map Pack by Kenney (kenney.nl, CC0)</li>

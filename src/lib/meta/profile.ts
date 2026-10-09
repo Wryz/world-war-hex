@@ -15,6 +15,7 @@ import {
   upgradeCost
 } from './economy';
 import { LEVEL_COUNT } from '../campaign/levels';
+import { challengeBonus } from '../campaign/challenges';
 import {
   CARD_SKINS, CASTLE_STYLES, CardSkinId, CastleStyleId, DEFAULT_CARD_SKIN, DEFAULT_CASTLE_STYLE, isCardSkinId, isCastleStyleId
 } from './cosmetics';
@@ -32,6 +33,8 @@ export interface LevelRecord {
   losses: number;
   // Fewest rounds the level was won in
   bestRounds?: number;
+  // Its optional challenge has been met (challenges.ts)
+  challenge?: boolean;
 }
 
 export interface BestiaryEntry {
@@ -148,7 +151,8 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
         stars: Math.min(3, toCount(record.stars)),
         wins: toCount(record.wins),
         losses: toCount(record.losses),
-        bestRounds: record.bestRounds === undefined ? undefined : toCount(record.bestRounds)
+        bestRounds: record.bestRounds === undefined ? undefined : toCount(record.bestRounds),
+        challenge: record.challenge === true || undefined
       };
     }
   }
@@ -412,6 +416,8 @@ export interface BattleOutcome {
   enemyCastleDamage: number;
   playerStats: SideStats;
   durationSeconds: number;
+  // The level's optional challenge was met (a campaign win)
+  challengeMet?: boolean;
 }
 
 export interface BattleRecordResult {
@@ -422,6 +428,8 @@ export interface BattleRecordResult {
   // Cards that just became available in the shop
   newCards: TroopId[];
   isNewBest: boolean;
+  // The level's challenge was met for the first time (its bonus is in the reward)
+  challengeCompleted: boolean;
 }
 
 export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
@@ -436,6 +444,14 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
       ? levelWinReward(outcome.levelId!, outcome.stars, previousStars)
       : levelLossReward(outcome.levelId!, outcome.enemyCastleDamage);
 
+  // The challenge's bonus, the first time it is met
+  const challengeCompleted = outcome.mode === 'campaign' && !!outcome.levelId && outcome.won && !!outcome.challengeMet && !previous?.challenge;
+  if (challengeCompleted) {
+    const bonus = challengeBonus(outcome.levelId!);
+    reward.coins += bonus;
+    reward.breakdown.push({ label: 'Challenge complete', coins: bonus });
+  }
+
   const levels = { ...profile.levels };
   let isNewBest = false;
   if (outcome.mode === 'campaign' && outcome.levelId) {
@@ -445,6 +461,7 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
       record.stars = Math.max(record.stars, outcome.stars);
       isNewBest = record.bestRounds === undefined || outcome.rounds < record.bestRounds;
       record.bestRounds = Math.min(record.bestRounds ?? Infinity, outcome.rounds);
+      if (challengeCompleted) record.challenge = true;
     } else {
       record.losses++;
     }
@@ -503,7 +520,7 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
   });
 
   setProfile(next);
-  return { reward, previousStars, discovered, newCards, isNewBest };
+  return { reward, previousStars, discovered, newCards, isNewBest, challengeCompleted };
 };
 
 // Coins from watching the optional ad after a battle
@@ -514,7 +531,9 @@ export const grantBonusCoins = (coins: number) => {
 
 // --- Export / import -----------------------------------------------------------------------
 
-const SAVE_FORMAT = 'world-war-hex-save';
+const SAVE_FORMAT = 'hex-hordes-save';
+// Saves exported before the game was renamed
+const OLD_SAVE_FORMATS = ['world-war-hex-save'];
 
 // Everything needed to restore progress on another computer: the profile and any battle in progress
 export const exportSave = (battle: unknown): string =>
@@ -523,7 +542,7 @@ export const exportSave = (battle: unknown): string =>
 export const parseSave = (text: string): { profile: Profile; battle: unknown } | null => {
   try {
     const data: unknown = JSON.parse(text);
-    if (!isRecord(data) || data.format !== SAVE_FORMAT) return null;
+    if (!isRecord(data) || (data.format !== SAVE_FORMAT && !OLD_SAVE_FORMATS.includes(String(data.format)))) return null;
     const profile = sanitizeProfile(data.profile);
     return profile ? { profile, battle: data.battle ?? null } : null;
   } catch {

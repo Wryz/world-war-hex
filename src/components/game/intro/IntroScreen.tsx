@@ -129,7 +129,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
           {/* Wordmark */}
           <div className="flex items-center gap-4">
             <Image
-              src="/world-war-hex-logo.png"
+              src="/logo.png"
               alt=""
               width={112}
               height={112}
@@ -137,12 +137,12 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
               priority
             />
             <h1 className="font-display leading-[0.85]">
-              <span className="block text-2xl text-slate-800 sm:text-4xl">World War</span>
+              <span className="block text-3xl text-slate-800 sm:text-5xl">Hex</span>
               <span
-                className="block text-6xl text-amber-400 sm:text-9xl"
+                className="block text-5xl text-amber-400 sm:text-8xl"
                 style={{ WebkitTextStroke: '3px #0f172a', paintOrder: 'stroke fill', textShadow: '0 6px 0 #0f172a' }}
               >
-                HEX
+                HORDES
               </span>
             </h1>
           </div>
