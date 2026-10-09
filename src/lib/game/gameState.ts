@@ -40,6 +40,7 @@ import {
 import { MAX_HEIGHT_OFFSET, getHexHeightOf, getTerrainHeight, shiftHeightOffset } from './hexHeight';
 import { cardStats, getClassCounter, getTroop, getTroopClass, scaleTroop } from './troops';
 import { aimStrike, getBossPower, isBossEnraged, powerCooldown } from './bosses';
+import { TUTORIAL_CAMPS, TUTORIAL_CASTLES, TUTORIAL_LEVEL_ID, TUTORIAL_TERRAIN } from './tutorialField';
 import {
   PIN_BONUS, SHIELD_WALL_REDUCTION, findScreen, inShieldWall, isPinned, screenReduction, strikesPinned
 } from './formations';
@@ -430,6 +431,7 @@ export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS, s
 // the player picks their castle's site, waiting in setup with the sites to choose from
 export const createBattle = (settings: GameSettings, setup?: BattleSetup): GameState => {
   const state = initializeGameState(settings, setup);
+  if (setup?.levelId === TUTORIAL_LEVEL_ID) return placeGuards(layTutorialField(state), setup.guards ?? []);
   if (setup?.chooseCastle) {
     const castleChoices = getCastleChoices(state);
     if (castleChoices.length > 1) return { ...state, castleChoices, pendingGuards: setup.guards ?? [] };
@@ -868,6 +870,28 @@ export const placeBases = (state: GameState, coordinates: HexCoordinates): GameS
   addLog(startedState, 'neutral', 'The battle begins! Play your cards and march on the enemy castle.');
 
   return startedState;
+};
+
+// The first battle's hand-laid field (tutorialField.ts): its ground, castles and camps
+const layTutorialField = (state: GameState): GameState => {
+  const newState = cloneState(state);
+  newState.hexGrid = newState.hexGrid.map(hex => ({
+    ...hex,
+    terrain: TUTORIAL_TERRAIN[coordKey(hex.coordinates)] ?? 'plain',
+    feature: undefined, fire: undefined, heightOffset: undefined, isCamp: false, isResourceHex: false, owner: undefined
+  }));
+  const castleHealth = getSettings(state).castleHealth ?? BASE_MAX_HEALTH;
+  for (const owner of ['player', 'ai'] as const) {
+    const at = TUTORIAL_CASTLES[owner];
+    updateHex(newState, at, { isBase: true, owner, baseHealth: castleHealth });
+    newState.players[owner] = { ...newState.players[owner], baseLocation: at, baseHealth: castleHealth, maxBaseHealth: castleHealth };
+  }
+  for (const camp of TUTORIAL_CAMPS) updateHex(newState, camp, { isCamp: true });
+  const started: GameState = {
+    ...newState, currentPhase: 'planning', activePlayer: 'player', turnNumber: 1, planningTimeRemaining: getSettings(state).planningPhaseTime
+  };
+  addLog(started, 'neutral', 'The battle begins! Play your cards and march on the enemy castle.');
+  return started;
 };
 
 // Pick the player's castle spot automatically: the valid edge hex nearest the bottom middle of the map,

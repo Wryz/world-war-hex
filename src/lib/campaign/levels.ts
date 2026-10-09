@@ -246,8 +246,9 @@ export const getLevel = (levelId: number): LevelDef => {
     (LEVEL_TUNING[id - 1] ?? 1) * 100
   ) / 100;
   const enemyTier = Math.max(1, Math.round((enemyScale - 1) / 0.1) + 1);
-  const gridSize = region.id < 2 ? 4 : 5;
-  const maxRounds = gridSize === 4 ? 14 : 16;
+  // The first battle is fought on a small field of its own (tutorialField.ts), castles four hexes apart
+  const gridSize = isTutorial ? 3 : region.id < 2 ? 4 : 5;
+  const maxRounds = gridSize === 3 ? 12 : gridSize === 4 ? 14 : 16;
 
   const guards: GuardSpec[] = [];
   if (isBoss) {
@@ -266,8 +267,8 @@ export const getLevel = (levelId: number): LevelDef => {
     gridSize,
     planningPhaseTime: 30,
     aiDifficulty: isTutorial || id <= 6 ? 'easy' : id <= 35 ? 'medium' : 'hard',
-    resourceHexCount: gridSize === 4 ? 3 : 4,
-    castleHealth: gridSize === 4 ? 26 : 32,
+    resourceHexCount: gridSize === 3 ? 0 : gridSize === 4 ? 3 : 4,
+    castleHealth: gridSize === 3 ? 20 : gridSize === 4 ? 26 : 32,
     startingGold: 30,
     aiIncomeBonus: isTutorial ? -2 : Math.floor((id - 1) / 25),
     maxRounds,

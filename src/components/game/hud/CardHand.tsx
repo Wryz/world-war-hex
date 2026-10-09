@@ -135,9 +135,10 @@ export const CardHand: React.FC<CardHandProps> = ({
             data-tutorial="end-turn"
             aria-label="Confirm your orders and end the turn"
             title="Confirm your orders: your troops move and fight, then the enemy takes its turn"
-            className="font-display rounded-xl bg-amber-500 px-2 py-2.5 text-sm leading-tight text-slate-900 shadow-[0_5px_0_#b45309] transition-transform hover:-translate-y-0.5 hover:bg-amber-400 active:translate-y-1 active:shadow-[0_1px_0_#b45309] sm:px-5 sm:py-3 sm:text-lg"
+            className="font-display rounded-xl bg-amber-500 px-1.5 py-2 text-xs leading-tight text-slate-900 shadow-[0_5px_0_#b45309] transition-transform hover:-translate-y-0.5 hover:bg-amber-400 active:translate-y-1 active:shadow-[0_1px_0_#b45309] sm:px-5 sm:py-3 sm:text-lg"
           >
-            <span className="flex items-center gap-1 sm:gap-1.5"><CheckIcon /> Confirm</span>
+            {/* (icon over the word on phones, so the button fits beside a full hand) */}
+            <span className="flex flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5"><CheckIcon className="text-base sm:text-lg" /> Confirm</span>
           </button>
         </div>
       </div>

@@ -375,7 +375,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       {/* First-time tips for the newer rules (not while the first battle's tutorial is running) */}
       {!showTutorial && isReady && currentPhase !== 'gameOver' && <RuleTips gameState={gameState} />}
       {showTutorial && isReady && currentPhase !== 'gameOver' && (
-        <TutorialOverlay gameState={gameState} pointer={tutorial.pointer} introRunning={tutorial.introRunning} onSkipIntro={tutorial.skipIntro} />
+        <TutorialOverlay gameState={gameState} pointer={tutorial.pointer} introRunning={tutorial.introRunning} introCaption={tutorial.introCaption} onSkipIntro={tutorial.skipIntro} />
       )}
 
       {showBossIntro && isReady && level && (
