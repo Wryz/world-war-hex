@@ -1,6 +1,6 @@
 # Painted troop card art
 
-All 63 troop portraits were generated with the built-in image generation tool from
+All 64 troop portraits were generated with the built-in image generation tool from
 the prompts in `PROMPTS.md`. `prompts.json` contains the shared style and each troop
 prompt. Each generation used the preserved 3D model render from `../card-renders`
 and the painted Swordsmen as the style reference. Swordsmen, Giant Spider, and Elder
@@ -15,3 +15,5 @@ These preview backgrounds are not part of the transparent card assets.
 
 `scripts/render-card-art.mjs` preserves paintings found here and copies them into
 `public/cards` instead of replacing them with newly rendered 3D portraits.
+
+Engineer was added using its model render and the existing painted Swordsmen style reference. `engineer-preview.jpg` shows it against navy.

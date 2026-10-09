@@ -127,6 +127,11 @@ potion flask low at the side. Serious, focused face. Match the attached render. 
 and transparent background as the approved cards.
 ```
 
+### `engineer` - Engineers
+```
+Card: Engineers (Kingdom, rare infantry). A bald, stout chibi woodsman with heavy grey eyebrows, a thick grey beard and a focused determined expression. Burnt-orange work tunic with white fur trim, brown leather work apron/straps, belt with silver buckle and studs, brown boots. Holds a small single-bladed steel axe low in the right hand; royal-blue badge shield on the left arm, largely hidden by the pose as in the render. No helmet. Match the attached model's silhouette, proportions, pose, color placement and gear. Same painted style, framing and transparent background as the approved cards.
+```
+
 ### `shieldbearer` - Shieldbearers
 ```
 Card: Shieldbearers (Kingdom, rare infantry). A chibi soldier in heavy steel plate and a

@@ -26,6 +26,10 @@
       "prompt": "Card: Mages (Kingdom, rare caster). A chibi battle mage in a huge wide-brimmed, bright royal-blue\npointed wizard hat with a slightly bent tip. Long periwinkle-purple coat with a high collar and silver\nbuttons, a brown belt with small potion vials, and brown boots. One hand holds a glowing lime-green\npotion flask low at the side. Serious, focused face. Match the attached render. Same style, framing\nand transparent background as the approved cards.\n"
     },
     {
+      "id": "engineer",
+      "prompt": "Card: Engineers (Kingdom, rare infantry). A bald, stout chibi woodsman with heavy grey eyebrows, a thick grey beard and a focused determined expression. Burnt-orange work tunic with white fur trim, brown leather work apron/straps, belt with silver buckle and studs, brown boots. Holds a small single-bladed steel axe low in the right hand; royal-blue badge shield on the left arm, largely hidden by the pose as in the render. No helmet. Match the attached model's silhouette, proportions, pose, color placement and gear. Same painted style, framing and transparent background as the approved cards."
+    },
+    {
       "id": "shieldbearer",
       "prompt": "Card: Shieldbearers (Kingdom, rare infantry). A chibi soldier in heavy steel plate and a\nraised-visor great-helm with a spiky crest. A tall rectangular royal-blue tower shield with a round\nboss is planted in front, covering most of the body. A short steel sword is in the other hand.\nImmovable, braced stance. Match the attached render. Same style, framing and transparent background\nas the approved cards.\n"
     },
