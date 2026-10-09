@@ -176,7 +176,7 @@ const nextStep = (
     if (buy && validMoves.some(c => c.q === buy.at.q && c.r === buy.at.r)) return { hex: buy.at, caption: buy.placeCaption };
     // (the planned spot has been taken: the next best, towards the fight, leaving the spots the
     // plan's moves and other cards will use)
-    const spoken = new Set([...moves.map(step => key(step.to)), ...buys.filter(step => step.unitType !== selectedUnitType).map(step => key(step.at))]);
+    const spoken = new Set([...moves.map(step => key(step.to)), ...buys.filter(step => step !== buy).map(step => key(step.at))]);
     const spot = deploySpot(state, selectedUnitType, spoken);
     if (spot && validMoves.some(c => c.q === spot.q && c.r === spot.r)) return { hex: spot, caption: deployCaption(state, spot) };
     const enemy = findBaseHex(state, 'ai')?.coordinates;

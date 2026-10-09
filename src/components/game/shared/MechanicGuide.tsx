@@ -89,8 +89,10 @@ export const useMechanicGuide = ({ active, gameState, selectedUnit }: { active: 
   const pointer = useMemo(() => {
     if (!planning) return null;
     const seen = readSeen();
-    // The one already being shown keeps the hand until it is done
+    // The one already being shown keeps the hand until it is done; once its turn is over it counts
+    // as seen (the effect below records that just after)
     const current = shownRef.current;
+    if (current && current.turn !== gameState.turnNumber) seen.add(current.id);
     const ids = current && current.turn === gameState.turnNumber ? [current.id] : ORDER.filter(id => !seen.has(id));
     for (const id of ids) {
       const next = pointerFor(id, gameState, selectedUnit);
