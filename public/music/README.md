@@ -38,6 +38,25 @@ These loop seamlessly, crossfade into each other and follow the music volume and
 Battle intensity (calm planning / normal / climax) only adds and removes layers in the
 synthesised battle music; a `battle.mp3` override just gets slightly quieter or louder.
 
+## Music for each region
+
+A battle in a region plays `battle-<faction>.mp3` when the manifest lists one (a boss battle,
+`boss-<faction>.mp3`), and `battle.mp3` / `boss.mp3` otherwise. The faction is the region's enemy;
+the late-campaign rematch regions reuse their faction's music.
+
+| Faction    | Regions                                   | Battle file             |
+| ---------- | ----------------------------------------- | ----------------------- |
+| `bandits`  | Greenvale Meadows                         | `battle-bandits.mp3`    |
+| `goblins`  | Goblin Woods                              | `battle-goblins.mp3`    |
+| `beasts`   | Howling Hills                             | `battle-beasts.mp3`     |
+| `swamp`    | Mirefen Marsh                             | `battle-swamp.mp3`      |
+| `desert`   | Sunscorch Desert                          | `battle-desert.mp3`     |
+| `frost`    | Frostpeak Pass, Rimeholt                  | `battle-frost.mp3`      |
+| `undead`   | Gravemoor, Hallowmere                     | `battle-undead.mp3`     |
+| `orcs`     | Ironfang Badlands, The King's Road        | `battle-orcs.mp3`       |
+| `infernal` | Emberforge Wastes, The Underkeep          | `battle-infernal.mp3`   |
+| `dragons`  | Dragonspire Peaks, The Last Bastion       | `battle-dragons.mp3`    |
+
 ## Stingers (play once, over the music)
 
 | File              | Plays when                     |
