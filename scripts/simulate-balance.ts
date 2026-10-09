@@ -117,7 +117,7 @@ for (const levelId of levels) {
   let rounds = 0;
   let recruits = 0;
   let peak = 0;
-  const reasons = { destroyed: 0, timeout: 0 };
+  const reasons = { destroyed: 0, timeout: 0, resigned: 0 };
   // Battles in which either castle was attacked at all
   let castleHits = 0;
   let challenges = 0;

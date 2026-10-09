@@ -90,6 +90,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     handleUnitTypeSelect,
     handleCancelSelection,
     handleUndo,
+    handleResign,
     canUndo,
     notice,
     actionChoice,
@@ -330,6 +331,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
             isMuted={isMuted}
             onToggleMute={() => setMuted(!isMuted)}
             onQuit={handleQuit}
+            onResign={isPlayerPlanning && !showTutorial ? handleResign : undefined}
           />
           <BossBar gameState={gameState} />
           {/* (on a phone it sits just above the hand, clear of the boss bar and tips at the top) */}

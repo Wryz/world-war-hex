@@ -411,7 +411,7 @@ export interface BattleOutcome {
   won: boolean;
   stars: number;
   rounds: number;
-  reason?: 'destroyed' | 'timeout';
+  reason?: 'destroyed' | 'timeout' | 'resigned';
   // Share of the enemy castle's health destroyed (0..1)
   enemyCastleDamage: number;
   playerStats: SideStats;
@@ -438,7 +438,10 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
   const previous = outcome.levelId ? profile.levels[outcome.levelId] : undefined;
   const previousStars = previous?.stars ?? 0;
 
-  const reward = outcome.mode === 'quick'
+  // (withdrawing from a battle earns nothing)
+  const reward = outcome.reason === 'resigned'
+    ? { coins: 0, breakdown: [] }
+    : outcome.mode === 'quick'
     ? quickBattleReward(outcome.won, clearedBefore)
     : outcome.won
       ? levelWinReward(outcome.levelId!, outcome.stars, previousStars)

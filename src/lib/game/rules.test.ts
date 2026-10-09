@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import type { Ability, GameState, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
 import {
   DEFAULT_SETTINGS, addPendingMove, cancelPendingMove, createBattle, executeMoves, findBaseHex, getCombatPreview, getHeightDifference, getHeightMultiplier, getStarScore, getValidMoveTargets,
-  getTimeScore, resolveAllCombats
+  getTimeScore, resign, resolveAllCombats
 } from './gameState';
 import { getHexDistance } from './hexUtils';
 import { LEVEL_COUNT, getLevel, starThresholds, starsForWin } from '../campaign/levels';
@@ -252,4 +252,15 @@ test('a troop can be sent onto a hex another of yours is leaving, but two troops
   // Calling off the leader's move calls off the follower's too
   const cancelled = cancelPendingMove(both, leader.id);
   assert.equal(cancelled.pendingMoves.length, 0);
+});
+
+test('resigning on your turn loses the battle; it does nothing on the enemy turn', () => {
+  const { state } = makeBattle('player');
+  const planning = { ...state, currentPhase: 'planning' as const, activePlayer: 'player' as const };
+  const lost = resign(planning);
+  assert.equal(lost.currentPhase, 'gameOver');
+  assert.equal(lost.winner, 'ai');
+  assert.equal(lost.winReason, 'resigned');
+  const theirs = { ...planning, activePlayer: 'ai' as const };
+  assert.equal(resign(theirs), theirs);
 });

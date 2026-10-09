@@ -154,7 +154,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   const title = won ? 'Victory!' : 'Defeat';
   const subtitle = won
     ? reason === 'timeout' ? 'Time ran out - you win on points.' : 'The enemy castle has fallen!'
-    : reason === 'timeout' ? 'Time ran out - the enemy wins on points.' : 'Your castle has fallen.';
+    : reason === 'timeout' ? 'Time ran out - the enemy wins on points.' : reason === 'resigned' ? 'You withdrew from the battle.' : 'Your castle has fallen.';
 
   return (
     <div className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-950/65 px-3 py-6 backdrop-blur-[2px] sm:items-center">
@@ -258,7 +258,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           </div>
         </div>
 
-        {rewardedAd.ready && !bonusClaimed && (
+        {rewardedAd.ready && !bonusClaimed && record.reward.coins > 0 && (
           <button
             onClick={rewardedAd.show}
             className="mt-2 flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 font-bold shadow-[0_4px_0_#047857] transition-transform hover:-translate-y-0.5 hover:bg-emerald-500 active:translate-y-1"

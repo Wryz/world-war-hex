@@ -1483,6 +1483,12 @@ export const cancelPendingMove = (state: GameState, unitId: string): GameState =
 const endGame = (state: GameState, winner: PlayerType, reason: WinReason): GameState =>
   ({ ...state, winner, winReason: reason, currentPhase: 'gameOver', combats: [], siege: undefined });
 
+// The player gives up the battle (on their own turn): it is lost
+export const resign = (state: GameState): GameState =>
+  state.currentPhase === 'planning' && state.activePlayer === 'player'
+    ? { ...endGame(state, 'ai', 'resigned'), pendingMoves: [], pendingPurchases: [] }
+    : state;
+
 // A troop chops down the great tree next to it: the tree falls away from it onto the next hex,
 // crushing whatever stands there (friend or foe), and its trunk lies there as a barrier - or, across
 // water, as a bridge. On mountains it just splinters. Works on a cloned state.
