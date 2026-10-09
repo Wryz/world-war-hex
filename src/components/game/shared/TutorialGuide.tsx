@@ -14,8 +14,8 @@ import { PointingHandIcon, SkipIcon } from '../icons';
 // same spot with a gold ring. It follows the battle as it unfolds, so whatever the player does, the
 // hand always shows a sensible next step.
 
-// The campaign battles that are tutorials (only until the player has won a battle)
-export const TUTORIAL_BATTLES = 2;
+// The campaign battle that is the tutorial (every time it's played)
+export const TUTORIAL_BATTLE = 1;
 
 export interface TutorialVisuals {
   // A spot the camera is flying to show (null: the usual view)
@@ -57,9 +57,6 @@ const INTRO_CAPTIONS: Record<Exclude<IntroStage, 'done'>, string> = {
 
 interface TutorialArgs {
   active: boolean;
-  // Only point at the best castle site (the tutorial battles once the player has won one: the rest
-  // of the hand's guidance is for players who haven't)
-  siteOnly?: boolean;
   // Open with the flight from castle to castle (the first battle)
   intro: boolean;
   // A hex tapped that a troop could move onto or work on: the choice is showing
@@ -72,9 +69,7 @@ interface TutorialArgs {
   validMoves: HexCoordinates[];
 }
 
-export const useTutorial = ({ active: shown, siteOnly = false, intro, ready, gameState, selectedUnit, selectedUnitType, validMoves, choosingOrder = false }: TutorialArgs) => {
-  // (the castle site is pointed out either way; everything else only for the full tutorial)
-  const active = shown && !siteOnly;
+export const useTutorial = ({ active, intro, ready, gameState, selectedUnit, selectedUnitType, validMoves, choosingOrder = false }: TutorialArgs) => {
   // (a battle resumed part-way through skips the opening flight)
   const [stage, setStage] = useState<IntroStage>(() => (!intro || gameState.turnNumber > 1 ? 'done' : 'home'));
   const started = active && ready && gameState.currentPhase === 'planning';
@@ -108,7 +103,7 @@ export const useTutorial = ({ active: shown, siteOnly = false, intro, ready, gam
       : nextStep(gameState, planRef.current.steps, selectedUnit, selectedUnitType, validMoves);
 
   // Before the castles stand: point at the best site to build yours
-  const site = shown && ready && gameState.currentPhase === 'setup' ? bestCastleSite(gameState) : null;
+  const site = active && ready && gameState.currentPhase === 'setup' ? bestCastleSite(gameState) : null;
   if (site) {
     const visuals: TutorialVisuals = { showcase: null, rings: [{ at: site, tone: 'tap' }], path: null, target: null, keepInView: site };
     return { visuals, introRunning: false, introCaption: null, pointer: { hex: site, caption: 'Build your castle here: near camps and high ground' } as Pointer, skipIntro: () => {} };

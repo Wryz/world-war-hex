@@ -29,7 +29,7 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 - **Battle callouts.** When a fight breaks out, its special effects pop up above it - Sneak attack!, Flanked +25%, High ground, Counter x1.5, Cover, Armored, Berserk, Ambush! - green when they help you and red when they help the enemy, and the battle log lists them too.
 - **Big moments.** First blood, double and triple kills, rampages, camp captures, crushing blows, last stands, the final round and boss kills get callouts, screen shake, slow motion, confetti and coins flying into your treasury. Castles shudder when hit and crumble when they fall, and fallen troops play out their deaths.
 - **Music.** Recorded medieval menu, map, battle and boss themes with victory and defeat jingles (CC0 tracks by RandomMind and Juhani Junkala), a battle theme and a boss theme of its own for each region (from OpenGameArt, credited in the game), plus synthesised jingles for stars, unlocks and bosses. Drop your own MP3s into `public/music/` to replace any of them (see its README).
-- **Tutorial.** The first two battles are guided by a pointing hand that plays the game's own AI plan for your side, with a few words on why, until the player wins a battle. After that the hand comes back once for each new thing a battle brings - the fog of war, a boss's marked strike, a great tree to fell, a catapult tower, a gatehouse.
+- **Tutorial.** The first battle is guided by a pointing hand that plays the game's own AI plan for your side, with a few words on why (every time it's played). From the second battle on, the hand comes back once for each new thing a battle brings - the fog of war, a boss's marked strike, a great tree to fell, a catapult tower, a gatehouse.
 
 ## How to Play
 
