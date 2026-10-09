@@ -21,7 +21,7 @@ export interface Challenge {
 
 // The bonus, as a share of the level's base reward
 export const CHALLENGE_BONUS = 0.6;
-// Levels without a challenge (the tutorial battles)
+// Levels without a challenge (the first two, gentle battles)
 const FIRST_CHALLENGE_LEVEL = 3;
 // Win within this share of the level's rounds
 const SWIFT_SHARE = 0.6;

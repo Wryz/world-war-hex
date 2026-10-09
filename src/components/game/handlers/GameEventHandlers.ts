@@ -16,6 +16,7 @@ import {
   coordsEqual,
   executeMoves,
   endTurn,
+  resign,
   getDeploymentHexes,
   getHand,
   getRosterStats,
@@ -510,6 +511,12 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     handleHexClick(unitHex);
   };
 
+  // Give up the battle (on your own turn): it counts as lost
+  const handleResign = () => {
+    clearSelection();
+    commitState(resign(stateRef.current));
+  };
+
   return {
     // State
     gameState,
@@ -531,6 +538,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     saveGame,
     handleCancelSelection: clearSelection,
     handleUndo,
+    handleResign,
     canUndo,
     notice,
     actionChoice,

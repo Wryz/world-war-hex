@@ -5,7 +5,7 @@ import { CATAPULT_RANGE } from '@/lib/game/structures';
 import { SANDSTORM_REACH } from '@/lib/game/regionRules';
 import { getHexDistance } from '@/lib/game/hexUtils';
 
-// After the tutorial battles, the tutorial's hand comes back once for each new thing a battle
+// After the tutorial battle, the tutorial's hand comes back once for each new thing a battle
 // brings, the first time it turns up: the fog of war, a boss's marked strike, a great tree a troop
 // could fell, a catapult tower and a gatehouse. It points at it with a few words (and for a tree,
 // walks through felling it), until the player does it or ends the turn; then it never shows again.

@@ -220,7 +220,7 @@ const announce = (
     playStinger(won ? 'victory' : 'defeat');
     emitMoment(won
       ? { title: 'Victory!', subtitle: gameState.winReason === 'timeout' ? 'You win on points' : 'The enemy castle falls!', tone: 'gold', big: true }
-      : { title: 'Defeat', subtitle: gameState.winReason === 'timeout' ? 'Time ran out' : 'Your castle has fallen', tone: 'red', big: true });
+      : { title: 'Defeat', subtitle: gameState.winReason === 'timeout' ? 'Time ran out' : gameState.winReason === 'resigned' ? 'You withdrew' : 'Your castle has fallen', tone: 'red', big: true });
   }
 };
 

@@ -174,7 +174,7 @@ export interface SideStats {
   played: Partial<Record<UnitType, number>>;
 }
 
-export type WinReason = 'destroyed' | 'timeout';
+export type WinReason = 'destroyed' | 'timeout' | 'resigned';
 
 export interface GameState {
   hexGrid: Hex[];

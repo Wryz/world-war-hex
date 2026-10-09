@@ -47,8 +47,14 @@ export const LevelPopup: React.FC<{ level: LevelDef; onFight: () => void; onClos
 
   return (
     <div ref={ref} className={`${CARD_CLASS} animate-fadeIn p-3 text-left`} role="dialog" aria-label={`Level ${level.id}: ${level.name}`}>
-      <div className="text-[0.625rem] font-bold uppercase tracking-widest text-slate-400">
-        Level {level.id} · {level.settings.maxRounds} rounds
+      <div className="flex items-start justify-between gap-2">
+        <div className="text-[0.625rem] font-bold uppercase tracking-widest text-slate-400">
+          Level {level.id} · {level.settings.maxRounds} rounds
+        </div>
+        {/* What winning pays (up to) */}
+        <span className="flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-widest text-slate-400" title={record?.stars ? 'Replay reward, up to' : 'Reward, up to'}>
+          Win <span className="font-display flex items-center gap-0.5 text-base normal-case tracking-normal text-yellow-300"><CoinIcon />{reward}</span>
+        </span>
       </div>
       <div className="font-display flex items-center gap-1.5 text-xl leading-tight text-slate-50">
         {level.isBoss && <BossIcon />}{level.isElite && <ShieldIcon color="#a78bfa" />}{level.name}
@@ -88,7 +94,6 @@ export const LevelPopup: React.FC<{ level: LevelDef; onFight: () => void; onClos
 
       <button onClick={onFight} className={`${PRIMARY_BUTTON} mt-3 flex w-full items-center justify-center gap-2 py-2 text-lg`} autoFocus>
         <AttackIcon color="currentColor" /> Fight!
-        <span className="ml-1 flex items-center gap-0.5 text-sm" title={record?.stars ? 'Replay reward up to' : 'Reward up to'}><CoinIcon />{reward}</span>
       </button>
     </div>
   );

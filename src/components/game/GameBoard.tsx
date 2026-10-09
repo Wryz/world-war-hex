@@ -10,7 +10,6 @@ import { Camp } from './Camp';
 import { BoardDecorations } from './BoardDecorations';
 import { BattlefieldObjects } from './BattlefieldObjects';
 import { BossPowerBursts, BossThreats } from './BossPowers';
-import { FormationLinks } from './FormationLinks';
 import { useHealthTimeline } from './effects/healthTimeline';
 import { WeatherEffects } from './WeatherEffects';
 import { PIN_BONUS, SCREEN_REDUCTION, SHIELD_WALL_REDUCTION, hasScreenBeside, inShieldWall, isPinned } from '@/lib/game/formations';
@@ -104,9 +103,10 @@ const CAMERA_MAX_ELEVATION = THREE.MathUtils.degToRad(85);
 const Y_AXIS = new THREE.Vector3(0, 1, 0);
 // Furthest the view can be panned from the centre of the board (fraction of the framed radius)
 const CAMERA_MAX_PAN = 0.73;
-// Looking down on a turn's battles: the tilt, how much room is left around them, the closest and
+// Looking down on a turn's battles (tilted a little off straight down, so the lie of the land shows):
+// the tilt, how much room is left around them, the closest and
 // furthest zoom, and how long the view holds after they end before settling back on a side
-const BATTLE_VIEW_ELEVATION = THREE.MathUtils.degToRad(82);
+const BATTLE_VIEW_ELEVATION = THREE.MathUtils.degToRad(72);
 const BATTLE_VIEW_MARGIN = 1.35;
 const BATTLE_VIEW_MIN_ZOOM = 0.5;
 const BATTLE_VIEW_MAX_ZOOM = 0.95;
@@ -120,6 +120,9 @@ const ACTION_REACH = 3;
 const ACTION_LOOK_AHEAD = 4;
 const ACTION_MIN_ZOOM = 0.55;
 const ACTION_SIDE_MARGIN = 0.1;
+// How near the camera's targets it has to be for a flight to count as over (world units, zoom,
+// radians): until then the player can't move it
+const ARRIVED = { distance: 0.15, zoom: 0.01, angle: 0.03 };
 // How long the camera looks down on a boss's marked ground or power
 const BOSS_FOCUS_HOLD_MS = 3200;
 
@@ -273,6 +276,9 @@ const CameraRig: React.FC<{
   const zoomRef = useRef(CAMERA_DEFAULT_ZOOM);
   // Where the player (or a turn change) wants the camera to go
   const desiredLookAtRef = useRef<THREE.Vector3 | null>(null);
+  // Set while the camera flies somewhere on its own (until it gets there): the player can't drag or
+  // zoom it meanwhile
+  const autoMovingRef = useRef(false);
   const desiredZoomRef = useRef(CAMERA_DEFAULT_ZOOM);
   // Extra rotation around the centre of the map and camera tilt chosen by the player
   const azimuthOffsetRef = useRef(0);
@@ -390,6 +396,7 @@ const CameraRig: React.FC<{
   const showSide = useCallback((side: number) => {
     const turn = side * Math.PI / 2;
     const action = frameAction(targetAzimuth + turn);
+    autoMovingRef.current = true;
     desiredLookAtRef.current = action?.lookAt ?? defaultLookAt.clone().applyAxisAngle(Y_AXIS, turn);
     desiredZoomRef.current = action?.zoom ?? CAMERA_DEFAULT_ZOOM;
     azimuthOffsetRef.current = turn;
@@ -477,6 +484,7 @@ const CameraRig: React.FC<{
   useEffect(() => {
     if (showcase) {
       const [x, , z] = axialToWorld(showcase.at);
+      autoMovingRef.current = true;
       desiredLookAtRef.current = new THREE.Vector3(x, 0, z);
       desiredZoomRef.current = showcase.zoom;
       desiredElevationRef.current = THREE.MathUtils.degToRad(62);
@@ -541,6 +549,7 @@ const CameraRig: React.FC<{
       const horizontal = Math.hypot(centre.x, centre.z);
       if (horizontal > maxPan) centre.multiplyScalar(maxPan / horizontal);
       battleViewRef.current = true;
+      autoMovingRef.current = true;
       desiredLookAtRef.current = centre;
       desiredZoomRef.current = THREE.MathUtils.clamp(spread * BATTLE_VIEW_MARGIN / viewRadiusRef.current, BATTLE_VIEW_MIN_ZOOM, BATTLE_VIEW_MAX_ZOOM);
       desiredElevationRef.current = BATTLE_VIEW_ELEVATION;
@@ -584,6 +593,7 @@ const CameraRig: React.FC<{
     const horizontal = Math.hypot(centre.x, centre.z);
     if (horizontal > maxPan) centre.multiplyScalar(maxPan / horizontal);
     battleViewRef.current = true;
+    autoMovingRef.current = true;
     desiredLookAtRef.current = centre;
     desiredZoomRef.current = THREE.MathUtils.clamp(spread * BATTLE_VIEW_MARGIN / viewRadiusRef.current, BATTLE_VIEW_MIN_ZOOM, BATTLE_VIEW_MAX_ZOOM);
     desiredElevationRef.current = BATTLE_VIEW_ELEVATION;
@@ -604,6 +614,7 @@ const CameraRig: React.FC<{
     const base = findBaseHex(gameState, loser);
     if (!base) return;
     const [x, , z] = axialToWorld(base.coordinates);
+    autoMovingRef.current = true;
     desiredLookAtRef.current = new THREE.Vector3(x, 0, z);
     desiredZoomRef.current = CAMERA_MIN_ZOOM;
     desiredElevationRef.current = THREE.MathUtils.degToRad(52);
@@ -617,35 +628,111 @@ const CameraRig: React.FC<{
     desiredLookAtRef.current?.applyAxisAngle(Y_AXIS, radians);
   }, []);
 
-  // Click and drag: left/right orbits around the centre of the map, up/down tilts the view
+  // The camera is the game's to move while it flies somewhere, looks down on the turn's battles or
+  // a boss's power, or shows the tutorial's flight
+  const cameraLocked = useCallback(
+    () => autoMovingRef.current || battleViewRef.current || wasShowcasingRef.current,
+    []
+  );
+
+  // Dragging: one finger (or the left mouse button) pans across the board, which moves with it; the
+  // right mouse button (or Shift and the left) orbits around the board, left and right, and tilts the
+  // view, up and down; two fingers pinch to zoom and twist to turn the board
   useEffect(() => {
     const element = gl.domElement;
-    let drag: { startX: number; startY: number; lastX: number; lastY: number; active: boolean; onLabel: boolean } | null = null;
+    // (the board takes every touch gesture itself, rather than the page)
+    element.style.touchAction = 'none';
+    type Mode = 'pan' | 'orbit';
+    let drag: { startX: number; startY: number; lastX: number; lastY: number; active: boolean; onLabel: boolean; mode: Mode } | null = null;
+    // Fingers on the board, and the pinch two of them are making
+    const touches = new Map<number, { x: number; y: number }>();
+    let pinch: { distance: number; angle: number } | null = null;
     // A drag that began on a troop's label doesn't then pick the troop when it ends
     let swallowClickUntil = 0;
+    const pinchOf = () => {
+      const [a, b] = [...touches.values()];
+      return { distance: Math.hypot(b.x - a.x, b.y - a.y), angle: Math.atan2(b.y - a.y, b.x - a.x) };
+    };
 
-    // (a drag can begin on the board or on a troop's label over it)
+    // Move the view across the board by a drag of (dx, dy) pixels, so the ground follows the pointer
+    const panBy = (dx: number, dy: number) => {
+      const perspective = camera as THREE.PerspectiveCamera;
+      const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(perspective.fov / 2));
+      const { width, height } = sizeRef.current;
+      const distance = getViewDistance(viewRadiusRef.current, tanHalfFov, width / Math.max(height, 1), zoomRef.current);
+      const perPixel = 2 * distance * tanHalfFov / Math.max(height, 1);
+      const azimuth = azimuthRef.current ?? 0;
+      const right = new THREE.Vector3(Math.cos(azimuth), 0, -Math.sin(azimuth));
+      const towards = new THREE.Vector3(Math.sin(azimuth), 0, Math.cos(azimuth));
+      const shift = right.multiplyScalar(-dx * perPixel)
+        .add(towards.multiplyScalar(-dy * perPixel / Math.max(0.3, Math.sin(elevationRef.current))));
+      const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
+      for (const target of [desiredLookAtRef.current, lookAtRef.current]) {
+        if (!target) continue;
+        target.add(shift);
+        const horizontal = Math.hypot(target.x, target.z);
+        if (horizontal > maxPan) target.multiplyScalar(maxPan / horizontal);
+      }
+    };
+
+    // (a drag can begin on the board or on a troop's label over it - not while the camera is
+    // showing something on its own)
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0) return;
+      if ((event.button !== 0 && event.button !== 2) || cameraLocked()) return;
       const onLabel = event.target instanceof Element && !!event.target.closest('[data-unit]');
       if (event.target !== element && !onLabel) return;
-      drag = { startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, active: false, onLabel };
+      if (event.pointerType === 'touch') {
+        touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        if (touches.size === 2) {
+          // A second finger: pinch and twist instead
+          pinch = pinchOf();
+          drag = null;
+          return;
+        }
+        if (touches.size > 2) return;
+      }
+      const mode: Mode = event.button === 2 || event.shiftKey ? 'orbit' : 'pan';
+      drag = { startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, active: false, onLabel, mode };
     };
     const onPointerMove = (event: PointerEvent) => {
+      if (touches.has(event.pointerId)) touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
+      if (!drag && !pinch) return;
+      // (the camera took off on its own mid-drag: the drag ends there)
+      if (cameraLocked()) {
+        drag = null;
+        pinch = null;
+        return;
+      }
+      if (pinch && touches.size >= 2) {
+        const next = pinchOf();
+        desiredZoomRef.current = THREE.MathUtils.clamp(
+          desiredZoomRef.current * pinch.distance / Math.max(1, next.distance), CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM
+        );
+        rotateBy(-angleDelta(pinch.angle, next.angle));
+        pinch = next;
+        return;
+      }
       if (!drag) return;
       // Ignore tiny movements so ordinary clicks never nudge the camera
       if (!drag.active && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < CAMERA_DRAG_THRESHOLD) return;
       drag.active = true;
-      rotateBy(-(event.clientX - drag.lastX) * CAMERA_DRAG_ROTATE_SPEED);
-      desiredElevationRef.current = THREE.MathUtils.clamp(
-        desiredElevationRef.current + (event.clientY - drag.lastY) * CAMERA_DRAG_TILT_SPEED,
-        CAMERA_MIN_ELEVATION,
-        CAMERA_MAX_ELEVATION
-      );
+      const dx = event.clientX - drag.lastX;
+      const dy = event.clientY - drag.lastY;
+      if (drag.mode === 'pan') panBy(dx, dy);
+      else {
+        rotateBy(-dx * CAMERA_DRAG_ROTATE_SPEED);
+        desiredElevationRef.current = THREE.MathUtils.clamp(
+          desiredElevationRef.current + dy * CAMERA_DRAG_TILT_SPEED,
+          CAMERA_MIN_ELEVATION,
+          CAMERA_MAX_ELEVATION
+        );
+      }
       drag.lastX = event.clientX;
       drag.lastY = event.clientY;
     };
-    const onPointerUp = () => {
+    const onPointerUp = (event: PointerEvent) => {
+      touches.delete(event.pointerId);
+      if (touches.size < 2) pinch = null;
       if (drag?.active && drag.onLabel) swallowClickUntil = performance.now() + 400;
       drag = null;
     };
@@ -654,6 +741,8 @@ const CameraRig: React.FC<{
       swallowClickUntil = 0;
       event.stopPropagation();
     };
+    // (the right button turns the view rather than opening the browser's menu)
+    const onContextMenu = (event: MouseEvent) => event.preventDefault();
 
     window.addEventListener('pointerdown', onPointerDown);
     // Track the drag on the window so it keeps working when the cursor passes over the HUD
@@ -661,14 +750,16 @@ const CameraRig: React.FC<{
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
     window.addEventListener('click', onClick, true);
+    element.addEventListener('contextmenu', onContextMenu);
     return () => {
       window.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
       window.removeEventListener('click', onClick, true);
+      element.removeEventListener('contextmenu', onContextMenu);
     };
-  }, [gl, rotateBy]);
+  }, [gl, camera, rotateBy, cameraLocked]);
 
   // Mouse wheel / trackpad pinch zooms towards whatever is under the cursor
   useEffect(() => {
@@ -679,6 +770,7 @@ const CameraRig: React.FC<{
 
     const onWheel = (event: WheelEvent) => {
       event.preventDefault();
+      if (cameraLocked()) return;
       const desiredLookAt = desiredLookAtRef.current;
       if (!desiredLookAt) return;
 
@@ -711,14 +803,15 @@ const CameraRig: React.FC<{
 
     element.addEventListener('wheel', onWheel, { passive: false });
     return () => element.removeEventListener('wheel', onWheel);
-  }, [gl, camera]);
+  }, [gl, camera, cameraLocked]);
 
-  // Expose the camera in development so automated browser tests can aim clicks precisely
+  // Expose the camera in development so automated browser tests can aim clicks precisely (and see
+  // when the player may move it, and the zoom it is heading for)
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') {
-      (window as unknown as { __wwhCamera?: THREE.Camera }).__wwhCamera = camera;
+      Object.assign(window, { __wwhCamera: camera, __wwhCameraRig: { locked: cameraLocked, zoom: () => desiredZoomRef.current, lookAt: () => desiredLookAtRef.current?.toArray() } });
     }
-  }, [camera]);
+  }, [camera, cameraLocked]);
 
   const keepInViewRef = useRef(keepInView);
   keepInViewRef.current = keepInView;
@@ -755,6 +848,13 @@ const CameraRig: React.FC<{
     zoomRef.current += (desiredZoomRef.current - zoomRef.current) * Math.min(1, delta * CAMERA_ZOOM_SPEED);
     elevationRef.current += (desiredElevationRef.current - elevationRef.current) * Math.min(1, delta * CAMERA_ZOOM_SPEED);
     const elevation = elevationRef.current;
+    // A flight is over once the camera is (all but) there
+    if (autoMovingRef.current && lookAtRef.current.distanceTo(desiredLookAt) < ARRIVED.distance &&
+      Math.abs(desiredZoomRef.current - zoomRef.current) < ARRIVED.zoom &&
+      Math.abs(desiredElevationRef.current - elevation) < ARRIVED.angle &&
+      Math.abs(angleDelta(azimuth, desiredAzimuth)) < ARRIVED.angle) {
+      autoMovingRef.current = false;
+    }
 
     // Distance at which the whole board fits on screen, scaled by the zoom level
     const perspective = camera as THREE.PerspectiveCamera;
@@ -1694,8 +1794,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {tutorial && <TutorialMarkers visuals={tutorial} hexByKey={hexByKey} />}
       {/* Great trees, felled trunks and fires */}
       <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} lastBombard={gameState.lastBombard} visibleKeys={visibleKeys} />
-      {/* Your formations: screens and shield walls */}
-      {currentPhase === 'planning' && <FormationLinks units={players.player.units} hexByKey={hexByKey} />}
       {/* Bosses' powers: the ground they have marked to strike, and each power as it lands */}
       <BossThreats units={players.ai.units} hexByKey={hexByKey} />
       <BossPowerBursts last={gameState.lastBossPower} hexByKey={hexByKey} />

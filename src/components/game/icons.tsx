@@ -17,7 +17,7 @@ import {
   GiSparkles, GiAxeInStump, GiFire, GiBurningEmbers, GiLog, GiWatchtower, GiHouse, GiCatapult, GiAnvil, GiBarracksTent,
   GiBeerStein, GiWoodPile, GiPointing, GiTargeted, GiDemolish, GiTorch, GiHammerNails, GiStoneWall, GiGate, GiStoneBridge, GiSpikedFence,
   GiThreeFriends, GiUnlitBomb, GiSandstorm, GiStomp, GiTrumpet, GiMeteorImpact, GiFireBreath, GiDespair, GiPawPrint, GiSnowing,
-  GiSmokingVolcano, GiGoblinCamp, GiWingedShield
+  GiSmokingVolcano, GiGoblinCamp, GiWingedShield, GiFlyingFlag
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuCheck, LuSkipForward, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
@@ -233,6 +233,8 @@ export const SoundOnIcon = icon(LuVolume2);
 export const SoundOffIcon = icon(LuVolumeX);
 export const MusicIcon = icon(LuMusic);
 export const HomeIcon = icon(LuHouse);
+// Giving up a battle
+export const ResignIcon = icon(GiFlyingFlag, '#e2e8f0');
 export const DownloadIcon = icon(LuDownload);
 export const UploadIcon = icon(LuUpload);
 export const ShareIcon = icon(LuShare2);

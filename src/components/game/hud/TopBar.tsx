@@ -1,9 +1,9 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { GameState } from '@/types/game';
 import { BASE_MAX_HEALTH, getCastleMaxHealth, getIncome, getMaxRounds, getTimeScore, isFogOfWar } from '@/lib/game/gameState';
 import { WEATHER, activeWeather, stormForecast } from '@/lib/game/regionRules';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
-import { CrownIcon, FogIcon, GoldIcon, HomeIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon, WeatherIcon } from '../icons';
+import { CrownIcon, FogIcon, GoldIcon, HomeIcon, ResignIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon, WeatherIcon } from '../icons';
 import { setGameSpeed, useCastleShownDamage, useGameSpeed } from '../effects/effects';
 import { useShownCastleHealth } from '../effects/healthTimeline';
 
@@ -19,6 +19,8 @@ interface TopBarProps {
   isMuted: boolean;
   onToggleMute: () => void;
   onQuit: () => void;
+  // Give up the battle (offered on your own turn)
+  onResign?: () => void;
   // The threat preview: hexes enemies can strike next turn
   showThreats: boolean;
   onToggleThreats: () => void;
@@ -49,8 +51,10 @@ const CastleHealth: React.FC<{ title: string; health: number; max: number; color
 
 // Compact status bar: whose turn it is, both castles' health, and the player's gold
 export const TopBar: React.FC<TopBarProps> = ({
-  gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit, showThreats, onToggleThreats
+  gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit, onResign, showThreats, onToggleThreats
 }) => {
+  // Asking to make sure before giving up
+  const [confirmingResign, setConfirmingResign] = useState(false);
   const { players, turnNumber } = gameState;
   // Hits landing on a castle in the battle being fought, ahead of its result
   const castleHits = useCastleShownDamage();
@@ -72,7 +76,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   ].filter(Boolean).join(', ');
 
   return (
-    <div className="fixed top-3 inset-x-3 z-20 flex items-start justify-between gap-3 pointer-events-none">
+    <div className="fixed top-3 inset-x-3 z-30 flex items-start justify-between gap-3 pointer-events-none">
       {/* Turn */}
       <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-1.5 whitespace-nowrap px-2 py-1.5 text-sm sm:gap-2 sm:px-3`}>
         <span className={`font-display ${isFinalRound ? 'text-red-400 animate-pulse' : 'text-slate-300'}`} title={`The battle ends after round ${maxRounds}`}>
@@ -141,7 +145,7 @@ export const TopBar: React.FC<TopBarProps> = ({
       </div>
 
       {/* Treasury */}
-      <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-1 px-2 py-1.5 sm:gap-2 sm:px-3`}>
+      <div className={`${PANEL_CLASS} pointer-events-auto relative flex items-center gap-1 px-2 py-1.5 sm:gap-2 sm:px-3`}>
         {/* (a phone shows the gold beside the hand instead) */}
         <span id="hud-gold" className="font-display hidden items-center gap-1 text-base text-amber-300 sm:flex" title={`${income.total >= 0 ? '+' : ''}${income.total} gold per turn (${incomeDetails})`}>
           <GoldIcon className="text-lg" /> {players.player.points}
@@ -187,9 +191,31 @@ export const TopBar: React.FC<TopBarProps> = ({
         >
           {isMuted ? <SoundOffIcon className="text-base" /> : <SoundOnIcon className="text-base" />}
         </button>
+        {onResign && (
+          <button onClick={() => setConfirmingResign(true)} title="Resign this battle" aria-label="Resign this battle" className={ICON_BUTTON_CLASS}>
+            <ResignIcon className="text-base" />
+          </button>
+        )}
         <button onClick={onQuit} title="Save and return to the main menu" aria-label="Save and return to the main menu" className={ICON_BUTTON_CLASS}>
           <HomeIcon className="text-base" />
         </button>
+        {confirmingResign && onResign && (
+          <div role="dialog" aria-label="Resign this battle?" className={`${PANEL_CLASS} absolute right-0 top-full z-50 mt-2 w-60 p-3 text-left`}>
+            <div className="text-sm font-bold text-slate-100">Resign this battle?</div>
+            <p className="mt-1 text-xs text-slate-400">It counts as a defeat.</p>
+            <div className="mt-2.5 flex gap-2">
+              <button
+                onClick={() => { setConfirmingResign(false); onResign(); }}
+                className="flex-1 rounded-lg bg-rose-600 px-2 py-1.5 text-xs font-bold text-white hover:bg-rose-500"
+              >
+                Resign
+              </button>
+              <button onClick={() => setConfirmingResign(false)} className="flex-1 rounded-lg bg-slate-700 px-2 py-1.5 text-xs font-bold text-slate-100 hover:bg-slate-600">
+                Keep fighting
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
