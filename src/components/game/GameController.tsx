@@ -72,7 +72,10 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   // The first battle is a tutorial for new players (see TutorialGuide)
   // The first two battles are always tutorials, however often they are played (the first opens with
   // a flight over the field; the second shows where to build a castle)
-  const [showTutorial, setShowTutorial] = useState(() => battle.mode === 'campaign' && battle.levelId <= TUTORIAL_BATTLES);
+  // The hand guides the first battles only until the player has won one: from then on it's theirs
+  // to play (players found its plays weaker than their own by then)
+  const [showTutorial, setShowTutorial] = useState(() =>
+    battle.mode === 'campaign' && battle.levelId <= TUTORIAL_BATTLES && getProfile().stats.wins === 0);
   const {
     gameState,
     selectedHex,
@@ -143,7 +146,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   // The first battle shows what to do (see TutorialGuide); it counts as done once the battle is over
   const tutorial = useTutorial({
-    active: showTutorial, intro: battle.mode === 'campaign' && battle.levelId === 1, ready: isReady, choosingOrder: !!actionChoice, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
+    active: showTutorial, intro: showTutorial && battle.mode === 'campaign' && battle.levelId === 1, ready: isReady, choosingOrder: !!actionChoice, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
   });
   // Later battles: the hand points out each new mechanic the first time it turns up
   const mechanic = useMechanicGuide({
@@ -317,7 +320,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         tutorial={tutorialVisuals}
       />
 
-      {(currentPhase === 'planning' || currentPhase === 'combat') && (
+      {(currentPhase === 'planning' || currentPhase === 'combat' || currentPhase === 'execution') && (
         <>
           <TopBar
             gameState={viewState}

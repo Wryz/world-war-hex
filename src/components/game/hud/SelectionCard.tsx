@@ -11,6 +11,7 @@ import { PANEL_CLASS, SIDE_COLORS } from './styles';
 import { TERRAIN_SHORT_EFFECTS } from './terrainInfo';
 import { AbilityIcon, AttackIcon, BossPowerIcon, CampIcon, CrownIcon, FireIcon, FrozenIcon, MoveIcon, TerrainIcon, UnitIcon, FogIcon } from '../icons';
 import { getBossPower, isBossEnraged } from '@/lib/game/bosses';
+import { useShownHealth } from '../effects/healthTimeline';
 
 interface SelectionCardProps {
   gameState: GameState;
@@ -51,13 +52,16 @@ export const CounterLine: React.FC<{ type: UnitType }> = ({ type }) => {
 
 // Compact details for the selected unit or castle
 export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selectedHex, selectedUnit }) => {
-  if (!selectedHex) return null;
-
   // Always show the latest version of what's on the hex
-  const hex = gameState.hexGrid.find(
+  const liveHex = selectedHex && (gameState.hexGrid.find(
     h => h.coordinates.q === selectedHex.coordinates.q && h.coordinates.r === selectedHex.coordinates.r
-  ) ?? selectedHex;
-  const unit = hex.unit ?? selectedUnit ?? null;
+  ) ?? selectedHex);
+  const liveUnit = liveHex ? liveHex.unit ?? selectedUnit ?? null : null;
+  // (its health as the board shows it: a blow counts once it has landed)
+  const shownHealth = useShownHealth(liveUnit);
+  if (!selectedHex || !liveHex) return null;
+  const hex = liveHex;
+  const unit = liveUnit;
 
   // Plain hexes are described by the hover tooltip; the card is only for units, castles and camps
   if (!unit && !hex.isBase && !hex.isCamp) return null;
@@ -92,7 +96,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
               {unit.owner === 'player' ? 'You' : 'Enemy'}
             </span>
           </div>
-          <div className="mt-2"><HealthBar value={unit.lifespan} max={unit.maxLifespan} /></div>
+          <div className="mt-2"><HealthBar value={shownHealth ?? unit.lifespan} max={unit.maxLifespan} /></div>
           {unit.isBoss && getBossPower(unit.type) && (
             <div className="mt-2 flex items-center gap-1.5 rounded-md bg-red-950/60 px-2 py-1 font-bold text-red-100">
               <BossPowerIcon power={getBossPower(unit.type)!.id} /> {getBossPower(unit.type)!.name}

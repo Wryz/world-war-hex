@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { GameState, Hex, HexCoordinates } from '@/types/game';
 import {
-  addPendingMove, advanceFires, executeMoves, findBaseHex, getFellTargets, getValidMoveTargets, isImpassable, updateHex
+  addPendingMove, advanceFires, endTurn, executeMoves, findBaseHex, getFellTargets, getValidMoveTargets, isImpassable, updateHex
 } from './gameState';
 import { BURN_TURNS, FELL_DAMAGE, FIRE_DAMAGE, pickGreatTrees } from './battlefield';
 import { getHexDistance, getNeighbors } from './hexUtils';
@@ -142,4 +142,30 @@ test('great trees grow away from the edge, spread apart', () => {
   assert.ok(trees.length > 0 && trees.length <= 3);
   for (const tree of trees) assert.ok(getHexDistance(tree, { q: 0, r: 0 }) < 5, 'not on the edge');
   for (const a of trees) for (const b of trees) if (a !== b) assert.ok(getHexDistance(a, b) >= 3);
+});
+
+test('a crushing tree is recorded for the board to show when it lands', () => {
+  const { state, tree, axe, enemy } = treeScene();
+  const after = executeMoves(addPendingMove(state, axe.id, state.players.player.id, tree));
+  const event = after.healthEvents?.find(e => e.unit?.id === enemy.id);
+  assert.ok(event, 'recorded');
+  assert.equal(event!.cause, 'fell');
+  assert.equal(event!.amount, -FELL_DAMAGE);
+  assert.deepEqual(event!.from, tree);
+  assert.equal(event!.unit!.lifespan, 20, 'with the troop as it was before');
+});
+
+test('a turn can stop after its moves, and end later: a spring heals then', () => {
+  const { state, centre } = makeBattle('player');
+  updateHex(state, at(centre, 1, 0), { terrain: 'spring' });
+  const troop = makeUnit('player', centre, { lifespan: 10, maxLifespan: 20 });
+  place(state, troop);
+  const moved = executeMoves(addPendingMove(state, troop.id, state.players.player.id, at(centre, 1, 0)), { holdTurnEnd: true });
+  assert.equal(moved.currentPhase, 'execution');
+  assert.equal(health(moved, troop), 10, 'not healed while it walks there');
+  const ended = endTurn(moved);
+  assert.ok(health(ended, troop) > 10, 'healed when the turn ends');
+  assert.equal(moved.players.player.units.find(u => u.id === troop.id)!.lifespan, 10, 'the held state is left alone');
+  const heal = ended.healthEvents!.find(e => e.cause === 'spring');
+  assert.ok(heal && heal.amount > 0);
 });

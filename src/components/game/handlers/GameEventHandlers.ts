@@ -15,6 +15,7 @@ import {
   chooseCastle,
   coordsEqual,
   executeMoves,
+  endTurn,
   getDeploymentHexes,
   getHand,
   getRosterStats,
@@ -34,6 +35,7 @@ import { buildBattle } from '@/lib/campaign/battleSetup';
 import { getProfile } from '@/lib/meta/profile';
 import { playBattleSound } from '../utils/battleSounds';
 import { getGameSpeed } from '../effects/effects';
+import { getTimelineBusyUntil } from '../effects/healthTimeline';
 import { BATTLE_DURATION_MS, getArrivalTime, getBattleStartDelay, setBattleStartDelay } from '../utils/battleTiming';
 import {
   BattleConfig,
@@ -74,11 +76,18 @@ const describeInvalidMove = (state: GameState, unit: Unit, hex: Hex): string => 
 
 // Short pauses that make the enemy's turn readable (scaled by the game speed)
 // Executes a side's orders, noting how long its troops take to walk into any battles that follow
+// (a turn without a fight pauses after its moves, so the end of the turn - healing at springs,
+// burning, the catapult - comes once the troops have arrived; see endTurn)
 const executeTurn = (state: GameState): GameState => {
-  const next = executeMoves(state);
-  setBattleStartDelay(next.currentPhase === 'combat' ? getArrivalTime(state, next) : 0);
+  const next = executeMoves(state, { holdTurnEnd: true });
+  setBattleStartDelay(next.currentPhase === 'combat' || next.currentPhase === 'execution' ? getArrivalTime(state, next) : 0);
   return next;
 };
+
+// How long until the board has shown everything still to land (a tree, a stone, a boss's strike)
+const timelineWait = () => Math.max(0, getTimelineBusyUntil() - performance.now());
+// A short beat once the troops have arrived, before the end of the turn
+const TURN_END_PAUSE_MS = 250;
 
 const AI_PLANNING_DELAY = 700;
 const AI_EXECUTION_DELAY = 450;
@@ -242,19 +251,29 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     let executionTimeout: ReturnType<typeof setTimeout> | undefined;
     const speed = getGameSpeed();
 
+    // (once the board has shown everything from the turn before)
     const planningTimeout = setTimeout(() => {
       commitState(planAITurn(stateRef.current));
 
       executionTimeout = setTimeout(() => {
         commitState(executeTurn(stateRef.current));
       }, AI_EXECUTION_DELAY / speed);
-    }, AI_PLANNING_DELAY / speed);
+    }, Math.max(AI_PLANNING_DELAY / speed, timelineWait()));
 
     return () => {
       clearTimeout(planningTimeout);
       if (executionTimeout) clearTimeout(executionTimeout);
     };
   }, [isReady, currentPhase, isAITurn, turnNumber, commitState]);
+
+  // A turn without a fight ends once its troops have arrived and the board has shown its moves
+  useEffect(() => {
+    if (!isReady || currentPhase !== 'execution') return;
+    const timeout = setTimeout(() => {
+      commitState(endTurn(stateRef.current));
+    }, Math.max((getBattleStartDelay() * 1000 + TURN_END_PAUSE_MS) / getGameSpeed(), timelineWait()));
+    return () => clearTimeout(timeout);
+  }, [isReady, currentPhase, turnNumber, commitState]);
 
   // All of the turn's battles play out together, then resolve at once
   useEffect(() => {
@@ -469,15 +488,26 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     commitState({ ...previous, planningTimeRemaining: stateRef.current.planningTimeRemaining });
   }, [clearSelection, commitState]);
 
-  // Handle unit selection by clicking a unit on the board
+  // Handle unit selection by clicking a unit on the board. A tap on one of your own troops always
+  // picks it (or puts it down again) - never sends the selected troop to its hex, even when it is
+  // about to move away; other troops are handled as a tap on their hex.
   const handleUnitSelect = (unit: Unit) => {
-    const unitHex = stateRef.current.hexGrid.find(
-      hex => hex.unit && hex.unit.id === unit.id
-    );
-
-    if (unitHex) {
-      handleHexClick(unitHex);
+    const current = stateRef.current;
+    const unitHex = current.hexGrid.find(hex => hex.unit && hex.unit.id === unit.id);
+    if (!unitHex) return;
+    const live = current.players.player.units.find(other => other.id === unit.id);
+    if (live && isPlayerPlanning() && !selectedUnitTypeForPurchase) {
+      setSelectedHex(unitHex);
+      if (selectedUnit?.id === live.id) {
+        setSelectedUnit(null);
+        setValidMoves([]);
+        return;
+      }
+      setSelectedUnit(live);
+      setValidMoves([...getValidMoveTargets(current, live), ...getFellTargets(current, live), ...getActionTargets(current, live).map(target => target.at)]);
+      return;
     }
+    handleHexClick(unitHex);
   };
 
   return {

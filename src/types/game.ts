@@ -219,6 +219,33 @@ export interface GameState {
   // A boss's power used most recently, for the board to play it out: the boss, the hexes it struck
   // (or where its minions appeared) and a serial counting powers used
   lastBossPower?: { power: BossPowerId; from: HexCoordinates; hexes: HexCoordinates[]; serial: number };
+  // Health changes outside a fight this turn (a felled tree, a catapult stone, a boss's power, a
+  // strafe, springs, mages and burning ground), in order, for the board to show each one when its
+  // animation lands rather than all at once. A fight's own blows are shown as it is fought.
+  healthEvents?: HealthEvent[];
+  // Counts health events over the battle, so the board can tell new ones from those it has shown
+  healthSerial?: number;
+}
+
+export type HealthCause =
+  | 'strafe' | 'fell' | 'catapult' | 'boss' | 'swarm' | 'bloodlust'
+  | 'spring' | 'mage' | 'regenerate' | 'lava' | 'cursed' | 'fire';
+
+export interface HealthEvent {
+  serial: number;
+  cause: HealthCause;
+  // How much health it changed: negative for damage, positive for healing
+  amount: number;
+  // The troop it happened to, as it was just before (its last look, if this destroyed it), or the
+  // castle of a side
+  unit?: Unit;
+  castle?: PlayerType;
+  // It destroyed the troop
+  fatal?: boolean;
+  // Where it came from (a tree's stump, a catapult tower, a boss), for timing it to the animation
+  from?: HexCoordinates;
+  // Its place in a sweep (a dragon's breath lands hex by hex)
+  order?: number;
 }
 
 export interface Sighting {

@@ -216,6 +216,9 @@ interface UnitMeshProps {
   dying?: boolean;
   // ...having already fallen in the battle that destroyed it, so it only sinks away
   fallen?: boolean;
+  // Changes to its health outside a fight that have just shown (damage negative, healing positive),
+  // each with a floating number
+  changes?: { serial: number; amount: number }[];
 }
 
 // Smallest signed difference between two angles
@@ -240,7 +243,8 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   decorative = false,
   hideRing = false,
   dying = false,
-  fallen = false
+  fallen = false,
+  changes
 }) => {
   const look = getUnitLook(unit.type);
   const ownerColor = OWNER_COLORS[unit.owner];
@@ -299,6 +303,17 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       actionRef.current = null;
     }
   }, [battleKey]);
+
+  // A change outside a fight that has just shown: its number floats up (green for healing)
+  const shownChangeRef = useRef(changes?.length ? Math.max(...changes.map(change => change.serial)) : 0);
+  useEffect(() => {
+    for (const change of changes ?? []) {
+      if (change.serial <= shownChangeRef.current) continue;
+      shownChangeRef.current = change.serial;
+      showHit(-change.amount);
+    }
+    // (only new changes)
+  }, [changes]);
 
   const showHit = (amount: number) => {
     const id = Date.now() + Math.random();
@@ -709,10 +724,11 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       ref={rootRef}
       onClick={onSelect ? handleClick : undefined}
     >
-      {/* Invisible click area */}
+      {/* Invisible click area: the whole troop, up to its label, so a tap on it never lands on the
+          tile behind it */}
       {onSelect && (
-        <mesh position={[0, 0.6, 0]} visible={false}>
-          <cylinderGeometry args={[0.45, 0.45, 1.2, 10]} />
+        <mesh position={[0, look.labelHeight / 2, 0]} visible={false}>
+          <cylinderGeometry args={[0.55, 0.55, look.labelHeight, 10]} />
         </mesh>
       )}
 
@@ -800,7 +816,11 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
         >
           <div className="flex flex-col items-center gap-0.5">
           <div
-            className="flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.6875rem] leading-none font-bold text-white whitespace-nowrap shadow select-none"
+            data-unit={unit.id}
+            data-health={shownHealth}
+            // (a tap on the label picks the troop, not the tile drawn behind it)
+            onClick={onSelect ? event => { event.stopPropagation(); onSelect(unit); } : undefined}
+            className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.6875rem] leading-none font-bold text-white whitespace-nowrap shadow select-none ${onSelect ? 'pointer-events-auto cursor-pointer' : ''}`}
             style={{
               background: 'rgba(15, 23, 42, 0.8)',
               border: `2px solid ${ownerColor}`,
@@ -840,10 +860,10 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
             {hitNumbers.map((hit, index) => (
               <span
                 key={hit.id}
-                className="animate-float-up font-display absolute -translate-x-1/2 whitespace-nowrap text-base font-bold text-red-400 select-none"
+                className={`animate-float-up font-display absolute -translate-x-1/2 whitespace-nowrap text-base font-bold select-none ${hit.amount < 0 ? 'text-emerald-300' : 'text-red-400'}`}
                 style={{ left: `${(index % 3 - 1) * 10}px`, textShadow: '0 1px 2px rgba(0,0,0,0.7)' }}
               >
-                -{hit.amount}
+                {hit.amount < 0 ? `+${-hit.amount}` : `-${hit.amount}`}
               </span>
             ))}
           </div>

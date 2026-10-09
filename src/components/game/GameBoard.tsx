@@ -11,6 +11,7 @@ import { BoardDecorations } from './BoardDecorations';
 import { BattlefieldObjects } from './BattlefieldObjects';
 import { BossPowerBursts, BossThreats } from './BossPowers';
 import { FormationLinks } from './FormationLinks';
+import { useHealthTimeline } from './effects/healthTimeline';
 import { WeatherEffects } from './WeatherEffects';
 import { PIN_BONUS, SCREEN_REDUCTION, SHIELD_WALL_REDUCTION, hasScreenBeside, inShieldWall, isPinned } from '@/lib/game/formations';
 import { PACK_BONUS, SHAKEN_ATTACK, canRise, furyMultiplier, hasTrait, isShaken } from '@/lib/game/regionRules';
@@ -1035,7 +1036,11 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       .map(hex => toVector(surfacePosition(hex)));
   }, []);
 
-  const allUnits = useMemo(() => [...players.player.units, ...players.ai.units], [players]);
+  const stateUnits = useMemo(() => [...players.player.units, ...players.ai.units], [players]);
+  // The units as the board shows them: each change to their health outside a fight shows when its
+  // animation lands, and a troop it destroyed stands until then (see healthTimeline)
+  const timeline = useHealthTimeline(gameState, stateUnits);
+  const allUnits = timeline.units;
 
   // Per-unit render data, memoised so units only re-render when something about them changes
   const unitRenderData = useMemo(() => {
@@ -1584,7 +1589,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           owner="player"
           look={playerCastleStyle}
           position={playerCastlePosition}
-          health={players.player.baseHealth ?? BASE_MAX_HEALTH}
+          health={timeline.castleHealth('player', players.player.baseHealth ?? BASE_MAX_HEALTH)}
           maxHealth={players.player.maxBaseHealth ?? BASE_MAX_HEALTH}
           incoming={castleIncoming?.owner === 'player' ? castleIncoming.incoming : undefined}
           fallen={currentPhase === 'gameOver' && gameState.winner === 'ai'}
@@ -1594,7 +1599,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         <Castle
           owner="ai"
           position={aiCastlePosition}
-          health={players.ai.baseHealth ?? BASE_MAX_HEALTH}
+          health={timeline.castleHealth('ai', players.ai.baseHealth ?? BASE_MAX_HEALTH)}
           maxHealth={players.ai.maxBaseHealth ?? BASE_MAX_HEALTH}
           incoming={castleIncoming?.owner === 'ai' ? castleIncoming.incoming : undefined}
           fallen={currentPhase === 'gameOver' && gameState.winner === 'player'}
@@ -1619,6 +1624,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           hasPlannedMove={data.hasPlannedMove}
           battle={data.battle}
           buffs={data.buffs}
+          changes={timeline.landed.get(data.unit.id)}
         />
       ))}
 

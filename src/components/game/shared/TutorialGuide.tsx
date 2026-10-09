@@ -14,7 +14,7 @@ import { PointingHandIcon, SkipIcon } from '../icons';
 // same spot with a gold ring. It follows the battle as it unfolds, so whatever the player does, the
 // hand always shows a sensible next step.
 
-// The campaign battles that are tutorials
+// The campaign battles that are tutorials (only until the player has won a battle)
 export const TUTORIAL_BATTLES = 2;
 
 export interface TutorialVisuals {

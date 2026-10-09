@@ -73,7 +73,7 @@ test('summoners call minions bound to them, who flee when the boss falls', () =>
   place(quiet.state, lonely);
   assert.equal(playTurn(quiet.state).players.ai.units.length, 1);
 
-  inflictDamage(called, find(called, king)!, 1000, 'player');
+  inflictDamage(called, find(called, king)!, 1000, 'player', 'strafe');
   assert.equal(called.players.ai.units.length, 0, 'the gang scatters');
 });
 
