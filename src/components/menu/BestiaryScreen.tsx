@@ -6,7 +6,8 @@ import { useHasHydrated, useProfile } from '@/lib/meta/profile';
 import { useMusic } from '@/lib/audio/music';
 import { TroopCard } from '../game/cards/TroopCard';
 import { MenuShell, CARD_CLASS } from './MenuShell';
-import { AbilityIcon, BookIcon, CloseIcon, SkullIcon } from '../game/icons';
+import { AbilityIcon, BookIcon, CloseIcon, SkullIcon, TraitIcon } from '../game/icons';
+import { getFactionTrait } from '@/lib/game/regionRules';
 import { CounterLine } from '../game/hud/SelectionCard';
 
 // The 3D viewer needs WebGL, so it only renders in the browser
@@ -49,6 +50,11 @@ const MobDetail: React.FC<{ id: TroopId; onClose: () => void }> = ({ id, onClose
               {troop.abilities.map(ability => (
                 <li key={ability} className="flex gap-1.5"><AbilityIcon ability={ability} className="mt-0.5" /><span><b>{ABILITIES[ability].name}:</b> {ABILITIES[ability].description}</span></li>
               ))}
+              {/* Its faction's trait (bosses have their powers instead) */}
+              {!troop.isBoss && getFactionTrait(id) && (() => {
+                const trait = getFactionTrait(id)!;
+                return <li className="flex gap-1.5"><TraitIcon trait={trait.id} className="mt-0.5" /><span><b>{trait.name}:</b> {trait.description}</span></li>;
+              })()}
             </ul>
             <div className="mt-4 flex flex-wrap gap-2 text-xs">
               <span className="rounded-full bg-slate-800 px-2 py-1">Met {entry?.seen ?? 0} times</span>

@@ -15,8 +15,15 @@ export const registerServiceWorker = () => {
     });
     const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
     if (saveData) return;
+    // (not while a battle is still loading: that waits for its own downloads first)
+    const warm = () => {
+      if (document.querySelector('[role=progressbar]')) {
+        setTimeout(warm, WARM_DELAY_MS);
+        return;
+      }
+      navigator.serviceWorker.ready.then(registration => registration.active?.postMessage({ type: 'warm' })).catch(() => undefined);
+    };
     setTimeout(() => {
-      const warm = () => navigator.serviceWorker.ready.then(registration => registration.active?.postMessage({ type: 'warm' })).catch(() => undefined);
       if ('requestIdleCallback' in window) window.requestIdleCallback(warm, { timeout: 10000 });
       else warm();
     }, WARM_DELAY_MS);

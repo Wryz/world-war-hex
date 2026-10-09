@@ -2432,6 +2432,7 @@ const finishTurn = (state: GameState): GameState => {
   for (const unit of burned) {
     newState.players[unit.owner].units = newState.players[unit.owner].units.filter(u => u.id !== unit.id);
     sideStats(newState, unit.owner).lost++;
+    if (unit.isBoss || unit.isChampion) shakeArmy(newState, unit.owner, unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE, unit);
     const inFire = findHexByCoordinates(newState.hexGrid, unit.position)?.fire?.stage === 'burning';
     addLog(newState, unit.owner, inFire
       ? `${unitLabel(unit)} perished in the flames.`
