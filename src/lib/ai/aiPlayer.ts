@@ -521,7 +521,7 @@ const assessThreats = (state: GameState): ThreatAssessment => {
 
   // Enemies that could reach a hex they could attack the castle from next turn
   const castleRaiders = state.players.player.units.filter(enemy =>
-    getHexDistance(enemy.position, aiBase.coordinates) <= getAttackRange(enemy, 'plain', state) + 1
+    getHexDistance(enemy.position, aiBase.coordinates) <= enemyReach(state, enemy) + 1
   );
 
   // Base is under threat if strong enemy units are nearby or one could besiege it
@@ -569,6 +569,14 @@ const liveEnemies = (planner: Planner) => planner.enemies.filter(enemy => remain
  * already strike that hex, and (a little less surely) from enemies that could walk into reach,
  * who would then usually be fighting from ordinary ground
  */
+// How far an enemy could reach and walk on its next turn, which may fall in the next round: the
+// more dangerous of this round's weather and the next (a storm may be blowing up or over)
+const nextRound = (state: GameState): GameState => ({ ...state, turnNumber: state.turnNumber + 1 });
+const enemyReach = (state: GameState, enemy: Unit) =>
+  Math.max(getAttackRange(enemy, 'plain', state), getAttackRange(enemy, 'plain', nextRound(state)));
+const enemyStride = (state: GameState, enemy: Unit) =>
+  Math.max(getMovementRange(state, enemy), getMovementRange(nextRound(state), enemy));
+
 const dangerAt = (planner: Planner, unit: Unit, position: HexCoordinates): number => {
   const target = { ...unit, position };
   let danger = 0;
@@ -576,8 +584,8 @@ const dangerAt = (planner: Planner, unit: Unit, position: HexCoordinates): numbe
     const distance = getHexDistance(enemy.position, position);
     if (canStrikeFrom(planner, enemy, enemy.position, position)) {
       danger += strikeFrom(planner, enemy, enemy.position, target, position);
-    } else if (distance <= getMovementRange(planner.state, enemy) + getAttackRange(enemy, 'plain', planner.state)) {
-      danger += 0.75 * getStrikePowerOnTerrain(enemy, 'plain', target, terrainAt(planner, position), getAttackRange(enemy, 'plain', planner.state));
+    } else if (distance <= enemyStride(planner.state, enemy) + enemyReach(planner.state, enemy)) {
+      danger += 0.75 * getStrikePowerOnTerrain(enemy, 'plain', target, terrainAt(planner, position), enemyReach(planner.state, enemy));
     }
   }
   return danger;
@@ -593,7 +601,7 @@ const healthValue = (unit: Unit, damage: number, health = unit.lifespan) => {
 const enemyCanReach = (planner: Planner, position: HexCoordinates): boolean =>
   planner.enemies.some(enemy =>
     getHexDistance(enemy.position, position) === 1 ||
-    walkingDistance(planner.state, enemy.position, position) <= getMovementRange(planner.state, enemy)
+    walkingDistance(planner.state, enemy.position, position) <= enemyStride(planner.state, enemy)
   );
 
 // ---------------------------------------------------------------------------
@@ -670,7 +678,7 @@ const assignObjectives = (planner: Planner): Map<string, Hex> => {
   const pairs = objectives.flatMap(({ hex, value }) => units.map(unit => ({
     hex,
     unit,
-    score: value - 2 * walkingDistance(state, unit.position, hex.coordinates) / unit.movementRange
+    score: value - 2 * walkingDistance(state, unit.position, hex.coordinates) / getMovementRange(state, unit)
   }))).filter(pair => pair.score > 0).sort((a, b) => b.score - a.score);
 
   const assignments = new Map<string, Hex>();
@@ -697,7 +705,7 @@ const findNearbySpring = (planner: Planner, unit: Unit): Hex | undefined => {
     if (reserved.some(c => coordsMatch(c, hex.coordinates))) continue;
     if (dangerAt(planner, unit, hex.coordinates) >= unit.lifespan) continue;
 
-    const turns = walkingDistance(planner.state, unit.position, hex.coordinates) / unit.movementRange;
+    const turns = walkingDistance(planner.state, unit.position, hex.coordinates) / getMovementRange(planner.state, unit);
     if (turns <= bestTurns) {
       bestTurns = turns;
       best = hex;
@@ -764,7 +772,7 @@ const assignAnchors = (planner: Planner): Map<string, HexCoordinates> => {
     for (const { hex, score } of scored) {
       if (taken.has(key(hex.coordinates))) continue;
       const fit = isRanged(unit) || profile.anchor === 'choke' ? score : score * 0.5;
-      const value = fit - walkingDistance(state, unit.position, hex.coordinates) / unit.movementRange;
+      const value = fit - walkingDistance(state, unit.position, hex.coordinates) / getMovementRange(state, unit);
       if (value > bestValue) {
         bestValue = value;
         best = hex;
@@ -787,7 +795,7 @@ const chooseRaidTarget = (planner: Planner, unit: Unit): HexCoordinates | null =
   let best: HexCoordinates | null = null;
   let bestValue = 0;
 
-  const turnsTo = (position: HexCoordinates) => walkingDistance(state, unit.position, position) / unit.movementRange;
+  const turnsTo = (position: HexCoordinates) => walkingDistance(state, unit.position, position) / getMovementRange(state, unit);
 
   for (const enemy of liveEnemies(planner)) {
     const counter = getCounterMultiplier(unit.type, enemy.type);
@@ -1002,7 +1010,7 @@ const decideUnitMove = (planner: Planner, unit: Unit): HexCoordinates | null => 
     }
 
     if (goal.position) {
-      const progress = (startDistance - walkingDistance(state, position, goal.position)) / unit.movementRange;
+      const progress = (startDistance - walkingDistance(state, position, goal.position)) / getMovementRange(state, unit);
       value += progress * goal.weight;
       if (coordsMatch(position, goal.position)) value += goal.weight * 0.5;
     }

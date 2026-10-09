@@ -176,20 +176,19 @@ export const getFogBankCentres = (state: Pick<GameState, 'settings' | 'turnNumbe
   return centres;
 };
 
-// (visibility asks for these constantly, so the last answer is kept: the banks only move each round)
-let lastFog: { key: string; keys: Set<string> } | null = null;
+// (visibility asks for these constantly, so they're kept for each board and round: the banks only
+// move each round, and a board whose castles move is a new board)
+const fogCache = new WeakMap<GameState['hexGrid'], { turn: number; keys: Set<string> }>();
 const NO_FOG = new Set<string>();
 export const getFogBankKeys = (state: Pick<GameState, 'settings' | 'turnNumber' | 'hexGrid' | 'battleSeed'>): Set<string> => {
   if (getWeather(state) !== 'fogBanks') return NO_FOG;
-  // (the castles count: the banks start clear of them)
-  const castles = state.hexGrid.filter(hex => hex.isBase).map(hex => `${hex.coordinates.q},${hex.coordinates.r}`).join(';');
-  const key = `${state.battleSeed ?? state.settings?.seed ?? 0}:${state.turnNumber}:${state.hexGrid.length}:${castles}`;
-  if (lastFog?.key === key) return lastFog.keys;
+  const cached = fogCache.get(state.hexGrid);
+  if (cached?.turn === state.turnNumber) return cached.keys;
   const keys = new Set<string>();
   for (const centre of getFogBankCentres(state)) {
     for (const c of [centre, ...getNeighbors(centre)]) keys.add(`${c.q},${c.r}`);
   }
-  lastFog = { key, keys };
+  fogCache.set(state.hexGrid, { turn: state.turnNumber, keys });
   return keys;
 };
 

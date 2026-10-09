@@ -84,7 +84,8 @@ export const TopBar: React.FC<TopBarProps> = ({
         {gameState.settings?.weather && (() => {
           const weather = gameState.settings.weather;
           const info = WEATHER[weather];
-          const raging = activeWeather(gameState) === weather;
+          // (only a storm lights up while it rages; fog and ash are there all battle)
+          const raging = info.storm && activeWeather(gameState) === weather;
           const forecast = stormForecast(gameState);
           return (
             <span
