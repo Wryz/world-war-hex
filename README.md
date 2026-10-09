@@ -119,7 +119,7 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 ### Screens (`src/app`)
 
 - `page.tsx`: Main menu (`components/game/intro/IntroScreen`, with a 3D island of troops and monsters)
-- `campaign`: The campaign map (each region an island of map tiles, laid out in `lib/campaign/mapArt.ts` and drawn by `components/menu/RegionMap`); tapping a level opens a callout from its spot (the enemy, your power against the recommended, weather, the challenge, the reward) with the button to fight it, any empty deck slots filled for it (`components/menu/CampaignScreen`, `LevelPopup`, `lib/campaign/startLevel.ts`; suggestions in `lib/meta/loadout.ts`)
+- `campaign`: The campaign map (each region an island of map tiles, laid out in `lib/campaign/mapArt.ts` and drawn by `components/menu/RegionMap`); tapping a level opens a callout from its spot (the enemy, your power against the recommended, weather, the challenge, the reward) with the button to fight it, and any empty deck slots are filled for the battle (`components/menu/CampaignScreen`, `LevelPopup`, `battleDeck` in `lib/campaign/battleSetup.ts`; suggestions in `lib/meta/loadout.ts`)
 - `army`: Your cards, the card shop and upgrades (`components/menu/ArmyScreen`)
 - `bestiary`: The bestiary and its 3D model viewer (`components/menu/BestiaryScreen`, `TroopModelViewer`)
 - `stats`: Stats and save files (`components/menu/StatsScreen`); the main menu's settings and guide are in `components/menu/SettingsPanel`

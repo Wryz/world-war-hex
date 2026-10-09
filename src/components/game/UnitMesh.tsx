@@ -22,6 +22,9 @@ import {
   UndyingIcon, FuryIcon, PackIcon
 } from './icons';
 
+// Height of a troop's invisible click area, for one whose label floats at `labelHeight`
+const CLICK_HEIGHT = (labelHeight: number) => Math.min(labelHeight, 1.5);
+
 // Small lift so the unit's indicator doesn't z-fight with the tile surface
 const UNIT_ELEVATION = 0.02;
 // Owner ring height above the unit's base: clear of hovered tiles, which rise slightly
@@ -724,11 +727,12 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       ref={rootRef}
       onClick={onSelect ? handleClick : undefined}
     >
-      {/* Invisible click area: the whole troop, up to its label, so a tap on it never lands on the
-          tile behind it */}
+      {/* Invisible click area: the troop's body, so a tap on it doesn't land on the tile behind it
+          (no taller than a man: a tall troop's head and its label take taps through the label, and
+          the hexes beyond it stay tappable) */}
       {onSelect && (
-        <mesh position={[0, look.labelHeight / 2, 0]} visible={false}>
-          <cylinderGeometry args={[0.55, 0.55, look.labelHeight, 10]} />
+        <mesh position={[0, CLICK_HEIGHT(look.labelHeight) / 2, 0]} visible={false}>
+          <cylinderGeometry args={[0.5, 0.5, CLICK_HEIGHT(look.labelHeight), 10]} />
         </mesh>
       )}
 

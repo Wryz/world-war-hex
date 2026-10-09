@@ -1,7 +1,7 @@
 import React, { useEffect, useRef } from 'react';
 import { LevelDef, levelEnemies } from '@/lib/campaign/levels';
 import { challengeBonus, levelChallenge } from '@/lib/campaign/challenges';
-import { deckFor } from '@/lib/campaign/startLevel';
+import { levelDeck } from '@/lib/campaign/battleSetup';
 import { WEATHER } from '@/lib/game/regionRules';
 import { FACTIONS, TROOPS } from '@/lib/game/troops';
 import { deckPower, levelWinReward } from '@/lib/meta/economy';
@@ -22,7 +22,7 @@ const verdictFor = (ratio: number) =>
 export const LevelPopup: React.FC<{ level: LevelDef; onFight: () => void; onClose: () => void }> = ({ level, onFight, onClose }) => {
   const profile = useProfile();
   const ref = useRef<HTMLDivElement>(null);
-  const power = deckPower(deckFor(level, profile), profile.cards);
+  const power = deckPower(levelDeck(level, profile), profile.cards);
   const verdict = verdictFor(power / level.recommendedPower);
   const record = profile.levels[level.id];
   const challenge = levelChallenge(level);

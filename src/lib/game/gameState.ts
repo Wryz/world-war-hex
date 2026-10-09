@@ -2636,7 +2636,9 @@ const unleashBossPowers = (state: GameState, side: PlayerType): void => {
       let downed = 0;
       for (const target of state.players[enemySide].units.filter(unit => marked.has(coordKey(unit.position)))) {
         const hit = inflictDamage(state, target, live.attackPower * strike.damage, side, 'boss', {
-          from: live.position, order: Math.max(0, hexes.findIndex(c => coordsEqual(c, target.position)))
+          from: live.position,
+          // (a dragon's breath sweeps across its hexes one after another; other strikes land at once)
+          ...(power.id === 'dragonBreath' ? { order: Math.max(0, hexes.findIndex(c => coordsEqual(c, target.position))) } : {})
         });
         hits++;
         if (hit.destroyed) downed++;

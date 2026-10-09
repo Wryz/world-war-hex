@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'reac
 import type { GameState, HealthEvent, PlayerType, Unit } from '@/types/game';
 import { FALL_SECONDS, STONE_SECONDS } from '../BattlefieldObjects';
 import { BREATH_SWEEP, BURST_SECONDS } from '../BossPowers';
-import { getTimeScale } from './effects';
+import { getGameClock, getTimeScale } from './effects';
 
 // The board shows each change to a troop's health outside a fight (and a castle's) when the thing
 // that caused it is seen to happen, never before: the crush when the felled tree lands, the stone's
@@ -31,24 +31,25 @@ export const healthEventDelay = (event: HealthEvent): number => {
 
 interface Scheduled {
   event: HealthEvent;
-  // performance.now() when it shows
+  // When it shows, on the battle's clock (see getGameClock: it keeps pace with the animations
+  // through speed changes and slow motion)
   showAt: number;
 }
 
-// When each change seen so far shows (performance.now()), by serial, so that how long the board
+// When each change seen so far shows (on the battle's clock), by serial, so that how long the board
 // still needs can be told from a state alone - whether or not the board has scheduled its changes yet
 const showsAt = new Map<number, number>();
 // (changes up to this serial have been scheduled: one no longer listed showed a while ago)
 let scheduledThrough = 0;
 
-// How long (ms) until the board has shown every change in a state (or those of them `which` picks):
-// for one it hasn't scheduled yet, its full delay from now
+// How long (real ms, at the present time scale) until the board has shown every change in a state
+// (or those of them `which` picks): for one it hasn't scheduled yet, its full delay from now
 export const pendingHealthWait = (state: GameState, which: (event: HealthEvent) => boolean = () => true): number => {
-  const now = performance.now();
+  const now = getGameClock();
   const scale = Math.max(0.1, getTimeScale());
   return Math.max(0, ...(state.healthEvents ?? []).filter(which).map(event => {
     const at = showsAt.get(event.serial);
-    if (at !== undefined) return at - now;
+    if (at !== undefined) return (at - now) / scale;
     return event.serial <= scheduledThrough ? 0 : healthEventDelay(event) * 1000 / scale;
   }));
 };
@@ -70,6 +71,12 @@ const subscribe = (listener: () => void) => {
 export const useShownHealth = (unit: Pick<Unit, 'id' | 'lifespan'> | null | undefined): number | undefined => {
   const map = useSyncExternalStore(subscribe, () => shownHealth, () => shownHealth);
   return unit ? map.get(unit.id) ?? unit.lifespan : undefined;
+};
+// A troop's health as the board shows it, or undefined when the board doesn't show it (gone, or
+// never drawn) - one destroyed is still shown until its fatal blow lands
+export const useShownHealthOf = (id: string | null | undefined): number | undefined => {
+  const map = useSyncExternalStore(subscribe, () => shownHealth, () => shownHealth);
+  return id ? map.get(id) : undefined;
 };
 // A castle's health as the board shows it
 export const useShownCastleHealth = (side: PlayerType, health: number): number => {
@@ -95,15 +102,18 @@ export interface HealthTimeline {
   landed: Map<string, LandedChange[]>;
 }
 
-// How long a landed change keeps its floating number listed
+// How long a landed change keeps its floating number listed (on the battle's clock)
 const LANDED_KEEP_MS = 1500;
+// Longest a wait for the next change goes unchecked (real ms)
+const RECHECK_MS = 300;
 
 export const useHealthTimeline = (gameState: GameState, units: Unit[]): HealthTimeline => {
   const scheduledRef = useRef<Scheduled[]>([]);
   // Changes from before the board appeared aren't replayed (set as the first render starts afresh)
   const seenSerialRef = useRef(0);
   const gameIdRef = useRef<string | null>(null);
-  const [now, setNow] = useState(() => performance.now());
+  // (the battle's clock)
+  const [now, setNow] = useState(() => getGameClock());
   // Troops drawn last time, so a troop already out of sight isn't brought back to die
   const drawnRef = useRef(new Set<string>());
 
@@ -120,10 +130,9 @@ export const useHealthTimeline = (gameState: GameState, units: Unit[]): HealthTi
   // never shows them early, even for a frame)
   const fresh = (gameState.healthEvents ?? []).filter(event => event.serial > seenSerialRef.current);
   if (fresh.length > 0) {
-    const arrived = performance.now();
-    const scale = Math.max(0.1, getTimeScale());
+    const arrived = getGameClock();
     for (const event of fresh) {
-      const showAt = arrived + healthEventDelay(event) * 1000 / scale;
+      const showAt = arrived + healthEventDelay(event) * 1000;
       scheduledRef.current.push({ event, showAt });
       showsAt.set(event.serial, showAt);
     }
@@ -180,18 +189,28 @@ export const useHealthTimeline = (gameState: GameState, units: Unit[]): HealthTi
   }, [units, now, seenSerial]);
 
   // Re-render when the next pending change is due, and forget changes shown a while ago (once the
-  // last has shown, when its number is done)
+  // last has shown, when its number is done). The wait is checked again at least every so often, as
+  // the time scale can change while it runs.
   useEffect(() => {
     const scheduled = scheduledRef.current;
     if (scheduled.length === 0) return;
     const due = scheduled.filter(item => item.showAt > now).map(item => item.showAt);
     const at = due.length > 0 ? Math.min(...due) : Math.min(...scheduled.map(item => item.showAt)) + LANDED_KEEP_MS;
-    const timeout = setTimeout(() => {
-      const time = performance.now();
-      scheduledRef.current = scheduledRef.current.filter(item => item.showAt > time - LANDED_KEEP_MS);
-      for (const [serial, showAt] of showsAt) if (showAt < time - LANDED_KEEP_MS) showsAt.delete(serial);
-      setNow(time);
-    }, Math.max(0, at - performance.now()) + 5);
+    let timeout: ReturnType<typeof setTimeout>;
+    const arm = () => {
+      const wait = (at - getGameClock()) / Math.max(0.1, getTimeScale());
+      timeout = setTimeout(() => {
+        const time = getGameClock();
+        if (time < at) {
+          arm();
+          return;
+        }
+        scheduledRef.current = scheduledRef.current.filter(item => item.showAt > time - LANDED_KEEP_MS);
+        for (const [serial, showAt] of showsAt) if (showAt < time - LANDED_KEEP_MS) showsAt.delete(serial);
+        setNow(time);
+      }, Math.min(RECHECK_MS, Math.max(0, wait)) + 5);
+    };
+    arm();
     return () => clearTimeout(timeout);
   }, [now, seenSerial]);
 

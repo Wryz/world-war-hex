@@ -42,12 +42,20 @@ const castleOnScreen = (state: GameState, side: PlayerType) => {
 export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
   const previousRef = useRef<GameState | null>(null);
   const flagsRef = useRef({ lastStand: false, finalRound: false });
+  // Announcements waiting for a blow to land (dropped if the battle ends or another begins)
+  const waitingRef = useRef(new Set<ReturnType<typeof setTimeout>>());
+  useEffect(() => () => {
+    waitingRef.current.forEach(clearTimeout);
+    waitingRef.current.clear();
+  }, []);
 
   useEffect(() => {
     const previous = previousRef.current;
     previousRef.current = gameState;
     if (!isReady || !previous || previous.players.player.id !== gameState.players.player.id) {
       flagsRef.current = { lastStand: false, finalRound: false };
+      waitingRef.current.forEach(clearTimeout);
+      waitingRef.current.clear();
       return;
     }
 
@@ -58,7 +66,13 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
     // Troops destroyed, castles hit and a boss enraged outside a fight (a falling tree, a stone, a
     // boss's strike) are announced when the blow lands on the board, not when the rules decide it
     const wait = pendingHealthWait(gameState, event => !!event.fatal || !!event.castle || !!event.unit?.isBoss);
-    if (wait > 0) setTimeout(() => announce(previous, gameState, before, after, flagsRef.current), wait);
+    if (wait > 0) {
+      const timer = setTimeout(() => {
+        waitingRef.current.delete(timer);
+        announce(previous, gameState, before, after, flagsRef.current);
+      }, wait);
+      waitingRef.current.add(timer);
+    }
     else announce(previous, gameState, before, after, flagsRef.current);
   }, [gameState, isReady]);
 };

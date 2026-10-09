@@ -3,7 +3,6 @@ import Image from 'next/image';
 import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { getLevel, LEVEL_COUNT, REGIONS } from '@/lib/campaign/levels';
-import { topUpDeck } from '@/lib/campaign/startLevel';
 import { MOB_IDS, FACTIONS } from '@/lib/game/troops';
 import { highestCleared, highestUnlocked, useHasHydrated, useProfile } from '@/lib/meta/profile';
 import { useMusic } from '@/lib/audio/music';
@@ -171,7 +170,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
             </div>
 
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <Link href={`/play?level=${nextLevel.id}`} onClick={() => topUpDeck(nextLevel)} className={`${PRIMARY_BUTTON} flex-1 py-4 text-center text-2xl sm:text-3xl`}>
+              <Link href={`/play?level=${nextLevel.id}`} className={`${PRIMARY_BUTTON} flex-1 py-4 text-center text-2xl sm:text-3xl`}>
                 <span className="inline-flex items-center gap-2"><AttackIcon color="currentColor" /> {cleared === 0 ? 'Start Campaign' : 'Battle!'}</span>
               </Link>
               {savedBattle && onContinueBattle && (

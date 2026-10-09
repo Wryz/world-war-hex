@@ -111,16 +111,19 @@ export const deployCandidates = (state: GameState, type: UnitType, taken: Set<st
     canStrike(state, foe, { ...foe, id: 'recruit', owner: 'player', position: hex.coordinates }));
   const free = getDeploymentHexes(state, 'player').filter(hex => !taken.has(coordKey(hex.coordinates)) && !(ranged && beside(hex)));
   const safe = free.filter(hex => ranged ? !inReach(hex) : !beside(hex));
-  const facing = (hexes: GameState['hexGrid']) => hexes.filter(hex => facesFight(state, hex.coordinates));
+  const facesFight = facingFight(state);
+  const facing = (hexes: GameState['hexGrid']) => hexes.filter(hex => facesFight(hex.coordinates));
   const tiers = ranged ? [facing(safe), safe, free] : [facing(safe), facing(free), safe, free];
   return tiers.find(tier => tier.length > 0) ?? [];
 };
 
 // Whether a spot is on the side of your castle facing the fight (nearer it than the castle is)
-const facesFight = (state: GameState, at: HexCoordinates): boolean => {
+const facingFight = (state: GameState): ((at: HexCoordinates) => boolean) => {
   const front = frontOf(state);
   const home = findBaseHex(state, 'player')?.coordinates;
-  return !!front && !!home && getHexDistance(at, front) < getHexDistance(home, front);
+  if (!front || !home) return () => false;
+  const castle = getHexDistance(home, front);
+  return at => getHexDistance(at, front) < castle;
 };
 
 // The spot to deploy a troop on: of the candidates, the one nearest the fight (a camp first when
@@ -138,14 +141,16 @@ export const deploySpot = (state: GameState, type: UnitType, taken: Set<string> 
 // there are taken, or are within the enemy's reach). `taken` as for deployCandidates.
 export const deployCaption = (state: GameState, at: HexCoordinates, taken: Set<string> = new Set()): string => {
   if (state.hexGrid.some(hex => hex.isCamp && same(hex.coordinates, at))) return 'Deploy at your camp, nearer the fight';
-  const enemies = getVisibleEnemies(state, 'player').length > 0;
-  if (facesFight(state, at)) return enemies ? 'Deploy it on the side facing the enemy' : 'Deploy it beside your castle, towards the enemy';
-  const facing = getDeploymentSpots(state, 'player').filter(spot => facesFight(state, spot) &&
+  const foes = getVisibleEnemies(state, 'player');
+  const enemies = foes.length > 0;
+  const facesFight = facingFight(state);
+  if (facesFight(at)) return enemies ? 'Deploy it on the side facing the enemy' : 'Deploy it beside your castle, towards the enemy';
+  const facing = getDeploymentSpots(state, 'player').filter(spot => facesFight(spot) &&
     state.hexGrid.some(hex => same(hex.coordinates, spot) && !hex.isBase && !isImpassable(hex)));
   if (facing.length === 0) return 'Deploy it beside your castle';
-  const free = getDeploymentHexes(state, 'player').filter(hex => facesFight(state, hex.coordinates) && !taken.has(coordKey(hex.coordinates)));
+  const free = getDeploymentHexes(state, 'player').filter(hex => facesFight(hex.coordinates) && !taken.has(coordKey(hex.coordinates)));
   if (free.length === 0) return 'Deploy it here: the spots facing the enemy are taken';
-  const reached = getVisibleEnemies(state, 'player').some(foe => canStrike(state, foe, { ...foe, id: 'recruit', owner: 'player', position: at }));
+  const reached = foes.some(foe => canStrike(state, foe, { ...foe, id: 'recruit', owner: 'player', position: at }));
   return enemies && !reached ? 'Deploy it here, out of the enemy\'s reach' : 'Deploy it beside your castle';
 };
 

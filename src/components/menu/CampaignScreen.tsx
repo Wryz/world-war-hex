@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { REGIONS, Region, getLevel, getRegionLevels, LevelDef } from '@/lib/campaign/levels';
-import { topUpDeck } from '@/lib/campaign/startLevel';
 import { FACTIONS, TROOPS } from '@/lib/game/troops';
 import { highestUnlocked, useHasHydrated, useProfile } from '@/lib/meta/profile';
 import { useMusic } from '@/lib/audio/music';
@@ -92,10 +91,7 @@ export const CampaignScreen: React.FC<{ initialLevel?: number }> = ({ initialLev
     if (initialLevel && initialLevel <= next) setSelected(getLevel(initialLevel));
   }, [hydrated, profile, initialLevel]);
 
-  const fight = (level: LevelDef) => {
-    topUpDeck(level);
-    router.push(`/play?level=${level.id}`);
-  };
+  const fight = (level: LevelDef) => router.push(`/play?level=${level.id}`);
   const close = useCallback(() => setSelected(null), []);
 
   return (

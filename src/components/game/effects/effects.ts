@@ -63,6 +63,28 @@ export const useCastleShownDamage = () => useSyncExternalStore(castleShownDamage
 // How fast animations run right now: the chosen speed, slowed during slow motion
 export const getTimeScale = () => speedSignal.get() * slowMotion.get();
 
+// The battle's own clock (ms): real time run at the time scale, so it keeps pace with the
+// animations through changes of speed and slow motion
+let clockReal = typeof performance !== 'undefined' ? performance.now() : 0;
+let clockGame = 0;
+let clockScale = getTimeScale();
+const settleClock = () => {
+  const now = performance.now();
+  clockGame += (now - clockReal) * clockScale;
+  clockReal = now;
+};
+export const getGameClock = () => {
+  settleClock();
+  return clockGame;
+};
+// (the clock runs at the old rate up to a change, the new one after)
+const rescaleClock = () => {
+  settleClock();
+  clockScale = getTimeScale();
+};
+speedSignal.subscribe(rescaleClock);
+slowMotion.subscribe(rescaleClock);
+
 let slowMotionTimeout: ReturnType<typeof setTimeout> | undefined;
 export const triggerSlowMotion = (scale: number, durationMs: number) => {
   slowMotion.set(scale);

@@ -210,6 +210,37 @@ const nearestSide = (azimuth: number, castleAzimuth: number) => {
 // of the edges, the top HUD and the hand of cards
 const KEEP_IN_VIEW = { left: 0.12, right: 0.88, top: 0.16, bottom: 0.66 };
 
+// What the action view takes in: your troops; the enemies in sight near them or your castle; the
+// enemy castle when your troops are near it; and your castle while a card is being played or
+// enemies are near it. Null (nothing to frame: the overview instead) before you have troops.
+const getActionPoints = (state: GameState, deploying: boolean): HexCoordinates[] | null => {
+  if (state.currentPhase === 'setup' || state.currentPhase === 'gameOver') return null;
+  const ours = state.players.player.units.map(unit => unit.position);
+  if (ours.length === 0) return null;
+  const home = findBaseHex(state, 'player')?.coordinates;
+  const enemyCastle = findBaseHex(state, 'ai')?.coordinates;
+  const near = (at: HexCoordinates, anchors: HexCoordinates[]) => anchors.some(anchor => getHexDistance(anchor, at) <= ACTION_REACH);
+  const foes = state.players.ai.units.map(unit => unit.position).filter(at => near(at, home ? [...ours, home] : ours));
+  const points = [...ours, ...foes];
+  if (enemyCastle && near(enemyCastle, ours)) points.push(enemyCastle);
+  // (nothing to fight close by: where the fight is, or lies)
+  if (foes.length === 0) {
+    const closest = (from: HexCoordinates[], to: HexCoordinates[]) =>
+      Math.min(...from.flatMap(a => to.map(b => getHexDistance(a, b))));
+    const seen = state.players.ai.units.map(unit => unit.position);
+    const nearest = [...seen].sort((a, b) => closest(ours, [a]) - closest(ours, [b]))[0];
+    if (nearest && closest(ours, [nearest]) <= ACTION_REACH * 2) points.push(nearest);
+    else if (enemyCastle) {
+      const ahead = state.hexGrid
+        .filter(hex => closest(ours, [hex.coordinates]) <= ACTION_LOOK_AHEAD)
+        .sort((a, b) => getHexDistance(a.coordinates, enemyCastle) - getHexDistance(b.coordinates, enemyCastle))[0];
+      if (ahead) points.push(ahead.coordinates);
+    }
+  }
+  if (home && (deploying || foes.some(at => getHexDistance(at, home) <= ACTION_REACH))) points.push(home);
+  return points;
+};
+
 const CameraRig: React.FC<{
   gameState: GameState;
   focus: HexCoordinates | null;
@@ -302,45 +333,16 @@ const CameraRig: React.FC<{
   }, [camera, viewRadius, nearEdgeDistance, targetAzimuth, nearEdgeMargin]);
   const defaultLookAt = useMemo(() => getDefaultLookAt(), [getDefaultLookAt]);
 
-  // What the action view takes in: your troops; the enemies in sight near them or your castle; the
-  // enemy castle when your troops are near it; and your castle while a card is being played or
-  // enemies are near it. Null (nothing to frame: the overview instead) before you have troops.
-  const actionPoints = (() => {
-    if (gameState.currentPhase === 'setup' || gameState.currentPhase === 'gameOver') return null;
-    const ours = gameState.players.player.units.map(unit => unit.position);
-    if (ours.length === 0) return null;
-    const home = findBaseHex(gameState, 'player')?.coordinates;
-    const enemyCastle = findBaseHex(gameState, 'ai')?.coordinates;
-    const near = (at: HexCoordinates, anchors: HexCoordinates[]) => anchors.some(anchor => getHexDistance(anchor, at) <= ACTION_REACH);
-    const foes = gameState.players.ai.units.map(unit => unit.position).filter(at => near(at, home ? [...ours, home] : ours));
-    const points = [...ours, ...foes];
-    if (enemyCastle && near(enemyCastle, ours)) points.push(enemyCastle);
-    // (nothing to fight close by: where the fight is, or lies)
-    if (foes.length === 0) {
-      const closest = (from: HexCoordinates[], to: HexCoordinates[]) =>
-        Math.min(...from.flatMap(a => to.map(b => getHexDistance(a, b))));
-      const seen = gameState.players.ai.units.map(unit => unit.position);
-      const nearest = [...seen].sort((a, b) => closest(ours, [a]) - closest(ours, [b]))[0];
-      if (nearest && closest(ours, [nearest]) <= ACTION_REACH * 2) points.push(nearest);
-      else if (enemyCastle) {
-        const ahead = gameState.hexGrid
-          .filter(hex => closest(ours, [hex.coordinates]) <= ACTION_LOOK_AHEAD)
-          .sort((a, b) => getHexDistance(a.coordinates, enemyCastle) - getHexDistance(b.coordinates, enemyCastle))[0];
-        if (ahead) points.push(ahead.coordinates);
-      }
-    }
-    if (home && (deployingCard || foes.some(at => getHexDistance(at, home) <= ACTION_REACH))) points.push(home);
-    return points;
-  })();
-  const actionPointsRef = useRef(actionPoints);
-  actionPointsRef.current = actionPoints;
+  // What the action view is worked out from (only when the camera reframes)
+  const actionSourceRef = useRef({ gameState, deploying: !!deployingCard });
+  actionSourceRef.current = { gameState, deploying: !!deployingCard };
   const nearEdgeMarginRef = useRef(nearEdgeMargin);
   nearEdgeMarginRef.current = nearEdgeMargin;
 
   // Where to look and how far to pull back for the action view from a direction (an azimuth around
   // the board): everything in it on screen between the top HUD and the hand of cards, centred
   const frameAction = useCallback((azimuth: number): { lookAt: THREE.Vector3; zoom: number } | null => {
-    const points = actionPointsRef.current;
+    const points = getActionPoints(actionSourceRef.current.gameState, actionSourceRef.current.deploying);
     if (!points) return null;
     const perspective = camera as THREE.PerspectiveCamera;
     const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(perspective.fov / 2));

@@ -1,16 +1,21 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { GameState } from '@/types/game';
 import { getTroopName } from '@/lib/game/gameState';
 import { getBossPower, isBossEnraged } from '@/lib/game/bosses';
 import { PANEL_CLASS } from './styles';
-import { useShownHealth } from '../effects/healthTimeline';
+import { useShownHealth, useShownHealthOf } from '../effects/healthTimeline';
 import { BossIcon, BossPowerIcon, FireIcon } from '../icons';
 
 // The boss's own health bar, under the castles while it lives: its health, whether it is enraged
 // (the bar burns), and its power - lit when it is ready or has marked the ground, with a pip for each
 // turn it still needs otherwise
 export const BossBar: React.FC<{ gameState: GameState }> = ({ gameState }) => {
-  const boss = gameState.players.ai.units.find(unit => unit.isBoss);
+  const live = gameState.players.ai.units.find(unit => unit.isBoss);
+  // (a boss just destroyed outside a fight stays until the board shows its fatal blow land)
+  const lastRef = useRef(live);
+  if (live) lastRef.current = live;
+  const lastShown = useShownHealthOf(lastRef.current?.id);
+  const boss = live ?? (lastShown !== undefined ? lastRef.current : undefined);
   // (its health as the board shows it: a blow counts once it has landed)
   const health = useShownHealth(boss) ?? 0;
   if (!boss) return null;

@@ -69,13 +69,12 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const isMuted = useMuted();
   const level = battle.mode === 'campaign' ? getLevel(battle.levelId) : undefined;
 
-  // The first battle is a tutorial for new players (see TutorialGuide)
-  // The first two battles are always tutorials, however often they are played (the first opens with
-  // a flight over the field; the second shows where to build a castle)
-  // The hand guides the first battles only until the player has won one: from then on it's theirs
-  // to play (players found its plays weaker than their own by then)
-  const [showTutorial, setShowTutorial] = useState(() =>
-    battle.mode === 'campaign' && battle.levelId <= TUTORIAL_BATTLES && getProfile().stats.wins === 0);
+  // The first two battles are tutorials for new players (see TutorialGuide): the first opens with a
+  // flight over the field, the second shows where to build a castle. The hand guides their turns
+  // only until the player has won a battle - from then on it's theirs to play (players found its
+  // plays weaker than their own by then) - but still points out the castle site
+  const tutorialBattle = battle.mode === 'campaign' && battle.levelId <= TUTORIAL_BATTLES;
+  const [showTutorial, setShowTutorial] = useState(() => tutorialBattle && getProfile().stats.wins === 0);
   const {
     gameState,
     selectedHex,
@@ -146,7 +145,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   // The first battle shows what to do (see TutorialGuide); it counts as done once the battle is over
   const tutorial = useTutorial({
-    active: showTutorial, intro: showTutorial && battle.mode === 'campaign' && battle.levelId === 1, ready: isReady, choosingOrder: !!actionChoice, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
+    active: showTutorial || tutorialBattle, siteOnly: !showTutorial, intro: showTutorial && battle.mode === 'campaign' && battle.levelId === 1, ready: isReady, choosingOrder: !!actionChoice, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
   });
   // Later battles: the hand points out each new mechanic the first time it turns up
   const mechanic = useMechanicGuide({
@@ -396,7 +395,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
       {/* First-time tips for the newer rules (not while the first battle's tutorial is running) */}
       {!showTutorial && isReady && currentPhase !== 'gameOver' && <RuleTips gameState={gameState} />}
-      {showTutorial && isReady && currentPhase !== 'gameOver' && (
+      {(showTutorial || tutorialBattle) && isReady && currentPhase !== 'gameOver' && (
         <TutorialOverlay gameState={gameState} pointer={tutorial.pointer} introRunning={tutorial.introRunning} introCaption={tutorial.introCaption} onSkipIntro={tutorial.skipIntro} />
       )}
       {mechanic?.hex && <TutorialOverlay gameState={gameState} pointer={{ hex: mechanic.hex, caption: mechanic.caption }} introRunning={false} onSkipIntro={() => undefined} />}

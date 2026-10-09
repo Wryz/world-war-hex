@@ -350,6 +350,18 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
   };
 
   // Handle hex click
+  // Pick one of the player's troops and show everything it can be ordered to (or, picked already,
+  // put it down again)
+  const toggleOwnUnit = (current: GameState, unit: Unit) => {
+    if (selectedUnit?.id === unit.id) {
+      setSelectedUnit(null);
+      setValidMoves([]);
+      return;
+    }
+    setSelectedUnit(unit);
+    setValidMoves([...getValidMoveTargets(current, unit), ...getFellTargets(current, unit), ...getActionTargets(current, unit).map(target => target.at)]);
+  };
+
   const handleHexClick = (hex: Hex) => {
     const current = stateRef.current;
     // Before the first turn: build the castle on one of the offered sites
@@ -459,17 +471,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
 
     // Select one of the player's units and show where it can move
     if (hex.unit && hex.unit.owner === 'player') {
-      if (selectedUnit?.id === hex.unit.id) {
-        // Clicking the selected unit again deselects it
-        setSelectedUnit(null);
-        setValidMoves([]);
-        return;
-      }
-
-      setSelectedUnit(hex.unit);
-      setValidMoves([
-        ...getValidMoveTargets(current, hex.unit), ...getFellTargets(current, hex.unit), ...getActionTargets(current, hex.unit).map(target => target.at)
-      ]);
+      toggleOwnUnit(current, hex.unit);
       return;
     }
 
@@ -502,13 +504,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     const orderedOnto = !!selectedUnit && selectedUnit.id !== unit.id && validMoves.some(c => coordsEqual(c, unitHex.coordinates));
     if (live && isPlayerPlanning() && !selectedUnitTypeForPurchase && !orderedOnto) {
       setSelectedHex(unitHex);
-      if (selectedUnit?.id === live.id) {
-        setSelectedUnit(null);
-        setValidMoves([]);
-        return;
-      }
-      setSelectedUnit(live);
-      setValidMoves([...getValidMoveTargets(current, live), ...getFellTargets(current, live), ...getActionTargets(current, live).map(target => target.at)]);
+      toggleOwnUnit(current, live);
       return;
     }
     handleHexClick(unitHex);
