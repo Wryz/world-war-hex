@@ -187,6 +187,10 @@ export interface AIPlanOptions {
   doctrine?: AIDoctrine;
   // Skill to play at instead of the battle's own setting (simulations play the player's side with it)
   difficulty?: 'easy' | 'medium' | 'hard';
+  // How much more (or less) than its doctrine's usual the side fears losing troops
+  caution?: number;
+  // Filled in with what each unit set out to do this turn
+  intents?: Map<string, GoalKind>;
 }
 
 // Share of the army given to a class of troop the doctrine doesn't mention
@@ -275,7 +279,7 @@ export const planAITurn = (initial: GameState, options: AIPlanOptions = {}): Gam
   // where it last saw the others
   const view = getSideView(state, side, true);
   if (side === 'ai') {
-    const planned = planTurn(view, doctrine, getRosterTypes(state, 'ai'), options.difficulty);
+    const planned = planTurn(view, doctrine, getRosterTypes(state, 'ai'), options.difficulty, options);
     if (view === state) return planned;
     // Carry the orders (and the gold they cost) back onto the real board
     return {
@@ -288,7 +292,7 @@ export const planAITurn = (initial: GameState, options: AIPlanOptions = {}): Gam
 
   // Plan the player's side by swapping sides (a player with a deck may only play the cards in hand),
   // then give the same orders on the real board so gold, the deck and every rule apply as normal
-  const planned = planTurn(mirrorSides(view), doctrine, getHand(state), options.difficulty);
+  const planned = planTurn(mirrorSides(view), doctrine, getHand(state), options.difficulty, options);
   let result = state;
   for (const move of planned.pendingMoves) {
     result = addPendingMove(result, move.unitId, state.players.player.id, move.to);
@@ -331,14 +335,19 @@ interface Planner {
   // In the last rounds: whether the AI is behind or ahead on the points that decide the battle if
   // time runs out (null before then, or level)
   endgame: 'behind' | 'ahead' | null;
+  // What each unit set out to do this turn (filled in as their moves are decided)
+  intents: Map<string, GoalKind>;
 }
 
-const planTurn = (state: GameState, doctrine: AIDoctrine, recruitTypes: UnitType[], difficulty?: AIPlanOptions['difficulty']): GameState => {
+const planTurn = (
+  state: GameState, doctrine: AIDoctrine, recruitTypes: UnitType[], difficulty?: AIPlanOptions['difficulty'],
+  options: Pick<AIPlanOptions, 'caution' | 'intents'> = {}
+): GameState => {
   const enemyBase = findBaseHex(state, 'player');
   const myBase = findBaseHex(state, 'ai');
   if (!myBase || !enemyBase) return state;
 
-  const profile = DOCTRINES[doctrine];
+  const profile = { ...DOCTRINES[doctrine], caution: DOCTRINES[doctrine].caution * (options.caution ?? 1) };
   const planner: Planner = {
     state,
     recruitTypes,
@@ -357,7 +366,8 @@ const planTurn = (state: GameState, doctrine: AIDoctrine, recruitTypes: UnitType
     objectives: new Map(),
     anchors: new Map(),
     interceptors: new Map(),
-    endgame: endgameStanding(state)
+    endgame: endgameStanding(state),
+    intents: options.intents ?? new Map()
   };
   planner.isPushing = isPushing(planner);
   planner.interceptors = assignInterceptors(planner);
@@ -818,7 +828,12 @@ const chooseSupportPosition = (planner: Planner, mage: Unit): HexCoordinates | n
 // Moving a unit
 // ---------------------------------------------------------------------------
 
+// What a unit is trying to do this turn (chooseGoal), for anyone asking why it moved (the tutorial)
+export type GoalKind =
+  | 'intercept' | 'guard' | 'retreat' | 'heal' | 'objective' | 'holdCamp' | 'holdMine' | 'support' | 'push' | 'anchor' | 'raid' | 'march';
+
 interface UnitGoal {
+  kind: GoalKind;
   position: HexCoordinates | null;
   // Gold value of each turn of progress towards it
   weight: number;
@@ -837,66 +852,66 @@ const chooseGoal = (planner: Planner, unit: Unit): UnitGoal => {
   const healthRatio = unit.lifespan / unit.maxLifespan;
   const standingOn = planner.hexes.get(key(unit.position));
   const cautionScale = planner.endgame === 'ahead' ? ENDGAME_CAUTION_BOOST : 1;
-  const goal = (position: HexCoordinates | null, weight: number, holdValue = 0, caution = profile.caution): UnitGoal =>
-    ({ position, weight, holdValue, caution: caution * cautionScale });
+  const goal = (kind: GoalKind, position: HexCoordinates | null, weight: number, holdValue = 0, caution = profile.caution): UnitGoal =>
+    ({ kind, position, weight, holdValue, caution: caution * cautionScale });
 
   // An enemy that could besiege the castle is met by enough units to stop it
   const raider = planner.interceptors.get(unit.id);
-  if (raider) return goal(raider.position, GOAL_WEIGHT.urgent, 0, profile.caution * 0.5);
+  if (raider) return goal('intercept', raider.position, GOAL_WEIGHT.urgent, 0, profile.caution * 0.5);
 
   // Bosses guard the castle (fighting whatever comes close) until the final push
-  if (unit.isBoss && !planner.isPushing) return goal(unit.position, GOAL_WEIGHT.station, 2, profile.caution * 0.5);
+  if (unit.isBoss && !planner.isPushing) return goal('guard', unit.position, GOAL_WEIGHT.station, 2, profile.caution * 0.5);
 
   // Wounded units under threat fall back
   if (!planner.isPushing && healthRatio < settings.retreatThreshold && dangerAt(planner, unit, unit.position) > 0) {
     const spring = findNearbySpring(planner, unit);
-    return goal(spring?.coordinates ?? myBase.coordinates, GOAL_WEIGHT.objective, 0, profile.caution * 2);
+    return goal('retreat', spring?.coordinates ?? myBase.coordinates, GOAL_WEIGHT.objective, 0, profile.caution * 2);
   }
 
   // Wounded units rest on a healing spring until they're back to full health,
   // and detour to one if it's close by
   const wantsToHeal = planner.isPushing ? healthRatio < PUSH_HEAL_THRESHOLD : unit.lifespan < unit.maxLifespan;
   if (wantsToHeal && standingOn && TERRAIN_EFFECTS[standingOn.terrain].healPerTurn) {
-    return goal(unit.position, GOAL_WEIGHT.objective, healthValue(unit, HEALER_HEAL_AMOUNT) * 2);
+    return goal('heal', unit.position, GOAL_WEIGHT.objective, healthValue(unit, HEALER_HEAL_AMOUNT) * 2);
   }
   if (wantsToHeal && unit.maxLifespan - unit.lifespan >= (planner.isPushing ? 1 : 2)) {
     const spring = findNearbySpring(planner, unit);
-    if (spring) return goal(spring.coordinates, GOAL_WEIGHT.objective);
+    if (spring) return goal('heal', spring.coordinates, GOAL_WEIGHT.objective);
   }
 
   // Take (or retake) the camp or gold mine this unit was sent to
   const objective = planner.objectives.get(unit.id);
-  if (objective) return goal(objective.coordinates, GOAL_WEIGHT.objective);
+  if (objective) return goal('objective', objective.coordinates, GOAL_WEIGHT.objective);
 
   // Hold a camp while the enemy could otherwise walk in and take it next turn
   if (standingOn?.isCamp && standingOn.owner === 'ai' && enemyCanReach(planner, unit.position)) {
-    return goal(unit.position, GOAL_WEIGHT.objective, CAMP_INCOME * 3);
+    return goal('holdCamp', unit.position, GOAL_WEIGHT.objective, CAMP_INCOME * 3);
   }
 
   // Hold gold mines until the all-out push
   if (standingOn?.isResourceHex && !planner.isPushing) {
-    return goal(unit.position, GOAL_WEIGHT.objective, (standingOn.resourceValue ?? 0) * 3);
+    return goal('holdMine', unit.position, GOAL_WEIGHT.objective, (standingOn.resourceValue ?? 0) * 3);
   }
 
   // Mages keep close behind the front line so they can heal it
   if (unit.abilities.includes('healing')) {
     const support = chooseSupportPosition(planner, unit);
-    if (support) return goal(support, GOAL_WEIGHT.station);
+    if (support) return goal('support', support, GOAL_WEIGHT.station);
   }
 
-  if (planner.isPushing) return goal(enemyBase.coordinates, GOAL_WEIGHT.urgent, 0, profile.caution * 0.3);
+  if (planner.isPushing) return goal('push', enemyBase.coordinates, GOAL_WEIGHT.urgent, 0, profile.caution * 0.3);
 
   if (profile.posture === 'hold') {
     const anchor = planner.anchors.get(unit.id);
-    if (anchor) return goal(anchor, GOAL_WEIGHT.station, 1);
+    if (anchor) return goal('anchor', anchor, GOAL_WEIGHT.station, 1);
   }
 
   if (profile.posture === 'raid') {
     const target = chooseRaidTarget(planner, unit);
-    if (target) return goal(target, GOAL_WEIGHT.march);
+    if (target) return goal('raid', target, GOAL_WEIGHT.march);
   }
 
-  return goal(enemyBase.coordinates, GOAL_WEIGHT.march);
+  return goal('march', enemyBase.coordinates, GOAL_WEIGHT.march);
 };
 
 // Whether a unit standing at `position` could attack the enemy castle (as canStrikeCastle)
@@ -969,6 +984,7 @@ const recordPlannedAttack = (planner: Planner, unit: Unit, position: HexCoordina
 const decideUnitMove = (planner: Planner, unit: Unit): HexCoordinates | null => {
   const { state, settings, myBase } = planner;
   const goal = chooseGoal(planner, unit);
+  planner.intents.set(unit.id, goal.kind);
   const enemiesNear = planner.enemies.some(enemy => getHexDistance(enemy.position, unit.position) <= 8);
   const startDistance = goal.position ? walkingDistance(state, unit.position, goal.position) : 0;
 
