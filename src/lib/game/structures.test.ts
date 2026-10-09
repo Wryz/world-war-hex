@@ -93,26 +93,42 @@ test('a tavern pays, and barracks take recruits and drill them', () => {
   assert.ok(cardStats);
 });
 
-test('a catapult tower bombards the weakest enemy in reach, else the enemy castle', () => {
+test('a catapult tower bombards the weakest enemy in reach that its side can see, else a castle it can see', () => {
   const { state, centre } = makeBattle('player');
   build(state, centre, 'catapult', 'player');
   const crew = makeUnit('player', centre);
-  const weak = makeUnit('ai', at(centre, 3, 0), { lifespan: 8 });
-  const strong = makeUnit('ai', at(centre, -3, 0), { lifespan: 20 });
-  place(state, crew, weak, strong);
+  const weak = makeUnit('ai', at(centre, 2, 0), { lifespan: 8 });
+  const strong = makeUnit('ai', at(centre, -2, 0), { lifespan: 20 });
+  // (weaker still, and in reach, but out of everyone's sight)
+  const unseen = makeUnit('ai', at(centre, 4, -4), { lifespan: 3 });
+  place(state, crew, weak, strong, unseen);
   const after = playTurn(state);
   assert.equal(health(after, weak), 8 - CATAPULT_DAMAGE);
   assert.equal(health(after, strong), 20);
+  assert.equal(health(after, unseen), 3, 'nothing is thrown at what nobody can see');
   assert.equal(after.lastBombard?.side, 'player');
+  assert.ok(after.players.player.units.find(unit => unit.id === crew.id)?.revealed, 'throwing gives the crew away');
 
+  // An empty tower stays quiet
+  const { state: empty, centre: middle } = makeBattle('player');
+  build(empty, middle, 'catapult', 'player');
+  const target = makeUnit('ai', at(middle, 1, 0), { lifespan: 8 });
+  const passer = makeUnit('player', at(middle, -1, 0));
+  place(empty, target, passer);
+  assert.equal(health(playTurn(empty), target), 8);
+
+  // The enemy castle, only once someone can see it
   const { state: siege } = makeBattle('player');
   const castle = findBaseHex(siege, 'ai')!.coordinates;
   const tower = siege.hexGrid.find(hex => !hex.isBase && getHexDistance(hex.coordinates, castle) === 4)!.coordinates;
   build(siege, tower, 'catapult');
   place(siege, makeUnit('player', tower));
   const castleBefore = siege.players.ai.baseHealth!;
-  const pounded = playTurn(siege);
-  assert.equal(pounded.players.ai.baseHealth, castleBefore - CATAPULT_CASTLE_DAMAGE);
+  assert.equal(playTurn(siege).players.ai.baseHealth, castleBefore, 'out of sight');
+  const spot = siege.hexGrid.find(hex => !hex.isBase && !hex.unit && getHexDistance(hex.coordinates, castle) === 2 &&
+    getHexDistance(hex.coordinates, tower) > 1)!.coordinates;
+  place(siege, makeUnit('player', spot));
+  assert.equal(playTurn(siege).players.ai.baseHealth, castleBefore - CATAPULT_CASTLE_DAMAGE, 'a scout sees it');
 });
 
 test('with a lumber mill, troops fell great trees from 2 hexes away', () => {
