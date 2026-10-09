@@ -129,11 +129,7 @@ and transparent background as the approved cards.
 
 ### `engineer` - Engineers
 ```
-Card: Engineers (Kingdom, rare infantry). A stocky, bald chibi craftsman with bushy grey eyebrows
-and a thick grey beard, cheerful and capable. Orange-red tunic with white trim, a brown leather
-strap across the chest and a wide brown belt with a round steel buckle, grey sleeves and brown
-boots. Holds a broad steel hatchet low at his side. Match the attached render. Same style, framing
-and transparent background as the approved cards.
+Card: Engineers (Kingdom, rare infantry). A bald, stout chibi woodsman with heavy grey eyebrows, a thick grey beard and a focused determined expression. Burnt-orange work tunic with white fur trim, brown leather work apron/straps, belt with silver buckle and studs, brown boots. Holds a small single-bladed steel axe low in the right hand; royal-blue badge shield on the left arm, largely hidden by the pose as in the render. No helmet. Match the attached model's silhouette, proportions, pose, color placement and gear. Same painted style, framing and transparent background as the approved cards.
 ```
 
 ### `shieldbearer` - Shieldbearers
