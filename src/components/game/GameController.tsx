@@ -139,7 +139,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   // The first battle shows what to do (see TutorialGuide); it counts as done once the battle is over
   const tutorial = useTutorial({
-    active: showTutorial, intro: battle.mode === 'campaign' && battle.levelId === 1, ready: isReady, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
+    active: showTutorial, intro: battle.mode === 'campaign' && battle.levelId === 1, ready: isReady, choosingOrder: !!actionChoice, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
   });
   // (the board only redraws its marks when they actually change)
   const tutorialVisualsKey = JSON.stringify(tutorial.visuals);
@@ -346,7 +346,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         <div className="fixed inset-x-0 bottom-48 z-40 flex justify-center px-3">
           <div className="animate-fadeIn flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-slate-900/95 p-2 shadow-2xl ring-1 ring-white/10" role="group" aria-label="Choose an order">
             {actionChoice.canMove && (
-              <button onClick={() => handleActionChoice(null)} className="font-display flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-900 hover:bg-white">
+              <button onClick={() => handleActionChoice(null)} data-tutorial="move-here" className="font-display flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-900 hover:bg-white">
                 <ArrowIcon /> Move here
               </button>
             )}
