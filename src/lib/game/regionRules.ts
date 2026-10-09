@@ -56,8 +56,6 @@ export const MAX_PACK = 2;
 export const FURY_MAX = 0.4;
 // Share of its health an undead troop rises with
 export const RISE_HEALTH = 1 / 3;
-// Troops that take wing with the dragonkin
-const TAKES_WING: TroopId[] = ['drake'];
 
 const factionOf = (type: UnitType): Faction => TROOPS[type as TroopId]?.faction ?? 'kingdom';
 
@@ -68,10 +66,6 @@ export const traitOf = (unit: { type: UnitType; isBoss?: boolean }): FactionTrai
   unit.isBoss ? undefined : getFactionTrait(unit.type)?.id;
 
 export const hasTrait = (unit: { type: UnitType; isBoss?: boolean }, trait: FactionTraitId) => traitOf(unit) === trait;
-
-// Abilities a troop gains from its faction's trait
-export const traitAbilities = (type: UnitType): 'flying'[] =>
-  FACTION_TRAITS[factionOf(type)]?.id === 'skyborne' && TAKES_WING.includes(type as TroopId) ? ['flying'] : [];
 
 // Ground a troop's faction crosses as if it were open
 const NATIVE_GROUND: Partial<Record<FactionTraitId, TerrainType[]>> = {
@@ -182,11 +176,20 @@ export const getFogBankCentres = (state: Pick<GameState, 'settings' | 'turnNumbe
   return centres;
 };
 
+// (visibility asks for these constantly, so the last answer is kept: the banks only move each round)
+let lastFog: { key: string; keys: Set<string> } | null = null;
+const NO_FOG = new Set<string>();
 export const getFogBankKeys = (state: Pick<GameState, 'settings' | 'turnNumber' | 'hexGrid' | 'battleSeed'>): Set<string> => {
+  if (getWeather(state) !== 'fogBanks') return NO_FOG;
+  // (the castles count: the banks start clear of them)
+  const castles = state.hexGrid.filter(hex => hex.isBase).map(hex => `${hex.coordinates.q},${hex.coordinates.r}`).join(';');
+  const key = `${state.battleSeed ?? state.settings?.seed ?? 0}:${state.turnNumber}:${state.hexGrid.length}:${castles}`;
+  if (lastFog?.key === key) return lastFog.keys;
   const keys = new Set<string>();
   for (const centre of getFogBankCentres(state)) {
     for (const c of [centre, ...getNeighbors(centre)]) keys.add(`${c.q},${c.r}`);
   }
+  lastFog = { key, keys };
   return keys;
 };
 

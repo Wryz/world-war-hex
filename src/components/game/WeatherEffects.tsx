@@ -1,4 +1,4 @@
-import React, { useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GameState } from '@/types/game';
@@ -92,6 +92,7 @@ const Storm: React.FC<{ kind: WeatherId; on: boolean; extent: number }> = ({ kin
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     return { geometry, phases };
   }, [style, extent]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
   useFrame(({ clock }, delta) => {
     const points = pointsRef.current;
     if (!points) return;

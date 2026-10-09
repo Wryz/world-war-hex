@@ -100,9 +100,16 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
     if (rose > 0) emitMoment({ title: 'They Rise Again!', subtitle: 'Finish the undead with War Clerics or fire', tone: 'purple' });
     const wavering = (side: PlayerType) => gameState.players[side].units.filter(unit =>
       unit.shaken && !previous.players[side].units.find(other => other.id === unit.id)?.shaken && !unit.isBoss).length;
-    if (!(after.player.bossesSlain > before.player.bossesSlain)) {
-      if (wavering('ai') > 0) emitMoment({ title: 'Wavering!', subtitle: 'Surrounded and alone, it hits softer', tone: 'gold' });
-      else if (wavering('player') > 0) emitMoment({ title: 'Your troop wavers!', subtitle: 'Surrounded and alone: send help', tone: 'red' });
+    // (a fallen boss or champion shakes the whole army: the boss has its own moment, a champion this one)
+    const leaderFell = previous.players.ai.units.some(unit => (unit.isBoss || unit.isChampion) &&
+      !gameState.players.ai.units.some(other => other.id === unit.id));
+    const bossFell = previous.players.ai.units.some(unit => unit.isBoss && !gameState.players.ai.units.some(other => other.id === unit.id));
+    if (leaderFell) {
+      if (!bossFell && wavering('ai') > 0) emitMoment({ title: 'Champion Down!', subtitle: 'The enemy army is shaken', tone: 'gold' });
+    } else if (wavering('ai') > 0) {
+      emitMoment({ title: 'Wavering!', subtitle: 'Surrounded and alone, it hits softer', tone: 'gold' });
+    } else if (wavering('player') > 0) {
+      emitMoment({ title: 'Your troop wavers!', subtitle: 'Surrounded and alone: send help', tone: 'red' });
     }
 
     // Ambushes in the fog of war
