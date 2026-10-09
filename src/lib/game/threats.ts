@@ -25,7 +25,7 @@ export const getThreats = (state: GameState, side: PlayerType = 'player'): Map<s
     const reach = new Map<string, HexCoordinates[]>();
     for (const position of positions) {
       const terrain = findHexByCoordinates(state.hexGrid, position)?.terrain ?? 'plain';
-      const range = getAttackRange(enemy, terrain);
+      const range = getAttackRange(enemy, terrain, state);
       for (const hex of getHexesInRange(state.hexGrid, position, range)) {
         const distance = getHexDistance(position, hex.coordinates);
         if (distance === 0) continue;

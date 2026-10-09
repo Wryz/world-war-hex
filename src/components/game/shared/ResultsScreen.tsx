@@ -135,10 +135,10 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
   const share = async () => {
     const starText = '★'.repeat(stars) + '☆'.repeat(3 - stars);
     const text = level
-      ? `⚔️ World War Hex - Level ${level.id}: ${level.name}\n${won ? `Victory ${starText} in ${rounds} rounds` : `Defeated after ${rounds} rounds`} · ${stats.kills} foes slain\nCan you beat it?`
-      : `⚔️ World War Hex - Skirmish ${won ? 'won' : 'lost'} in ${rounds} rounds · ${stats.kills} foes slain`;
+      ? `⚔️ Hex Hordes - Level ${level.id}: ${level.name}\n${won ? `Victory ${starText} in ${rounds} rounds` : `Defeated after ${rounds} rounds`} · ${stats.kills} foes slain\nCan you beat it?`
+      : `⚔️ Hex Hordes - Skirmish ${won ? 'won' : 'lost'} in ${rounds} rounds · ${stats.kills} foes slain`;
     try {
-      if (navigator.share) await navigator.share({ title: 'World War Hex', text, url: window.location.origin });
+      if (navigator.share) await navigator.share({ title: 'Hex Hordes', text, url: window.location.origin });
       else {
         await navigator.clipboard.writeText(`${text}\n${window.location.origin}`);
         setCopied(true);

@@ -382,7 +382,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       )}
 
       {showBossIntro && isReady && level && (
-        <BossIntro boss={level.region.boss} level={level.enemyTier} onDone={() => setShowBossIntro(false)} />
+        <BossIntro boss={level.region.boss} level={level.enemyTier} stats={level.guards.find(guard => guard.isBoss)?.stats} onDone={() => setShowBossIntro(false)} />
       )}
 
       <EffectsLayer />

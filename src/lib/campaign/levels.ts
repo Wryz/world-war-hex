@@ -3,6 +3,7 @@ import type { GuardSpec } from '../game/gameState';
 import { Faction, MOB_IDS, TROOPS, TroopId, cardPower, scaleTroop, statsPower } from '../game/troops';
 import { expectedProgression, recommendedPower, baseLevelReward } from '../meta/economy';
 import { LEVEL_TUNING } from './levelTuning';
+import { SWARM_COST, WeatherId, getFactionTrait } from '../game/regionRules';
 
 // The campaign: fifteen regions of ten levels each. Every region has its own map theme, enemy
 // faction and terrain; the tenth level of each is a boss battle. The last five regions are
@@ -25,6 +26,8 @@ export interface Region {
   colors: [string, string];
   // Names of the ten battles
   places: string[];
+  // Its weather (regionRules.ts)
+  weather?: WeatherId;
 }
 
 export const REGIONS: Region[] = [
@@ -47,19 +50,19 @@ export const REGIONS: Region[] = [
     places: ['Shepherd\'s Rest', 'Bone Ridge', 'Webbed Ravine', 'Boar Run', 'Moonlit Tor', 'Bear Caves', 'Echo Pass', 'Fang Rocks', 'The Long Howl', 'Fenrak\'s Den']
   },
   {
-    id: 3, name: 'Mirefen Marsh', theme: 'Mirefen Marsh', faction: 'swamp', boss: 'bog_hydra',
+    id: 3, name: 'Mirefen Marsh', theme: 'Mirefen Marsh', faction: 'swamp', boss: 'bog_hydra', weather: 'fogBanks',
     newTerrain: ['swamp'], colors: ['#7fa36b', '#0f766e'],
     blurb: 'The marsh is rising, and so is whatever lives beneath it.',
     places: ['Reedwater', 'Sinking Steps', 'Slime Pools', 'Witch\'s Hut', 'Croaking Fen', 'Drowned Chapel', 'Lizard Shoals', 'Gloomwater', 'Hag\'s Cauldron', 'The Hydra\'s Lair']
   },
   {
-    id: 4, name: 'Sunscorch Desert', theme: 'Sunscorch Desert', faction: 'desert', boss: 'pharaoh',
+    id: 4, name: 'Sunscorch Desert', theme: 'Sunscorch Desert', faction: 'desert', boss: 'pharaoh', weather: 'sandstorm',
     newTerrain: ['desert', 'ruins'], colors: ['#ffd97a', '#b45309'],
     blurb: 'Raiders have broken open the tombs of the old kings.',
     places: ['Oasis Gate', 'Dune Sea', 'Scorpion Flats', 'Broken Obelisk', 'Sandstorm Road', 'Sunken Temple', 'Valley of Kings', 'Golem Quarry', 'Mirage Walls', 'The Pharaoh\'s Tomb']
   },
   {
-    id: 5, name: 'Frostpeak Pass', theme: 'Frostpeak Pass', faction: 'frost', boss: 'frost_giant',
+    id: 5, name: 'Frostpeak Pass', theme: 'Frostpeak Pass', faction: 'frost', boss: 'frost_giant', weather: 'blizzard',
     newTerrain: ['snow', 'ice'], colors: ['#eef6fc', '#0284c7'],
     blurb: 'The only road north runs through the giants\' frozen pass.',
     places: ['Snowgate', 'Frozen Lake', 'Wraith Hollow', 'Yeti Tracks', 'Icefall', 'Hunter\'s Lodge', 'Glacier Bridge', 'Whiteout', 'Giant\'s Stair', 'Hrimgar\'s Hall']
@@ -77,7 +80,7 @@ export const REGIONS: Region[] = [
     places: ['Rustgate', 'Skull Canyon', 'War Drums', 'Ogre Bridge', 'Spiked Walls', 'Bloodrock', 'Warg Pits', 'Smoking Forge', 'Horde Muster', 'Gorrash\'s Fortress']
   },
   {
-    id: 8, name: 'Emberforge Wastes', theme: 'Emberforge Wastes', faction: 'infernal', boss: 'demon_lord',
+    id: 8, name: 'Emberforge Wastes', theme: 'Emberforge Wastes', faction: 'infernal', boss: 'demon_lord', weather: 'ashfall',
     newTerrain: ['lava'], colors: ['#f97316', '#7f1d1d'],
     blurb: 'A rift has opened in the Emberforge. Demons pour through it.',
     places: ['Ashfall', 'Cinder Road', 'Imp Nest', 'Magma Falls', 'Brimstone Gate', 'Burning Ruins', 'Obsidian Field', 'Hellhound Kennels', 'The Rift', 'Azgaroth\'s Throne']
@@ -107,7 +110,7 @@ export const REGIONS: Region[] = [
     places: ['Deepgate', 'Torchlit Hall', 'Pillar Maze', 'Collapsed Stair', 'Vault of Coins', 'Goblin Mines', 'Chained Bridge', 'Flooded Forge', 'Hall of Banners', 'The Pit Throne']
   },
   {
-    id: 13, name: 'Rimeholt', theme: 'Rimeholt', faction: 'frost', allies: ['dragons'], boss: 'frost_giant',
+    id: 13, name: 'Rimeholt', theme: 'Rimeholt', faction: 'frost', allies: ['dragons'], boss: 'frost_giant', weather: 'blizzard',
     newTerrain: [], colors: ['#e0f2fe', '#1e3a8a'],
     blurb: 'Far north of the pass, the frost giants have woken the ice drakes.',
     places: ['Rime Gate', 'Frostfang Village', 'Shattered Lake', 'Iceveil Woods', 'Wyrm\'s Rest', 'Hoarfrost Keep', 'Glacier Tombs', 'Northwind Tower', 'Rimeholt Peak', 'Hrimgar\'s Vengeance']
@@ -156,7 +159,7 @@ const ENEMY_STRENGTH = 0.82;
 // Factions whose troops are cheaper or trickier than their power suggests (goblin swarms, undead
 // healed by cursed ground) are toned down; the simulator measured these
 const FACTION_STRENGTH: Partial<Record<Faction, number>> = {
-  bandits: 0.88, goblins: 0.78, beasts: 1.02, swamp: 0.86, desert: 0.9, frost: 1.08, undead: 0.8, orcs: 0.89, infernal: 0.86, dragons: 1.16
+  bandits: 0.88, goblins: 0.65, beasts: 1.02, swamp: 0.86, desert: 0.85, frost: 1.08, undead: 0.65, orcs: 0.89, infernal: 0.86, dragons: 1.16
 };
 // Later levels in a region are a little harder than earlier ones; the first meets a new enemy, so it is gentler
 const IN_REGION_RAMP = 0.012;
@@ -261,7 +264,7 @@ export const getLevel = (levelId: number): LevelDef => {
     // The strongest regular of the roster, a size up
     const champion = [...enemyRoster].sort((a, b) =>
       statsPower(scaleTroop(TROOPS[b], 1)) - statsPower(scaleTroop(TROOPS[a], 1)))[0];
-    guards.push({ type: champion, stats: scaleTroop(TROOPS[champion], enemyScale * CHAMPION_STRENGTH, enemyTier) });
+    guards.push({ type: champion, stats: scaleTroop(TROOPS[champion], enemyScale * CHAMPION_STRENGTH, enemyTier), isChampion: true });
   }
 
   const settings: GameSettings = {
@@ -276,7 +279,8 @@ export const getLevel = (levelId: number): LevelDef => {
     // The fog of war rolls in from the second region, once the basics are learned
     fogOfWar: id >= FOG_FROM_LEVEL,
     themeName: region.theme,
-    seed: 7919 * id + 104729
+    seed: 7919 * id + 104729,
+    weather: region.weather
   };
 
   const level: LevelDef = {
@@ -302,8 +306,13 @@ export const getRegionLevels = (regionId: number): LevelDef[] =>
   Array.from({ length: LEVELS_PER_REGION }, (_, i) => getLevel(regionId * LEVELS_PER_REGION + i + 1));
 
 // The enemy's recruitable troops for a level
+// (goblins swarm: they come cheap)
 export const enemyRosterStats = (level: LevelDef): Roster =>
-  Object.fromEntries(level.enemyRoster.map(id => [id, scaleTroop(TROOPS[id], level.enemyScale, level.enemyTier)]));
+  Object.fromEntries(level.enemyRoster.map(id => {
+    const stats = scaleTroop(TROOPS[id], level.enemyScale, level.enemyTier);
+    if (getFactionTrait(id)?.id === 'swarm') stats.cost = Math.max(1, Math.round(stats.cost * SWARM_COST));
+    return [id, stats];
+  }));
 
 // Every troop type the player will face in a level (recruits and guards)
 export const levelEnemies = (level: LevelDef): TroopId[] =>

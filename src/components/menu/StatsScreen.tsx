@@ -51,7 +51,7 @@ export const StatsScreen: React.FC = () => {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `world-war-hex-save-${new Date().toISOString().slice(0, 10)}.json`;
+    link.download = `hex-hordes-save-${new Date().toISOString().slice(0, 10)}.json`;
     link.click();
     URL.revokeObjectURL(url);
     trackEvent('save_exported');
@@ -61,7 +61,7 @@ export const StatsScreen: React.FC = () => {
   const handleImport = async (file: File) => {
     const parsed = parseSave(await file.text());
     if (!parsed) {
-      setMessage({ text: 'That file isn\'t a World War Hex save.', isError: true });
+      setMessage({ text: 'That file isn\'t a Hex Hordes save.', isError: true });
       return;
     }
     if (!window.confirm('Load this save? Your current progress on this computer will be replaced.')) return;

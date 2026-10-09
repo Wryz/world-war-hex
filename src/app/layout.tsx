@@ -16,9 +16,16 @@ const fredoka = Fredoka({
   subsets: ["latin"],
 });
 
+const DESCRIPTION = "A fantasy strategy card game on a 3D hex battlefield: play your troops, read the land and topple the enemy castle.";
+
 export const metadata: Metadata = {
-  title: "World War Hex",
-  description: "A military strategy game where players use environmental factors and medieval military tactics to destroy the enemy base.",
+  metadataBase: new URL("https://hexhordes.com"),
+  title: "Hex Hordes",
+  applicationName: "Hex Hordes",
+  description: DESCRIPTION,
+  openGraph: { title: "Hex Hordes", description: DESCRIPTION, siteName: "Hex Hordes", url: "/", images: ["/logo.png"], type: "website" },
+  twitter: { card: "summary", title: "Hex Hordes", description: DESCRIPTION, images: ["/logo.png"] },
+  appleWebApp: { title: "Hex Hordes" },
 };
 
 export default function RootLayout({

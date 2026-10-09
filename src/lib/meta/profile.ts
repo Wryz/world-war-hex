@@ -514,7 +514,9 @@ export const grantBonusCoins = (coins: number) => {
 
 // --- Export / import -----------------------------------------------------------------------
 
-const SAVE_FORMAT = 'world-war-hex-save';
+const SAVE_FORMAT = 'hex-hordes-save';
+// Saves exported before the game was renamed
+const OLD_SAVE_FORMATS = ['world-war-hex-save'];
 
 // Everything needed to restore progress on another computer: the profile and any battle in progress
 export const exportSave = (battle: unknown): string =>
@@ -523,7 +525,7 @@ export const exportSave = (battle: unknown): string =>
 export const parseSave = (text: string): { profile: Profile; battle: unknown } | null => {
   try {
     const data: unknown = JSON.parse(text);
-    if (!isRecord(data) || data.format !== SAVE_FORMAT) return null;
+    if (!isRecord(data) || (data.format !== SAVE_FORMAT && !OLD_SAVE_FORMATS.includes(String(data.format)))) return null;
     const profile = sanitizeProfile(data.profile);
     return profile ? { profile, battle: data.battle ?? null } : null;
   } catch {

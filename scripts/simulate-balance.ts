@@ -15,7 +15,6 @@ import { planAITurn } from '@/lib/ai/aiPlayer';
 import { getLevel, enemyRosterStats, LEVEL_COUNT, targetWinRate } from '@/lib/campaign/levels';
 import { expectedProgression } from '@/lib/meta/economy';
 import { deckRoster } from '@/lib/campaign/battleSetup';
-import { TROOPS, cardStats, scaleTroop } from '@/lib/game/troops';
 
 const args = process.argv.slice(2);
 // --no-fog plays every battle without the fog of war, to see what the fog changes
@@ -56,7 +55,7 @@ const playBattle = (levelId: number, strength = 1): GameState => {
   const { deck, levels: cardLevels } = expectedProgression(levelId);
   const enemy = strength === 1 || bossOnly
     ? enemyRosterStats(level)
-    : Object.fromEntries(level.enemyRoster.map(id => [id, scaleTroop(TROOPS[id], level.enemyScale * strength)]));
+    : enemyRosterStats({ ...level, enemyScale: level.enemyScale * strength });
   const guards = troopsOnly ? level.guards : level.guards.map(guard => ({
     ...guard,
     stats: { ...guard.stats, attackPower: guard.stats.attackPower * strength, maxLifespan: Math.round(guard.stats.maxLifespan * strength) }
