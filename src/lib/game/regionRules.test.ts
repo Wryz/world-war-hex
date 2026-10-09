@@ -154,3 +154,15 @@ test('a boss falling shakes its army; a hurt troop surrounded wavers', () => {
   assert.equal(find(wavering, lone)?.shaken, 1);
   assert.ok(SHAKEN_ATTACK < 1);
 });
+
+test('a boss burned to death shakes its army too', () => {
+  const { state, centre } = makeBattle('ai');
+  const hex = state.hexGrid.find(h => h.coordinates.q === centre.q && h.coordinates.r === centre.r)!;
+  hex.fire = { stage: 'burning', turnsLeft: 2 };
+  const king = troop('ai', 'bandit_king', centre, { isBoss: true, lifespan: 1, maxLifespan: 50 });
+  const thug = troop('ai', 'bandit_thug', at(centre, 3, -1));
+  place(state, king, thug);
+  const after = playTurn(state);
+  assert.equal(find(after, king), undefined);
+  assert.ok((find(after, thug)!.shaken ?? 0) > 0);
+});

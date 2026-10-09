@@ -24,7 +24,8 @@ import {
   getActionTargets,
   isImpassable,
   TERRAIN_EFFECTS,
-  resolveAllCombats
+  resolveAllCombats,
+  getMovementRange
 } from '@/lib/game/gameState';
 import { getHexDistance } from '@/lib/game/hexUtils';
 import { planAITurn } from '@/lib/ai/aiPlayer';
@@ -68,7 +69,7 @@ const describeInvalidMove = (state: GameState, unit: Unit, hex: Hex): string => 
     state.pendingMoves.some(m => m.unitId !== unit.id && coordsEqual(m.to, hex.coordinates)) ||
     state.pendingPurchases.some(p => coordsEqual(p.position, hex.coordinates));
   if (isClaimed) return 'Another unit is already heading there';
-  return `Out of reach - ${name} can move ${unit.movementRange} this turn`;
+  return `Out of reach - ${name} can move ${getMovementRange(state, unit)} this turn`;
 };
 
 // Short pauses that make the enemy's turn readable (scaled by the game speed)

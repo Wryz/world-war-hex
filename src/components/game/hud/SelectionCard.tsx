@@ -4,7 +4,7 @@ import { ABILITIES, TROOP_CLASSES, getTroopClass, strongAgainst, weakAgainst } f
 import {
   BASE_MAX_HEALTH, HIGH_GROUND_ELEVATION, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS,
   getSightRange, isFogOfWar,
-  getCastleMaxHealth
+  getCastleMaxHealth, getMovementRange
 } from '@/lib/game/gameState';
 import { getUnitTypeName } from '../utils/UnitHelpers';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
@@ -104,7 +104,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
           )}
           <div className="mt-2 flex gap-3 text-slate-200">
             <span title="Attack" className="flex items-center gap-1"><AttackIcon /> <b>{unit.attackPower}</b></span>
-            <span title="Movement" className="flex items-center gap-1"><MoveIcon /> <b>{unit.movementRange}</b></span>
+            <span title={getMovementRange(gameState, unit) < unit.movementRange ? 'Movement (slowed by the blizzard)' : 'Movement'} className="flex items-center gap-1"><MoveIcon /> <b className={getMovementRange(gameState, unit) < unit.movementRange ? 'text-sky-300' : ''}>{getMovementRange(gameState, unit)}</b></span>
             <span className="ml-auto text-slate-400" title={effect.description}>
               <TerrainIcon terrain={hex.terrain} /> {terrainBonuses.length > 0 ? terrainBonuses.join(' · ') : effect.name}
             </span>
