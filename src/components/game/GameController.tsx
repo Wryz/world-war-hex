@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { GameBoard } from './GameBoard';
 import { CombatResolver } from './combat/CombatResolver';
 import { ResultsScreen } from './shared/ResultsScreen';
-import { TutorialOverlay, useTutorial } from './shared/TutorialGuide';
+import { TUTORIAL_BATTLES, TutorialOverlay, useTutorial } from './shared/TutorialGuide';
 import { RuleTips } from './shared/RuleTips';
 import { BossBar } from './hud/BossBar';
 import { BossIntro } from './shared/BossIntro';
@@ -67,8 +67,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const level = battle.mode === 'campaign' ? getLevel(battle.levelId) : undefined;
 
   // The first battle is a tutorial for new players (see TutorialGuide)
-  // The first battle is always the tutorial, however often it is played
-  const [showTutorial, setShowTutorial] = useState(() => battle.mode === 'campaign' && battle.levelId === 1);
+  // The first two battles are always tutorials, however often they are played (the first opens with
+  // a flight over the field; the second shows where to build a castle)
+  const [showTutorial, setShowTutorial] = useState(() => battle.mode === 'campaign' && battle.levelId <= TUTORIAL_BATTLES);
   const {
     gameState,
     selectedHex,
@@ -138,7 +139,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   // The first battle shows what to do (see TutorialGuide); it counts as done once the battle is over
   const tutorial = useTutorial({
-    active: showTutorial, ready: isReady, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
+    active: showTutorial, intro: battle.mode === 'campaign' && battle.levelId === 1, ready: isReady, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
   });
   // (the board only redraws its marks when they actually change)
   const tutorialVisualsKey = JSON.stringify(tutorial.visuals);
