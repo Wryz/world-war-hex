@@ -2433,8 +2433,10 @@ const finishTurn = (state: GameState): GameState => {
     newState.players[unit.owner].units = newState.players[unit.owner].units.filter(u => u.id !== unit.id);
     // (a boss the ground finishes off is slain all the same, and counts for the other side)
     if (unit.isBoss) {
-      creditKill(newState, unit, getOpponent(unit.owner));
-      earnGold(newState, getOpponent(unit.owner), getKillBounty(unit));
+      const killer = getOpponent(unit.owner);
+      creditKill(newState, unit, killer);
+      earnGold(newState, killer, getKillBounty(unit));
+      addLog(newState, killer, `${killer === 'player' ? 'You earn' : 'The enemy earns'} ${getKillBounty(unit)} gold in bounty.`);
     }
     else sideStats(newState, unit.owner).lost++;
     if (unit.isBoss || unit.isChampion) shakeArmy(newState, unit.owner, unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE, unit);
@@ -2799,6 +2801,10 @@ export const getKillBounty = (unit: Unit) => Math.max(2, Math.round(unit.cost * 
 // Every attacker strikes the defender; the defender strikes back, splitting its attack between the
 // attackers it can reach. Each strike is scaled by height, counters and the target's cover, and
 // armour soaks a point of what lands.
+// An undying troop slain in a fight rises again, unless a War Cleric among its foes finishes it (fire
+// finishes it on the burning ground, at the turn's end)
+const finishesUndead = (foes: Unit[]) => foes.some(foe => foe.type === 'cleric');
+
 export const getCombatPreview = (state: GameState, combat: Combat): CombatPreview => {
   const getLiveUnit = (unit: Unit) =>
     state.players[unit.owner].units.find(u => u.id === unit.id);
@@ -2887,9 +2893,6 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     ? distributeDamage(attackers.map(a => a.canBeHitBack ? getStrikePower(state, defenders[0].unit, a.unit) : null))
     : attackers.map(() => 0);
 
-  // An undying troop slain rises again, unless a War Cleric among its foes finishes it (fire finishes
-  // it on the burning ground, at the turn's end)
-  const finishesUndead = (foes: Unit[]) => foes.some(foe => foe.type === 'cleric');
   const withDamage = (
     entry: { unit: Unit; terrain: TerrainType; power: number; modifiers: CombatEffect[] },
     rawDamage: number,
@@ -2985,7 +2988,7 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     add(bonuses.size === 1 ? [...bonuses.keys()][0] : 'Bonuses', 'good', `+${total}%`, total);
   }
   if (hasAbility(target, 'armored')) add('Armored', 'bad', `-${ARMOR_REDUCTION}`, 15);
-  if (canRise(target) && !attackers.some(unit => unit.type === 'cleric')) add('Undying', 'bad', undefined, 10);
+  if (canRise(target) && !finishesUndead(attackers)) add('Undying', 'bad', undefined, 10);
   for (const protection of getProtections(state, target)) {
     add(protection.label, 'bad', `-${Math.round(protection.reduction * 100)}%`, Math.round(protection.reduction * 100));
   }

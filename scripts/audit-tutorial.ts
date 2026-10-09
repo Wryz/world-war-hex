@@ -6,15 +6,15 @@
 
 import { GameState } from '@/types/game';
 import {
-  addPendingMove, addPendingPurchase, canStrike, canStrikeCastle, chooseCastle, executeMoves, findBaseHex, getDeploymentHexes,
-  getTerrainDistanceMap, getVisibleEnemies, resolveAllCombats
+  addPendingMove, addPendingPurchase, canStrike, canStrikeCastle, chooseCastle, executeMoves, findBaseHex, getTerrainDistanceMap,
+  getVisibleEnemies, resolveAllCombats
 } from '@/lib/game/gameState';
 import { planAITurn } from '@/lib/ai/aiPlayer';
 import { buildBattle } from '@/lib/campaign/battleSetup';
 import { getLevel } from '@/lib/campaign/levels';
 import { createProfile } from '@/lib/meta/profile';
 import { getHexDistance } from '@/lib/game/hexUtils';
-import { bestCastleSite, planTutorialTurn } from '@/lib/game/tutorialPlan';
+import { bestCastleSite, deployCandidates, frontOf, planTutorialTurn } from '@/lib/game/tutorialPlan';
 
 const args = process.argv.slice(2).map(Number);
 const battles = args[0] || 20;
@@ -69,12 +69,10 @@ for (const levelId of levels) {
             }
             state = addPendingMove(state, item.unitId, state.players.player.id, item.to);
           } else {
-            // The front: the nearest enemy in sight to the player's castle, or else the enemy castle
-            const home = findBaseHex(state, 'player')!.coordinates;
-            const front = [...foes].sort((a, b) => getHexDistance(a.position, home) - getHexDistance(b.position, home))[0]?.position ??
-              findBaseHex(state, 'ai')!.coordinates;
-            const free = getDeploymentHexes(state, 'player').map(hex => hex.coordinates);
-            const best = Math.min(99, ...free.map(c => getHexDistance(c, front)));
+            // Against the nearest spot it could have had (by the tutorial's own rules: out of reach
+            // when it can be, never beside an enemy for archers and mages)
+            const front = frontOf(state)!;
+            const best = Math.min(99, ...deployCandidates(state, item.unitType).map(hex => getHexDistance(hex.coordinates, front)));
             deploys++;
             if (getHexDistance(item.at, front) > best + 1) {
               deployedBack.push(`L${levelId} r${state.turnNumber} ${item.unitType}: ${getHexDistance(item.at, front)} from the front, ${best} was free ("${item.placeCaption}")`);

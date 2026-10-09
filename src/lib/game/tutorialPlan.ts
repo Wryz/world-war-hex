@@ -65,7 +65,10 @@ export const planTutorialTurn = (state: GameState): PlanStep[] => {
   // towards the fight instead, so a new troop never seems to be sent the wrong way
   const taken = new Set([...destination.values()].map(c => `${c.q},${c.r}`));
   for (const purchase of planned.pendingPurchases.slice(state.pendingPurchases.length)) {
-    const at = deploySpot(state, purchase.unitType, taken) ?? purchase.position;
+    const at = deploySpot(state, purchase.unitType, taken) ??
+      (taken.has(`${purchase.position.q},${purchase.position.r}`) ? null : purchase.position);
+    // (nowhere left to put it: that card waits)
+    if (!at) continue;
     taken.add(`${at.q},${at.r}`);
     plan.push({
       kind: 'buy', unitType: purchase.unitType, at,
@@ -77,27 +80,36 @@ export const planTutorialTurn = (state: GameState): PlanStep[] => {
 };
 
 // Where the fight is for a new troop: the enemy in sight nearest your castle, or else the enemy castle
-const frontOf = (state: GameState): HexCoordinates | undefined => {
+export const frontOf = (state: GameState): HexCoordinates | undefined => {
   const home = findBaseHex(state, 'player')?.coordinates;
   const foes = getVisibleEnemies(state, 'player');
   const nearest = home && [...foes].sort((a, b) => getHexDistance(a.position, home) - getHexDistance(b.position, home))[0];
   return nearest?.position ?? findBaseHex(state, 'ai')?.coordinates;
 };
 
-// The free spot to deploy a troop on: the one nearest the fight (a camp first when it's as near),
-// but not right beside an enemy - a troop just raised can't move or strike first, so it would only
-// be hit - unless there's nowhere else (and never for archers and mages, who fight badly at arm's
-// length). `taken` holds spots the turn's other orders will use.
+// The free spots a troop may be deployed on, the best kind only. A troop just raised can't move or
+// strike first, so it shouldn't stand right beside an enemy, and an archer or mage (frail, and poor
+// at arm's length) shouldn't stand where any enemy in sight could already strike it - when there
+// are such spots; else any free spot (but never beside an enemy for archers and mages). Keeping
+// every recruit out of all reach would push most of them back behind the castle, away from the
+// fight. `taken` holds spots the turn's other orders will use.
+export const deployCandidates = (state: GameState, type: UnitType, taken: Set<string> = new Set()): GameState['hexGrid'] => {
+  const ranged = !!getRosterStats(state, 'player', type)?.abilities.includes('rangedAttack');
+  const foes = getVisibleEnemies(state, 'player');
+  const beside = (hex: GameState['hexGrid'][number]) => foes.some(foe => getHexDistance(foe.position, hex.coordinates) === 1);
+  const inReach = (hex: GameState['hexGrid'][number]) => foes.some(foe =>
+    canStrike(state, foe, { ...foe, id: 'recruit', owner: 'player', position: hex.coordinates }));
+  const free = getDeploymentHexes(state, 'player').filter(hex => !taken.has(`${hex.coordinates.q},${hex.coordinates.r}`) && !(ranged && beside(hex)));
+  const safe = free.filter(hex => ranged ? !inReach(hex) : !beside(hex));
+  return safe.length > 0 ? safe : free;
+};
+
+// The spot to deploy a troop on: of the candidates, the one nearest the fight (a camp first when
+// it's as near)
 export const deploySpot = (state: GameState, type: UnitType, taken: Set<string> = new Set()): HexCoordinates | null => {
   const front = frontOf(state);
   if (!front) return null;
-  const ranged = !!getRosterStats(state, 'player', type)?.abilities.includes('rangedAttack');
-  const foes = getVisibleEnemies(state, 'player');
-  const exposed = (hex: GameState['hexGrid'][number]) => foes.some(foe => getHexDistance(foe.position, hex.coordinates) === 1);
-  const free = getDeploymentHexes(state, 'player').filter(hex => !taken.has(`${hex.coordinates.q},${hex.coordinates.r}`) && !(ranged && exposed(hex)));
-  const safe = free.filter(hex => !exposed(hex));
-  const spots = safe.length > 0 ? safe : free;
-  return [...spots].sort((a, b) =>
+  return [...deployCandidates(state, type, taken)].sort((a, b) =>
     getHexDistance(a.coordinates, front) - getHexDistance(b.coordinates, front) || Number(!!b.isCamp) - Number(!!a.isCamp)
   )[0]?.coordinates ?? null;
 };

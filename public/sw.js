@@ -29,10 +29,15 @@ const ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    // A returning player (an older version's cache is here) gets the models and art cached now, as
-    // before, since activating deletes the old copies; a first visit leaves them for the warm step
-    const returning = (await caches.keys()).some(key => key.startsWith('wwh-') && key !== CACHE);
-    const later = returning ? self.__PRECACHE.later ?? [] : [];
+    // The models and art an older version had cached are cached again now, since activating deletes
+    // the old copies (one at a time, so the page keeps most of the bandwidth); anything else waits
+    // for the warm step
+    const older = (await caches.keys()).filter(key => key.startsWith('wwh-') && key !== CACHE);
+    const had = new Set();
+    for (const key of older) {
+      for (const request of await (await caches.open(key)).keys()) had.add(new URL(request.url).pathname);
+    }
+    const later = (self.__PRECACHE.later ?? []).filter(url => had.has(url));
     // One missing file shouldn't stop the rest from being cached. Built files (/_next/static, named
     // by their contents) never change, so the copies the page just downloaded are reused; pages and
     // files that keep their names (the music manifest, the logo) are fetched afresh.
@@ -42,11 +47,14 @@ self.addEventListener('install', event => {
         .catch(() => undefined)
     ));
     // (checked with the server, so an unchanged file isn't downloaded again)
-    await Promise.all(later.map(url =>
-      fetch(url, { cache: 'no-cache' })
-        .then(response => (response.ok ? cache.put(url, response) : undefined))
-        .catch(() => undefined)
-    ));
+    for (const url of later) {
+      try {
+        const response = await fetch(url, { cache: 'no-cache' });
+        if (response.ok) await cache.put(url, response);
+      } catch {
+        break;
+      }
+    }
     await self.skipWaiting();
   })());
 });

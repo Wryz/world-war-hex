@@ -175,7 +175,7 @@ const nextStep = (
     const buy = buys.find(step => step.unitType === selectedUnitType);
     if (buy && validMoves.some(c => c.q === buy.at.q && c.r === buy.at.r)) return { hex: buy.at, caption: buy.placeCaption };
     // (the planned spot has been taken: the next best, towards the fight)
-    const spot = deploySpot(state, selectedUnitType);
+    const spot = deploySpot(state, selectedUnitType, new Set(moves.map(step => `${step.to.q},${step.to.r}`)));
     if (spot && validMoves.some(c => c.q === spot.q && c.r === spot.r)) return { hex: spot, caption: deployCaption(state, spot) };
     const enemy = findBaseHex(state, 'ai')?.coordinates;
     return { hex: enemy ? nearestOf(validMoves, enemy) : validMoves[0], caption: 'Deploy it beside your castle' };
