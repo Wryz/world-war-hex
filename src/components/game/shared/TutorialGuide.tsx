@@ -17,6 +17,9 @@ import { PointingHandIcon, SkipIcon } from '../icons';
 // same spot with a gold ring. It follows the battle as it unfolds, so whatever the player does, the
 // hand always shows a sensible next step.
 
+// The campaign battles that are tutorials
+export const TUTORIAL_BATTLES = 2;
+
 export interface TutorialVisuals {
   // A spot the camera is flying to show (null: the usual view)
   showcase: { at: HexCoordinates; zoom: number } | null;
@@ -44,8 +47,9 @@ const CONFIRM = '[data-tutorial="end-turn"]';
 const key = (c: HexCoordinates) => `${c.q},${c.r}`;
 
 // What the opening flight says at each stop
-// Room the hand needs below its target (less, and it comes from above instead)
-const HAND_ROOM = 170;
+// The hand: its size, and where its fingertip is in its box (the icon points down and to the right)
+const HAND_SIZE = 72;
+const FINGERTIP = { x: 0.935, y: 0.8 };
 // How far a caption's middle stays from the screen's sides
 const CAPTION_MARGIN = 150;
 
@@ -57,6 +61,8 @@ const INTRO_CAPTIONS: Record<Exclude<IntroStage, 'done'>, string> = {
 
 interface TutorialArgs {
   active: boolean;
+  // Open with the flight from castle to castle (the first battle)
+  intro: boolean;
   // The battle has loaded and can be shown
   ready: boolean;
   gameState: GameState;
@@ -65,9 +71,9 @@ interface TutorialArgs {
   validMoves: HexCoordinates[];
 }
 
-export const useTutorial = ({ active, ready, gameState, selectedUnit, selectedUnitType, validMoves }: TutorialArgs) => {
+export const useTutorial = ({ active, intro, ready, gameState, selectedUnit, selectedUnitType, validMoves }: TutorialArgs) => {
   // (a battle resumed part-way through skips the opening flight)
-  const [stage, setStage] = useState<IntroStage>(() => (gameState.turnNumber > 1 ? 'done' : 'home'));
+  const [stage, setStage] = useState<IntroStage>(() => (!intro || gameState.turnNumber > 1 ? 'done' : 'home'));
   const started = active && ready && gameState.currentPhase === 'planning';
   useEffect(() => {
     if (!started || stage === 'done') return;
@@ -97,19 +103,22 @@ export const useTutorial = ({ active, ready, gameState, selectedUnit, selectedUn
     ? nextStep(gameState, enemy, distances, selectedUnit, selectedUnitType, validMoves)
     : null;
 
+  // Before the castles stand: point at the best site to build yours
+  const site = active && ready && gameState.currentPhase === 'setup' ? bestCastleSite(gameState) : null;
+  if (site) {
+    const visuals: TutorialVisuals = { showcase: null, rings: [{ at: site, tone: 'tap' }], path: null, target: null, keepInView: site };
+    return { visuals, introRunning: false, introCaption: null, pointer: { hex: site, caption: 'Build your castle here: near camps and high ground' } as Pointer, skipIntro: () => {} };
+  }
+
   if (!active || !enemy) return { visuals: null, introRunning: false, introCaption: null, pointer: null, skipIntro: () => {} };
 
-  // The way to show: during the flight, castle to castle; later, from the troop to point at (or the
-  // troop's march to the hex pointed at) on towards the enemy castle
+  // The way to show: during the flight, castle to castle; later, only the march of the troop picked
+  // to the hex pointed at (never a way somewhere else, to distract from it)
   let path: HexCoordinates[] | null = null;
   if (introRunning) path = stage === 'route' ? route : null;
   else if (pointer && 'hex' in pointer) {
     const live = selectedUnit && gameState.players.player.units.find(unit => unit.id === selectedUnit.id);
-    path = live
-      ? getMovePath(gameState, live, pointer.hex)
-      : gameState.players.player.units.some(unit => unit.position.q === pointer.hex.q && unit.position.r === pointer.hex.r)
-        ? findTerrainPath(gameState.hexGrid, pointer.hex, enemy)
-        : null;
+    path = live ? getMovePath(gameState, live, pointer.hex) : null;
   }
 
   const visuals: TutorialVisuals = {
@@ -125,6 +134,17 @@ export const useTutorial = ({ active, ready, gameState, selectedUnit, selectedUn
   };
   const introCaption = introRunning ? INTRO_CAPTIONS[stage as Exclude<IntroStage, 'done'>] : null;
   return { visuals, introRunning, introCaption, pointer, skipIntro: () => setStage('done') };
+};
+
+// The castle site to suggest: the one with the most camps, gold and high ground near it
+const bestCastleSite = (state: GameState): HexCoordinates | null => {
+  const choices = state.castleChoices ?? [];
+  const score = (site: HexCoordinates) => state.hexGrid.reduce((sum, hex) => {
+    const distance = getHexDistance(hex.coordinates, site);
+    if (distance === 0 || distance > 3) return sum;
+    return sum + (hex.isCamp ? 3 : 0) + (hex.isResourceHex ? 2 : 0) + (hex.terrain === 'hills' ? 1 : 0) + (hex.terrain === 'forest' ? 0.5 : 0);
+  }, 0);
+  return [...choices].sort((a, b) => score(b) - score(a))[0] ?? null;
 };
 
 // A troop's lesson this turn, most urgent first: a hurt troop pulls back (to the spring if it can);
@@ -260,7 +280,11 @@ export const TutorialOverlay: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pointerKey]);
 
-  const fromAbove = !!spot && spot.y > window.innerHeight - HAND_ROOM;
+  // The hand reaches in from above and to the left of its target, its fingertip on it - mirrored
+  // where that would take it off the screen
+  const flipX = !!spot && spot.x < HAND_SIZE * 1.3;
+  const flipY = !!spot && spot.y < HAND_SIZE * 1.6;
+  const tip = { x: (flipX ? 1 - FINGERTIP.x : FINGERTIP.x) * HAND_SIZE, y: (flipY ? 1 - FINGERTIP.y : FINGERTIP.y) * HAND_SIZE };
   return (
     <>
       {introCaption && (
@@ -285,11 +309,19 @@ export const TutorialOverlay: React.FC<{
         <div className="pointer-events-none fixed z-[45]" style={{ left: spot.x, top: spot.y }} aria-hidden>
           {/* A ripple where the finger lands, and the hand tapping */}
           <span className="tap-ripple absolute -left-7 -top-7 block h-14 w-14 rounded-full border-4 border-amber-300" />
-          {/* (near the bottom of the screen it comes down from above, so it stays in view) */}
-          <span className={`${fromAbove ? 'tap-hand-down' : 'tap-hand'} absolute block text-7xl drop-shadow-[0_4px_0_rgba(15,23,42,0.75)]`} style={{ left: -10, top: fromAbove ? -70 : -2 }}>
-            <PointingHandIcon />
+          <span
+            className="absolute block"
+            style={{ left: -tip.x, top: -tip.y, width: HAND_SIZE, height: HAND_SIZE, transform: `scale(${flipX ? -1 : 1}, ${flipY ? -1 : 1})` }}
+          >
+            {/* (it jabs along its finger and presses, pivoting on the fingertip) */}
+            <span
+              className="tap-hand flex drop-shadow-[0_4px_0_rgba(15,23,42,0.75)]"
+              style={{ width: HAND_SIZE, height: HAND_SIZE, fontSize: HAND_SIZE, lineHeight: 1, transformOrigin: `${FINGERTIP.x * 100}% ${FINGERTIP.y * 100}%` }}
+            >
+              <PointingHandIcon />
+            </span>
           </span>
-          {/* Why: a few words, above the hand (below it near the top of the screen) */}
+          {/* Why: a few words, beyond the hand (above it, or below it when it reaches up) */}
           {caption && (
             <span
               key={caption}
@@ -297,7 +329,7 @@ export const TutorialOverlay: React.FC<{
               style={{
                 // (kept on screen near the edges)
                 left: Math.max(0, CAPTION_MARGIN - spot.x) - Math.max(0, spot.x - (window.innerWidth - CAPTION_MARGIN)),
-                top: spot.y < 150 ? 96 : fromAbove ? -150 : -84
+                top: flipY ? HAND_SIZE + 24 : -HAND_SIZE - 52
               }}
             >
               {caption}
