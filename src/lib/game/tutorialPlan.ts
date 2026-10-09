@@ -1,8 +1,8 @@
 import type { GameState, HexCoordinates, Unit, UnitType } from '@/types/game';
 import { GoalKind, planAITurn } from '../ai/aiPlayer';
 import {
-  canStrike, canStrikeCastle, findBaseHex, getCounterMultiplier, getHeightDifference, getTerrainDistanceMap, getTroopName,
-  getVisibleEnemies
+  canStrike, canStrikeCastle, findBaseHex, getCounterMultiplier, getDeploymentHexes, getHeightDifference, getRosterStats,
+  getTerrainDistanceMap, getTroopName, getVisibleEnemies
 } from './gameState';
 import { getHexDistance } from './hexUtils';
 import { isPinned, strikesPinned } from './formations';
@@ -61,16 +61,51 @@ export const planTutorialTurn = (state: GameState): PlanStep[] => {
     }
     return [{ kind: 'move', unitId: unit.id, to, caption }];
   });
+  // The AI deploys warily (away from anything that could reach the spot); the tutorial deploys
+  // towards the fight instead, so a new troop never seems to be sent the wrong way
+  const taken = new Set([...destination.values()].map(c => `${c.q},${c.r}`));
   for (const purchase of planned.pendingPurchases.slice(state.pendingPurchases.length)) {
+    const at = deploySpot(state, purchase.unitType, taken) ?? purchase.position;
+    taken.add(`${at.q},${at.r}`);
     plan.push({
-      kind: 'buy', unitType: purchase.unitType, at: purchase.position,
+      kind: 'buy', unitType: purchase.unitType, at,
       caption: explainCard(state, purchase.unitType),
-      placeCaption: state.hexGrid.some(hex => hex.isCamp && same(hex.coordinates, purchase.position))
-        ? 'Deploy at your camp, nearer the fight' : 'Deploy it beside your castle'
+      placeCaption: deployCaption(state, at)
     });
   }
   return plan;
 };
+
+// Where the fight is for a new troop: the enemy in sight nearest your castle, or else the enemy castle
+const frontOf = (state: GameState): HexCoordinates | undefined => {
+  const home = findBaseHex(state, 'player')?.coordinates;
+  const foes = getVisibleEnemies(state, 'player');
+  const nearest = home && [...foes].sort((a, b) => getHexDistance(a.position, home) - getHexDistance(b.position, home))[0];
+  return nearest?.position ?? findBaseHex(state, 'ai')?.coordinates;
+};
+
+// The free spot to deploy a troop on: the one nearest the fight (a camp first when it's as near),
+// but not right beside an enemy - a troop just raised can't move or strike first, so it would only
+// be hit - unless there's nowhere else (and never for archers and mages, who fight badly at arm's
+// length). `taken` holds spots the turn's other orders will use.
+export const deploySpot = (state: GameState, type: UnitType, taken: Set<string> = new Set()): HexCoordinates | null => {
+  const front = frontOf(state);
+  if (!front) return null;
+  const ranged = !!getRosterStats(state, 'player', type)?.abilities.includes('rangedAttack');
+  const foes = getVisibleEnemies(state, 'player');
+  const exposed = (hex: GameState['hexGrid'][number]) => foes.some(foe => getHexDistance(foe.position, hex.coordinates) === 1);
+  const free = getDeploymentHexes(state, 'player').filter(hex => !taken.has(`${hex.coordinates.q},${hex.coordinates.r}`) && !(ranged && exposed(hex)));
+  const safe = free.filter(hex => !exposed(hex));
+  const spots = safe.length > 0 ? safe : free;
+  return [...spots].sort((a, b) =>
+    getHexDistance(a.coordinates, front) - getHexDistance(b.coordinates, front) || Number(!!b.isCamp) - Number(!!a.isCamp)
+  )[0]?.coordinates ?? null;
+};
+
+export const deployCaption = (state: GameState, at: HexCoordinates): string =>
+  state.hexGrid.some(hex => hex.isCamp && same(hex.coordinates, at))
+    ? 'Deploy at your camp, nearer the fight'
+    : getVisibleEnemies(state, 'player').length > 0 ? 'Deploy it on the side facing the enemy' : 'Deploy it beside your castle, towards the enemy';
 
 // Why the plan plays a card: what it beats among the enemies in sight
 export const explainCard = (state: GameState, type: UnitType): string => {

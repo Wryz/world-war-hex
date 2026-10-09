@@ -6,8 +6,8 @@
 
 import { GameState } from '@/types/game';
 import {
-  addPendingMove, addPendingPurchase, canStrike, canStrikeCastle, chooseCastle, executeMoves, findBaseHex, getTerrainDistanceMap,
-  getVisibleEnemies, resolveAllCombats
+  addPendingMove, addPendingPurchase, canStrike, canStrikeCastle, chooseCastle, executeMoves, findBaseHex, getDeploymentHexes,
+  getTerrainDistanceMap, getVisibleEnemies, resolveAllCombats
 } from '@/lib/game/gameState';
 import { planAITurn } from '@/lib/ai/aiPlayer';
 import { buildBattle } from '@/lib/campaign/battleSetup';
@@ -26,6 +26,9 @@ for (const levelId of levels) {
   const captions = new Map<string, number>();
   const odd: string[] = [];
   const mismatched: string[] = [];
+  // Recruits placed well back from the fight when a spot nearer it was free
+  const deployedBack: string[] = [];
+  let deploys = 0;
   for (let battle = 0; battle < battles; battle++) {
     let state: GameState = buildBattle({ mode: 'campaign', levelId }, createProfile());
     if (state.castleChoices) state = chooseCastle(state, bestCastleSite(state)!);
@@ -66,6 +69,16 @@ for (const levelId of levels) {
             }
             state = addPendingMove(state, item.unitId, state.players.player.id, item.to);
           } else {
+            // The front: the nearest enemy in sight to the player's castle, or else the enemy castle
+            const home = findBaseHex(state, 'player')!.coordinates;
+            const front = [...foes].sort((a, b) => getHexDistance(a.position, home) - getHexDistance(b.position, home))[0]?.position ??
+              findBaseHex(state, 'ai')!.coordinates;
+            const free = getDeploymentHexes(state, 'player').map(hex => hex.coordinates);
+            const best = Math.min(99, ...free.map(c => getHexDistance(c, front)));
+            deploys++;
+            if (getHexDistance(item.at, front) > best + 1) {
+              deployedBack.push(`L${levelId} r${state.turnNumber} ${item.unitType}: ${getHexDistance(item.at, front)} from the front, ${best} was free ("${item.placeCaption}")`);
+            }
             state = addPendingPurchase(state, state.players.player.id, item.unitType, item.at);
           }
         }
@@ -83,6 +96,8 @@ for (const levelId of levels) {
   for (const [label, count] of [...captions].sort((a, b) => b[1] - a[1])) console.log(`  ${String(count).padStart(4)}  ${label}`);
   console.log(`  ${odd.length} steps send a healthy troop away from the fight:`);
   for (const line of odd.slice(0, 12)) console.log(`    ${line}`);
+  console.log(`  ${deployedBack.length} of ${deploys} recruits placed well back from the fight:`);
+  for (const line of deployedBack.slice(0, 12)) console.log(`    ${line}`);
   console.log(`  ${mismatched.length} captions that don't match their move:`);
   for (const line of mismatched.slice(0, 12)) console.log(`    ${line}`);
 }

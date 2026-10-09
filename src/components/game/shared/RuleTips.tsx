@@ -16,7 +16,7 @@ const TIPS: Record<TipId, string> = {
   village: 'Villages: 20% less damage, and walls that block arrows from below.',
   follow: 'A hex your troop is leaving is free for another. Ctrl+Z undoes an order.',
   signature: 'A glowing sparkle under a troop: its signature ability is working. Tap for details.',
-  morale: `Morale: when a boss or champion falls its army is shaken, and a badly hurt troop surrounded with no friend beside it wavers. Shaken troops hit ${Math.round((1 - SHAKEN_ATTACK) * 100)}% softer for a turn.`,
+  morale: `Morale: when a boss or champion falls its army is shaken, and a badly hurt troop surrounded with no friend beside it wavers. Shaken troops hit ${Math.round((1 - SHAKEN_ATTACK) * 100)}% softer for a turn (two after a boss falls).`,
   undying: 'The undead rise again once when slain. War Clerics and fire finish them for good.',
   'weather-fogBanks': `Fog banks drift a hex every round. ${WEATHER.fogBanks.description}`,
   'weather-sandstorm': `Sandstorms blow two rounds in every four (watch the top bar). ${WEATHER.sandstorm.description}`,

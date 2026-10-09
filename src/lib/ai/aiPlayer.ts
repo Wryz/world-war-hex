@@ -582,7 +582,10 @@ const dangerAt = (planner: Planner, unit: Unit, position: HexCoordinates): numbe
   let danger = 0;
   for (const enemy of liveEnemies(planner)) {
     const distance = getHexDistance(enemy.position, position);
-    if (canStrikeFrom(planner, enemy, enemy.position, position)) {
+    // (from where it stands, in this round's weather or the next's)
+    const inSight = distance <= 1 || enemy.abilities.includes('magic') || hasLineOfSight(planner.state.hexGrid, enemy.position, position);
+    if (canStrikeFrom(planner, enemy, enemy.position, position) ||
+      (inSight && distance <= getAttackRange(enemy, terrainAt(planner, enemy.position), nextRound(planner.state)))) {
       danger += strikeFrom(planner, enemy, enemy.position, target, position);
     } else if (distance <= enemyStride(planner.state, enemy) + enemyReach(planner.state, enemy)) {
       danger += 0.75 * getStrikePowerOnTerrain(enemy, 'plain', target, terrainAt(planner, position), enemyReach(planner.state, enemy));

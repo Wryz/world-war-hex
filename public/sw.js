@@ -29,11 +29,21 @@ const ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
+    // A returning player (an older version's cache is here) gets the models and art cached now, as
+    // before, since activating deletes the old copies; a first visit leaves them for the warm step
+    const returning = (await caches.keys()).some(key => key.startsWith('wwh-') && key !== CACHE);
+    const later = returning ? self.__PRECACHE.later ?? [] : [];
     // One missing file shouldn't stop the rest from being cached. Built files (/_next/static, named
     // by their contents) never change, so the copies the page just downloaded are reused; pages and
     // files that keep their names (the music manifest, the logo) are fetched afresh.
     await Promise.all([...PAGES, ...ASSETS].map(url =>
       fetch(url, { cache: url.startsWith('/_next/static/') ? 'default' : 'reload' })
+        .then(response => (response.ok ? cache.put(url, response) : undefined))
+        .catch(() => undefined)
+    ));
+    // (checked with the server, so an unchanged file isn't downloaded again)
+    await Promise.all(later.map(url =>
+      fetch(url, { cache: 'no-cache' })
         .then(response => (response.ok ? cache.put(url, response) : undefined))
         .catch(() => undefined)
     ));

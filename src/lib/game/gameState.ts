@@ -2432,7 +2432,10 @@ const finishTurn = (state: GameState): GameState => {
   for (const unit of burned) {
     newState.players[unit.owner].units = newState.players[unit.owner].units.filter(u => u.id !== unit.id);
     // (a boss the ground finishes off is slain all the same, and counts for the other side)
-    if (unit.isBoss) creditKill(newState, unit, getOpponent(unit.owner));
+    if (unit.isBoss) {
+      creditKill(newState, unit, getOpponent(unit.owner));
+      earnGold(newState, getOpponent(unit.owner), getKillBounty(unit));
+    }
     else sideStats(newState, unit.owner).lost++;
     if (unit.isBoss || unit.isChampion) shakeArmy(newState, unit.owner, unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE, unit);
     const inFire = findHexByCoordinates(newState.hexGrid, unit.position)?.fire?.stage === 'burning';
@@ -2982,7 +2985,7 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     add(bonuses.size === 1 ? [...bonuses.keys()][0] : 'Bonuses', 'good', `+${total}%`, total);
   }
   if (hasAbility(target, 'armored')) add('Armored', 'bad', `-${ARMOR_REDUCTION}`, 15);
-  if (canRise(target)) add('Undying', 'bad', undefined, 10);
+  if (canRise(target) && !attackers.some(unit => unit.type === 'cleric')) add('Undying', 'bad', undefined, 10);
   for (const protection of getProtections(state, target)) {
     add(protection.label, 'bad', `-${Math.round(protection.reduction * 100)}%`, Math.round(protection.reduction * 100));
   }

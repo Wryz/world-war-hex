@@ -1,6 +1,6 @@
 import type { GameState, HexCoordinates, TerrainType, Unit, UnitType } from '@/types/game';
 import { Faction, TROOPS, TroopId } from './troops';
-import { getHexDistance, getNeighbors } from './hexUtils';
+import { DIRECTIONS, getHexDistance, getNeighbors } from './hexUtils';
 
 // What makes each enemy and each region fight differently: every faction's troops have a trait of
 // their own, some regions have weather, and any army can lose its nerve (morale).
@@ -147,9 +147,6 @@ const hash = (seed: number): number => {
   t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
   return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
 };
-const DIRECTIONS: HexCoordinates[] = [
-  { q: 1, r: 0 }, { q: 1, r: -1 }, { q: 0, r: -1 }, { q: -1, r: 0 }, { q: -1, r: 1 }, { q: 0, r: 1 }
-];
 
 export const getFogBankCentres = (state: Pick<GameState, 'settings' | 'turnNumber' | 'hexGrid' | 'battleSeed'>): HexCoordinates[] => {
   if (getWeather(state) !== 'fogBanks') return [];
