@@ -137,13 +137,14 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Treasury */}
       <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-1 px-2 py-1.5 sm:gap-2 sm:px-3`}>
-        <span id="hud-gold" className="font-display flex items-center gap-1 text-base text-amber-300" title={`${income.total >= 0 ? '+' : ''}${income.total} gold per turn (${incomeDetails})`}>
+        {/* (a phone shows the gold beside the hand instead) */}
+        <span id="hud-gold" className="font-display hidden items-center gap-1 text-base text-amber-300 sm:flex" title={`${income.total >= 0 ? '+' : ''}${income.total} gold per turn (${incomeDetails})`}>
           <GoldIcon className="text-lg" /> {players.player.points}
           <span className={`text-xs ${income.upkeep > 0 ? 'text-rose-300' : 'text-amber-200/70'}`}>
             {income.total >= 0 ? '+' : ''}{income.total}
           </span>
         </span>
-        <span className="mx-0.5 h-5 w-px bg-slate-700" />
+        <span className="mx-0.5 hidden h-5 w-px bg-slate-700 sm:block" />
         <button
           onClick={onToggleThreats}
           title={showThreats ? 'Hide enemy threats (T)' : 'Show where enemies can strike next turn (T)'}

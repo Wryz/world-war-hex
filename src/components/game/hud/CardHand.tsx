@@ -115,7 +115,7 @@ export const CardHand: React.FC<CardHandProps> = ({
 
         <div className="pointer-events-auto flex flex-col items-stretch gap-1.5">
           {/* Gold on small screens */}
-          <span className={`${PANEL_CLASS} font-display flex items-center justify-center gap-1 px-2 py-1 text-base text-amber-300 sm:hidden`}>
+          <span id="hud-gold-phone" className={`${PANEL_CLASS} font-display flex items-center justify-center gap-1 px-2 py-1 text-base text-amber-300 sm:hidden`}>
             <GoldIcon />{gold}
           </span>
           {onUndo && (

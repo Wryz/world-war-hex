@@ -332,7 +332,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
             onQuit={handleQuit}
           />
           <BossBar gameState={gameState} />
-          <div className="fixed left-3 top-16 z-20 pointer-events-none">
+          {/* (on a phone it sits just above the hand, clear of the boss bar and tips at the top) */}
+          <div className="fixed bottom-[10.75rem] left-2 z-20 pointer-events-none sm:bottom-auto sm:left-3 sm:top-16">
             <SelectionCard gameState={viewState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
           </div>
           {/* Capped above the battle card and the hand so panels never run under them */}
