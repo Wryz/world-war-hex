@@ -26,6 +26,8 @@ import {
   isFogOfWar,
   getMovePath,
   getFellLanding,
+  getActionTargets,
+  ACTION_NAMES,
   getValidBaseLocations,
   getSiegeDamage,
   getCombatEffects,
@@ -52,9 +54,12 @@ import { getBattleStartDelay, getDeathTime, getImpactTimes, getImpactTimesUntil 
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale, getGameSpeed } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
-import { CampIcon, EmbersIcon, FallenLogIcon, FellIcon, FireIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
+import { ActionIcon, StakesIcon, CampIcon, EmbersIcon, FallenLogIcon, FellIcon, FireIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
 import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
+import { isCapturable } from '@/lib/game/structures';
 import type { UnitBuff } from './UnitMesh';
+import type { TutorialVisuals } from './shared/TutorialGuide';
+import { TutorialMarkers } from './shared/TutorialMarkers';
 import { describeBonus, getBond } from '@/lib/game/bonds';
 import type { TroopId } from '@/lib/game/troops';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
@@ -120,6 +125,8 @@ interface GameBoardProps {
   unitIds?: Set<string>;
   // Tint the hexes enemies can strike next turn, and label damage for the selected troop
   showThreats?: boolean;
+  // The first battle's tutorial: where it points the camera, and what it marks on the board
+  tutorial?: TutorialVisuals | null;
 }
 
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
@@ -142,6 +149,8 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
             focus={props.selectedUnit?.position ?? (props.selectedHex && (props.selectedHex.isCamp || props.selectedHex.isBase) ? props.selectedHex.coordinates : null)}
             focusIsOurs={props.selectedUnit ? props.selectedUnit.owner === 'player' : props.selectedHex?.owner === 'player'}
             deployingCard={props.selectedUnitTypeForPurchase}
+            showcase={props.tutorial?.showcase ?? null}
+            keepInView={props.tutorial?.keepInView ?? null}
           />
         </Suspense>
       </Canvas>
@@ -182,8 +191,21 @@ const nearestSide = (azimuth: number, castleAzimuth: number) => {
   return best;
 };
 
-const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; focusIsOurs?: boolean; deployingCard?: UnitType | null }> = ({
-  gameState, focus, focusIsOurs = true, deployingCard
+// Where on screen (as shares of its width and height) a hex the tutorial points at should be: clear
+// of the edges, the top HUD and the hand of cards
+const KEEP_IN_VIEW = { left: 0.12, right: 0.88, top: 0.16, bottom: 0.66 };
+
+const CameraRig: React.FC<{
+  gameState: GameState;
+  focus: HexCoordinates | null;
+  focusIsOurs?: boolean;
+  deployingCard?: UnitType | null;
+  // A point the tutorial is showing: the camera flies there, and back to your side when it's done
+  showcase?: TutorialVisuals['showcase'];
+  // A hex the tutorial is pointing at: the camera drifts until it is well on screen
+  keepInView?: HexCoordinates | null;
+}> = ({
+  gameState, focus, focusIsOurs = true, deployingCard, showcase = null, keepInView = null
 }) => {
   const { camera, size, gl } = useThree();
 
@@ -349,6 +371,24 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
     // Only reacts to a new turn of yours
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yourTurn]);
+
+  // The tutorial showing a spot on the board: fly there, close and from higher up; then come back
+  const showcaseKey = showcase ? `${showcase.at.q},${showcase.at.r},${showcase.zoom}` : null;
+  const wasShowcasingRef = useRef(false);
+  useEffect(() => {
+    if (showcase) {
+      const [x, , z] = axialToWorld(showcase.at);
+      desiredLookAtRef.current = new THREE.Vector3(x, 0, z);
+      desiredZoomRef.current = showcase.zoom;
+      desiredElevationRef.current = THREE.MathUtils.degToRad(62);
+      wasShowcasingRef.current = true;
+    } else if (wasShowcasingRef.current) {
+      wasShowcasingRef.current = false;
+      showSide(0);
+    }
+    // Only reacts to the tutorial moving the camera
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showcaseKey]);
 
   // A camp you've just captured: swing round to its side
   const ownedCamps = gameState.hexGrid.filter(hex => hex.isCamp && hex.owner === viewSide).map(hex => coordKey(hex.coordinates)).sort().join(' ');
@@ -532,9 +572,29 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
     }
   }, [camera]);
 
+  const keepInViewRef = useRef(keepInView);
+  keepInViewRef.current = keepInView;
+  const probe = useMemo(() => new THREE.Vector3(), []);
+
   useFrame((frame, rawDelta) => {
     const delta = Math.min(rawDelta, 0.1);
     const ease = Math.min(1, delta * CAMERA_TURN_SPEED);
+
+    // Drift towards the hex the tutorial points at while it is near an edge or under the HUD
+    const spot = keepInViewRef.current;
+    if (spot) {
+      const [x, , z] = axialToWorld(spot);
+      probe.set(x, 0, z).project(camera);
+      const screenX = (probe.x + 1) / 2;
+      const screenY = (1 - probe.y) / 2;
+      if (probe.z > 1 || screenX < KEEP_IN_VIEW.left || screenX > KEEP_IN_VIEW.right || screenY < KEEP_IN_VIEW.top || screenY > KEEP_IN_VIEW.bottom) {
+        const desired = desiredLookAtRef.current ?? defaultLookAt.clone();
+        const pull = Math.min(1, delta * 1.5);
+        desired.x += (x - desired.x) * pull;
+        desired.z += (z - desired.z) * pull;
+        desiredLookAtRef.current = desired;
+      }
+    }
     const [shakeX, shakeY, shakeZ] = takeShake(delta, frame.clock.getElapsedTime());
     const desiredAzimuth = targetAzimuth + azimuthOffsetRef.current;
     const current = azimuthRef.current ?? desiredAzimuth;
@@ -691,7 +751,8 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   // Its bonuses from others (Ward)
   for (const bonus of situational) {
     if (bonus.label !== signature?.def.name) {
-      buffs.push({ id: `bonus-${bonus.label}`, icon: 'attack', label: bonus.label, value: `+${pct(bonus.multiplier - 1)} attack`, good: true });
+      // (a blacksmith's edge is on every troop, so it only shows in the list)
+      buffs.push({ id: `bonus-${bonus.label}`, icon: 'attack', label: bonus.label, value: `+${pct(bonus.multiplier - 1)} attack`, good: true, quiet: bonus.label === 'Blacksmith' });
     }
   }
   for (const protection of getProtections(state, unit)) {
@@ -770,7 +831,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   assetsLoaded,
   selectedUnitTypeForPurchase = null,
   unitIds,
-  showThreats = false
+  showThreats = false,
+  tutorial = null
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const unitIdsRef = useRef(unitIds);
@@ -801,10 +863,17 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     [isSetupPhase, hexGrid, gameState.castleChoices]
   );
 
+  // Hexes the selected troop can work on (demolish, set alight, build), highlighted like trees to fell
+  const actionKeys = useMemo(() => {
+    const live = selectedUnit && players[selectedUnit.owner].units.find(unit => unit.id === selectedUnit.id);
+    return new Set(live && live.owner === 'player' ? getActionTargets(gameState, live).map(target => coordKey(target.at)) : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUnit, players, hexGrid, pendingMoves]);
+
   const getHighlight = (key: string): HexHighlight => {
     if (isSetupPhase) return validBaseKeys.has(key) ? 'base' : 'none';
     if (!validMoveKeys.has(key)) return 'none';
-    if (hexByKey.get(key)?.feature === 'greatTree') return 'fell';
+    if (hexByKey.get(key)?.feature === 'greatTree' || actionKeys.has(key)) return 'fell';
     return selectedUnitTypeForPurchase ? 'deploy' : 'move';
   };
 
@@ -1163,7 +1232,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const plannedPaths = useMemo(() => pendingMoves.flatMap(move => {
     const unit = allUnits.find(u => u.id === move.unitId);
     // (orders to fell a tree show where it will land instead)
-    if (!unit || hexByKey.get(coordKey(move.to))?.feature === 'greatTree') return [];
+    if (!unit || move.action || hexByKey.get(coordKey(move.to))?.feature === 'greatTree') return [];
 
     const stateWithoutMove = { ...gameState, pendingMoves: pendingMoves.filter(m => m !== move) };
     const route = getMovePath(stateWithoutMove, unit, move.to) ?? [unit.position, move.to];
@@ -1436,8 +1505,10 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
       {/* Trees, peaks, dunes and gold that show each hex's terrain */}
       <BoardDecorations hexGrid={hexGrid} decor={decor} />
+      {/* The tutorial's marks: your castle, the enemy castle to take, the hex to tap, the way there */}
+      {tutorial && <TutorialMarkers visuals={tutorial} hexByKey={hexByKey} />}
       {/* Great trees, felled trunks and fires */}
-      <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} visibleKeys={visibleKeys} />
+      <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} lastBombard={gameState.lastBombard} visibleKeys={visibleKeys} />
 
       {/* Castles */}
       {playerCastlePosition && (
@@ -1498,6 +1569,18 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           isPendingPurchase
         />
       ))}
+
+      {/* Work ordered this turn: what each troop will do to the hex next to it */}
+      {pendingMoves.filter(move => move.action).map(move => {
+        const hex = hexByKey.get(coordKey(move.to));
+        return hex && (
+          <Html key={`work-${move.unitId}`} position={labelPosition(hex)} center zIndexRange={[6, 0]} style={{ pointerEvents: 'none' }}>
+            <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-400 px-1.5 py-0.5 text-[0.6875rem] font-bold text-slate-900 shadow select-none">
+              <ActionIcon action={move.action!} />{ACTION_NAMES[move.action!]}
+            </span>
+          </Html>
+        );
+      })}
 
       {/* Where felled trees will land */}
       {fellMarkers.map(marker => (
@@ -1580,7 +1663,9 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
           ? <><FallenLogIcon /> Fallen trunk: blocks the way</>
           : hex.feature === 'logBridge'
             ? <><FallenLogIcon /> Log bridge: troops can cross</>
-            : null;
+            : hex.feature === 'stakes'
+              ? <><StakesIcon /> Stakes: cavalry can&apos;t cross, +1 movement for others</>
+              : null;
 
   return (
     <Html position={[x, y + 0.2, z]} zIndexRange={[9, 0]} style={{ pointerEvents: 'none' }}>
@@ -1589,6 +1674,11 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
           {hex.isCamp ? <><CampIcon /> Camp</> : <><TerrainIcon terrain={hex.terrain} /> {TERRAIN_EFFECTS[hex.terrain].name}</>}
         </span>
         <span className="text-slate-400"> · height {getHexHeight(hex).toFixed(1)}</span>
+        {isCapturable(hex.terrain) && (
+          <span className="font-semibold" style={{ color: hex.owner ? OWNER_COLORS[hex.owner] : '#cbd5e1' }}>
+            {' '}· {hex.owner === 'player' ? 'yours' : hex.owner === 'ai' ? 'enemy' : 'unclaimed'}
+          </span>
+        )}
         {object ? <span className="text-amber-200"> · {object}</span> : <span className="text-slate-400"> · {effect}</span>}
         {hex.unit && (
           <span className="ml-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>

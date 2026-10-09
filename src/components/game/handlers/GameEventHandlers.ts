@@ -4,7 +4,8 @@ import {
   Hex,
   HexCoordinates,
   Unit,
-  UnitType
+  UnitType,
+  UnitAction
 } from '@/types/game';
 import {
   addPendingMove,
@@ -20,6 +21,7 @@ import {
   getTroopName,
   getValidMoveTargets,
   getFellTargets,
+  getActionTargets,
   isImpassable,
   TERRAIN_EFFECTS,
   resolveAllCombats
@@ -53,6 +55,9 @@ const describeInvalidMove = (state: GameState, unit: Unit, hex: Hex): string => 
         : `Move ${name} next to the great tree to chop it down`;
   }
   if (hex.feature === 'log') return 'A fallen trunk blocks that hex';
+  if (hex.terrain === 'gate' && hex.owner && hex.owner !== unit.owner) return 'The enemy holds that gate - Siege Sappers can tear it down';
+  if (hex.terrain === 'wall') return 'A stone wall - go round it, through a gate, or bring Siege Sappers';
+  if (hex.feature === 'stakes' && !unit.abilities.includes('flying')) return 'Cavalry can\'t cross stakes - send troops on foot';
   if (hex.fire?.stage === 'burning') return "That hex is on fire - wait for it to burn out";
   if (isImpassable(hex)) {
     return `${name} can't stop on ${TERRAIN_EFFECTS[hex.terrain].name.toLowerCase()} - pick another hex`;
@@ -100,9 +105,11 @@ interface GameHandlerOptions {
   resume: boolean;
   // False while the loading screen still covers the board: turn timers and the AI wait until then
   isReady: boolean;
+  // No turn timer (the first battle's tutorial: a new player takes their time)
+  untimed?: boolean;
 }
 
-export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions) => {
+export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: GameHandlerOptions) => {
   // Created once: either the saved battle or a fresh one
   const [initialGame] = useState(() => createInitialGame(battle, resume));
   const [gameState, setGameState] = useState<GameState>(initialGame.gameState);
@@ -110,6 +117,8 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   const [selectedUnitTypeForPurchase, setSelectedUnitTypeForPurchase] = useState<UnitType | null>(null);
   const [validMoves, setValidMoves] = useState<HexCoordinates[]>([]);
+  // A hex where the selected troop could either move or do some work: the player picks which
+  const [actionChoice, setActionChoice] = useState<{ unitId: string; at: HexCoordinates; actions: UnitAction[]; canMove: boolean } | null>(null);
   const [timer, setTimer] = useState(initialGame.gameState.planningTimeRemaining);
   // Short warning shown to the player, e.g. when they pick a hex a unit can't move to
   const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
@@ -158,6 +167,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     setSelectedUnit(null);
     setSelectedUnitTypeForPurchase(null);
     setValidMoves([]);
+    setActionChoice(null);
   }, []);
 
   // A brand new battle replaces any older save
@@ -195,7 +205,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
   // End the player's turn: execute their pending moves and purchases
   const executeAllMoves = useCallback(() => {
     const current = stateRef.current;
-    // The turn may already have ended (e.g. the timer ran out just before End Turn was clicked)
+    // The turn may already have ended (e.g. the timer ran out just before Confirm was clicked)
     if (current.currentPhase !== 'planning' || (current.activePlayer ?? 'player') !== 'player') return;
 
     clearSelection();
@@ -205,7 +215,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
   // Planning timer for the player's turn - when it runs out the turn ends automatically.
   // It doesn't start until the board is visible, and pauses while the tab is in the background.
   useEffect(() => {
-    if (!isReady || currentPhase !== 'planning' || isAITurn) return;
+    if (!isReady || currentPhase !== 'planning' || isAITurn || untimed) return;
 
     let remaining = stateRef.current.planningTimeRemaining;
     setTimer(remaining);
@@ -222,7 +232,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     }, 1000);
 
     return () => clearInterval(timerInterval);
-  }, [isReady, currentPhase, isAITurn, turnNumber, executeAllMoves]);
+  }, [isReady, currentPhase, isAITurn, turnNumber, executeAllMoves, untimed]);
 
   // AI turn: plan purchases and moves, then execute them
   useEffect(() => {
@@ -310,6 +320,14 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     return true;
   };
 
+  // The player's pick for a hex where the troop could move or work: an action, or null to move there
+  const handleActionChoice = (action: UnitAction | null) => {
+    const current = stateRef.current;
+    if (!actionChoice || !isPlayerPlanning()) return;
+    commitOrder(addPendingMove(current, actionChoice.unitId, current.players.player.id, actionChoice.at, action ?? undefined));
+    clearSelection();
+  };
+
   // Handle hex click
   const handleHexClick = (hex: Hex) => {
     const current = stateRef.current;
@@ -349,6 +367,24 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
         setSelectedHex(hex);
       }
       return;
+    }
+
+    // Work the selected troop can do on this hex (demolish, set alight, build): done at once when it
+    // is the only thing to do there, otherwise the player chooses between moving and the work
+    if (selectedUnit && validMoves.some(c => coordsEqual(c, hex.coordinates))) {
+      const unit = current.players.player.units.find(u => u.id === selectedUnit.id) ?? selectedUnit;
+      const actions = getActionTargets(current, unit).filter(target => coordsEqual(target.at, hex.coordinates)).map(target => target.action);
+      if (actions.length > 0) {
+        const withoutOrder = { ...current, pendingMoves: current.pendingMoves.filter(m => m.unitId !== unit.id) };
+        const canMove = [...getValidMoveTargets(withoutOrder, unit), ...getFellTargets(withoutOrder, unit)].some(c => coordsEqual(c, hex.coordinates));
+        if (!canMove && actions.length === 1) {
+          commitOrder(addPendingMove(current, unit.id, playerId, hex.coordinates, actions[0]));
+          clearSelection();
+        } else {
+          setActionChoice({ unitId: unit.id, at: hex.coordinates, actions, canMove });
+        }
+        return;
+      }
     }
 
     // Move the selected unit to a valid destination
@@ -410,7 +446,9 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
       }
 
       setSelectedUnit(hex.unit);
-      setValidMoves([...getValidMoveTargets(current, hex.unit), ...getFellTargets(current, hex.unit)]);
+      setValidMoves([
+        ...getValidMoveTargets(current, hex.unit), ...getFellTargets(current, hex.unit), ...getActionTargets(current, hex.unit).map(target => target.at)
+      ]);
       return;
     }
 
@@ -464,5 +502,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     handleUndo,
     canUndo,
     notice,
+    actionChoice,
+    handleActionChoice,
   };
 };

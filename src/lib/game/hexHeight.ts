@@ -22,6 +22,17 @@ const TERRAIN_HEIGHTS: Record<TerrainType, number> = {
   ice: 0.3,
   ruins: 1.1,
   village: 1.1,
+  // A watchtower stands on a rise as high as a hill; the other buildings on open ground
+  watchtower: 1.8,
+  house: 1.1,
+  catapult: 1.2,
+  blacksmith: 1.1,
+  barracks: 1.1,
+  tavern: 1.1,
+  lumbermill: 1.1,
+  wall: 1.3,
+  gate: 1.2,
+  bridge: 0.2,
   cursed: 0.8
 };
 

@@ -1,6 +1,7 @@
 import { memo, useLayoutEffect, useMemo, useRef } from 'react';
 import * as THREE from 'three';
-import { Hex, TerrainType } from '@/types/game';
+import { Hex, PlayerType, TerrainType } from '@/types/game';
+import { STRUCTURE_TERRAINS, isStructure } from '@/lib/game/structures';
 import type { MapDecor } from '@/lib/game/mapGenerator';
 import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
 import { KAYKIT_HEX_SCALE, PropLibrary, PropPack, usePropLibrary } from './utils/kaykitProps';
@@ -280,7 +281,18 @@ const InstancedPart: React.FC<{ part: PartName; matrices: THREE.Matrix4[] }> = (
 // --- KayKit scenery ---------------------------------------------------------------------------
 
 // Terrain drawn with KayKit models once they have loaded (the rest keeps the shapes above)
-const KAYKIT_TERRAIN: ReadonlySet<TerrainType> = new Set(['forest', 'mountain', 'plain', 'resource', 'ruins', 'cursed', 'water', 'swamp', 'village']);
+const KAYKIT_TERRAIN: ReadonlySet<TerrainType> = new Set(['forest', 'mountain', 'plain', 'resource', 'ruins', 'cursed', 'water', 'swamp', 'village', ...STRUCTURE_TERRAINS]);
+
+// Buildings drawn in the colour of the side holding them (yellow while nobody does), and their size
+const BUILDING_MODELS: Partial<Record<TerrainType, { model: string; scale: number }>> = {
+  watchtower: { model: 'building_tower_A', scale: 0.62 },
+  catapult: { model: 'building_tower_catapult', scale: 0.6 },
+  blacksmith: { model: 'building_blacksmith', scale: 0.58 },
+  barracks: { model: 'building_barracks', scale: 0.58 },
+  tavern: { model: 'building_tavern', scale: 0.58 },
+  lumbermill: { model: 'building_lumbermill', scale: 0.58 }
+};
+const SIDE_COLOR: Record<PlayerType | 'none', string> = { player: 'blue', ai: 'red', none: 'yellow' };
 const S = KAYKIT_HEX_SCALE;
 
 // Where each KayKit model goes on the board: one list of transforms per model
@@ -301,7 +313,30 @@ const buildPropMatrices = (hexes: Hex[], decor?: MapDecor): Map<string, THREE.Ma
   };
   const pick = (models: string[], r: number) => models[Math.min(models.length - 1, Math.floor(r * models.length))];
 
+  const hexAt = new Map(hexes.map(hex => [`${hex.coordinates.q},${hex.coordinates.r}`, hex]));
+  // The heading along the first of the hex's three axes with a matching hex on both sides (or one)
+  const lineTurn = (hex: Hex, matches: (other: Hex) => boolean) => {
+    const axes = [{ q: 1, r: 0 }, { q: 0, r: 1 }, { q: 1, r: -1 }];
+    const score = (d: { q: number; r: number }) => [1, -1].filter(sign => {
+      const other = hexAt.get(`${hex.coordinates.q + sign * d.q},${hex.coordinates.r + sign * d.r}`);
+      return other && matches(other);
+    }).length;
+    const best = [...axes].sort((a, b) => score(b) - score(a))[0];
+    const [x0, , z0] = axialToWorld(hex.coordinates);
+    const [x1, , z1] = axialToWorld({ q: hex.coordinates.q + best.q, r: hex.coordinates.r + best.r });
+    return Math.atan2(x1 - x0, z1 - z0) + Math.PI / 2;
+  };
+
   for (const hex of hexes) {
+    // Stakes planted against cavalry: a hedge of sharpened fence posts
+    if (hex.feature === 'stakes') {
+      const [cx, , cz] = axialToWorld(hex.coordinates);
+      const y = getHexSurfaceHeight(hex);
+      for (let i = 0; i < 3; i++) {
+        const angle = i * Math.PI * 2 / 3 + 0.3;
+        add('fence_wood_straight', cx + Math.cos(angle) * 0.3, y, cz + Math.sin(angle) * 0.3, 0.75, -angle + Math.PI / 4);
+      }
+    }
     if (!KAYKIT_TERRAIN.has(hex.terrain) || hex.isBase || hex.isCamp) continue;
     const [cx, , cz] = axialToWorld(hex.coordinates);
     const y = getHexSurfaceHeight(hex);
@@ -336,6 +371,38 @@ const buildPropMatrices = (hexes: Hex[], decor?: MapDecor): Map<string, THREE.Ma
           const z = Math.sin(angle) * 0.48;
           add(model, cx + x, y, cz + z, scales[model] ?? 0.46, facing(x, z));
         }
+        break;
+      }
+      case 'watchtower':
+      case 'catapult':
+      case 'blacksmith':
+      case 'barracks':
+      case 'tavern':
+      case 'lumbermill': {
+        const building = BUILDING_MODELS[hex.terrain]!;
+        add(`${building.model}_${SIDE_COLOR[hex.owner ?? 'none']}`, cx, y, cz, building.scale, Math.round(seededRandom(hex, 3) * 6) * Math.PI / 3);
+        break;
+      }
+      case 'wall':
+      case 'gate': {
+        // Stone wall along its line (towards the next stretch of wall or the gate); the gatehouse flies
+        // the flag of whoever holds it
+        // (a gate torn down to ruins still lines the wall up)
+        const turn = lineTurn(hex, other => other.terrain === 'wall' || other.terrain === 'gate' || other.terrain === 'ruins');
+        add(hex.terrain === 'gate' ? 'wall_straight_gate' : 'wall_straight', cx, y, cz, S * 0.98, turn);
+        if (hex.terrain === 'gate' && hex.owner) add(hex.owner === 'player' ? 'flag_blue' : 'flag_red', cx + 0.35, y, cz + 0.35, 0.9, turn);
+        break;
+      }
+      case 'bridge':
+        // Across the water, from bank to bank
+        add('building_bridge_A', cx, y, cz, S * 0.98, lineTurn(hex, other => other.terrain !== 'water' && other.terrain !== 'bridge' && other.terrain !== 'mountain'));
+        break;
+      case 'house': {
+        // A cottage, and a crate or barrel by the door
+        const turn = Math.round(seededRandom(hex, 3) * 6) * Math.PI / 3;
+        add(seededRandom(hex, 4) > 0.5 ? 'building_home_A_yellow' : 'building_home_B_yellow', cx, y, cz, 0.68, turn);
+        const [{ x, z, r }] = rimSpots(hex, 1);
+        add(r > 0.5 ? 'barrel' : 'crate_B_small', cx + x * 1.1, y, cz + z * 1.1, 1.4, r * 6);
         break;
       }
       case 'mountain':
@@ -431,14 +498,17 @@ const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[]; decor?: MapDecor }> 
   // Only the packs this map's scenery uses download (Halloween bits for haunted ground, dungeon props
   // for the Underkeep)
   const hasCursed = hexGrid.some(hex => hex.terrain === 'cursed');
+  const hasBuildings = hexGrid.some(hex => isStructure(hex.terrain));
   const packs = useMemo((): PropPack[] => [
     'medieval',
     ...(hasCursed || decor === 'haunted' ? ['halloween' as const] : []),
-    ...(decor === 'dungeon' ? ['dungeon' as const] : [])
-  ], [hasCursed, decor]);
+    ...(decor === 'dungeon' ? ['dungeon' as const] : []),
+    ...(hasBuildings ? ['buildings' as const] : [])
+  ], [hasCursed, decor, hasBuildings]);
   const library = usePropLibrary(packs);
   // Decorations only depend on the terrain, not on units moving around
-  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}`).join('|');
+  // (and on who holds each building, which shows in its colours)
+  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}${isStructure(h.terrain) ? h.owner ?? '' : ''}${h.feature === 'stakes' ? 's' : ''}`).join('|');
   const hexesRef = useRef(hexGrid);
   hexesRef.current = hexGrid;
 

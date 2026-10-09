@@ -62,6 +62,7 @@ export const TopBar: React.FC<TopBarProps> = ({
     `+${income.base} income`,
     income.mines > 0 && `+${income.mines} gold mines`,
     income.camps > 0 && `+${income.camps} camps`,
+    income.taverns > 0 && `+${income.taverns} taverns`,
     income.upkeep > 0 && `-${income.upkeep} upkeep`
   ].filter(Boolean).join(', ');
 

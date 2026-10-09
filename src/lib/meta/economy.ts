@@ -78,6 +78,7 @@ export const upgradeCost = (id: TroopId, level: number, eliteUnlocked = false): 
 // Campaign level that must be cleared before a card appears in the shop (starter cards are owned)
 export const CARD_UNLOCK_LEVEL: Partial<Record<TroopId, number>> = {
   helicopter: 5,
+  engineer: 9,
   medic: 13,
   shieldbearer: 20,
   berserker: 27,

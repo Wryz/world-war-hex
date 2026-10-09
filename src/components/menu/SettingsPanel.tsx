@@ -15,7 +15,7 @@ import { TERRAIN_ORDER, TERRAIN_SHORT_EFFECTS } from '../game/hud/terrainInfo';
 import { CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
 import {
   AttackIcon, BondIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
-  SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon, FellIcon
+  SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon, FellIcon, AbilityIcon
 } from '../game/icons';
 import type { Difficulty } from '../game/storage/GameStorage';
 import { UI_SIZES, setUiSize, useUiSize } from '@/lib/uiSize';
@@ -240,6 +240,26 @@ const GuideTab: React.FC = () => (
         burns for a round and a half: nothing can enter it, its smoke blocks arrows, and troops caught in it lose {FIRE_DAMAGE} health a turn.
         Fire spreads through forest and burns it down to open ground - cover can go up in smoke.
       </p>
+    </GuideSection>
+    <GuideSection title="Buildings" icon={<TerrainIcon terrain="watchtower" />}>
+      <p>Buildings stand where neither side has the longer march. Step a troop onto one to take it; it stays yours, in your colours, until the enemy takes it back.</p>
+      <ul className="flex flex-col gap-1">
+        <li><TerrainIcon terrain="watchtower" /> <b>Watchtower</b>: high ground - a troop up there sees 2 hexes further and its arrows reach 1 further, and the tower keeps watch for you even when empty.</li>
+        <li><TerrainIcon terrain="house" /> <b>House</b>: garrison a troop inside - 40% less damage, no flanking, hidden from anyone not next to it. Houses burn.</li>
+        <li><TerrainIcon terrain="catapult" /> <b>Catapult tower</b>: a troop in it hurls a stone at the weakest enemy within 4 hexes every turn (5 damage), or at the enemy castle (2).</li>
+        <li><TerrainIcon terrain="gate" /> <b>Walls and gates</b>: some battlefields have a stone wall across the middle. Whoever holds its gatehouse decides who passes; go round, or tear it down.</li>
+        <li><TerrainIcon terrain="bridge" /> <b>Bridges</b> cross the water - chokepoints that can be torn down, or built anew.</li>
+        <li><TerrainIcon terrain="blacksmith" /> <b>Blacksmith</b>: all your troops attack 10% harder. <TerrainIcon terrain="barracks" /> <b>Barracks</b>: deploy there; recruits get 20% more health. <TerrainIcon terrain="tavern" /> <b>Tavern</b>: +3 gold a turn. <TerrainIcon terrain="lumbermill" /> <b>Lumber mill</b>: fell great trees from 2 hexes away.</li>
+      </ul>
+    </GuideSection>
+    <GuideSection title="Work orders" icon={<AbilityIcon ability="engineering" />}>
+      <p>Some troops can work on the hex next to them instead of moving: select the troop, then tap a gold hex (if it could also move there, pick Move or the work).</p>
+      <ul className="flex flex-col gap-1">
+        <li><AbilityIcon ability="demolition" /> <b>Siege Sappers</b> tear down walls, gates, bridges, fallen trunks and stakes.</li>
+        <li><AbilityIcon ability="firebrand" /> <b>Rogues</b> set dry ground alight: it smoulders through the enemy&apos;s turn, then burns.</li>
+        <li><AbilityIcon ability="engineering" /> <b>Engineers</b> build a bridge over the water, or plant stakes on open ground that cavalry can&apos;t cross.</li>
+        <li><FellIcon /> Any troop on foot can fell a great tree next to it.</li>
+      </ul>
     </GuideSection>
     <GuideSection title="Fog of war" icon={<FogIcon />}>
       <p>

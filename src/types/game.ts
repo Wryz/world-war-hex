@@ -17,7 +17,19 @@ export type TerrainType =
   | 'ruins'
   | 'cursed'
   // Houses, mills and wells: cover, and buildings that block arrows
-  | 'village';
+  | 'village'
+  // Buildings with a job of their own (see lib/game/structures)
+  | 'watchtower'
+  | 'house'
+  | 'catapult'
+  | 'blacksmith'
+  | 'barracks'
+  | 'tavern'
+  | 'lumbermill'
+  // Fortifications and crossings
+  | 'wall'
+  | 'gate'
+  | 'bridge';
 
 export type PlayerType = 'player' | 'ai';
 
@@ -53,7 +65,7 @@ export interface Hex {
   scorched?: boolean;
 }
 
-export type HexFeature = 'greatTree' | 'log' | 'logBridge';
+export type HexFeature = 'greatTree' | 'log' | 'logBridge' | 'stakes';
 
 export interface Unit {
   id: string;
@@ -99,7 +111,10 @@ export type Ability =
   | 'undead'       // healed rather than hurt by cursed ground
   | 'pathfinder'   // rough ground (desert, swamp, snow, ice) costs 1 to enter
   | 'fireborn'     // unharmed by lava
-  | 'magic';       // spells ignore line of sight and cover
+  | 'magic'        // spells ignore line of sight and cover
+  | 'demolition'   // tears down walls, gates, bridges, trunks and stakes next to it
+  | 'firebrand'    // sets dry ground next to it alight
+  | 'engineering'; // builds bridges over water and stakes against cavalry next to it
 
 // The stats a side recruits a troop type with this battle (cards are levelled, monsters scaled)
 export interface TroopStats {
@@ -184,6 +199,8 @@ export interface GameState {
   pendingGuards?: { type: UnitType; stats: TroopStats; isBoss?: boolean }[];
   // Seeds the battle's chance events (fires flaring up around lava)
   battleSeed?: number;
+  // The catapult's most recent stone, for the board to show it flying (serial counts stones)
+  lastBombard?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
   // The tree felled most recently, for the board to show it falling (serial counts fellings)
   lastFell?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
 }
@@ -212,7 +229,12 @@ export interface Move {
   playerId: string;
   from: HexCoordinates;
   to: HexCoordinates;
+  // Work done on the hex `to` instead of moving onto it (see lib/game/battlefield): the troop stays
+  // where it is. (Felling a great tree is an order onto the tree, without an action.)
+  action?: UnitAction;
 }
+
+export type UnitAction = 'demolish' | 'ignite' | 'bridge' | 'stakes';
 
 export interface Purchase {
   playerId: string;
