@@ -15,7 +15,8 @@ import {
   GiAngelWings, GiRegeneration, GiChestArmor, GiSiegeRam, GiAngryEyes, GiRaiseSkeleton, GiWingfoot, GiFireRing,
   GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog,
   GiSparkles, GiAxeInStump, GiFire, GiBurningEmbers, GiLog, GiWatchtower, GiHouse, GiCatapult, GiAnvil, GiBarracksTent,
-  GiBeerStein, GiWoodPile, GiPointing, GiTargeted, GiDemolish, GiTorch, GiHammerNails, GiStoneWall, GiGate, GiStoneBridge, GiSpikedFence
+  GiBeerStein, GiWoodPile, GiPointing, GiTargeted, GiDemolish, GiTorch, GiHammerNails, GiStoneWall, GiGate, GiStoneBridge, GiSpikedFence,
+  GiThreeFriends, GiUnlitBomb, GiSandstorm, GiStomp, GiTrumpet, GiMeteorImpact, GiFireBreath
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuCheck, LuSkipForward, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
@@ -23,6 +24,7 @@ import {
   LuSettings, LuBookOpen, LuGamepad2
 } from 'react-icons/lu';
 import { Ability, TerrainType, UnitAction, UnitType } from '@/types/game';
+import type { BossPowerId } from '@/lib/game/bosses';
 
 // SVG icons used throughout the game: Game Icons (game-icons.net) and Lucide, via react-icons
 
@@ -237,6 +239,7 @@ export const SignatureIcon = icon(GiSparkles, '#f0abfc');
 export const FellIcon = icon(GiAxeInStump, '#a16207');
 export const FallenLogIcon = icon(GiLog, '#92400e');
 export const FireIcon = icon(GiFire, '#f97316');
+export const FrozenIcon = icon(GiIceCube, '#67e8f9');
 export const EmbersIcon = icon(GiBurningEmbers, '#fb923c');
 // Stakes planted against cavalry
 export const StakesIcon = icon(GiSpikedFence, '#a16207');
@@ -256,3 +259,20 @@ export const ActionIcon: React.FC<IconProps & { action: UnitAction }> = ({ actio
 // The tutorial's guiding hand, and the target it marks
 export const PointingHandIcon = icon(GiPointing, '#fde68a');
 export const TargetIcon = icon(GiTargeted, '#ef4444');
+
+// Bosses' powers, in the colour each one strikes with
+export const BOSS_POWER_COLORS: Record<BossPowerId, string> = {
+  callTheGang: '#f87171', goblinBombs: '#fb923c', howl: '#cbd5e1', manyHeads: '#4ade80', sandstorm: '#fcd34d',
+  iceStomp: '#67e8f9', raiseDead: '#c084fc', rallyHorde: '#f87171', hellfire: '#f97316', dragonBreath: '#fb923c'
+};
+const BOSS_POWER_ICONS: Record<BossPowerId, IconType> = {
+  callTheGang: GiThreeFriends, goblinBombs: GiUnlitBomb, howl: GiWolfHowl, manyHeads: GiHydra, sandstorm: GiSandstorm,
+  iceStomp: GiStomp, raiseDead: GiRaiseSkeleton, rallyHorde: GiTrumpet, hellfire: GiMeteorImpact, dragonBreath: GiFireBreath
+};
+const BOSS_POWER_ICON_COMPONENTS = Object.fromEntries(
+  Object.entries(BOSS_POWER_ICONS).map(([power, Icon]) => [power, icon(Icon, BOSS_POWER_COLORS[power as BossPowerId])])
+) as Record<BossPowerId, React.FC<IconProps>>;
+export const BossPowerIcon: React.FC<IconProps & { power: BossPowerId }> = ({ power, ...props }) => {
+  const Icon = BOSS_POWER_ICON_COMPONENTS[power];
+  return <Icon {...props} />;
+};

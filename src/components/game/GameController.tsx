@@ -8,6 +8,7 @@ import { CombatResolver } from './combat/CombatResolver';
 import { ResultsScreen } from './shared/ResultsScreen';
 import { TutorialOverlay, useTutorial } from './shared/TutorialGuide';
 import { RuleTips } from './shared/RuleTips';
+import { BossBar } from './hud/BossBar';
 import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
 import { LoadingManagerProvider } from './utils/LoadingManager';
@@ -314,6 +315,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
             onToggleMute={() => setMuted(!isMuted)}
             onQuit={handleQuit}
           />
+          <BossBar gameState={gameState} />
           <div className="fixed left-3 top-16 z-20 pointer-events-none">
             <SelectionCard gameState={viewState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
           </div>

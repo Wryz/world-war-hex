@@ -163,12 +163,17 @@ const IN_REGION_RAMP = 0.012;
 const FIRST_LEVEL_EASE = 0.92;
 // The tutorial battle is gentler still
 const TUTORIAL_EASE = 0.75;
-// Bosses and champions are far tougher than a regular troop, so their stats are scaled less
+// Bosses and champions are far tougher than a regular troop, so their stats are scaled less - a
+// boss's attack much less than its health: it is a fortress of a troop that takes a whole army to
+// bring down, and it fights with its power (bosses.ts) as much as its blows
 const BOSS_STRENGTH = 0.42;
-// ...adjusted per boss, as some abilities (flying, healing) count for more than others
-const BOSS_ADJUST: Partial<Record<TroopId, number>> = {
-  goblin_warchief: 1.25, alpha_direwolf: 0.65, bog_hydra: 0.8, pharaoh: 0.8, lich_king: 0.75,
-  orc_warlord: 1.3, demon_lord: 0.5, elder_dragon: 0.8
+const BOSS_HEALTH = 1.0;
+// ...adjusted per boss battle, as some bosses' abilities (flying, healing) count for more than others.
+// Bosses stay big: a boss level's own troops are eased to make up for it (LEVEL_TUNING, tuned with
+// the balance simulator's --troops-only --tune)
+const BOSS_TUNING: Record<number, number> = {
+  10: 0.8, 20: 0.9, 30: 0.6, 40: 0.8, 50: 0.75, 60: 0.8, 70: 0.7, 80: 0.85, 90: 0.6, 100: 0.75,
+  110: 0.85, 120: 0.7, 130: 0.6, 140: 0.8, 150: 0.75
 };
 const CHAMPION_STRENGTH = 0.55;
 // First level fought in the fog of war
@@ -246,7 +251,10 @@ export const getLevel = (levelId: number): LevelDef => {
 
   const guards: GuardSpec[] = [];
   if (isBoss) {
-    guards.push({ type: region.boss, stats: scaleTroop(TROOPS[region.boss], enemyScale * BOSS_STRENGTH * (BOSS_ADJUST[region.boss] ?? 1), enemyTier), isBoss: true });
+    const adjust = enemyScale * (BOSS_TUNING[id] ?? 1);
+    const stats = scaleTroop(TROOPS[region.boss], adjust * BOSS_STRENGTH, enemyTier);
+    stats.maxLifespan = scaleTroop(TROOPS[region.boss], adjust * BOSS_HEALTH, enemyTier).maxLifespan;
+    guards.push({ type: region.boss, stats, isBoss: true });
   } else if (isElite) {
     // The strongest regular of the roster, a size up
     const champion = [...enemyRoster].sort((a, b) =>

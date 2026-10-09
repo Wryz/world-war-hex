@@ -3,6 +3,8 @@
 //
 //   npx tsx scripts/simulate-balance.ts [battlesPerLevel] [level ...]
 //   npx tsx scripts/simulate-balance.ts --tune [battlesPerLevel] [level ...]
+//   npx tsx scripts/simulate-balance.ts --boss-only --tune [battlesPerLevel] [boss level ...]
+//   npx tsx scripts/simulate-balance.ts --troops-only --tune [battlesPerLevel] [boss level ...]
 //
 // --tune searches, for each level, for the enemy strength (relative to the current setting) at which
 // the model player wins its level's target share of battles (targetWinRate in levels.ts).
@@ -19,6 +21,12 @@ const args = process.argv.slice(2);
 // --no-fog plays every battle without the fog of war, to see what the fog changes
 const noFog = args.includes('--no-fog');
 if (noFog) args.splice(args.indexOf('--no-fog'), 1);
+// --boss-only makes --strength and --tune scale only the guards (a boss level's boss), not the
+// troops the enemy recruits; --troops-only the other way round
+const bossOnly = args.includes('--boss-only');
+if (bossOnly) args.splice(args.indexOf('--boss-only'), 1);
+const troopsOnly = args.includes('--troops-only');
+if (troopsOnly) args.splice(args.indexOf('--troops-only'), 1);
 // --strength x plays every battle with the enemy x times as strong as the level's setting
 const strengthAt = args.indexOf('--strength');
 const fixedStrength = strengthAt >= 0 ? Number(args[strengthAt + 1]) : 1;
@@ -46,10 +54,10 @@ let peakArmy = 0;
 const playBattle = (levelId: number, strength = 1): GameState => {
   const level = getLevel(levelId);
   const { deck, levels: cardLevels } = expectedProgression(levelId);
-  const enemy = strength === 1
+  const enemy = strength === 1 || bossOnly
     ? enemyRosterStats(level)
     : Object.fromEntries(level.enemyRoster.map(id => [id, scaleTroop(TROOPS[id], level.enemyScale * strength)]));
-  const guards = level.guards.map(guard => ({
+  const guards = troopsOnly ? level.guards : level.guards.map(guard => ({
     ...guard,
     stats: { ...guard.stats, attackPower: guard.stats.attackPower * strength, maxLifespan: Math.round(guard.stats.maxLifespan * strength) }
   }));

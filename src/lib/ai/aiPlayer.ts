@@ -1,3 +1,4 @@
+import { getBossPower } from '@/lib/game/bosses';
 import { getHexHeightOf } from '../game/hexHeight';
 import {
   GameState,
@@ -989,6 +990,11 @@ const decideUnitMove = (planner: Planner, unit: Unit): HexCoordinates | null => 
     if (isStay) value += goal.holdValue;
     // Crewing a catapult tower: a stone at the enemy every turn
     if (isStay && hex?.terrain === 'catapult') value += CATAPULT_DAMAGE * 1.5;
+    // Ground an enemy boss has marked for its power: it lands before this troop moves again
+    for (const boss of planner.enemies) {
+      const strike = boss.threat && getBossPower(boss.type)?.strike;
+      if (strike && boss.threat!.some(at => coordsMatch(at, position))) value -= healthValue(unit, boss.attackPower * strike.damage * 1.5);
+    }
     // Embers: the hex will be on fire next turn
     if (hex?.fire?.stage === 'smoulder' && !unit.abilities.includes('fireborn')) value -= healthValue(unit, FIRE_DAMAGE * 2);
     // Already on fire (a troop caught in it): get out

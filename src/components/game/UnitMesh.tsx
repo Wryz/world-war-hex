@@ -778,6 +778,14 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
         />
       </mesh>
 
+      {/* Frozen in place by a boss: locked in a block of ice for the turn */}
+      {unit.frozen && !dying && !killed && (
+        <mesh position={[0, look.labelHeight * 0.4, 0]} renderOrder={2}>
+          <cylinderGeometry args={[0.5, 0.56, look.labelHeight * 0.8, 6]} />
+          <meshStandardMaterial color="#a5f3fc" emissive="#22d3ee" emissiveIntensity={0.25} transparent opacity={0.45} depthWrite={false} flatShading />
+        </mesh>
+      )}
+
       {/* Compact unit label: type and health, with its buffs underneath */}
       {!decorative && !dying && !killed && (
         <Html

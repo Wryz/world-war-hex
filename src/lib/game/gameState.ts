@@ -39,7 +39,8 @@ import {
   WORKSHOP_COUNT, isCapturable, WALL_ARM, WALL_CHANCE, BRIDGE_COUNT
 } from './structures';
 import { MAX_HEIGHT_OFFSET, getHexHeightOf, getTerrainHeight, shiftHeightOffset } from './hexHeight';
-import { cardStats, getClassCounter, getTroop, getTroopClass } from './troops';
+import { cardStats, getClassCounter, getTroop, getTroopClass, scaleTroop } from './troops';
+import { aimStrike, getBossPower, isBossEnraged, powerCooldown } from './bosses';
 import {
   CHARGE_DISTANCE, EYE_OF_STORM_RADIUS, LONE_BLADE_RADIUS, SHOULDER_MAX_ALLIES, bloodlustHeal, braceBonus,
   challengePulls, challengeRange, chargeBonus, eyeOfStormBonus, holySmiteBonus, isSmitable, loneBladeBonus,
@@ -1784,8 +1785,9 @@ const canSpot = (state: GameState, from: HexCoordinates, range: number, target: 
 
 // Whether a side can see a unit: always its own, and enemies its lookouts spot (or that gave
 // themselves away this turn)
+// (bosses tower over the battlefield: they are always seen, and so is the ground they mark)
 export const isUnitVisibleTo = (state: GameState, side: PlayerType, unit: Unit): boolean =>
-  unit.owner === side || !isFogOfWar(state) || !!unit.revealed ||
+  unit.owner === side || !isFogOfWar(state) || !!unit.revealed || !!unit.isBoss ||
   lookoutsOf(state, side).some(lookout => canSpot(state, lookout.position, lookout.range, unit.position));
 
 export const getVisibleEnemies = (state: GameState, side: PlayerType): Unit[] => {
@@ -1793,7 +1795,7 @@ export const getVisibleEnemies = (state: GameState, side: PlayerType): Unit[] =>
   if (!isFogOfWar(state)) return enemies;
   const lookouts = lookoutsOf(state, side);
   return enemies.filter(unit =>
-    unit.revealed || lookouts.some(lookout => canSpot(state, lookout.position, lookout.range, unit.position)));
+    unit.revealed || unit.isBoss || lookouts.some(lookout => canSpot(state, lookout.position, lookout.range, unit.position)));
 };
 
 // The hexes where a side would spot an enemy troop (everything, without fog)
@@ -2335,7 +2337,7 @@ const finishTurn = (state: GameState): GameState => {
       }
       // A side's troops slip back into the fog when its own turn comes round again
       const updated = {
-        ...unit, lifespan, hasMoved: false, isEngagedInCombat: false, movedHexes: 0,
+        ...unit, lifespan, hasMoved: false, isEngagedInCombat: false, movedHexes: 0, frozen: undefined,
         revealed: side === activePlayer ? unit.revealed : false
       };
       if (lifespan <= 0) burned.push(updated);
@@ -2351,6 +2353,7 @@ const finishTurn = (state: GameState): GameState => {
       ? `${unitLabel(unit)} perished in the flames.`
       : `${unitLabel(unit)} perished on the ${TERRAIN_EFFECTS[terrainUnder(newState, unit)].name.toLowerCase()}.`);
   }
+  scatterMinions(newState);
   syncHexUnits(newState);
   const sideTroops = activePlayer === 'player' ? 'Your' : 'Enemy';
   if (healedAtSprings > 0) {
@@ -2361,6 +2364,7 @@ const finishTurn = (state: GameState): GameState => {
   }
   bombard(newState, activePlayer);
   advanceFires(newState, activePlayer === 'ai');
+  unleashBossPowers(newState, activePlayer);
   applyChallenges(newState, activePlayer);
   undermine(newState, diggers.filter(digger => newState.players[activePlayer].units.some(unit => unit.id === digger.id)));
   for (const builder of builders.filter(unit => newState.players[activePlayer].units.some(other => other.id === unit.id))) {
@@ -2477,6 +2481,105 @@ const seededRandom = (seed: number): number => {
 // Siege damage one unit deals to a castle in its range
 export const getSiegeDamage = (unit: Unit): number =>
   unit.attackPower * (hasAbility(unit, 'siege') ? SIEGE_MULTIPLIER : 1);
+
+// Bosses use their powers at the end of their side's turn (see bosses.ts): a strike marked last turn
+// lands; a power that is ready is used (a strike is marked, minions are called, the Hydra bites)
+const MAX_MINIONS = 3;
+const unleashBossPowers = (state: GameState, side: PlayerType): void => {
+  const enemySide = getOpponent(side);
+  const board = new Set(state.hexGrid.map(hex => coordKey(hex.coordinates)));
+  for (const boss of [...state.players[side].units.filter(unit => unit.isBoss)]) {
+    const power = getBossPower(boss.type);
+    const live = state.players[side].units.find(unit => unit.id === boss.id);
+    if (!power || !live) continue;
+    const name = getTroopName(live.type);
+    const used = (hexes: HexCoordinates[]) => {
+      state.lastBossPower = { power: power.id, from: live.position, hexes, serial: (state.lastBossPower?.serial ?? 0) + 1 };
+      live.powerCooldown = powerCooldown(power, isBossEnraged(live));
+    };
+
+    // The strike marked last turn lands
+    if (live.threat && power.strike) {
+      const strike = power.strike;
+      const hexes = live.threat;
+      live.threat = undefined;
+      const marked = new Set(hexes.map(coordKey));
+      let hits = 0;
+      let downed = 0;
+      for (const target of state.players[enemySide].units.filter(unit => marked.has(coordKey(unit.position)))) {
+        const hit = inflictDamage(state, target, live.attackPower * strike.damage, side);
+        hits++;
+        if (hit.destroyed) downed++;
+        const still = state.players[enemySide].units.find(unit => unit.id === target.id);
+        if (still && strike.freeze) {
+          still.frozen = true;
+          still.hasMoved = true;
+        }
+      }
+      if (strike.fire) {
+        for (const at of hexes) {
+          const hex = findHexByCoordinates(state.hexGrid, at);
+          if (hex && isFlammable(hex) && hex.fire?.stage !== 'burning') updateHex(state, at, { fire: { stage: 'burning', turnsLeft: BURN_TURNS } });
+        }
+      }
+      used(hexes);
+      addLog(state, side, `${name} unleashes ${power.name}` +
+        (hits > 0 ? ` - ${hits === 1 ? 'a troop' : `${hits} troops`} caught${downed > 0 ? `, ${downed} destroyed` : ''}${strike.freeze ? ' and frozen' : ''}.` : ', but strikes empty ground.'));
+      continue;
+    }
+
+    live.powerCooldown = Math.max(0, (live.powerCooldown ?? 0) - 1);
+    if (live.powerCooldown > 0) continue;
+    const foes = getVisibleEnemies(state, side);
+
+    if (power.strike) {
+      const hexes = aimStrike(power.strike, live.position, foes, board);
+      if (hexes.length === 0) continue;
+      live.threat = hexes;
+      addLog(state, side, `${name} readies ${power.name}!`);
+    } else if (power.summon) {
+      const minions = state.players[side].units.filter(unit => unit.summonedBy === live.id).length;
+      const count = Math.min(power.summon.count, MAX_MINIONS - minions);
+      // Called when the enemy comes near
+      if (count <= 0 || !foes.some(foe => getHexDistance(foe.position, live.position) <= SUMMON_ALERT_RANGE)) continue;
+      const stats = minionStats(state, side, power.summon.type);
+      const occupied = new Set([...state.players.player.units, ...state.players.ai.units].map(unit => coordKey(unit.position)));
+      const spots = getHexesInRange(state.hexGrid, live.position, 2)
+        .sort((a, b) => getHexDistance(a.coordinates, live.position) - getHexDistance(b.coordinates, live.position))
+        .filter(hex => !hex.isBase && !isImpassable(hex) && !occupied.has(coordKey(hex.coordinates)) &&
+          !TERRAIN_EFFECTS[hex.terrain].damagePerTurn && hex.fire?.stage !== 'burning' && !isClosedTo(hex, { owner: side, type: power.summon!.type, abilities: stats.abilities }))
+        .slice(0, count);
+      if (spots.length === 0) continue;
+      for (const spot of spots) {
+        const minion = createUnit(power.summon.type, side, spot.coordinates, stats);
+        minion.summonedBy = live.id;
+        state.players[side].units.push(minion);
+      }
+      syncHexUnits(state);
+      used(spots.map(spot => spot.coordinates));
+      addLog(state, side, `${name} uses ${power.name}: ${spots.length} ${getTroopName(power.summon.type)}${spots.length === 1 ? '' : 's'} answer the call!`);
+    } else if (power.bite) {
+      const bitten = state.players[enemySide].units.filter(unit => getHexDistance(unit.position, live.position) === 1);
+      if (bitten.length === 0) continue;
+      let damage = 0;
+      for (const target of bitten) damage += inflictDamage(state, target, live.attackPower * power.bite, side).damage;
+      used(bitten.map(unit => unit.position));
+      addLog(state, side, `${name}'s ${power.name} lash out at ${bitten.length === 1 ? 'a troop' : `${bitten.length} troops`} (-${damage}).`);
+    }
+  }
+};
+
+// How near an enemy has to come before a summoner calls its minions
+const SUMMON_ALERT_RANGE = 5;
+
+// A boss's minions arrive with the stats its side recruits them at, or scaled like its other troops
+const minionStats = (state: GameState, side: PlayerType, type: UnitType): TroopStats => {
+  const own = getRosterStats(state, side, type);
+  if (own) return own;
+  const sample = getRosterTypes(state, side).map(other => ({ other, stats: getRosterStats(state, side, other)! }))[0];
+  const scale = sample ? sample.stats.attackPower / getTroop(sample.other).attack : 1;
+  return scaleTroop(getTroop(type), scale, sample?.stats.level ?? 1);
+};
 
 // The besieging side's units near the enemy base damage it, plundering gold as they do
 // Catapult towers: a troop of the side whose turn it is standing in one hurls a stone at the weakest
@@ -2862,7 +2965,19 @@ export const resolveAllCombats = (state: GameState): GameState => {
 // Remove a unit from the game
 const removeUnit = (state: GameState, unit: Unit): void => {
   state.players[unit.owner].units = state.players[unit.owner].units.filter(u => u.id !== unit.id);
+  if (unit.isBoss) scatterMinions(state);
   syncHexUnits(state);
+};
+
+// Minions whose boss has fallen scatter and leave the field
+const scatterMinions = (state: GameState): void => {
+  for (const side of ['player', 'ai'] as const) {
+    const units = state.players[side].units;
+    const staying = units.filter(unit => !unit.summonedBy || units.some(boss => boss.id === unit.summonedBy));
+    if (staying.length === units.length) continue;
+    state.players[side].units = staying;
+    addLog(state, side, `With their master fallen, ${units.length - staying.length === 1 ? 'its minion flees' : 'its minions flee'} the field.`);
+  }
 };
 
 // Count a destroyed unit for the side that destroyed it (and against the side that lost it)

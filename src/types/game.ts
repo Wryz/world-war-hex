@@ -1,4 +1,5 @@
 import type { TroopId } from '@/lib/game/troops';
+import type { BossPowerId } from '@/lib/game/bosses';
 import type { BondId } from '@/lib/game/bonds';
 
 export type TerrainType =
@@ -91,6 +92,14 @@ export interface Unit {
   ambushed?: boolean;
   // Hexes it walked (or flew) this turn
   movedHexes?: number;
+  // A boss: turns until its power is ready, and the hexes it has marked to strike at the end of its
+  // next turn
+  powerCooldown?: number;
+  threat?: HexCoordinates[];
+  // A minion a boss called: the boss it serves (it scatters when the boss falls)
+  summonedBy?: string;
+  // Frozen in place (the Frost Giant's Ice Stomp): it can't move this turn
+  frozen?: boolean;
 }
 
 // Every troop - the player's cards and the campaign's monsters - is identified by its troop id
@@ -203,6 +212,9 @@ export interface GameState {
   lastBombard?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
   // The tree felled most recently, for the board to show it falling (serial counts fellings)
   lastFell?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
+  // A boss's power used most recently, for the board to play it out: the boss, the hexes it struck
+  // (or where its minions appeared) and a serial counting powers used
+  lastBossPower?: { power: BossPowerId; from: HexCoordinates; hexes: HexCoordinates[]; serial: number };
 }
 
 export interface Sighting {

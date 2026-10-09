@@ -9,6 +9,7 @@ import { Castle, CastleIncoming } from './Castle';
 import { Camp } from './Camp';
 import { BoardDecorations } from './BoardDecorations';
 import { BattlefieldObjects } from './BattlefieldObjects';
+import { BossPowerBursts, BossThreats } from './BossPowers';
 import { MovePath } from './MovePath';
 import {
   DEFAULT_SETTINGS,
@@ -107,6 +108,8 @@ const BATTLE_VIEW_MARGIN = 1.35;
 const BATTLE_VIEW_MIN_ZOOM = 0.5;
 const BATTLE_VIEW_MAX_ZOOM = 0.95;
 const BATTLE_VIEW_HOLD_MS = 600;
+// How long the camera looks down on a boss's marked ground or power
+const BOSS_FOCUS_HOLD_MS = 3200;
 
 // Sun position; the shadow camera looks from here towards the board centre
 const SHADOW_LIGHT_POSITION: [number, number, number] = [12, 30, 18];
@@ -413,6 +416,8 @@ const CameraRig: React.FC<{
   const isGameOver = gameState.currentPhase === 'gameOver';
   const settleRef = useRef<() => void>(() => {});
   settleRef.current = () => {
+    // (a boss's power still being shown settles when it is done)
+    if (Date.now() < bossFocusUntilRef.current) return;
     battleViewRef.current = false;
     const side = pendingSideRef.current ?? nearestHomeSide(azimuthRef.current ?? targetAzimuth);
     pendingSideRef.current = null;
@@ -459,6 +464,40 @@ const CameraRig: React.FC<{
     // Only reacts to battles starting and ending
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [battleKey, isGameOver]);
+
+  // A boss marking the ground it will strike, or unleashing its power: look down on it for a moment,
+  // then settle back (the marked ground keeps glowing for whenever the player looks again)
+  const bossFocusUntilRef = useRef(0);
+  const bossThreat = gameState.players.ai.units.find(unit => unit.isBoss && unit.threat)?.threat ?? null;
+  const bossFocus: HexCoordinates[] | null = bossThreat ??
+    (gameState.lastBossPower ? [gameState.lastBossPower.from, ...gameState.lastBossPower.hexes] : null);
+  const bossFocusKey = bossThreat
+    ? `threat:${bossThreat.map(coordKey).join(' ')}`
+    : gameState.lastBossPower ? `power:${gameState.lastBossPower.serial}` : null;
+  const firstBossFocusRef = useRef(bossFocusKey);
+  useEffect(() => {
+    if (!bossFocusKey || bossFocusKey === firstBossFocusRef.current || !bossFocus || isGameOver) return;
+    firstBossFocusRef.current = null;
+    const world = bossFocus.map(point => axialToWorld(point));
+    const centre = new THREE.Vector3(
+      world.reduce((sum, [x]) => sum + x, 0) / world.length, 0,
+      world.reduce((sum, [, , z]) => sum + z, 0) / world.length
+    );
+    const spread = Math.max(...world.map(([x, , z]) => Math.hypot(x - centre.x, z - centre.z))) + HEX_SIZE * 2;
+    const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
+    const horizontal = Math.hypot(centre.x, centre.z);
+    if (horizontal > maxPan) centre.multiplyScalar(maxPan / horizontal);
+    battleViewRef.current = true;
+    desiredLookAtRef.current = centre;
+    desiredZoomRef.current = THREE.MathUtils.clamp(spread * BATTLE_VIEW_MARGIN / viewRadiusRef.current, BATTLE_VIEW_MIN_ZOOM, BATTLE_VIEW_MAX_ZOOM);
+    desiredElevationRef.current = BATTLE_VIEW_ELEVATION;
+    const hold = BOSS_FOCUS_HOLD_MS / getGameSpeed();
+    bossFocusUntilRef.current = Date.now() + hold - 50;
+    const settle = setTimeout(() => settleRef.current(), hold);
+    return () => clearTimeout(settle);
+    // Only reacts to a new mark or power
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bossFocusKey]);
 
   // The battle is won: swoop down on the losing castle as it falls
   const loser = gameState.currentPhase === 'gameOver' && gameState.winner
@@ -1509,6 +1548,9 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {tutorial && <TutorialMarkers visuals={tutorial} hexByKey={hexByKey} />}
       {/* Great trees, felled trunks and fires */}
       <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} lastBombard={gameState.lastBombard} visibleKeys={visibleKeys} />
+      {/* Bosses' powers: the ground they have marked to strike, and each power as it lands */}
+      <BossThreats units={players.ai.units} hexByKey={hexByKey} />
+      <BossPowerBursts last={gameState.lastBossPower} hexByKey={hexByKey} />
 
       {/* Castles */}
       {playerCastlePosition && (
