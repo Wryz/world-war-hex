@@ -1,0 +1,257 @@
+{
+  "style": "\nI'm making card art for \"World War Hex\", a cheerful fantasy strategy card game with chunky, toy-like\n3D pieces on a bright hex board. Its UI is deep navy with bright, rounded, playful type. For each\ncard I'll attach a 3D render of the troop's game model. Repaint it as a 2D illustration that is\nclearly the same character: same silhouette, proportions, pose, colours, gear and colour placement.\n\nSTYLE (same for every card):\n- A hand-painted board-game piece / toy figure: chibi proportions (the head is about a third of the\n  body's height), stubby limbs, chunky rounded simple forms. Creatures keep the faceted, low-poly\n  blockiness of the reference.\n- Flat cel shading with 2\u20133 tones per colour and soft, matte, gouache-like paint. Light, even paper\n  grain inside the colour fills. Edges are crisp and confident, slightly imperfect, like they were\n  painted by hand.\n- Thin outlines in a darker shade of each local colour, never pure black.\n- Bright, saturated, friendly palette. One light source from the upper left, with one clear shadow\n  side.\n- Three-quarter view from slightly above, as in the reference. Full body, centred, with about 8% empty\n  margin on every side.\n- Fully transparent background (PNG with alpha): no ground, no cast shadow, no scenery, no particles\n  or smoke beyond what the prompt asks for, no text, no border, no frame.\n- Landscape 3:2 image.\n\nAVOID: photorealism, glossy plastic or 3D-render shine, bloom, glow halos, rim lighting, lens or\ndepth-of-field effects, airbrushed gradients, hyper-detailed textures or filigree, extra ornaments\nor weapons that aren't in the reference, dramatic cinematic lighting, and anything that would look\ngrim or gory. The tone is playful and readable, so each card must read clearly at 64 pixels wide.\n\nPaint the first card now. After that I'll send one card per message, and every card must match the\nfirst one's style, scale and framing exactly.\n",
+  "cards": [
+    {
+      "id": "infantry",
+      "prompt": "Card: Swordsmen (Kingdom, common infantry). A stout chibi soldier in rounded steel plate armour with\na steel great-helm whose visor is raised to show a cheerful young face. The helm has a small spiky\ncrest. A small red rose emblem sits on the chest, with a brown leather belt and silver buckle. A short\nsteel sword hangs in the right hand, pointing down, and a round royal-blue shield is on the left arm.\nSteady, stubborn stance. Match the attached render. Same style, framing and transparent background as\nthe approved cards.\n"
+    },
+    {
+      "id": "artillery",
+      "prompt": "Card: Archers (Kingdom, common ranged). A chibi archer in an emerald-green pointed hood and green\ntunic, with brown leather bracers, belt and boots. Holds a grey-steel crossbow low across the body.\nCalm, ready expression, peeking from under the hood. Match the attached render. Same style, framing\nand transparent background as the approved cards.\n"
+    },
+    {
+      "id": "tank",
+      "prompt": "Card: Pikemen (Kingdom, common spear). A chibi soldier wearing a dark-brown bear-head helmet with\nround ears and the snout over the brow. Bushy grey beard. Slate-blue tunic under brown leather\nstraps with silver studs. A long wooden pike with a steel tip is held upright, its point down at the\nfeet, and a round royal-blue shield is on the left arm. Match the attached render. Same style,\nframing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "rogue",
+      "prompt": "Card: Rogues (Kingdom, common skirmisher). A chibi rogue with long auburn-brown hair, a sly\nhalf-smile and a small earring, wearing a green tunic with a V-neck, brown leather bracers, belt\nand boots. A short dagger is in one hand and a curved short sword in the other, held low and ready.\nLight on their feet. Match the attached render. Same style, framing and transparent background as\nthe approved cards.\n"
+    },
+    {
+      "id": "helicopter",
+      "prompt": "Card: Knights (Kingdom, rare cavalry). A chibi knight in steel plate with a raised-visor great-helm\nand a small red rose emblem, riding a chestnut-brown horse that rears slightly toward the viewer. A\nsteel sword is in one hand and a royal-blue shield is on the arm. The horse is simple and blocky with\na dark mane, in the same toy-like proportions. Match the attached render. Same style, framing and\ntransparent background as the approved cards.\n"
+    },
+    {
+      "id": "medic",
+      "prompt": "Card: Mages (Kingdom, rare caster). A chibi battle mage in a huge wide-brimmed, bright royal-blue\npointed wizard hat with a slightly bent tip. Long periwinkle-purple coat with a high collar and silver\nbuttons, a brown belt with small potion vials, and brown boots. One hand holds a glowing lime-green\npotion flask low at the side. Serious, focused face. Match the attached render. Same style, framing\nand transparent background as the approved cards.\n"
+    },
+    {
+      "id": "shieldbearer",
+      "prompt": "Card: Shieldbearers (Kingdom, rare infantry). A chibi soldier in heavy steel plate and a\nraised-visor great-helm with a spiky crest. A tall rectangular royal-blue tower shield with a round\nboss is planted in front, covering most of the body. A short steel sword is in the other hand.\nImmovable, braced stance. Match the attached render. Same style, framing and transparent background\nas the approved cards.\n"
+    },
+    {
+      "id": "berserker",
+      "prompt": "Card: Berserkers (Kingdom, rare brute). A bald, burly chibi Northman with heavy grey eyebrows, a\nthick grey beard and a fierce scowl. Rust-brown leather armour with white fur trim, straps and silver\nstuds. A short sword is in one hand and a small single-bladed axe in the other. Ready to charge. Match\nthe attached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "longbow",
+      "prompt": "Card: Longbowmen (Kingdom, epic ranged). A chibi archer with long auburn-brown hair and a calm,\nconfident look, wearing a bright green tunic with brown leather bracers, belt and boots. Holds a\ntall wooden longbow (taller than the figure) at the side, with a small quiver of green-fletched arrows\non the back. Match the colours and figure of the attached render. Note that the render shows a\ncrossbow, but this card gets a longbow. Same style, framing and transparent background as the approved\ncards.\n"
+    },
+    {
+      "id": "cleric",
+      "prompt": "Card: War Clerics (Kingdom, epic infantry). A chibi holy warrior in ivory-white plate armour and a\nmatching raised-visor great-helm with a spiky crest. A small golden sun emblem is on the chest. A\nsteel flanged mace is held down in one hand and a royal-blue shield is on the other arm. Calm, devout\nexpression. Match the attached render. Note that the render shows a sword, but the card's lore calls\nfor a mace. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "sapper",
+      "prompt": "Card: Siege Sappers (Kingdom, epic skirmisher). A chibi demolition expert with long auburn-brown hair\nand a determined, mischievous look, in a brown leather tunic, bracers, belt and boots. One hand holds\na round black iron bomb with a short fuse that is just sparking. Match the attached render. Same\nstyle, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "pegasus",
+      "prompt": "Card: Pegasus Knights (Kingdom, legendary cavalry). A chibi knight in gleaming white plate armour with\na raised-visor great-helm and a small red rose emblem, riding a pure-white winged horse that rears\nup. Its wings are long, slim and angular, swept out to both sides. A royal-blue shield is on the\nknight's arm. Noble and heroic, yet still toy-like. Match the attached render. Same style, framing\nand transparent background as the approved cards.\n"
+    },
+    {
+      "id": "archmage",
+      "prompt": "Card: Archmage (Kingdom, legendary caster). A chibi wizard in an enormous wide-brimmed royal-blue\npointed hat, wearing a deep indigo-purple long coat with a high collar and silver buttons. Holds an\nopen white spellbook in one hand and a glowing violet potion flask in the other. A single small crackle\nof blue storm-lightning dances above the open book. Wise, commanding look. Match the attached render.\nSame style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "bandit_thug",
+      "prompt": "Card: Bandit Thug (Bandits, common infantry). A stocky chibi brute in a grey bear-head helmet with\nround ears, with a scruffy grey beard and a mean squint. Brown leather armour with red-brown straps and\nsilver studs. A notched short sword hangs in one hand. Match the attached render. Same style, framing\nand transparent background as the approved cards.\n"
+    },
+    {
+      "id": "bandit_archer",
+      "prompt": "Card: Bandit Archer (Bandits, common ranged). A chibi poacher in an olive-drab pointed hood and olive\ntunic with brown leather bracers, belt and boots. Holds a grey crossbow low. Shifty, smug look from\nunder the hood. Match the attached render. Same style, framing and transparent background as the\napproved cards.\n"
+    },
+    {
+      "id": "highwayman",
+      "prompt": "Card: Highwayman (Bandits, rare skirmisher). A chibi rogue with long auburn-brown hair, a cocky\nsmirk and an earring, wearing a near-black charcoal tunic with brown leather bracers, belt and boots.\nA dagger is in one hand and a curved short sword in the other. Light, sneaky stance. Match the attached\nrender. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "bandit_raider",
+      "prompt": "Card: Mounted Raider (Bandits, rare cavalry). A chibi rider in a dark, gunmetal great-helm with a\nspiky crest, with a dark-brown beard and grimy leather armour, riding a dusty dark-brown horse that\nrears slightly. A short sword is in one hand. Rough and scrappy, not noble. Match the attached render.\nSame style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "bandit_king",
+      "prompt": "Card: Redcap Rufus, the Bandit King (Bandits, BOSS). A big, swaggering chibi brute in a shining\ngolden bear-head helmet with round ears, with a golden-blond beard and a crimson-red tunic with gold\ntrim and straps. A huge golden double-bladed battle axe rests on the shoulder. Gaudy, self-crowned\npride. Make him feel bigger and bolder than a regular troop. Match the attached render. Same style,\nframing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "goblin_scrapper",
+      "prompt": "Card: Goblin Scrapper (Goblins, common infantry). A small chibi goblin with bright green skin,\npointed ears, long scraggly auburn hair and a toothy grin, in a ragged brown tunic with leather\nbracers and boots. Holds a small rusty knife low. Match the attached render. Same style, framing and\ntransparent background as the approved cards.\n"
+    },
+    {
+      "id": "goblin_slinger",
+      "prompt": "Card: Goblin Slinger (Goblins, common ranged). A chibi goblin with bright green skin in an olive-drab\npointed hood and olive tunic with leather bracers and boots. One hand holds a round grey rock ready to\nthrow. Gleeful, mischievous face. Match the attached render. Same style, framing and transparent\nbackground as the approved cards.\n"
+    },
+    {
+      "id": "goblin_shaman",
+      "prompt": "Card: Goblin Shaman (Goblins, rare caster). A small chibi goblin with bright green skin in a big\nfloppy bright-red pointed witch hat, wearing a lavender-purple coat with a high collar and silver\nbuttons. A small twig wand is in one hand, giving off one wisp of smelly green smoke. Muttering,\nsquinting expression. Match the attached render. Same style, framing and transparent background as\nthe approved cards.\n"
+    },
+    {
+      "id": "goblin_sapper",
+      "prompt": "Card: Goblin Sapper (Goblins, rare skirmisher). A chibi goblin with bright green skin and long\nscraggly auburn hair, in a brown leather tunic, bracers and boots. Proudly holds a round black bomb\nwhose fuse is fizzing and sparking. Manic, delighted grin. Match the attached render. Same style,\nframing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "goblin_warchief",
+      "prompt": "Card: Grubnak the Warchief (Goblins, BOSS). An oversized, hulking chibi goblin with bright green skin\nand a troll-like jaw, under a big brown bear-head helmet with round ears. Dark brown leather armour\nwith straps and studs. A massive notched double-bladed axe made of pale weathered wood and stone is\nheld across the body. Make him feel much bigger and meaner than a normal goblin. Match the attached\nrender. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "grey_wolf",
+      "prompt": "Card: Grey Wolf (Beasts, common cavalry). A blocky, faceted low-poly wolf in cool grey with lighter\ngrey legs, tall pointed ears, a black nose, bright yellow eyes and a red collar. It stands alert,\nthree-quarter view, head turned toward the viewer. Match the attached render. Same style, framing and\ntransparent background as the approved cards.\n"
+    },
+    {
+      "id": "wild_boar",
+      "prompt": "Card: Wild Boar (Beasts, common cavalry). A chunky, faceted low-poly boar in dark chocolate brown with\na bristly mane ridge, small pointed ears, beady white eyes, two big white curved tusks and a red\ncollar. Low, stubborn, about-to-charge stance. Match the attached render. Same style, framing and\ntransparent background as the approved cards.\n"
+    },
+    {
+      "id": "giant_spider",
+      "prompt": "Card: Giant Spider (Beasts, rare skirmisher). A faceted low-poly giant spider with a dark\nplum-purple body and eight long, thin, angular violet legs splayed wide, and a cluster of glowing\nred-pink eyes on the front. Sinister but still cartoon-friendly. Match the attached render. Same\nstyle, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "cave_bear",
+      "prompt": "Card: Cave Bear (Beasts, rare brute). A big, blocky, faceted low-poly bear in warm brown with a\nlighter tan muzzle and paws, small round ears, beady black eyes and a red collar. A heavy, grumpy,\njust-woken-up stance. Match the attached render. Same style, framing and transparent background as the\napproved cards.\n"
+    },
+    {
+      "id": "alpha_direwolf",
+      "prompt": "Card: Fenrak the Alpha (Beasts, BOSS). A huge, faceted low-poly direwolf in near-black charcoal with\nslate-grey legs, tall pointed ears, a black nose, fierce glowing yellow eyes and a red collar. Head\nraised mid-howl, with a few sharp white fangs showing. It should feel massive and commanding. Match the\nattached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "bog_slime",
+      "prompt": "Card: Bog Slime (Swamp Folk, common infantry). A round, faceted low-poly blob of bright moss-green\nslime with two big googly white eyes with black pupils, one slightly bigger than the other, a small\nsurprised mouth and two little droplets splitting off at the base. Silly and gooey. Match the attached\nrender. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "lizardman",
+      "prompt": "Card: Lizardman Spear (Swamp Folk, common spear). A chibi lizard warrior with a rounded teal-green\nscaly head, heavy brow and a pale grey-green chin frill, wearing a dark green tunic with white trim\nand leather straps. A long wooden spear with a steel tip is held upright, point down. Match the\ncolours and figure of the attached render. Lean the head a little more reptilian than the render.\nSame style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "toxic_toad",
+      "prompt": "Card: Toxic Toad (Swamp Folk, rare ranged). A chunky, faceted low-poly toad in acid lime-green with\nhuge bulging yellow eyes, a wide grinning purple mouth and belly, and a small red bump on top of its\nhead. Squatting on thick front legs, with a single drip of glowing green spit at the corner of its\nmouth. Match the attached render. Same style, framing and transparent background as the approved\ncards.\n"
+    },
+    {
+      "id": "swamp_witch",
+      "prompt": "Card: Swamp Witch (Swamp Folk, rare caster). A small chibi witch with pale green skin in a big\nfloppy bright-red pointed witch hat, wearing a dark plum-purple coat with silver buttons. A bubbling\npurple potion flask hangs from one hand. Knowing, crooked smile. Match the attached render. Same\nstyle, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "bog_hydra",
+      "prompt": "Card: The Bog Hydra (Swamp Folk, BOSS). A faceted low-poly hydra with three long, segmented,\ndark-jade-green serpent necks rising from a stubby squat body on short legs. Each head has small\nyellow horns, yellow eyes and a red collar ring. The three heads look in different directions. It\nshould feel big and menacing. Match the attached render. Same style, framing and transparent\nbackground as the approved cards.\n"
+    },
+    {
+      "id": "giant_scorpion",
+      "prompt": "Card: Giant Scorpion (Sand Court, common spear). A faceted low-poly scorpion in sandy amber-orange\nwith darker brown banding, a red spot on its back, thin spiky legs and big pincers forward. Its\nsegmented tail curls high overhead, ending in a black stinger. Match the attached render. Same style,\nframing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "sand_raider",
+      "prompt": "Card: Sand Raider (Sand Court, common skirmisher). A chibi desert raider with warm brown skin, in a\nsand-coloured pointed hood and sand-coloured tunic with brown leather bracers, belt and boots. A\ndagger is in one hand and a curved scimitar in the other. A small swirl of sand around the feet. Match\nthe attached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "mummy",
+      "prompt": "Card: Mummy (Sand Court, rare infantry). A chibi skeletal figure with a big bone-white skull and\nglowing lime-green eye sockets, a red scarf at the neck and a brown belt, its bony body loosely\nwrapped in a few strips of pale, frayed linen bandage. Arms raised forward, cross about being woken.\nMatch the attached render, adding the bandage wrappings it lacks. Same style, framing and transparent\nbackground as the approved cards.\n"
+    },
+    {
+      "id": "sand_golem",
+      "prompt": "Card: Sand Golem (Sand Court, rare brute). A hulking golem built from round, lumpy, faceted\nsandstone boulders in warm sand-gold, with a big chest, boulder fists, short boulder legs and a small\nhead with two glowing cyan eyes. A faint carved band runs across the chest like an old statue. Match\nthe attached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "pharaoh",
+      "prompt": "Card: Pharaoh Ankhamun (Sand Court, BOSS). A chibi skeletal king with a bone-white skull and glowing\namber eyes, under a tall floppy bright-red pointed wizard hat, wearing a royal-blue robe with silver\nbuttons, with a few gold trims added. Holds a staff topped with a small horned skull, its shaft\npainted gold. Ancient, regal and grumpy. Make him feel bigger and grander than a normal troop. Match\nthe attached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "snow_wolf",
+      "prompt": "Card: Snow Wolf (Frostborn, common cavalry). A blocky, faceted low-poly wolf in snow-white with\npale ice-blue shading, tall pointed ears, a black nose, glowing cyan eyes and a red collar. It stands\nalert. Match the attached render. Same style, framing and transparent background as the approved\ncards.\n"
+    },
+    {
+      "id": "ice_wraith",
+      "prompt": "Card: Ice Wraith (Frostborn, rare skirmisher). A floating spirit: a glowing aqua-cyan orb face with\ntwo black eyes, ringed by a red hoop, with a halo of sharp, pale-blue ice crystal shards fanning\nout around it and a tapering icy tail beneath. Eerie but readable. Match the attached render. Same\nstyle, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "yeti",
+      "prompt": "Card: Yeti (Frostborn, rare brute). A big chibi brute with pale frost-white skin, a heavy brow, a\nthick grey beard and a shaggy white fur coat with grey trim and fur boots. Bare fists at the sides.\nHulking but a little goofy. Match the attached render. Same style, framing and transparent background\nas the approved cards.\n"
+    },
+    {
+      "id": "frost_huntress",
+      "prompt": "Card: Frost Huntress (Frostborn, common ranged). A chibi huntress in a sky-blue pointed hood and\nlight-blue tunic with brown leather bracers, belt and boots. Holds a grey crossbow low, with a bolt\ntipped in pale crystal ice. Cool, focused look. Match the attached render. Same style, framing and\ntransparent background as the approved cards.\n"
+    },
+    {
+      "id": "frost_giant",
+      "prompt": "Card: Jarl Hrimgar the Frost Giant (Frostborn, BOSS). A massive chibi giant with pale ice-blue skin,\nan icy blue bear-head helmet with round ears, and a frosty beard. Dark navy and brown leather armour\nwith straps. A huge pale-blue ice double-bladed axe is held across the body. Make him feel colossal.\nMatch the attached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "skeleton_minion",
+      "prompt": "Card: Skeleton Minion (Undead, common infantry). A chibi skeleton with a big bone-white skull,\nglowing yellow eye sockets and a red scarf around the neck. Holds a short rusty sword down at the\nside. Rattly, slightly dopey stance. Match the attached render. Same style, framing and transparent\nbackground as the approved cards.\n"
+    },
+    {
+      "id": "skeleton_warrior",
+      "prompt": "Card: Skeleton Warrior (Undead, common infantry). A chibi skeleton in a gunmetal viking helmet with\ntwo ivory horns, with glowing yellow eyes, a red scarf and a battered iron round shield. A short sword\nis held ready. \"Still a knight, technically.\" Match the attached render. Same style, framing and\ntransparent background as the approved cards.\n"
+    },
+    {
+      "id": "skeleton_archer",
+      "prompt": "Card: Skeleton Crossbowman (Undead, rare ranged). A chibi skeleton in a deep wine-red pointed hood,\nwith glowing yellow eyes, a dark grey tunic and a belt. Holds a big dark-iron crossbow with a spiky,\nfan-shaped front. Hollow-eyed and steady. Match the attached render. Same style, framing and\ntransparent background as the approved cards.\n"
+    },
+    {
+      "id": "ghost",
+      "prompt": "Card: Wailing Ghost (Undead, rare skirmisher). A floating, faceted low-poly ghost head in pale\ntranslucent mint-green with pointed ear-like wisps, two big black oval eyes, a wide open wailing black\nmouth and a red ring collar at its base, fading to wisps below. Spooky but cartoonish. Match the\nattached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "lich_king",
+      "prompt": "Card: Morthul the Lich King (Undead, BOSS). A chibi skeletal sorcerer with a bone-white skull and\nglowing red-violet eyes, under a tall floppy bright-red pointed wizard hat, wearing a deep\nviolet-purple robe with silver buttons. Holds a staff topped with a small horned skull. A faint violet\nwisp curls around the staff top. Make him feel bigger and more powerful than a normal troop. Match the\nattached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "orc_grunt",
+      "prompt": "Card: Orc Grunt (Orcs, common infantry). A stocky chibi orc with green skin and small tusks, under a\ngrey bear-head helmet with round ears, with a grey beard, rust-brown leather armour, straps and studs.\nA short sword is in one hand and a round red shield on the other arm. Match the attached render. Same\nstyle, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "orc_archer",
+      "prompt": "Card: Orc Archer (Orcs, common ranged). A chibi orc with green skin in a dark-brown pointed hood and\nbrown tunic with leather bracers and boots. Holds a big grey crossbow loaded with a comically thick\nbolt. Match the attached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "orc_shaman",
+      "prompt": "Card: Orc Shaman (Orcs, rare caster). A chibi orc with green skin in a big floppy bright-red pointed\nwitch hat and a scarlet-red coat with silver buttons. A glowing red potion flask hangs from one hand.\nWild, spirit-touched grin. Match the attached render. Same style, framing and transparent background\nas the approved cards.\n"
+    },
+    {
+      "id": "ogre",
+      "prompt": "Card: Ogre (Orcs, rare brute). A huge, bald chibi brute with a tan, lumpy head, heavy brow, a scraggly\nwhite beard and dim, determined eyes. Brown leather armour with straps and studs. A big grey steel\ndouble-bladed axe is held across the body. Heavy and slow. Match the attached render. Same style,\nframing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "orc_warlord",
+      "prompt": "Card: Warlord Gorrash (Orcs, BOSS). A hulking chibi orc warlord with green skin under a spiky\nblackened-iron great-helm, wearing black armour with dark red-brown straps. A huge, long black\ngreatsword is held out to the side. Brutal and imposing. Make him feel much bigger than a normal orc.\nMatch the attached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "imp",
+      "prompt": "Card: Imp (Infernal, common skirmisher). A small, faceted low-poly imp in bright scarlet red with\ntwo little yellow horns, big orange-yellow eyes, tiny fangs, long pointed bat-like ears and a short\nskirt-like band at the waist. A few small flames flicker off its shoulders. Cackling, mischievous.\nMatch the attached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "magma_golem",
+      "prompt": "Card: Magma Golem (Infernal, rare brute). A hulking golem made of chunky, faceted black volcanic\nboulders with bright orange-yellow lava glowing through the cracks. It has a big chest with a\nglowing crack, boulder fists, short boulder legs and a small head with two orange eyes. Match the\nattached render. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "fire_elemental",
+      "prompt": "Card: Fire Elemental (Infernal, rare caster). A round, bright lemon-yellow fire spirit with two small\nblack eyes, crowned with tall white-hot and orange flame spikes, floating over a glowing red-orange\nring of fire. A couple of tiny embers drift above it. Match the attached render. Same style, framing\nand transparent background as the approved cards.\n"
+    },
+    {
+      "id": "hellhound",
+      "prompt": "Card: Hellhound (Infernal, common cavalry). A blocky, faceted low-poly hound in very dark maroon-black\nwith tall pointed ears, glowing orange eyes, a red collar and dark red paws. Small orange flames lick\nfrom its jaws and paws. Menacing stance. Match the attached render. Same style, framing and transparent\nbackground as the approved cards.\n"
+    },
+    {
+      "id": "demon_lord",
+      "prompt": "Card: Azgaroth the Demon Lord (Infernal, BOSS). A hulking chibi demon in a smooth crimson bucket\ngreat-helm with slit eyes, a black beard, black armour with red-brown straps, and two long, thin,\ndark-red-black bat wings spread wide. A massive black double-bladed axe is held across the body. Add\ntwo small black horns rising from the helm, and a little smoke curling off the wings. Make him feel\nenormous. Match the attached render. Same style, framing and transparent background as the approved\ncards.\n"
+    },
+    {
+      "id": "dragon_cultist",
+      "prompt": "Card: Dragon Cultist (Dragonkin, common caster). A chibi human fanatic with rosy cheeks and a smug,\ndevoted expression, in a big floppy bright-red pointed hat and a crimson coat with silver buttons and\ngrey trim. A thin twig wand is held at the side. Match the attached render. Same style, framing and\ntransparent background as the approved cards.\n"
+    },
+    {
+      "id": "wyvern",
+      "prompt": "Card: Wyvern (Dragonkin, rare cavalry). A faceted low-poly wyvern in bright lime-to-moss green with a\nlong segmented neck, a blocky head with yellow eyes, big angular green wings, a red collar ring and\nsmall yellow claws. Standing upright, wings spread. Match the attached render. Same style, framing and\ntransparent background as the approved cards.\n"
+    },
+    {
+      "id": "drake",
+      "prompt": "Card: Fire Drake (Dragonkin, rare brute). A chunky, faceted low-poly young dragon in bright red with\na pink belly and small pink wings, yellow horn spikes down its neck and back, yellow eyes, pink feet\nwith yellow claws and a red collar ring. A small puff of flame curls from its mouth. Match the attached\nrender. Same style, framing and transparent background as the approved cards.\n"
+    },
+    {
+      "id": "dragon_knight",
+      "prompt": "Card: Dragon Knight (Dragonkin, epic cavalry). A chibi fallen knight in blackened plate armour with a\nspiky black great-helm and small glinting red eyes, a red rose emblem on the chest and a crimson\nshield on the arm, riding a coal-black horse that rears slightly. A dark sword is in one hand. Grim but\ntoy-like. Match the attached render. Same style, framing and transparent background as the approved\ncards.\n"
+    },
+    {
+      "id": "elder_dragon",
+      "prompt": "Card: Vyrmathrax the Elder Dragon (Dragonkin, BOSS). A massive, faceted low-poly dragon in deep\ncrimson with golden-yellow wing membranes and belly, golden horns, yellow eyes, golden feet and claws,\nyellow spikes along its neck and a red collar ring. It rears up proudly with wings half open. It\nshould feel ancient, enormous and furious, the final boss. Match the attached render. Same style,\nframing and transparent background as the approved cards.\n"
+    }
+  ]
+}

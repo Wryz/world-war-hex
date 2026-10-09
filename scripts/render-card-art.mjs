@@ -7,7 +7,7 @@
 // Needs Playwright and its Chromium: `npm i --no-save playwright && npx playwright install chromium`.
 // Set CARD_ART_URL to use another server than http://localhost:3000, and PLAYWRIGHT_CHROMIUM to a
 // Chromium executable to use instead of Playwright's own.
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const root = process.cwd();
@@ -35,6 +35,12 @@ const browser = await chromium.launch(process.env.PLAYWRIGHT_CHROMIUM ? { execut
 const page = await browser.newPage({ viewport: { width: 600, height: 500 }, deviceScaleFactor: 1 });
 let failed = 0;
 for (const id of ids) {
+  const painting = join(root, 'art', 'card-ai', `${id}.webp`);
+  if (existsSync(painting)) {
+    writeFileSync(join(outDir, `${id}.webp`), readFileSync(painting));
+    console.log(`  ${id} (painted art preserved)`);
+    continue;
+  }
   try {
     await page.goto(`${base}/dev/card-art?type=${id}`, { waitUntil: 'load' });
     await page.waitForSelector('body[data-ready="1"]', { timeout: 90000 });
