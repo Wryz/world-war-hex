@@ -29,15 +29,6 @@ const ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    // The models and art an older version had cached are cached again now, since activating deletes
-    // the old copies (one at a time, so the page keeps most of the bandwidth); anything else waits
-    // for the warm step
-    const older = (await caches.keys()).filter(key => key.startsWith('wwh-') && key !== CACHE);
-    const had = new Set();
-    for (const key of older) {
-      for (const request of await (await caches.open(key)).keys()) had.add(new URL(request.url).pathname);
-    }
-    const later = (self.__PRECACHE.later ?? []).filter(url => had.has(url));
     // One missing file shouldn't stop the rest from being cached. Built files (/_next/static, named
     // by their contents) never change, so the copies the page just downloaded are reused; pages and
     // files that keep their names (the music manifest, the logo) are fetched afresh.
@@ -46,30 +37,24 @@ self.addEventListener('install', event => {
         .then(response => (response.ok ? cache.put(url, response) : undefined))
         .catch(() => undefined)
     ));
-    // (checked with the server, so an unchanged file isn't downloaded again)
-    for (const url of later) {
-      try {
-        const response = await fetch(url, { cache: 'no-cache' });
-        if (response.ok) await cache.put(url, response);
-      } catch {
-        break;
-      }
-    }
     await self.skipWaiting();
   })());
 });
 
-// The models and art, one at a time and only those not yet cached, when the page says it's idle
-// (again next time it asks, if the connection dropped part-way)
+// The models and art, one at a time, when the page says it's idle: those not yet cached, and those
+// carried over from an older version (checked with the server, in case they changed) - again next
+// time it asks, if the connection dropped part-way
+const INHERITED = 'x-wwh-inherited';
 let warming = null;
 self.addEventListener('message', event => {
   if (event.data?.type !== 'warm' || warming) return;
   warming = (async () => {
     const cache = await caches.open(CACHE);
     for (const url of self.__PRECACHE.later ?? []) {
-      if (await cache.match(url)) continue;
+      const hit = await cache.match(url);
+      if (hit && !hit.headers.has(INHERITED)) continue;
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, { cache: hit ? 'no-cache' : 'default' });
         if (response.ok) await cache.put(url, response);
       } catch {
         // Offline again: the rest are cached as they're used
@@ -80,9 +65,29 @@ self.addEventListener('message', event => {
   event.waitUntil(warming);
 });
 
+// An older version's models and art are carried over before its cache is deleted, so they keep
+// working offline (no download needed); the warm step checks them with the server later
+const carryOver = async (fromKey, cache) => {
+  const later = new Set(self.__PRECACHE.later ?? []);
+  const old = await caches.open(fromKey);
+  for (const request of await old.keys()) {
+    const path = new URL(request.url).pathname;
+    if (!later.has(path) || (await cache.match(path))) continue;
+    const response = await old.match(request);
+    if (!response || response.status !== 200) continue;
+    const headers = new Headers(response.headers);
+    headers.set(INHERITED, '1');
+    await cache.put(path, new Response(await response.blob(), { status: 200, headers }));
+  }
+};
+
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
+    const cache = await caches.open(CACHE);
+    for (const key of keys.filter(key => key.startsWith('wwh-') && key !== CACHE)) {
+      await carryOver(key, cache).catch(() => undefined);
+    }
     await Promise.all(keys.filter(key => key.startsWith('wwh-') && key !== CACHE).map(key => caches.delete(key)));
     await self.clients.claim();
   })());

@@ -174,11 +174,14 @@ const nextStep = (
   if (selectedUnitType && validMoves.length > 0) {
     const buy = buys.find(step => step.unitType === selectedUnitType);
     if (buy && validMoves.some(c => c.q === buy.at.q && c.r === buy.at.r)) return { hex: buy.at, caption: buy.placeCaption };
-    // (the planned spot has been taken: the next best, towards the fight)
-    const spot = deploySpot(state, selectedUnitType, new Set(moves.map(step => `${step.to.q},${step.to.r}`)));
+    // (the planned spot has been taken: the next best, towards the fight, leaving the spots the
+    // plan's moves and other cards will use)
+    const spoken = new Set([...moves.map(step => key(step.to)), ...buys.filter(step => step.unitType !== selectedUnitType).map(step => key(step.at))]);
+    const spot = deploySpot(state, selectedUnitType, spoken);
     if (spot && validMoves.some(c => c.q === spot.q && c.r === spot.r)) return { hex: spot, caption: deployCaption(state, spot) };
     const enemy = findBaseHex(state, 'ai')?.coordinates;
-    return { hex: enemy ? nearestOf(validMoves, enemy) : validMoves[0], caption: 'Deploy it beside your castle' };
+    const nearest = enemy ? nearestOf(validMoves, enemy) : validMoves[0];
+    return { hex: nearest, caption: deployCaption(state, nearest) };
   }
 
   const live = selectedUnit && units.find(unit => unit.id === selectedUnit.id);

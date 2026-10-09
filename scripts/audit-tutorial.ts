@@ -35,6 +35,8 @@ for (const levelId of levels) {
     for (let step = 0; step < 600 && state.currentPhase !== 'gameOver'; step++) {
       if (state.currentPhase === 'planning' && state.activePlayer === 'player') {
         const plan = planTutorialTurn(state);
+        const start = state;
+        const spoken = new Set(plan.flatMap(step => step.kind === 'move' ? [`${step.to.q},${step.to.r}`] : []));
         const foes = getVisibleEnemies(state, 'player');
         for (const item of plan) {
           const label = item.caption.replace(/the [A-Z][\w ]+?(:|$| before)/, 'the X$1').split(':')[0];
@@ -71,8 +73,11 @@ for (const levelId of levels) {
           } else {
             // Against the nearest spot it could have had (by the tutorial's own rules: out of reach
             // when it can be, never beside an enemy for archers and mages)
-            const front = frontOf(state)!;
-            const best = Math.min(99, ...deployCandidates(state, item.unitType).map(hex => getHexDistance(hex.coordinates, front)));
+            // (on the board as the plan saw it, before this turn's orders, with the spots its moves
+            // and earlier cards use set aside)
+            const front = frontOf(start)!;
+            const best = Math.min(99, ...deployCandidates(start, item.unitType, spoken).map(hex => getHexDistance(hex.coordinates, front)));
+            spoken.add(`${item.at.q},${item.at.r}`);
             deploys++;
             if (getHexDistance(item.at, front) > best + 1) {
               deployedBack.push(`L${levelId} r${state.turnNumber} ${item.unitType}: ${getHexDistance(item.at, front)} from the front, ${best} was free ("${item.placeCaption}")`);

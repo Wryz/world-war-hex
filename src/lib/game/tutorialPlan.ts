@@ -6,6 +6,7 @@ import {
 } from './gameState';
 import { getHexDistance } from './hexUtils';
 import { isPinned, strikesPinned } from './formations';
+import { coordKey } from './battlefield';
 
 // The tutorial's plan for a turn of the player's: what the game's own AI would do with the player's
 // troops and cards, as steps for the hand to show, each with a few words on why - the AI's own reason
@@ -63,13 +64,13 @@ export const planTutorialTurn = (state: GameState): PlanStep[] => {
   });
   // The AI deploys warily (away from anything that could reach the spot); the tutorial deploys
   // towards the fight instead, so a new troop never seems to be sent the wrong way
-  const taken = new Set([...destination.values()].map(c => `${c.q},${c.r}`));
+  // (the hexes the plan's moves go to are spoken for)
+  const taken = new Set(plan.flatMap(step => step.kind === 'move' ? [coordKey(step.to)] : []));
   for (const purchase of planned.pendingPurchases.slice(state.pendingPurchases.length)) {
-    const at = deploySpot(state, purchase.unitType, taken) ??
-      (taken.has(`${purchase.position.q},${purchase.position.r}`) ? null : purchase.position);
-    // (nowhere left to put it: that card waits)
+    const at = deploySpot(state, purchase.unitType, taken);
+    // (nowhere fit to put it: that card waits)
     if (!at) continue;
-    taken.add(`${at.q},${at.r}`);
+    taken.add(coordKey(at));
     plan.push({
       kind: 'buy', unitType: purchase.unitType, at,
       caption: explainCard(state, purchase.unitType),
@@ -99,7 +100,7 @@ export const deployCandidates = (state: GameState, type: UnitType, taken: Set<st
   const beside = (hex: GameState['hexGrid'][number]) => foes.some(foe => getHexDistance(foe.position, hex.coordinates) === 1);
   const inReach = (hex: GameState['hexGrid'][number]) => foes.some(foe =>
     canStrike(state, foe, { ...foe, id: 'recruit', owner: 'player', position: hex.coordinates }));
-  const free = getDeploymentHexes(state, 'player').filter(hex => !taken.has(`${hex.coordinates.q},${hex.coordinates.r}`) && !(ranged && beside(hex)));
+  const free = getDeploymentHexes(state, 'player').filter(hex => !taken.has(coordKey(hex.coordinates)) && !(ranged && beside(hex)));
   const safe = free.filter(hex => ranged ? !inReach(hex) : !beside(hex));
   return safe.length > 0 ? safe : free;
 };

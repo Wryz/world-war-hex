@@ -814,9 +814,9 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   if (isShaken(unit)) {
     // (it steadies at the end of each of its side's turns: on its own turn, this one counts)
     const turns = unit.shaken ?? 1;
-    const ownTurn = state.activePlayer === unit.owner;
+    const ownTurn = getActivePlayer(state) === unit.owner;
     const lasting = ownTurn
-      ? turns === 1 ? 'until the end of this turn' : `this turn and ${turns - 1 === 1 ? 'its next' : `its next ${turns - 1}`}`
+      ? turns === 1 ? 'until the end of this turn' : `this turn and ${turns - 1 === 1 ? 'its next' : `its next ${turns - 1} turns`}`
       : turns === 1 ? 'until the end of its next turn' : `for its next ${turns} turns`;
     buffs.push({ id: 'shaken', icon: 'shaken', label: 'Shaken', value: `-${pct(1 - SHAKEN_ATTACK)} attack ${lasting}`, good: false });
   }

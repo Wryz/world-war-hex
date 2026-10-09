@@ -581,10 +581,11 @@ const enemyStride = (state: GameState, enemy: Unit) =>
 const dangerAt = (planner: Planner, unit: Unit, position: HexCoordinates): number => {
   const target = { ...unit, position };
   let danger = 0;
+  const next = nextRound(planner.state);
   for (const enemy of liveEnemies(planner)) {
     const distance = getHexDistance(enemy.position, position);
     // (from where it stands, in this round's weather or the next's)
-    if (canStrikeFrom(planner, enemy, enemy.position, position) || canStrikeFrom(planner, enemy, enemy.position, position, nextRound(planner.state))) {
+    if (canStrikeFrom(planner, enemy, enemy.position, position) || canStrikeFrom(planner, enemy, enemy.position, position, next)) {
       danger += strikeFrom(planner, enemy, enemy.position, target, position);
     } else if (distance <= enemyStride(planner.state, enemy) + enemyReach(planner.state, enemy)) {
       danger += 0.75 * getStrikePowerOnTerrain(enemy, 'plain', target, terrainAt(planner, position), enemyReach(planner.state, enemy));

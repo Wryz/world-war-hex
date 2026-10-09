@@ -2797,14 +2797,14 @@ export interface CombatPreview {
 // Gold awarded for destroying an enemy unit
 export const getKillBounty = (unit: Unit) => Math.max(2, Math.round(unit.cost * KILL_BOUNTY_FRACTION));
 
-// Work out what a combat will do, using the units' current stats, terrain and reach.
-// Every attacker strikes the defender; the defender strikes back, splitting its attack between the
-// attackers it can reach. Each strike is scaled by height, counters and the target's cover, and
-// armour soaks a point of what lands.
 // An undying troop slain in a fight rises again, unless a War Cleric among its foes finishes it (fire
 // finishes it on the burning ground, at the turn's end)
 const finishesUndead = (foes: Unit[]) => foes.some(foe => foe.type === 'cleric');
 
+// Work out what a combat will do, using the units' current stats, terrain and reach.
+// Every attacker strikes the defender; the defender strikes back, splitting its attack between the
+// attackers it can reach. Each strike is scaled by height, counters and the target's cover, and
+// armour soaks a point of what lands.
 export const getCombatPreview = (state: GameState, combat: Combat): CombatPreview => {
   const getLiveUnit = (unit: Unit) =>
     state.players[unit.owner].units.find(u => u.id === unit.id);
