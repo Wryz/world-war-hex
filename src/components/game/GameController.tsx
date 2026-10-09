@@ -6,11 +6,12 @@ import { useRouter } from 'next/navigation';
 import { GameBoard } from './GameBoard';
 import { CombatResolver } from './combat/CombatResolver';
 import { ResultsScreen } from './shared/ResultsScreen';
-import { TUTORIAL_BATTLES, TutorialOverlay, useTutorial } from './shared/TutorialGuide';
+import { TUTORIAL_BATTLES, TutorialOverlay, TutorialVisuals, useTutorial } from './shared/TutorialGuide';
 import { RuleTips } from './shared/RuleTips';
 import { BossBar } from './hud/BossBar';
 import { WeatherVeil } from './WeatherEffects';
 import { challengeMet } from '@/lib/campaign/challenges';
+import { useMechanicGuide } from './shared/MechanicGuide';
 import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
 import { LoadingManagerProvider } from './utils/LoadingManager';
@@ -144,10 +145,18 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const tutorial = useTutorial({
     active: showTutorial, intro: battle.mode === 'campaign' && battle.levelId === 1, ready: isReady, choosingOrder: !!actionChoice, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
   });
+  // Later battles: the hand points out each new mechanic the first time it turns up
+  const mechanic = useMechanicGuide({
+    active: isReady && !showTutorial && !showBossIntro && !finished && battle.mode === 'campaign', gameState, selectedUnit
+  });
   // (the board only redraws its marks when they actually change)
-  const tutorialVisualsKey = JSON.stringify(tutorial.visuals);
+  // (a mechanic being pointed out gets the same gold ring, kept in view)
+  const boardGuide: TutorialVisuals | null = tutorial.visuals ?? (mechanic
+    ? { showcase: null, rings: [{ at: mechanic.hex, tone: 'tap' }], path: null, target: null, keepInView: mechanic.hex }
+    : null);
+  const tutorialVisualsKey = JSON.stringify(boardGuide);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const tutorialVisuals = useMemo(() => tutorial.visuals, [tutorialVisualsKey]);
+  const tutorialVisuals = useMemo(() => boardGuide, [tutorialVisualsKey]);
 
   // Stable handlers so the memoised 3D board doesn't re-render on every timer tick
   const onBoardHexClick = useStableCallback(handleHexClick);
@@ -385,6 +394,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       {showTutorial && isReady && currentPhase !== 'gameOver' && (
         <TutorialOverlay gameState={gameState} pointer={tutorial.pointer} introRunning={tutorial.introRunning} introCaption={tutorial.introCaption} onSkipIntro={tutorial.skipIntro} />
       )}
+      {mechanic && <TutorialOverlay gameState={gameState} pointer={mechanic} introRunning={false} onSkipIntro={() => undefined} />}
 
       {showBossIntro && isReady && level && (
         <BossIntro boss={level.region.boss} level={level.enemyTier} stats={level.guards.find(guard => guard.isBoss)?.stats} onDone={() => setShowBossIntro(false)} />
