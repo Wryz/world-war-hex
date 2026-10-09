@@ -826,6 +826,8 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
             onClick={onSelect ? event => { event.stopPropagation(); onSelect(unit); } : undefined}
             className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[0.6875rem] leading-none font-bold text-white whitespace-nowrap shadow select-none ${onSelect ? 'pointer-events-auto cursor-pointer' : ''}`}
             style={{
+              // (a gesture begun on the label works the board's camera, as on the board itself)
+              touchAction: 'none',
               background: 'rgba(15, 23, 42, 0.8)',
               border: `2px solid ${ownerColor}`,
               opacity: isPendingPurchase ? 0.7 : 1

@@ -53,8 +53,10 @@ const CastleHealth: React.FC<{ title: string; health: number; max: number; color
 export const TopBar: React.FC<TopBarProps> = ({
   gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit, onResign, showThreats, onToggleThreats
 }) => {
-  // Asking to make sure before giving up
-  const [confirmingResign, setConfirmingResign] = useState(false);
+  // Asking to make sure before giving up: on the turn it was asked on, while resigning is on offer
+  const [confirmTurn, setConfirmTurn] = useState<number | null>(null);
+  const confirmingResign = confirmTurn === gameState.turnNumber && !!onResign;
+  const setConfirmingResign = (open: boolean) => setConfirmTurn(open ? gameState.turnNumber : null);
   const { players, turnNumber } = gameState;
   // Hits landing on a castle in the battle being fought, ahead of its result
   const castleHits = useCastleShownDamage();
