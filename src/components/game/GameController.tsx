@@ -94,7 +94,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     handleActionChoice
   } = useGameHandlers({ battle, resume: shouldContinueGame, isReady, untimed: showTutorial });
 
-  useMusic(level?.isBoss ? 'boss' : 'battle');
+  // Each region of the campaign can have battle (and boss) music of its own, by its enemy faction
+  useMusic(level?.isBoss ? 'boss' : 'battle', level?.region.faction);
   useEffect(() => {
     setMusicIntensity(1);
     return () => resetEffects();

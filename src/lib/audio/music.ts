@@ -1,6 +1,6 @@
 // Background music: procedurally synthesised tracks and stingers, crossfaded and mixed through the
 // Web Audio API. Any `/music/<name>.mp3` dropped into `public/music/` (and listed in its manifest.json) replaces its synthesised
-// version. Nothing touches `window` until it is used, so this module is safe to import on the server.
+// version, and `/music/<name>-<area>.mp3` replaces it in one area of the campaign (e.g. battle-desert). Nothing touches `window` until it is used, so this module is safe to import on the server.
 
 import { useEffect, useSyncExternalStore } from 'react';
 import { isMuted, subscribeToMute } from '@/components/game/utils/SoundPlayer';
@@ -213,7 +213,15 @@ interface Retiring {
   until: number; // Context time after which the player is silent and can be disposed
 }
 
-let current: { track: MusicTrack; player: TrackPlayer } | null = null;
+// A track, and the area it is played for: `battle` in the desert plays `battle-desert.mp3` when
+// there is one, and `battle.mp3` (or the synthesised battle music) otherwise
+export interface MusicRequest {
+  track: MusicTrack;
+  area?: string;
+}
+const requestKey = (request: MusicRequest | null) => (request ? `${request.track}:${request.area ?? ''}` : null);
+
+let current: { request: MusicRequest; player: TrackPlayer } | null = null;
 let retiring: Retiring[] = [];
 let schedulerId: ReturnType<typeof setInterval> | null = null;
 
@@ -289,7 +297,7 @@ const loadStingerBuffer = (ctx: AudioContext, url: string): Promise<AudioBuffer 
 
 // ---- Playback ----
 
-let requested: MusicTrack | null = null;
+let requested: MusicRequest | null = null;
 let intensity: Layer = 1;
 let syncToken = 0;
 
@@ -300,7 +308,8 @@ const retireCurrent = () => {
   current = null;
 };
 
-const startTrack = (track: MusicTrack, url: string | null) => {
+const startTrack = (request: MusicRequest, url: string | null) => {
+  const { track } = request;
   if (!runtime) return;
   const { ctx, mixer } = runtime;
   let player: TrackPlayer;
@@ -314,7 +323,7 @@ const startTrack = (track: MusicTrack, url: string | null) => {
   if (!shouldRun()) player.pause();
   retireCurrent();
   fadeIn(player, ctx, CROSSFADE_SECONDS);
-  current = { track, player };
+  current = { request, player };
   ensureScheduler();
 };
 
@@ -324,25 +333,29 @@ const syncPlayback = () => {
   const rt = getRuntime();
   if (!rt) return;
   const target = requested;
-  if ((current?.track ?? null) === target) return;
+  if (requestKey(current?.request ?? null) === requestKey(target)) return;
   if (target === null) {
     retireCurrent();
     return;
   }
-  findMusicFile(target).then(url => {
-    if (token === syncToken && requested === target) startTrack(target, url);
-  });
+  // The area's own recording, else the track's, else the synthesised track
+  (target.area ? findMusicFile(`${target.track}-${target.area}`) : Promise.resolve(null))
+    .then(url => url ?? findMusicFile(target.track))
+    .then(url => {
+      if (token === syncToken && requestKey(requested) === requestKey(target)) startTrack(target, url);
+    });
 };
 
 /**
  * Crossfades to the given track, or fades out for null. Requesting the track that is already
  * playing does nothing. Music asked for before the first user gesture starts once audio unlocks.
  */
-export const playMusic = (track: MusicTrack | null) => {
-  if (typeof window === 'undefined' || track === requested) return;
+export const playMusic = (track: MusicTrack | null, area?: string) => {
+  const request = track ? { track, area } : null;
+  if (typeof window === 'undefined' || requestKey(request) === requestKey(requested)) return;
   // Intensity belongs to one battle, so it resets when the battle music ends
-  if (requested === 'battle') intensity = 1;
-  requested = track;
+  if (requested?.track === 'battle') intensity = 1;
+  requested = request;
   syncPlayback();
 };
 
@@ -389,7 +402,7 @@ export const playStinger = (stinger: Stinger) => {
 // ---- React ----
 
 // Tracks requested by mounted components; the most recent one plays
-const claims: { track: MusicTrack | null }[] = [];
+const claims: { track: MusicTrack | null; area?: string }[] = [];
 let claimTimer: ReturnType<typeof setTimeout> | null = null;
 
 // Waiting a moment lets a screen that replaces another keep the same track going without a restart
@@ -397,22 +410,24 @@ const applyClaimsSoon = () => {
   if (claimTimer !== null) clearTimeout(claimTimer);
   claimTimer = setTimeout(() => {
     claimTimer = null;
-    playMusic(claims.length ? claims[claims.length - 1].track : null);
+    const claim = claims[claims.length - 1];
+    playMusic(claim?.track ?? null, claim?.area);
   }, 50);
 };
 
 /**
- * Plays the track while the component is mounted. When it unmounts, the track requested by
- * the next most recently mounted component (if any) takes over.
+ * Plays the track while the component is mounted - the area's own version of it if there is one
+ * (see playMusic). When it unmounts, the track requested by the next most recently mounted
+ * component (if any) takes over.
  */
-export const useMusic = (track: MusicTrack | null) => {
+export const useMusic = (track: MusicTrack | null, area?: string) => {
   useEffect(() => {
-    const claim = { track };
+    const claim = { track, area };
     claims.push(claim);
     applyClaimsSoon();
     return () => {
       claims.splice(claims.indexOf(claim), 1);
       applyClaimsSoon();
     };
-  }, [track]);
+  }, [track, area]);
 };
