@@ -1,3 +1,4 @@
+import { Haul, MaterialId, isMaterialId } from '../game/materials';
 import { useSyncExternalStore } from 'react';
 import type { SideStats, WinReason } from '@/types/game';
 import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId, isTroopId } from '../game/troops';
@@ -87,6 +88,10 @@ export interface Profile {
   tutorialDone: boolean;
   // Card frames and castle styles owned, and the ones in use
   cosmetics: ProfileCosmetics;
+  // Materials carried home from the battlefields (lib/game/materials), and every kind ever found
+  // (for the collection and the Chronicle, whatever has since been spent)
+  materials: Haul;
+  materialsFound: MaterialId[];
   createdAt: string;
   updatedAt: string;
 }
@@ -110,6 +115,8 @@ export const createProfile = (): Profile => {
     stats: emptyStats(),
     tutorialDone: false,
     cosmetics: { cardSkins: [DEFAULT_CARD_SKIN], castleStyles: [DEFAULT_CASTLE_STYLE], cardSkin: DEFAULT_CARD_SKIN, castleStyle: DEFAULT_CASTLE_STYLE },
+    materials: {},
+    materialsFound: [],
     createdAt: now,
     updatedAt: now
   };
@@ -190,9 +197,22 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
     if (isCastleStyleId(raw.cosmetics.castleStyle) && cosmetics.castleStyles.includes(raw.cosmetics.castleStyle)) cosmetics.castleStyle = raw.cosmetics.castleStyle;
   }
 
+  const materials: Haul = {};
+  if (isRecord(raw.materials)) {
+    for (const [id, count] of Object.entries(raw.materials)) {
+      if (isMaterialId(id) && toCount(count) > 0) materials[id] = toCount(count);
+    }
+  }
+  const materialsFound = [...new Set([
+    ...(Array.isArray(raw.materialsFound) ? raw.materialsFound.filter((id): id is MaterialId => typeof id === 'string' && isMaterialId(id)) : []),
+    ...(Object.keys(materials) as MaterialId[])
+  ])];
+
   return {
     ...base,
     coins: toCount(raw.coins) + retiredTacticRefund(raw.tactics),
+    materials,
+    materialsFound,
     cards,
     deck: deck.length > 0 ? deck : [...STARTER_CARDS],
     levels,
@@ -418,6 +438,8 @@ export interface BattleOutcome {
   durationSeconds: number;
   // The level's optional challenge was met (a campaign win)
   challengeMet?: boolean;
+  // What was gathered on the battlefield
+  haul?: Haul;
 }
 
 export interface BattleRecordResult {
@@ -430,6 +452,10 @@ export interface BattleRecordResult {
   isNewBest: boolean;
   // The level's challenge was met for the first time (its bonus is in the reward)
   challengeCompleted: boolean;
+  // The materials carried home (all of a win's haul, half of a loss's, none of a battle given up),
+  // and the kinds found for the first time
+  haul: Haul;
+  firstFinds: MaterialId[];
 }
 
 export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
@@ -515,7 +541,15 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
     cardsPlayed
   };
 
-  const next: Profile = { ...profile, coins: profile.coins + reward.coins, levels, bestiary, stats };
+  const haul = keptHaul(outcome);
+  const materials = { ...profile.materials };
+  for (const [id, count] of Object.entries(haul) as [MaterialId, number][]) materials[id] = (materials[id] ?? 0) + count;
+  const firstFinds = (Object.keys(haul) as MaterialId[]).filter(id => !profile.materialsFound.includes(id));
+
+  const next: Profile = {
+    ...profile, coins: profile.coins + reward.coins, levels, bestiary, stats,
+    materials, materialsFound: [...profile.materialsFound, ...firstFinds]
+  };
   const clearedAfter = highestCleared(next);
   const newCards = PLAYER_CARD_IDS.filter(id => {
     const unlockAt = CARD_UNLOCK_LEVEL[id];
@@ -523,7 +557,19 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
   });
 
   setProfile(next);
-  return { reward, previousStars, discovered, newCards, isNewBest, challengeCompleted };
+  return { reward, previousStars, discovered, newCards, isNewBest, challengeCompleted, haul, firstFinds };
+};
+
+// What of a battle's haul comes home: all of it from a win, half of each kind (rounded up, so a
+// single relic or trophy is never lost) from a defeat, and nothing from a battle given up
+export const keptHaul = (outcome: Pick<BattleOutcome, 'won' | 'reason' | 'haul'>): Haul => {
+  if (outcome.reason === 'resigned') return {};
+  const kept: Haul = {};
+  for (const [id, count] of Object.entries(outcome.haul ?? {}) as [MaterialId, number][]) {
+    const amount = outcome.won ? count : Math.ceil(count / 2);
+    if (amount > 0) kept[id] = amount;
+  }
+  return kept;
 };
 
 // Coins from watching the optional ad after a battle
