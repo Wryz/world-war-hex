@@ -2,11 +2,27 @@
 // without a connection, and persistent storage asks the browser not to clear saved progress
 // when it tidies up space.
 
+// It registers once the page has loaded, so it doesn't compete with it; the models and art it
+// caches for offline play are fetched later still, when the game has been idle a while (and never
+// when the browser asks to save data)
+const WARM_DELAY_MS = 20000;
+
 export const registerServiceWorker = () => {
   if (process.env.NODE_ENV !== 'production' || typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
-  navigator.serviceWorker.register('/sw.js').catch(() => {
-    // Not supported here (e.g. a private window): the game still works online
-  });
+  const register = () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Not supported here (e.g. a private window): the game still works online
+    });
+    const saveData = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData;
+    if (saveData) return;
+    setTimeout(() => {
+      const warm = () => navigator.serviceWorker.ready.then(registration => registration.active?.postMessage({ type: 'warm' })).catch(() => undefined);
+      if ('requestIdleCallback' in window) window.requestIdleCallback(warm, { timeout: 10000 });
+      else warm();
+    }, WARM_DELAY_MS);
+  };
+  if (document.readyState === 'complete') register();
+  else window.addEventListener('load', register, { once: true });
 };
 
 export const isStoragePersisted = async (): Promise<boolean | null> => {

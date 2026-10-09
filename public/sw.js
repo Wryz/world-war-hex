@@ -5,9 +5,11 @@
  * - Music is streamed with Range requests, which are answered from the cached file.
  *
  * sw-manifest.js (written by scripts/build-sw-manifest.mjs after each build) lists every built
- * file to cache on install; a new build changes it, which installs a fresh copy of this worker.
+ * file to cache on install, and the models and art to cache later, when the page says the game is
+ * idle ('warm'), so a first visit on a slow connection gets the bandwidth; a new build changes it,
+ * which installs a fresh copy of this worker.
  */
-self.__PRECACHE = { version: 'dev', files: [] };
+self.__PRECACHE = { version: 'dev', files: [], later: [] };
 try {
   importScripts('/sw-manifest.js');
 } catch {
@@ -27,14 +29,35 @@ const ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    // One missing file shouldn't stop the rest from being cached
+    // One missing file shouldn't stop the rest from being cached. Built files never change, so
+    // the copies the page just downloaded are reused; pages are fetched afresh.
     await Promise.all([...PAGES, ...ASSETS].map(url =>
-      fetch(url, { cache: 'reload' })
+      fetch(url, { cache: PAGES.includes(url) ? 'reload' : 'default' })
         .then(response => (response.ok ? cache.put(url, response) : undefined))
         .catch(() => undefined)
     ));
     await self.skipWaiting();
   })());
+});
+
+// The models and art, one at a time and only those not yet cached, when the page says it's idle
+let warming = null;
+self.addEventListener('message', event => {
+  if (event.data?.type !== 'warm' || warming) return;
+  warming = (async () => {
+    const cache = await caches.open(CACHE);
+    for (const url of self.__PRECACHE.later ?? []) {
+      if (await cache.match(url)) continue;
+      try {
+        const response = await fetch(url);
+        if (response.ok) await cache.put(url, response);
+      } catch {
+        // Offline again: the rest are cached as they're used
+        break;
+      }
+    }
+  })();
+  event.waitUntil(warming);
 });
 
 self.addEventListener('activate', event => {
