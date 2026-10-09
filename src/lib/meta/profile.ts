@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import type { SideStats } from '@/types/game';
+import type { SideStats, WinReason } from '@/types/game';
 import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId, isTroopId } from '../game/troops';
 import {
   BattleReward,
@@ -411,7 +411,7 @@ export interface BattleOutcome {
   won: boolean;
   stars: number;
   rounds: number;
-  reason?: 'destroyed' | 'timeout' | 'resigned';
+  reason?: WinReason;
   // Share of the enemy castle's health destroyed (0..1)
   enemyCastleDamage: number;
   playerStats: SideStats;

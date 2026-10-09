@@ -258,6 +258,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   const handleRetry = () => {
     setFinished(null);
+    // (the tutorial battle is the tutorial again)
+    setShowTutorial(battle.mode === 'campaign' && battle.levelId === TUTORIAL_BATTLE);
     setShowResults(false);
     resetEffects();
     setMusicIntensity(1);

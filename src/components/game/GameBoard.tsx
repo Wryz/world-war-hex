@@ -122,7 +122,9 @@ const ACTION_MIN_ZOOM = 0.55;
 const ACTION_SIDE_MARGIN = 0.1;
 // How near the camera's targets it has to be for a flight to count as over (world units, zoom,
 // radians): until then the player can't move it
-const ARRIVED = { distance: 0.15, zoom: 0.01, angle: 0.03 };
+const ARRIVED = { distance: 0.25, zoom: 0.02, angle: 0.1 };
+// Longest a flight keeps the camera from the player (its slow last stretch is theirs to cut short)
+const FLIGHT_LOCK_MAX_MS = 1500;
 // How long the camera looks down on a boss's marked ground or power
 const BOSS_FOCUS_HOLD_MS = 3200;
 
@@ -279,6 +281,16 @@ const CameraRig: React.FC<{
   // Set while the camera flies somewhere on its own (until it gets there): the player can't drag or
   // zoom it meanwhile
   const autoMovingRef = useRef(false);
+  // (and when it set off: a flight locks the camera for a moment at most)
+  const flightStartedRef = useRef(0);
+  // Send the camera somewhere on its own
+  const flyTo = useCallback((lookAt: THREE.Vector3, zoom: number, elevation: number) => {
+    autoMovingRef.current = true;
+    flightStartedRef.current = performance.now();
+    desiredLookAtRef.current = lookAt;
+    desiredZoomRef.current = zoom;
+    desiredElevationRef.current = elevation;
+  }, []);
   const desiredZoomRef = useRef(CAMERA_DEFAULT_ZOOM);
   // Extra rotation around the centre of the map and camera tilt chosen by the player
   const azimuthOffsetRef = useRef(0);
@@ -396,12 +408,9 @@ const CameraRig: React.FC<{
   const showSide = useCallback((side: number) => {
     const turn = side * Math.PI / 2;
     const action = frameAction(targetAzimuth + turn);
-    autoMovingRef.current = true;
-    desiredLookAtRef.current = action?.lookAt ?? defaultLookAt.clone().applyAxisAngle(Y_AXIS, turn);
-    desiredZoomRef.current = action?.zoom ?? CAMERA_DEFAULT_ZOOM;
+    flyTo(action?.lookAt ?? defaultLookAt.clone().applyAxisAngle(Y_AXIS, turn), action?.zoom ?? CAMERA_DEFAULT_ZOOM, CAMERA_ELEVATION);
     azimuthOffsetRef.current = turn;
-    desiredElevationRef.current = CAMERA_ELEVATION;
-  }, [defaultLookAt, frameAction, targetAzimuth]);
+  }, [defaultLookAt, frameAction, targetAzimuth, flyTo]);
 
   // Set while the camera is looking down on a turn's battles (until it settles back on a side)
   const battleViewRef = useRef(false);
@@ -484,10 +493,7 @@ const CameraRig: React.FC<{
   useEffect(() => {
     if (showcase) {
       const [x, , z] = axialToWorld(showcase.at);
-      autoMovingRef.current = true;
-      desiredLookAtRef.current = new THREE.Vector3(x, 0, z);
-      desiredZoomRef.current = showcase.zoom;
-      desiredElevationRef.current = THREE.MathUtils.degToRad(62);
+      flyTo(new THREE.Vector3(x, 0, z), showcase.zoom, THREE.MathUtils.degToRad(62));
       wasShowcasingRef.current = true;
     } else if (wasShowcasingRef.current) {
       wasShowcasingRef.current = false;
@@ -518,6 +524,19 @@ const CameraRig: React.FC<{
   // (or the side of a camp just captured)
   const battleKey = gameState.currentPhase === 'combat' ? `${gameState.turnNumber}-${getActivePlayer(gameState)}` : null;
   const isGameOver = gameState.currentPhase === 'gameOver';
+  // Look down on some points of the board (a turn's battles, a boss's power), with `pad` around them
+  const flyOver = (points: HexCoordinates[], pad: number) => {
+    const world = points.map(point => axialToWorld(point));
+    const centre = new THREE.Vector3(
+      world.reduce((sum, [x]) => sum + x, 0) / world.length, 0,
+      world.reduce((sum, [, , z]) => sum + z, 0) / world.length
+    );
+    const spread = Math.max(...world.map(([x, , z]) => Math.hypot(x - centre.x, z - centre.z))) + pad;
+    const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
+    const horizontal = Math.hypot(centre.x, centre.z);
+    if (horizontal > maxPan) centre.multiplyScalar(maxPan / horizontal);
+    flyTo(centre, THREE.MathUtils.clamp(spread * BATTLE_VIEW_MARGIN / viewRadiusRef.current, BATTLE_VIEW_MIN_ZOOM, BATTLE_VIEW_MAX_ZOOM), BATTLE_VIEW_ELEVATION);
+  };
   const settleRef = useRef<() => void>(() => {});
   settleRef.current = () => {
     // (a boss's power still being shown settles when it is done)
@@ -539,20 +558,8 @@ const CameraRig: React.FC<{
         }
       }
       if (points.length === 0) return;
-      const world = points.map(point => axialToWorld(point));
-      const centre = new THREE.Vector3(
-        world.reduce((sum, [x]) => sum + x, 0) / world.length, 0,
-        world.reduce((sum, [, , z]) => sum + z, 0) / world.length
-      );
-      const spread = Math.max(...world.map(([x, , z]) => Math.hypot(x - centre.x, z - centre.z))) + HEX_SIZE * 1.5;
-      const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
-      const horizontal = Math.hypot(centre.x, centre.z);
-      if (horizontal > maxPan) centre.multiplyScalar(maxPan / horizontal);
       battleViewRef.current = true;
-      autoMovingRef.current = true;
-      desiredLookAtRef.current = centre;
-      desiredZoomRef.current = THREE.MathUtils.clamp(spread * BATTLE_VIEW_MARGIN / viewRadiusRef.current, BATTLE_VIEW_MIN_ZOOM, BATTLE_VIEW_MAX_ZOOM);
-      desiredElevationRef.current = BATTLE_VIEW_ELEVATION;
+      flyOver(points, HEX_SIZE * 1.5);
       return;
     }
     if (!battleViewRef.current || isGameOver) {
@@ -573,6 +580,8 @@ const CameraRig: React.FC<{
   // A boss marking the ground it will strike, or unleashing its power: look down on it for a moment,
   // then settle back (the marked ground keeps glowing for whenever the player looks again)
   const bossFocusUntilRef = useRef(0);
+  const phaseRef = useRef(gameState.currentPhase);
+  phaseRef.current = gameState.currentPhase;
   const bossThreat = gameState.players.ai.units.find(unit => unit.isBoss && unit.threat)?.threat ?? null;
   const bossFocus: HexCoordinates[] | null = bossThreat ??
     (gameState.lastBossPower ? [gameState.lastBossPower.from, ...gameState.lastBossPower.hexes] : null);
@@ -583,30 +592,27 @@ const CameraRig: React.FC<{
   useEffect(() => {
     if (!bossFocusKey || bossFocusKey === firstBossFocusRef.current || !bossFocus || isGameOver) return;
     firstBossFocusRef.current = null;
-    const world = bossFocus.map(point => axialToWorld(point));
-    const centre = new THREE.Vector3(
-      world.reduce((sum, [x]) => sum + x, 0) / world.length, 0,
-      world.reduce((sum, [, , z]) => sum + z, 0) / world.length
-    );
-    const spread = Math.max(...world.map(([x, , z]) => Math.hypot(x - centre.x, z - centre.z))) + HEX_SIZE * 2;
-    const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
-    const horizontal = Math.hypot(centre.x, centre.z);
-    if (horizontal > maxPan) centre.multiplyScalar(maxPan / horizontal);
     battleViewRef.current = true;
-    autoMovingRef.current = true;
-    desiredLookAtRef.current = centre;
-    desiredZoomRef.current = THREE.MathUtils.clamp(spread * BATTLE_VIEW_MARGIN / viewRadiusRef.current, BATTLE_VIEW_MIN_ZOOM, BATTLE_VIEW_MAX_ZOOM);
-    desiredElevationRef.current = BATTLE_VIEW_ELEVATION;
+    flyOver(bossFocus, HEX_SIZE * 2);
     const hold = BOSS_FOCUS_HOLD_MS / getGameSpeed();
     bossFocusUntilRef.current = Date.now() + hold - 50;
     const settle = setTimeout(() => settleRef.current(), hold);
-    return () => clearTimeout(settle);
+    return () => {
+      clearTimeout(settle);
+      // (cut short - by a new mark, or the mark going: let the camera go, unless battles are being
+      // watched, which settle on their own)
+      if (Date.now() < bossFocusUntilRef.current) {
+        bossFocusUntilRef.current = 0;
+        if (phaseRef.current !== 'combat') settleRef.current();
+      }
+    };
     // Only reacts to a new mark or power
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bossFocusKey]);
 
-  // The battle is won: swoop down on the losing castle as it falls
-  const loser = gameState.currentPhase === 'gameOver' && gameState.winner
+  // The battle is won: swoop down on the losing castle as it falls (not when you resign: your
+  // castle still stands)
+  const loser = gameState.currentPhase === 'gameOver' && gameState.winner && gameState.winReason !== 'resigned'
     ? (gameState.winner === 'player' ? 'ai' : 'player')
     : null;
   useEffect(() => {
@@ -614,10 +620,7 @@ const CameraRig: React.FC<{
     const base = findBaseHex(gameState, loser);
     if (!base) return;
     const [x, , z] = axialToWorld(base.coordinates);
-    autoMovingRef.current = true;
-    desiredLookAtRef.current = new THREE.Vector3(x, 0, z);
-    desiredZoomRef.current = CAMERA_MIN_ZOOM;
-    desiredElevationRef.current = THREE.MathUtils.degToRad(52);
+    flyTo(new THREE.Vector3(x, 0, z), CAMERA_MIN_ZOOM, THREE.MathUtils.degToRad(52));
     // Only reacts to the battle ending
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loser]);
@@ -631,7 +634,8 @@ const CameraRig: React.FC<{
   // The camera is the game's to move while it flies somewhere, looks down on the turn's battles or
   // a boss's power, or shows the tutorial's flight
   const cameraLocked = useCallback(
-    () => autoMovingRef.current || battleViewRef.current || wasShowcasingRef.current,
+    () => (autoMovingRef.current && performance.now() - flightStartedRef.current < FLIGHT_LOCK_MAX_MS) ||
+      battleViewRef.current || wasShowcasingRef.current,
     []
   );
 
@@ -642,9 +646,11 @@ const CameraRig: React.FC<{
   useEffect(() => {
     const element = gl.domElement;
     // (the board takes every touch gesture itself, rather than the page)
+    const touchActionBefore = element.style.touchAction;
     element.style.touchAction = 'none';
     type Mode = 'pan' | 'orbit';
-    let drag: { startX: number; startY: number; lastX: number; lastY: number; active: boolean; onLabel: boolean; mode: Mode } | null = null;
+    // (a drag belongs to the pointer that began it)
+    let drag: { pointerId: number; startX: number; startY: number; lastX: number; lastY: number; active: boolean; onLabel: boolean; mode: Mode } | null = null;
     // Fingers on the board, and the pinch two of them are making
     const touches = new Map<number, { x: number; y: number }>();
     let pinch: { distance: number; angle: number; middleY: number } | null = null;
@@ -676,10 +682,10 @@ const CameraRig: React.FC<{
       }
     };
 
-    // (a drag can begin on the board or on a troop's label over it - not while the camera is
-    // showing something on its own)
+    // (a drag can begin on the board or on a troop's label over it; one begun while the camera is
+    // showing something on its own waits, and takes over once it is free)
     const onPointerDown = (event: PointerEvent) => {
-      if ((event.button !== 0 && event.button !== 2) || cameraLocked()) return;
+      if (event.button !== 0 && event.button !== 2) return;
       const onLabel = event.target instanceof Element && !!event.target.closest('[data-unit]');
       if (event.target !== element && !onLabel) return;
       if (event.pointerType === 'touch') {
@@ -693,15 +699,18 @@ const CameraRig: React.FC<{
         if (touches.size > 2) return;
       }
       const mode: Mode = event.button === 2 || event.shiftKey ? 'orbit' : 'pan';
-      drag = { startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, active: false, onLabel, mode };
+      drag = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, active: false, onLabel, mode };
     };
     const onPointerMove = (event: PointerEvent) => {
       if (touches.has(event.pointerId)) touches.set(event.pointerId, { x: event.clientX, y: event.clientY });
       if (!drag && !pinch) return;
-      // (the camera took off on its own mid-drag: the drag ends there)
+      // (the camera is busy: the gesture waits, from wherever the fingers are when it's free)
       if (cameraLocked()) {
-        drag = null;
-        pinch = null;
+        if (pinch && touches.size >= 2) pinch = pinchOf();
+        if (drag && drag.pointerId === event.pointerId) {
+          drag.lastX = event.clientX;
+          drag.lastY = event.clientY;
+        }
         return;
       }
       if (pinch && touches.size >= 2) {
@@ -719,7 +728,7 @@ const CameraRig: React.FC<{
         pinch = next;
         return;
       }
-      if (!drag) return;
+      if (!drag || drag.pointerId !== event.pointerId) return;
       // Ignore tiny movements so ordinary clicks never nudge the camera
       if (!drag.active && Math.hypot(event.clientX - drag.startX, event.clientY - drag.startY) < CAMERA_DRAG_THRESHOLD) return;
       drag.active = true;
@@ -740,7 +749,8 @@ const CameraRig: React.FC<{
     const onPointerUp = (event: PointerEvent) => {
       touches.delete(event.pointerId);
       if (touches.size < 2) pinch = null;
-      if (drag?.active && drag.onLabel) swallowClickUntil = performance.now() + 400;
+      if (!drag || drag.pointerId !== event.pointerId) return;
+      if (drag.active && drag.onLabel) swallowClickUntil = performance.now() + 400;
       drag = null;
     };
     const onClick = (event: MouseEvent) => {
@@ -765,6 +775,7 @@ const CameraRig: React.FC<{
       window.removeEventListener('pointercancel', onPointerUp);
       window.removeEventListener('click', onClick, true);
       element.removeEventListener('contextmenu', onContextMenu);
+      element.style.touchAction = touchActionBefore;
     };
   }, [gl, camera, rotateBy, cameraLocked]);
 
@@ -1815,7 +1826,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           health={timeline.castleHealth('player', players.player.baseHealth ?? BASE_MAX_HEALTH)}
           maxHealth={players.player.maxBaseHealth ?? BASE_MAX_HEALTH}
           incoming={castleIncoming?.owner === 'player' ? castleIncoming.incoming : undefined}
-          fallen={currentPhase === 'gameOver' && gameState.winner === 'ai'}
+          fallen={currentPhase === 'gameOver' && gameState.winner === 'ai' && gameState.winReason !== 'resigned'}
         />
       )}
       {aiCastlePosition && (

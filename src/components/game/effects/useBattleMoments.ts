@@ -214,8 +214,12 @@ const announce = (
   // The battle is decided
   if (gameState.currentPhase === 'gameOver' && previous.currentPhase !== 'gameOver') {
     const won = gameState.winner === 'player';
-    triggerSlowMotion(0.35, 1600);
-    shakeScreen(won ? 0.8 : 1);
+    // (a battle given up just ends: no castle falls)
+    const resigned = gameState.winReason === 'resigned';
+    if (!resigned) {
+      triggerSlowMotion(0.35, 1600);
+      shakeScreen(won ? 0.8 : 1);
+    }
     if (won) emitConfetti();
     playStinger(won ? 'victory' : 'defeat');
     emitMoment(won

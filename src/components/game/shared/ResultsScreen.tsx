@@ -129,7 +129,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
     }
     timeouts.push(setTimeout(() => {
       const rect = rewardRef.current?.getBoundingClientRect();
-      if (rect) emitCoins({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, Math.min(14, 4 + Math.round(record.reward.coins / 20)), 'coins');
+      if (rect && record.reward.coins > 0) emitCoins({ x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 }, Math.min(14, 4 + Math.round(record.reward.coins / 20)), 'coins');
     }, rewardDelay));
     if (record.newCards.length > 0) timeouts.push(setTimeout(() => playStinger('unlock'), rewardDelay + 900));
     return () => timeouts.forEach(clearTimeout);

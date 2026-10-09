@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { GameState } from '@/types/game';
 import { BASE_MAX_HEALTH, getCastleMaxHealth, getIncome, getMaxRounds, getTimeScore, isFogOfWar } from '@/lib/game/gameState';
 import { WEATHER, activeWeather, stormForecast } from '@/lib/game/regionRules';
@@ -53,8 +53,12 @@ const CastleHealth: React.FC<{ title: string; health: number; max: number; color
 export const TopBar: React.FC<TopBarProps> = ({
   gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit, onResign, showThreats, onToggleThreats
 }) => {
-  // Asking to make sure before giving up
+  // Asking to make sure before giving up (forgotten once resigning isn't on offer - the turn over)
   const [confirmingResign, setConfirmingResign] = useState(false);
+  const canResign = !!onResign;
+  useEffect(() => {
+    if (!canResign) setConfirmingResign(false);
+  }, [canResign]);
   const { players, turnNumber } = gameState;
   // Hits landing on a castle in the battle being fought, ahead of its result
   const castleHits = useCastleShownDamage();
