@@ -2,7 +2,8 @@ import React, { useEffect, useRef } from 'react';
 import { TROOPS, TroopId } from '@/lib/game/troops';
 import { playStinger } from '@/lib/audio/music';
 import { TroopCard } from '../cards/TroopCard';
-import { BossIcon } from '../icons';
+import { getBossPower } from '@/lib/game/bosses';
+import { BossIcon, BossPowerIcon } from '../icons';
 
 interface BossIntroProps {
   boss: TroopId;
@@ -15,6 +16,7 @@ const INTRO_DURATION = 3200;
 // Dramatic card announcing the boss before a boss battle
 export const BossIntro: React.FC<BossIntroProps> = ({ boss, level, onDone }) => {
   const troop = TROOPS[boss];
+  const power = getBossPower(boss);
   // The parent re-renders every second (turn timer), so hold on to the latest callback
   const onDoneRef = useRef(onDone);
   onDoneRef.current = onDone;
@@ -44,6 +46,11 @@ export const BossIntro: React.FC<BossIntroProps> = ({ boss, level, onDone }) => 
           {troop.name}
         </h2>
         <p className="mt-2 text-sm italic text-slate-300">{troop.lore}</p>
+        {power && (
+          <span className="mt-3 inline-flex items-center gap-2 rounded-full bg-red-600/90 px-3 py-1 text-sm font-bold text-white ring-2 ring-red-200 shadow-[0_0_14px_#ef4444]">
+            <BossPowerIcon power={power.id} color="#fff" className="text-lg" />{power.name}
+          </span>
+        )}
         <p className="mt-3 text-xs text-slate-500">It guards the enemy castle. Tap to begin.</p>
       </div>
     </button>

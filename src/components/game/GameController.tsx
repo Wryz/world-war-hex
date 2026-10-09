@@ -8,6 +8,7 @@ import { CombatResolver } from './combat/CombatResolver';
 import { ResultsScreen } from './shared/ResultsScreen';
 import { TutorialOverlay, useTutorial } from './shared/TutorialGuide';
 import { RuleTips } from './shared/RuleTips';
+import { BossBar } from './hud/BossBar';
 import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
 import { LoadingManagerProvider } from './utils/LoadingManager';
@@ -116,8 +117,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       difficulty: battle.mode === 'quick' ? battle.difficulty : level?.settings.aiDifficulty,
       power: profilePower(profile),
       recommended_power: level?.recommendedPower,
-      deck: profile.deck,
-      bonds: gameState.bonds ?? []
+      deck: profile.deck
     });
     // Runs once per battle
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -314,6 +314,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
             onToggleMute={() => setMuted(!isMuted)}
             onQuit={handleQuit}
           />
+          <BossBar gameState={gameState} />
           <div className="fixed left-3 top-16 z-20 pointer-events-none">
             <SelectionCard gameState={viewState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
           </div>
@@ -374,7 +375,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       {/* First-time tips for the newer rules (not while the first battle's tutorial is running) */}
       {!showTutorial && isReady && currentPhase !== 'gameOver' && <RuleTips gameState={gameState} />}
       {showTutorial && isReady && currentPhase !== 'gameOver' && (
-        <TutorialOverlay gameState={gameState} pointer={tutorial.pointer} introRunning={tutorial.introRunning} onSkipIntro={tutorial.skipIntro} />
+        <TutorialOverlay gameState={gameState} pointer={tutorial.pointer} introRunning={tutorial.introRunning} introCaption={tutorial.introCaption} onSkipIntro={tutorial.skipIntro} />
       )}
 
       {showBossIntro && isReady && level && (

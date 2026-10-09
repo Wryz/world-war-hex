@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { GameState, PlayerType } from '@/types/game';
+import { BOSS_POWERS, isBossEnraged } from '@/lib/game/bosses';
 import { castleHealthRatio, findBaseHex, getMaxRounds } from '@/lib/game/gameState';
 import { playStinger, setMusicIntensity } from '@/lib/audio/music';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
@@ -7,6 +8,8 @@ import { playBattleSound } from '../utils/battleSounds';
 import {
   emitCoins, emitConfetti, emitMoment, flashDamage, projectToScreen, shakeScreen, triggerSlowMotion
 } from './effects';
+
+const BOSS_POWER_NAMES = Object.fromEntries(Object.values(BOSS_POWERS).map(power => [power!.id, power!.name])) as Record<string, string>;
 
 // A castle down to half its health gets a moment of its own
 const HALF_HEALTH = 0.5;
@@ -68,6 +71,20 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
       emitConfetti();
       playStinger('levelUp');
       emitMoment({ title: 'Boss Defeated!', subtitle: 'Its army is shaken', tone: 'gold', big: true });
+    }
+
+    // A boss's power lands, and a boss driven into a rage
+    const power = gameState.lastBossPower;
+    if (power && power.serial !== previous.lastBossPower?.serial) {
+      const used = BOSS_POWER_NAMES[power.power];
+      shakeScreen(power.power === 'raiseDead' || power.power === 'callTheGang' || power.power === 'howl' || power.power === 'rallyHorde' ? 0.3 : 0.6);
+      emitMoment({ title: `${used}!`, tone: 'red' });
+    }
+    const boss = gameState.players.ai.units.find(unit => unit.isBoss);
+    const bossBefore = boss && previous.players.ai.units.find(unit => unit.id === boss.id);
+    if (boss && bossBefore && isBossEnraged(boss) && !isBossEnraged(bossBefore)) {
+      shakeScreen(0.5);
+      emitMoment({ title: 'Enraged!', tone: 'red' });
     }
 
     // Ambushes in the fog of war

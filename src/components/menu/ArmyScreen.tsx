@@ -20,10 +20,8 @@ import { playStinger, useMusic } from '@/lib/audio/music';
 import { getLevel } from '@/lib/campaign/levels';
 import { TroopCard, RARITY_STYLES } from '../game/cards/TroopCard';
 import { MenuShell, CARD_CLASS } from './MenuShell';
-import { BondIcon, CardsIcon, CoinIcon, LockIcon, PowerIcon, SignatureIcon, UnitIcon, UpgradeIcon } from '../game/icons';
-import { BondList } from '../game/cards/BondList';
+import { CardsIcon, CoinIcon, LockIcon, PowerIcon, SignatureIcon, UpgradeIcon } from '../game/icons';
 import { useIsNarrow } from '../shared/useIsNarrow';
-import { BONDS, describeBond } from '@/lib/game/bonds';
 
 // Your cards: choose the four to bring into battle, buy new cards as the campaign unlocks them, and upgrade them with coins
 export const ArmyScreen: React.FC = () => {
@@ -88,9 +86,6 @@ export const ArmyScreen: React.FC = () => {
             );
           })}
         </div>
-        <div className="mt-5">
-          <BondList deck={profile.deck} owned={owned} />
-        </div>
       </section>
 
       {/* Collection */}
@@ -141,31 +136,6 @@ export const ArmyScreen: React.FC = () => {
             );
           })}
         </div>
-      </section>
-
-      {/* Every bond, so players know what to work towards */}
-      <section className="mt-8">
-        <h2 className="font-display mb-1 flex items-center gap-2 text-2xl text-slate-800"><BondIcon /> Bonds</h2>
-        <p className="mb-3 text-sm font-semibold text-slate-700">Bring both cards to fight better together.</p>
-        <ul className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {BONDS.map(bond => {
-            const ready = bond.cards.every(card => profile.cards[card] !== undefined);
-            const active = bond.cards.every(card => profile.deck.includes(card));
-            return (
-              <li key={bond.id} className={`${CARD_CLASS} flex items-start gap-2 p-3 text-xs ${active ? 'ring-2 ring-amber-300' : ''}`} title={bond.flavor}>
-                <span className={`mt-0.5 flex shrink-0 items-center gap-0.5 text-base ${ready ? '' : 'opacity-50'}`}>
-                  <UnitIcon type={bond.cards[0]} /><BondIcon /><UnitIcon type={bond.cards[1]} />
-                </span>
-                <span className="min-w-0">
-                  <b className={active ? 'text-amber-200' : 'text-slate-100'}>{bond.name}</b>
-                  {active && <span className="ml-1.5 rounded-full bg-amber-400 px-1.5 text-[0.625rem] font-bold text-slate-900">Active</span>}
-                  {!ready && <span className="ml-1.5 rounded-full bg-slate-700 px-1.5 text-[0.625rem] font-bold text-slate-300">Need both cards</span>}
-                  <span className="block text-slate-300">{bond.cards.map(card => TROOPS[card].name).join(' + ')}: {describeBond(bond)}</span>
-                </span>
-              </li>
-            );
-          })}
-        </ul>
       </section>
 
       {/* Shop */}

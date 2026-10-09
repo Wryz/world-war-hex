@@ -68,8 +68,10 @@ export const RuleTips: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   }, [gameState, tip]);
 
   if (!tip) return null;
+  // (below the boss's health bar, while there is one)
+  const hasBoss = gameState.players.ai.units.some(unit => unit.isBoss);
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-20 z-[44] flex justify-center px-3">
+    <div className={`pointer-events-none fixed inset-x-0 z-[44] flex justify-center px-3 ${hasBoss ? 'top-[7.25rem]' : 'top-20'}`}>
       <div className="animate-fadeIn pointer-events-auto flex max-w-md items-start gap-3 rounded-2xl bg-slate-900/95 p-3 text-sm text-slate-100 shadow-2xl ring-2 ring-sky-400/70">
         <span className="font-display mt-0.5 rounded-full bg-sky-400 px-2 text-xs text-slate-900">New rule</span>
         <p className="flex-1 font-semibold leading-snug">{TIPS[tip]}</p>

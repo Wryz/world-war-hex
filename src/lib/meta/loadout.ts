@@ -1,5 +1,4 @@
 import { TroopId, cardStats, getClassCounter, getTroopClass, statsPower } from '../game/troops';
-import { activeBonds, applyBonds } from '../game/bonds';
 import { MAX_DECK_SIZE } from './economy';
 
 // Choosing which cards to bring into a battle
@@ -15,16 +14,15 @@ export const matchupScore = (card: TroopId, enemies: TroopId[]): number => {
   }, 0) / enemies.length;
 };
 
-// How good a loadout is against these enemies: its cards' power after bonds, weighted by how well
+// How good a loadout is against these enemies: its cards' power, weighted by how well
 // each counters them, with a little less for doubling up on one class of troop
 export const loadoutScore = (deck: readonly TroopId[], cards: Partial<Record<TroopId, number>>, enemies: TroopId[]): number => {
-  const roster = applyBonds(Object.fromEntries(deck.map(id => [id, cardStats(id, cards[id] ?? 1)])), activeBonds(deck));
   const seen = new Set<string>();
   return deck.reduce((sum, id) => {
     const troopClass = getTroopClass(id);
     const repeat = seen.has(troopClass);
     seen.add(troopClass);
-    return sum + statsPower(roster[id]!) * (1 + 0.6 * matchupScore(id, enemies)) * (repeat ? 0.8 : 1);
+    return sum + statsPower(cardStats(id, cards[id] ?? 1)) * (1 + 0.6 * matchupScore(id, enemies)) * (repeat ? 0.8 : 1);
   }, 0);
 };
 

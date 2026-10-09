@@ -3,34 +3,8 @@ import { useIsNarrow } from '../../shared/useIsNarrow';
 import { GameState, UnitType } from '@/types/game';
 import { getHand, getNextCard, getRosterStats, getTroopName } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
-import { BondIcon, CheckIcon, GoldIcon, UndoIcon } from '../icons';
-import { BondDef, describeBond, getBond } from '@/lib/game/bonds';
+import { CheckIcon, GoldIcon, UndoIcon } from '../icons';
 import { PANEL_CLASS } from './styles';
-
-// The bonds at work this battle as one small badge with their count; tapping it lists them
-const BondBadge: React.FC<{ bonds: BondDef[] }> = ({ bonds }) => {
-  const [open, setOpen] = useState(false);
-  return (
-    <div className="pointer-events-auto flex flex-col items-center gap-1">
-      {open && (
-        <div className="flex flex-col gap-0.5 rounded-xl bg-slate-900/90 px-3 py-1.5 text-[0.6875rem] shadow">
-          {bonds.map(bond => (
-            <span key={bond.id}><b className="text-amber-200">{bond.name}</b> <span className="text-slate-300">{describeBond(bond)}</span></span>
-          ))}
-        </div>
-      )}
-      <button
-        onClick={() => setOpen(value => !value)}
-        aria-expanded={open}
-        aria-label={`${bonds.length} active bond${bonds.length === 1 ? '' : 's'}`}
-        title={bonds.map(bond => `${bond.name}: ${describeBond(bond)}`).join('\n')}
-        className="flex items-center gap-1 rounded-full bg-slate-900/85 px-2.5 py-1 text-[0.6875rem] font-bold text-amber-200 shadow ring-1 ring-amber-300/50"
-      >
-        <BondIcon /> {bonds.length}
-      </button>
-    </div>
-  );
-};
 
 // Phones get smaller cards so a full hand and the Confirm button fit across the screen
 
@@ -58,7 +32,6 @@ export const CardHand: React.FC<CardHandProps> = ({
   // The card the first battle's guide points at
   const firstAffordable = hand.findIndex(type => gold >= (getRosterStats(gameState, 'player', type)?.cost ?? Infinity));
   const isNarrow = useIsNarrow();
-  const bonds = (gameState.bonds ?? []).map(getBond);
 
   // Cards that just arrived in the hand animate in; keyed by slot so each slot redraws when its card changes
   const previousHandRef = useRef<UnitType[]>(hand);
@@ -88,8 +61,6 @@ export const CardHand: React.FC<CardHandProps> = ({
 
   return (
     <div className="fixed bottom-2 inset-x-2 z-20 flex flex-col items-center gap-2 pointer-events-none" data-tutorial="hand">
-      {/* Bonds the player's cards complete this battle: one badge, tap for the list */}
-      {bonds.length > 0 && !hint && <BondBadge bonds={bonds} />}
       {hint && (
         <div className="rounded-full bg-slate-900/85 px-4 py-1.5 text-center text-xs font-semibold text-slate-100 shadow">
           {hint}
@@ -164,9 +135,10 @@ export const CardHand: React.FC<CardHandProps> = ({
             data-tutorial="end-turn"
             aria-label="Confirm your orders and end the turn"
             title="Confirm your orders: your troops move and fight, then the enemy takes its turn"
-            className="font-display rounded-xl bg-amber-500 px-2 py-2.5 text-sm leading-tight text-slate-900 shadow-[0_5px_0_#b45309] transition-transform hover:-translate-y-0.5 hover:bg-amber-400 active:translate-y-1 active:shadow-[0_1px_0_#b45309] sm:px-5 sm:py-3 sm:text-lg"
+            className="font-display rounded-xl bg-amber-500 px-1.5 py-2 text-xs leading-tight text-slate-900 shadow-[0_5px_0_#b45309] transition-transform hover:-translate-y-0.5 hover:bg-amber-400 active:translate-y-1 active:shadow-[0_1px_0_#b45309] sm:px-5 sm:py-3 sm:text-lg"
           >
-            <span className="flex items-center gap-1 sm:gap-1.5"><CheckIcon /> Confirm</span>
+            {/* (icon over the word on phones, so the button fits beside a full hand) */}
+            <span className="flex flex-col items-center gap-0.5 sm:flex-row sm:gap-1.5"><CheckIcon className="text-base sm:text-lg" /> Confirm</span>
           </button>
         </div>
       </div>

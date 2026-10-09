@@ -9,6 +9,9 @@ import { Castle, CastleIncoming } from './Castle';
 import { Camp } from './Camp';
 import { BoardDecorations } from './BoardDecorations';
 import { BattlefieldObjects } from './BattlefieldObjects';
+import { BossPowerBursts, BossThreats } from './BossPowers';
+import { FormationLinks } from './FormationLinks';
+import { PIN_BONUS, SCREEN_REDUCTION, SHIELD_WALL_REDUCTION, hasScreenBeside, inShieldWall, isPinned } from '@/lib/game/formations';
 import { MovePath } from './MovePath';
 import {
   DEFAULT_SETTINGS,
@@ -60,8 +63,6 @@ import { isCapturable } from '@/lib/game/structures';
 import type { UnitBuff } from './UnitMesh';
 import type { TutorialVisuals } from './shared/TutorialGuide';
 import { TutorialMarkers } from './shared/TutorialMarkers';
-import { describeBonus, getBond } from '@/lib/game/bonds';
-import type { TroopId } from '@/lib/game/troops';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
 import { SKY_COLOR } from '@/components/menu/MenuShell';
 
@@ -107,6 +108,8 @@ const BATTLE_VIEW_MARGIN = 1.35;
 const BATTLE_VIEW_MIN_ZOOM = 0.5;
 const BATTLE_VIEW_MAX_ZOOM = 0.95;
 const BATTLE_VIEW_HOLD_MS = 600;
+// How long the camera looks down on a boss's marked ground or power
+const BOSS_FOCUS_HOLD_MS = 3200;
 
 // Sun position; the shadow camera looks from here towards the board centre
 const SHADOW_LIGHT_POSITION: [number, number, number] = [12, 30, 18];
@@ -413,6 +416,8 @@ const CameraRig: React.FC<{
   const isGameOver = gameState.currentPhase === 'gameOver';
   const settleRef = useRef<() => void>(() => {});
   settleRef.current = () => {
+    // (a boss's power still being shown settles when it is done)
+    if (Date.now() < bossFocusUntilRef.current) return;
     battleViewRef.current = false;
     const side = pendingSideRef.current ?? nearestHomeSide(azimuthRef.current ?? targetAzimuth);
     pendingSideRef.current = null;
@@ -459,6 +464,40 @@ const CameraRig: React.FC<{
     // Only reacts to battles starting and ending
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [battleKey, isGameOver]);
+
+  // A boss marking the ground it will strike, or unleashing its power: look down on it for a moment,
+  // then settle back (the marked ground keeps glowing for whenever the player looks again)
+  const bossFocusUntilRef = useRef(0);
+  const bossThreat = gameState.players.ai.units.find(unit => unit.isBoss && unit.threat)?.threat ?? null;
+  const bossFocus: HexCoordinates[] | null = bossThreat ??
+    (gameState.lastBossPower ? [gameState.lastBossPower.from, ...gameState.lastBossPower.hexes] : null);
+  const bossFocusKey = bossThreat
+    ? `threat:${bossThreat.map(coordKey).join(' ')}`
+    : gameState.lastBossPower ? `power:${gameState.lastBossPower.serial}` : null;
+  const firstBossFocusRef = useRef(bossFocusKey);
+  useEffect(() => {
+    if (!bossFocusKey || bossFocusKey === firstBossFocusRef.current || !bossFocus || isGameOver) return;
+    firstBossFocusRef.current = null;
+    const world = bossFocus.map(point => axialToWorld(point));
+    const centre = new THREE.Vector3(
+      world.reduce((sum, [x]) => sum + x, 0) / world.length, 0,
+      world.reduce((sum, [, , z]) => sum + z, 0) / world.length
+    );
+    const spread = Math.max(...world.map(([x, , z]) => Math.hypot(x - centre.x, z - centre.z))) + HEX_SIZE * 2;
+    const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
+    const horizontal = Math.hypot(centre.x, centre.z);
+    if (horizontal > maxPan) centre.multiplyScalar(maxPan / horizontal);
+    battleViewRef.current = true;
+    desiredLookAtRef.current = centre;
+    desiredZoomRef.current = THREE.MathUtils.clamp(spread * BATTLE_VIEW_MARGIN / viewRadiusRef.current, BATTLE_VIEW_MIN_ZOOM, BATTLE_VIEW_MAX_ZOOM);
+    desiredElevationRef.current = BATTLE_VIEW_ELEVATION;
+    const hold = BOSS_FOCUS_HOLD_MS / getGameSpeed();
+    bossFocusUntilRef.current = Date.now() + hold - 50;
+    const settle = setTimeout(() => settleRef.current(), hold);
+    return () => clearTimeout(settle);
+    // Only reacts to a new mark or power
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bossFocusKey]);
 
   // The battle is won: swoop down on the losing castle as it falls
   const loser = gameState.currentPhase === 'gameOver' && gameState.winner
@@ -727,7 +766,6 @@ const toVector = ([x, y, z]: [number, number, number]) => new THREE.Vector3(x, y
 
 // The buffs (and the odd drawback) working on a unit right now, shown under its health tag, most
 // telling first: its signature while its condition is met, hazards, then the ground.
-// Bonds are always on, so they only show in the list a tap opens.
 const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitBuff[] => {
   if (!hex) return [];
   const buffs: UnitBuff[] = [];
@@ -757,6 +795,18 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   }
   for (const protection of getProtections(state, unit)) {
     buffs.push({ id: `guard-${protection.label}`, icon: 'shield', label: protection.label, value: `-${pct(protection.reduction)} damage`, good: true });
+  }
+  // Formations: screened by a front-line friend, standing in a shield wall, or pinned by the enemy
+  const friends = state.players[unit.owner].units;
+  const foes = state.players[unit.owner === 'player' ? 'ai' : 'player'].units;
+  if (hasScreenBeside(unit, unit.position, friends)) {
+    buffs.push({ id: 'screened', icon: 'shield', label: 'Screened', value: `-${pct(SCREEN_REDUCTION)} damage from beyond its screen`, good: true });
+  }
+  if (inShieldWall(unit, unit.position, friends)) {
+    buffs.push({ id: 'shieldwall', icon: 'shield', label: 'Shield wall', value: `-${pct(SHIELD_WALL_REDUCTION)} damage`, good: true });
+  }
+  if (isPinned(unit.position, foes)) {
+    buffs.push({ id: 'pinned', icon: 'pinned', label: 'Pinned', value: `Archers and riders deal +${pct(PIN_BONUS)}`, good: false });
   }
   // Its own fury
   if (unit.abilities.includes('berserk') && unit.lifespan * 2 <= unit.maxLifespan) {
@@ -800,13 +850,6 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   }
   if (hex.isResourceHex) {
     buffs.push({ id: 'gold', icon: 'gold', label: 'Gold mine', value: `+${hex.resourceValue ?? 0} gold/turn`, good: true });
-  }
-  if (unit.owner === 'player') {
-    for (const bondId of state.bonds ?? []) {
-      const bond = getBond(bondId);
-      const bonus = bond.bonuses[unit.type as TroopId];
-      if (bonus) buffs.push({ id: `bond-${bond.id}`, icon: 'bond', label: bond.name, value: describeBonus(unit.type as TroopId, bonus), good: true, quiet: true });
-    }
   }
   return buffs;
 };
@@ -1509,6 +1552,11 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {tutorial && <TutorialMarkers visuals={tutorial} hexByKey={hexByKey} />}
       {/* Great trees, felled trunks and fires */}
       <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} lastBombard={gameState.lastBombard} visibleKeys={visibleKeys} />
+      {/* Your formations: screens and shield walls */}
+      {currentPhase === 'planning' && <FormationLinks units={players.player.units} hexByKey={hexByKey} />}
+      {/* Bosses' powers: the ground they have marked to strike, and each power as it lands */}
+      <BossThreats units={players.ai.units} hexByKey={hexByKey} />
+      <BossPowerBursts last={gameState.lastBossPower} hexByKey={hexByKey} />
 
       {/* Castles */}
       {playerCastlePosition && (

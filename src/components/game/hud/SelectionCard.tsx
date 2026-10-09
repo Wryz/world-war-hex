@@ -7,10 +7,10 @@ import {
   getCastleMaxHealth
 } from '@/lib/game/gameState';
 import { getUnitTypeName } from '../utils/UnitHelpers';
-import { describeBonus, getBond } from '@/lib/game/bonds';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
 import { TERRAIN_SHORT_EFFECTS } from './terrainInfo';
-import { AbilityIcon, AttackIcon, CampIcon, CrownIcon, MoveIcon, TerrainIcon, UnitIcon, BondIcon, FogIcon } from '../icons';
+import { AbilityIcon, AttackIcon, BossPowerIcon, CampIcon, CrownIcon, FireIcon, FrozenIcon, MoveIcon, TerrainIcon, UnitIcon, FogIcon } from '../icons';
+import { getBossPower, isBossEnraged } from '@/lib/game/bosses';
 
 interface SelectionCardProps {
   gameState: GameState;
@@ -93,6 +93,15 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
             </span>
           </div>
           <div className="mt-2"><HealthBar value={unit.lifespan} max={unit.maxLifespan} /></div>
+          {unit.isBoss && getBossPower(unit.type) && (
+            <div className="mt-2 flex items-center gap-1.5 rounded-md bg-red-950/60 px-2 py-1 font-bold text-red-100">
+              <BossPowerIcon power={getBossPower(unit.type)!.id} /> {getBossPower(unit.type)!.name}
+              {isBossEnraged(unit) && <span className="ml-auto flex items-center gap-0.5 text-orange-300"><FireIcon /> Enraged</span>}
+            </div>
+          )}
+          {unit.frozen && (
+            <div className="mt-2 flex items-center gap-1.5 rounded-md bg-cyan-950/60 px-2 py-1 font-bold text-cyan-100"><FrozenIcon /> Frozen this turn</div>
+          )}
           <div className="mt-2 flex gap-3 text-slate-200">
             <span title="Attack" className="flex items-center gap-1"><AttackIcon /> <b>{unit.attackPower}</b></span>
             <span title="Movement" className="flex items-center gap-1"><MoveIcon /> <b>{unit.movementRange}</b></span>
@@ -118,11 +127,6 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
                 : unit.revealed ? 'Gave its position away' : 'In sight of your troops'}
             </div>
           )}
-          {unit.owner === 'player' && (gameState.bonds ?? []).map(getBond).filter(bond => bond.bonuses[unit.type]).map(bond => (
-            <div key={bond.id} className="mt-1.5 flex items-center gap-1 text-[0.6875rem] text-amber-200" title={describeBonus(unit.type, bond.bonuses[unit.type]!)}>
-              <BondIcon /> <b>{bond.name}</b>
-            </div>
-          ))}
           {unit.owner === 'player' && unit.hasMoved && gameState.currentPhase === 'planning' && (
             <div className="mt-2 text-slate-400">Moves next turn</div>
           )}
