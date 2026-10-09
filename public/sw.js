@@ -37,39 +37,61 @@ self.addEventListener('install', event => {
         .then(response => (response.ok ? cache.put(url, response) : undefined))
         .catch(() => undefined)
     ));
+    // An older version's models and art are carried over (no download), so they keep working
+    // offline once its cache is deleted; this happens while the older version still answers the
+    // page, so nothing waits on it. The warm step checks them with the server later.
+    for (const key of (await caches.keys()).filter(key => key.startsWith('wwh-') && key !== CACHE)) {
+      await carryOver(key, cache).catch(() => undefined);
+    }
     await self.skipWaiting();
   })());
 });
 
-// Older versions' caches: kept after an update until this version has its own copies of the models
-// and art, so they keep working offline meanwhile
-const olderCaches = async () => (await caches.keys()).filter(key => key.startsWith('wwh-') && key !== CACHE);
-
-// The models and art not yet cached, one at a time, when the page says it's idle (checked with the
-// server, so an unchanged file isn't downloaded again); once all are here, older versions' caches
-// go. Again next time it asks, if the connection dropped part-way.
+// The models and art, one at a time, when the page says it's idle: those not yet cached, and those
+// carried over from an older version (checked with the server, in case they changed) - again next
+// time it asks, if the connection dropped part-way
+const INHERITED = 'x-wwh-inherited';
 let warming = null;
 self.addEventListener('message', event => {
   if (event.data?.type !== 'warm' || warming) return;
   warming = (async () => {
     const cache = await caches.open(CACHE);
     for (const url of self.__PRECACHE.later ?? []) {
-      if (await cache.match(url)) continue;
+      const hit = await cache.match(url);
+      if (hit && !hit.headers.has(INHERITED)) continue;
       try {
-        const response = await fetch(url, { cache: 'no-cache' });
+        const response = await fetch(url, { cache: hit ? 'no-cache' : 'default' });
         if (response.ok) await cache.put(url, response);
       } catch {
         // Offline again: the rest are cached as they're used
-        return;
+        break;
       }
     }
-    await Promise.all((await olderCaches()).map(key => caches.delete(key)));
   })().finally(() => { warming = null; });
   event.waitUntil(warming);
 });
 
+// Copies an older version's cached models and art into this version's cache, marked as inherited
+const carryOver = async (fromKey, cache) => {
+  const later = new Set(self.__PRECACHE.later ?? []);
+  const old = await caches.open(fromKey);
+  for (const request of await old.keys()) {
+    const path = new URL(request.url).pathname;
+    if (!later.has(path) || (await cache.match(path))) continue;
+    const response = await old.match(request);
+    if (!response || response.status !== 200) continue;
+    const headers = new Headers(response.headers);
+    headers.set(INHERITED, '1');
+    await cache.put(path, new Response(await response.blob(), { status: 200, headers }));
+  }
+};
+
 self.addEventListener('activate', event => {
-  event.waitUntil(self.clients.claim());
+  event.waitUntil((async () => {
+    const keys = await caches.keys();
+    await Promise.all(keys.filter(key => key.startsWith('wwh-') && key !== CACHE).map(key => caches.delete(key)));
+    await self.clients.claim();
+  })());
 });
 
 const isCacheFirst = url =>
@@ -86,18 +108,9 @@ const cachedFile = async (request, url) => {
   const key = url.pathname + url.search;
   const hit = await cache.match(key);
   if (hit) return hit;
-  try {
-    const response = await fetch(key);
-    if (response.ok && response.status === 200) await cache.put(key, response.clone());
-    return response;
-  } catch (error) {
-    // Offline: an older version's copy, until this one has its own
-    for (const older of await olderCaches()) {
-      const old = await (await caches.open(older)).match(key);
-      if (old) return old;
-    }
-    throw error;
-  }
+  const response = await fetch(key);
+  if (response.ok && response.status === 200) await cache.put(key, response.clone());
+  return response;
 };
 
 // Answer a Range request (audio streaming) with the requested slice of a whole cached file

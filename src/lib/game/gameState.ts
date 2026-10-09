@@ -50,7 +50,7 @@ import {
   piercingShare, rankOf, fieldworksHeight, shoulderBonusPerAlly, steadyAimBonus, strafeDamage, undermineDepth, wardReduction
 } from './signatures';
 import {
-  ASH_FLARE, ASH_SPREAD, SANDSTORM_REACH, BOSS_FALL_SHAKE, CHAMPION_FALL_SHAKE, MAX_PACK, PACK_BONUS, SWARM_SPLASH, activeWeather, canRise,
+  ASH_FLARE, ASH_SPREAD, BOSS_FALL_SHAKE, CHAMPION_FALL_SHAKE, MAX_PACK, PACK_BONUS, SWARM_SPLASH, activeWeather, canRise,
   furyMultiplier, getFogBankKeys, hasTrait, isFearless, isInFogBank, isNativeGround, isSurrounded, moraleMultiplier, riseHealth,
   traitOf, weatherMovePenalty, weatherReachPenalty
 } from './regionRules';
@@ -1144,9 +1144,9 @@ export const unitEnterCost = (unit: { abilities: Ability[]; type?: UnitType; isB
 };
 
 // How far a unit can walk this turn: its movement, less what the weather takes (a blizzard slows a
-// troop to one hex at the least; one that can't move stays put)
+// troop to one hex at the least)
 export const getMovementRange = (state: GameState, unit: Unit): number =>
-  Math.max(Math.min(1, unit.movementRange), unit.movementRange - weatherMovePenalty(state, unit));
+  Math.max(1, unit.movementRange - weatherMovePenalty(state, unit));
 
 // Cheapest-path search over the board. By default entering a hex costs its terrain's movement cost.
 // `canEnter` decides which hexes may be walked through at all.
@@ -2686,11 +2686,11 @@ const minionStats = (state: GameState, side: PlayerType, type: UnitType): TroopS
 // enemy troop it can see within reach, or at the enemy castle when no troop is in reach
 const bombard = (state: GameState, side: PlayerType): void => {
   const enemySide = getOpponent(side);
-  // (a sandstorm shortens its throw like every other shot)
-  const range = CATAPULT_RANGE - (activeWeather(state) === 'sandstorm' ? SANDSTORM_REACH : 0);
   for (const tower of state.hexGrid.filter(hex => hex.terrain === 'catapult')) {
     const crew = state.players[side].units.find(unit => coordsEqual(unit.position, tower.coordinates));
     if (!crew) continue;
+    // (a sandstorm shortens its throw like every other shot - unless the Sand Court crews it)
+    const range = CATAPULT_RANGE - weatherReachPenalty(state, crew);
     const target = state.players[enemySide].units
       .filter(enemy => getHexDistance(enemy.position, tower.coordinates) <= range && isUnitVisibleTo(state, side, enemy))
       .sort((a, b) => a.lifespan - b.lifespan || getHexDistance(a.position, tower.coordinates) - getHexDistance(b.position, tower.coordinates))[0];

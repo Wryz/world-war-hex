@@ -65,7 +65,7 @@ const pointerFor = (id: MechanicId, state: GameState, selected: Unit | null): Me
       const live = selected && units.find(unit => unit.id === selected.id);
       const reachable = live && getValidMoveTargets(state, live).some(c => same(c, site));
       const caption = id === 'catapult'
-        ? `Catapult tower: hold it with a troop and it hurls stones at enemies within ${CATAPULT_RANGE} hexes`
+        ? `Catapult tower: hold it with a troop and it hurls stones at enemies within ${CATAPULT_RANGE} hexes${state.settings?.weather === 'sandstorm' ? ` (${CATAPULT_RANGE - 1} in a sandstorm)` : ''}`
         : 'Gatehouse: hold it with a troop and only your side can pass the wall';
       return { id, hex: site, caption: reachable ? `${caption} - move here to take it` : caption };
     }
@@ -112,5 +112,7 @@ export const useMechanicGuide = ({ active, gameState, selectedUnit }: { active: 
     if (pointer && !shownRef.current) shownRef.current = { id: pointer.id, turn: gameState.turnNumber };
   }, [pointer, gameState, planning]);
 
-  return pointer && (!shownRef.current || shownRef.current.id === pointer.id) ? pointer : null;
+  // (one still being shown from a turn that's over doesn't hold the hand back)
+  const current = shownRef.current;
+  return pointer && (!current || current.turn !== gameState.turnNumber || current.id === pointer.id) ? pointer : null;
 };
