@@ -637,7 +637,8 @@ const CameraRig: React.FC<{
 
   // Dragging: one finger (or the left mouse button) pans across the board, which moves with it; the
   // right mouse button (or Shift and the left) orbits around the board, left and right, and tilts the
-  // view, up and down; two fingers pinch to zoom and twist to turn the board
+  // view, up and down; two fingers pinch to zoom, twist to turn the board and slide up or down
+  // together to tilt it
   useEffect(() => {
     const element = gl.domElement;
     // (the board takes every touch gesture itself, rather than the page)
@@ -646,12 +647,12 @@ const CameraRig: React.FC<{
     let drag: { startX: number; startY: number; lastX: number; lastY: number; active: boolean; onLabel: boolean; mode: Mode } | null = null;
     // Fingers on the board, and the pinch two of them are making
     const touches = new Map<number, { x: number; y: number }>();
-    let pinch: { distance: number; angle: number } | null = null;
+    let pinch: { distance: number; angle: number; middleY: number } | null = null;
     // A drag that began on a troop's label doesn't then pick the troop when it ends
     let swallowClickUntil = 0;
     const pinchOf = () => {
       const [a, b] = [...touches.values()];
-      return { distance: Math.hypot(b.x - a.x, b.y - a.y), angle: Math.atan2(b.y - a.y, b.x - a.x) };
+      return { distance: Math.hypot(b.x - a.x, b.y - a.y), angle: Math.atan2(b.y - a.y, b.x - a.x), middleY: (a.y + b.y) / 2 };
     };
 
     // Move the view across the board by a drag of (dx, dy) pixels, so the ground follows the pointer
@@ -709,6 +710,12 @@ const CameraRig: React.FC<{
           desiredZoomRef.current * pinch.distance / Math.max(1, next.distance), CAMERA_MIN_ZOOM, CAMERA_MAX_ZOOM
         );
         rotateBy(-angleDelta(pinch.angle, next.angle));
+        // (both fingers sliding up or down tilt the view, as a mouse's right-drag does)
+        desiredElevationRef.current = THREE.MathUtils.clamp(
+          desiredElevationRef.current + (next.middleY - pinch.middleY) * CAMERA_DRAG_TILT_SPEED,
+          CAMERA_MIN_ELEVATION,
+          CAMERA_MAX_ELEVATION
+        );
         pinch = next;
         return;
       }
