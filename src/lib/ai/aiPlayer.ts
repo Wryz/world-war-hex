@@ -26,6 +26,7 @@ import {
   addPendingMove,
   addPendingPurchase,
   getAttackRange,
+  getMovementRange,
   getDeploymentHexes,
   getValidMoveTargets,
   getTerrainDistanceMap,
@@ -520,7 +521,7 @@ const assessThreats = (state: GameState): ThreatAssessment => {
 
   // Enemies that could reach a hex they could attack the castle from next turn
   const castleRaiders = state.players.player.units.filter(enemy =>
-    getHexDistance(enemy.position, aiBase.coordinates) <= getAttackRange(enemy) + 1
+    getHexDistance(enemy.position, aiBase.coordinates) <= getAttackRange(enemy, 'plain', state) + 1
   );
 
   // Base is under threat if strong enemy units are nearby or one could besiege it
@@ -575,8 +576,8 @@ const dangerAt = (planner: Planner, unit: Unit, position: HexCoordinates): numbe
     const distance = getHexDistance(enemy.position, position);
     if (canStrikeFrom(planner, enemy, enemy.position, position)) {
       danger += strikeFrom(planner, enemy, enemy.position, target, position);
-    } else if (distance <= enemy.movementRange + getAttackRange(enemy)) {
-      danger += 0.75 * getStrikePowerOnTerrain(enemy, 'plain', target, terrainAt(planner, position), getAttackRange(enemy));
+    } else if (distance <= getMovementRange(planner.state, enemy) + getAttackRange(enemy, 'plain', planner.state)) {
+      danger += 0.75 * getStrikePowerOnTerrain(enemy, 'plain', target, terrainAt(planner, position), getAttackRange(enemy, 'plain', planner.state));
     }
   }
   return danger;
@@ -592,7 +593,7 @@ const healthValue = (unit: Unit, damage: number, health = unit.lifespan) => {
 const enemyCanReach = (planner: Planner, position: HexCoordinates): boolean =>
   planner.enemies.some(enemy =>
     getHexDistance(enemy.position, position) === 1 ||
-    walkingDistance(planner.state, enemy.position, position) <= enemy.movementRange
+    walkingDistance(planner.state, enemy.position, position) <= getMovementRange(planner.state, enemy)
   );
 
 // ---------------------------------------------------------------------------
@@ -612,13 +613,13 @@ const assignInterceptors = (planner: Planner): Map<string, Unit> => {
   for (const raider of raiders) {
     const responders = state.players.ai.units
       .filter(unit => !unit.hasMoved && !interceptors.has(unit.id) &&
-        getHexDistance(unit.position, raider.position) <= unit.movementRange + getAttackRange(unit) + 1)
+        getHexDistance(unit.position, raider.position) <= getMovementRange(state, unit) + getAttackRange(unit, 'plain', state) + 1)
       .sort((a, b) => getHexDistance(a.position, raider.position) - getHexDistance(b.position, raider.position));
     let expected = 0;
     for (const unit of responders) {
       if (expected >= raider.lifespan * 1.5) break;
       interceptors.set(unit.id, raider);
-      expected += getStrikePowerOnTerrain(unit, 'plain', raider, terrainAt(planner, raider.position), getAttackRange(unit));
+      expected += getStrikePowerOnTerrain(unit, 'plain', raider, terrainAt(planner, raider.position), getAttackRange(unit, 'plain', state));
     }
   }
   return interceptors;

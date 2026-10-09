@@ -1,5 +1,5 @@
 import type { GameState } from '@/types/game';
-import { castleHealthRatio } from '../game/gameState';
+import { DEFAULT_SETTINGS, castleHealthRatio } from '../game/gameState';
 import { baseLevelReward } from '../meta/economy';
 import { getLevel, LevelDef } from './levels';
 
@@ -28,7 +28,7 @@ const SWIFT_SHARE = 0.6;
 const UNBROKEN_HEALTH = 0.9;
 const THRIFTY_TROOPS = 5;
 
-const swiftRounds = (level: LevelDef) => Math.ceil((level.settings.maxRounds ?? 16) * SWIFT_SHARE);
+const swiftRounds = (level: LevelDef) => Math.ceil((level.settings.maxRounds ?? DEFAULT_SETTINGS.maxRounds!) * SWIFT_SHARE);
 
 const build = (id: ChallengeId, level: LevelDef): Challenge => {
   switch (id) {

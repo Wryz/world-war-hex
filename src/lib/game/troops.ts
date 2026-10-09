@@ -416,8 +416,8 @@ export const TROOPS: Record<TroopId, TroopDef> = {
   }),
   drake: troop({
     id: 'drake', name: 'Fire Drake', faction: 'dragons', rarity: 'rare', troopClass: 'brute', cost: 30, attack: 10, health: 18, move: 3,
-    abilities: ['armored', 'fireborn'], role: 'Scaled fire-breather', attackInterval: 1.0,
-    lore: 'Too young to fly, more than old enough to burn.'
+    abilities: ['armored', 'fireborn', 'flying'], role: 'Scaled fire-breather', attackInterval: 1.0,
+    lore: 'Barely fledged, and more than old enough to burn.'
   }),
   dragon_knight: troop({
     id: 'dragon_knight', name: 'Dragon Knight', faction: 'dragons', rarity: 'epic', troopClass: 'cavalry', cost: 32, attack: 10, health: 16, move: 4,

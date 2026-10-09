@@ -165,4 +165,13 @@ test('a boss burned to death shakes its army too', () => {
   const after = playTurn(state);
   assert.equal(find(after, king), undefined);
   assert.ok((find(after, thug)!.shaken ?? 0) > 0);
+  assert.equal(after.battleStats!.player.bossesSlain, 1, 'it counts as slain');
+});
+
+test('a War Cleric of any level finishes the undead', () => {
+  const { state, centre } = makeBattle('player');
+  const bones = troop('ai', 'skeleton_minion', centre, { lifespan: 3, maxLifespan: 12 });
+  const cleric = troop('player', 'cleric', at(centre, 1, 0), { attackPower: 10, level: 1 });
+  place(state, bones, cleric);
+  assert.equal(find(playTurn(state), bones), undefined);
 });

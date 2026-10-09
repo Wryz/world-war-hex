@@ -29,10 +29,11 @@ const ASSETS = [
 self.addEventListener('install', event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    // One missing file shouldn't stop the rest from being cached. Built files never change, so
-    // the copies the page just downloaded are reused; pages are fetched afresh.
+    // One missing file shouldn't stop the rest from being cached. Built files (/_next/static, named
+    // by their contents) never change, so the copies the page just downloaded are reused; pages and
+    // files that keep their names (the music manifest, the logo) are fetched afresh.
     await Promise.all([...PAGES, ...ASSETS].map(url =>
-      fetch(url, { cache: PAGES.includes(url) ? 'reload' : 'default' })
+      fetch(url, { cache: url.startsWith('/_next/static/') ? 'default' : 'reload' })
         .then(response => (response.ok ? cache.put(url, response) : undefined))
         .catch(() => undefined)
     ));

@@ -52,7 +52,7 @@ import {
 import {
   ASH_FLARE, ASH_SPREAD, BOSS_FALL_SHAKE, CHAMPION_FALL_SHAKE, MAX_PACK, PACK_BONUS, SWARM_SPLASH, activeWeather, canRise,
   furyMultiplier, getFogBankKeys, hasTrait, isFearless, isInFogBank, isNativeGround, isSurrounded, moraleMultiplier, riseHealth,
-  traitAbilities, traitOf, weatherMovePenalty, weatherReachPenalty
+  traitOf, weatherMovePenalty, weatherReachPenalty
 } from './regionRules';
 
 // Default game settings: a small board and short turns so a battle takes a few minutes
@@ -612,7 +612,7 @@ export const createUnit = (type: UnitType, owner: PlayerType, position: HexCoord
   lifespan: stats.maxLifespan,
   maxLifespan: stats.maxLifespan,
   cost: stats.cost,
-  abilities: [...new Set([...stats.abilities, ...traitAbilities(type)])],
+  abilities: [...stats.abilities],
   level: stats.level,
   isBoss: isBoss || undefined,
   // Freshly deployed units can't move until their next turn
@@ -2433,6 +2433,11 @@ const finishTurn = (state: GameState): GameState => {
     newState.players[unit.owner].units = newState.players[unit.owner].units.filter(u => u.id !== unit.id);
     sideStats(newState, unit.owner).lost++;
     if (unit.isBoss || unit.isChampion) shakeArmy(newState, unit.owner, unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE, unit);
+    // (a boss the ground finishes off is slain all the same)
+    if (unit.isBoss) {
+      sideStats(newState, getOpponent(unit.owner)).bossesSlain++;
+      addLog(newState, getOpponent(unit.owner), `${getTroopName(unit.type)} has been slain!`);
+    }
     const inFire = findHexByCoordinates(newState.hexGrid, unit.position)?.fire?.stage === 'burning';
     addLog(newState, unit.owner, inFire
       ? `${unitLabel(unit)} perished in the flames.`
@@ -2883,7 +2888,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     : attackers.map(() => 0);
 
   // An undying troop slain rises again, unless a War Cleric or a firebrand among its foes finishes it
-  const finishesUndead = (foes: Unit[]) => foes.some(foe => rankOf(foe, 'holySmite') > 0 || hasAbility(foe, 'firebrand'));
+  const finishesUndead = (foes: Unit[]) => foes.some(foe => foe.type === 'cleric' || rankOf(foe, 'holySmite') > 0 || hasAbility(foe, 'firebrand'));
   const withDamage = (
     entry: { unit: Unit; terrain: TerrainType; power: number; modifiers: CombatEffect[] },
     rawDamage: number,
@@ -3151,6 +3156,8 @@ export const inflictDamage = (state: GameState, unit: Unit, amount: number, by: 
     return { damage, destroyed: false };
   }
   if (canRise(live)) {
+    // (struck down all the same: the bounty is paid, as in a fight)
+    if (by && by !== live.owner) earnGold(state, by, getKillBounty(live));
     riseAgain(state, live);
     return { damage, destroyed: false };
   }
