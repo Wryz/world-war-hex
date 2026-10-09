@@ -1,11 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { GameState, HexCoordinates, Unit, UnitType } from '@/types/game';
-import {
-  HIGH_GROUND_ELEVATION, TERRAIN_EFFECTS, canStrike, canStrikeCastle, findBaseHex, findTerrainPath, getCounterMultiplier, getHand,
-  getHeightDifference, getMovePath, getRosterStats, getTroopName, getValidMoveTargets, getVisibleEnemies
-} from '@/lib/game/gameState';
-import { hasScreenBeside, inShieldWall, isPinned, strikesPinned } from '@/lib/game/formations';
-import { planAITurn } from '@/lib/ai/aiPlayer';
+import { findBaseHex, findTerrainPath, getHand, getMovePath, getRosterStats, getValidMoveTargets } from '@/lib/game/gameState';
+import { PlanStep, bestCastleSite, planTutorialTurn } from '@/lib/game/tutorialPlan';
 import { getHexDistance } from '@/lib/game/hexUtils';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
 import { projectToScreen } from '../effects/effects';
@@ -137,98 +133,6 @@ export const useTutorial = ({ active, intro, ready, gameState, selectedUnit, sel
   };
   const introCaption = introRunning ? INTRO_CAPTIONS[stage as Exclude<IntroStage, 'done'>] : null;
   return { visuals, introRunning, introCaption, pointer, skipIntro: () => setStage('done') };
-};
-
-// The castle site to suggest: the one with the most camps, gold and high ground near it
-const bestCastleSite = (state: GameState): HexCoordinates | null => {
-  const choices = state.castleChoices ?? [];
-  const score = (site: HexCoordinates) => state.hexGrid.reduce((sum, hex) => {
-    const distance = getHexDistance(hex.coordinates, site);
-    if (distance === 0 || distance > 3) return sum;
-    return sum + (hex.isCamp ? 3 : 0) + (hex.isResourceHex ? 2 : 0) + (hex.terrain === 'hills' ? 1 : 0) + (hex.terrain === 'forest' ? 0.5 : 0);
-  }, 0);
-  return [...choices].sort((a, b) => score(b) - score(a))[0] ?? null;
-};
-
-// The turn's plan: what the game's own AI would do with the player's troops and cards (it weighs
-// height, cover, matchups, flanking and danger), as steps for the hand to show, each with a few
-// words on why. Planned once when the player's turn begins; the steps the player has carried out
-// (or made impossible) are skipped.
-type PlanStep =
-  | { kind: 'move'; unitId: string; to: HexCoordinates; caption: string }
-  | { kind: 'buy'; unitType: UnitType; at: HexCoordinates; caption: string; placeCaption: string };
-
-const HURT = 0.5;
-const same = (a: HexCoordinates, b: HexCoordinates) => a.q === b.q && a.r === b.r;
-
-export const planTutorialTurn = (state: GameState): PlanStep[] => {
-  const planned = planAITurn(state, { side: 'player', difficulty: 'hard' });
-  const before = new Set(state.pendingMoves.map(move => move.unitId));
-  const moves = planned.pendingMoves.filter(move => !before.has(move.unitId));
-  const purchases = planned.pendingPurchases.slice(state.pendingPurchases.length);
-  // Where every troop of yours will stand once the plan is carried out
-  const destination = new Map(state.players.player.units.map(unit => [unit.id, unit.position]));
-  for (const move of moves) destination.set(move.unitId, move.to);
-  const steps: PlanStep[] = [];
-  for (const move of moves) {
-    const unit = state.players.player.units.find(other => other.id === move.unitId);
-    if (unit) steps.push({ kind: 'move', unitId: unit.id, to: move.to, caption: explainMove(state, unit, move.to, destination) });
-  }
-  for (const purchase of purchases) {
-    steps.push({
-      kind: 'buy', unitType: purchase.unitType, at: purchase.position,
-      caption: explainCard(state, purchase.unitType),
-      placeCaption: state.hexGrid.some(hex => hex.isCamp && same(hex.coordinates, purchase.position))
-        ? 'Deploy at your camp, nearer the fight' : 'Deploy it beside your castle'
-    });
-  }
-  return steps;
-};
-
-// Why the plan plays a card: what it beats among the enemies in sight
-const explainCard = (state: GameState, type: UnitType): string => {
-  const name = getTroopName(type);
-  const prey = getVisibleEnemies(state, 'player').find(foe => getCounterMultiplier(type, foe.type) > 1);
-  return prey ? `Play ${name}: strong against their ${getTroopName(prey.type)}` : `Play ${name} to raise a troop`;
-};
-
-// Why the plan sends a troop to a hex, in a few words: the attack it makes from there and what favours
-// it, the castle, a camp or gold mine, pulling back when hurt, high ground, cover, a formation, or
-// simply the march on the enemy castle
-const explainMove = (state: GameState, unit: Unit, to: HexCoordinates, destination: Map<string, HexCoordinates>): string => {
-  const hexAt = (c: HexCoordinates) => state.hexGrid.find(hex => same(hex.coordinates, c));
-  const hex = hexAt(to);
-  const foes = getVisibleEnemies(state, 'player');
-  const there = { ...unit, position: to };
-  const nearestFoe = (c: HexCoordinates) => Math.min(99, ...foes.map(foe => getHexDistance(foe.position, c)));
-  const friendsThere = state.players.player.units
-    .filter(friend => friend.id !== unit.id)
-    .map(friend => ({ ...friend, position: destination.get(friend.id) ?? friend.position }));
-
-  // Pulling a hurt troop out of the fight
-  if (unit.lifespan <= unit.maxLifespan * HURT && nearestFoe(to) > nearestFoe(unit.position)) {
-    return hex?.terrain === 'spring' ? 'Hurt: pull back to the spring to heal' : 'Hurt: pull back out of reach';
-  }
-  // Attacking: the troop strikes an enemy in reach once it has moved
-  const targets = foes.filter(foe => canStrike(state, there, foe));
-  if (targets.length > 0) {
-    const target = [...targets].sort((a, b) => getCounterMultiplier(unit.type, b.type) - getCounterMultiplier(unit.type, a.type) || a.lifespan - b.lifespan)[0];
-    const reasons: string[] = [];
-    if (getCounterMultiplier(unit.type, target.type) > 1) reasons.push(`${getTroopName(unit.type)} beat ${getTroopName(target.type)}`);
-    if (getHeightDifference(state, to, target.position) > 0) reasons.push('from higher ground');
-    const allies = friendsThere.filter(friend => canStrike(state, friend, target)).length;
-    if (allies > 0) reasons.push('together they flank it');
-    if (strikesPinned(unit) && isPinned(target.position, friendsThere)) reasons.push("it's pinned");
-    return `Attack the ${getTroopName(target.type)}${reasons.length > 0 ? `: ${reasons.join(', ')}` : ''}`;
-  }
-  if (canStrikeCastle(state, there)) return 'Attack the enemy castle!';
-  if (hex?.isCamp && hex.owner !== 'player') return 'Take the camp: gold every turn, and a new place to deploy';
-  if (hex?.isResourceHex) return 'Hold the gold mine: gold every turn';
-  if (hex && TERRAIN_EFFECTS[hex.terrain].elevation >= HIGH_GROUND_ELEVATION) return 'Take the high ground: strike harder, see further';
-  if (hex && TERRAIN_EFFECTS[hex.terrain].damageTakenMultiplier < 1) return `Into the ${TERRAIN_EFFECTS[hex.terrain].name.toLowerCase()}: cover softens blows`;
-  if (hasScreenBeside(unit, to, friendsThere)) return 'Behind the front line, it is screened';
-  if (inShieldWall(unit, to, friendsThere)) return 'Side by side: a shield wall';
-  return nearestFoe(to) < nearestFoe(unit.position) ? 'Close in on the enemy' : 'March on the enemy castle';
 };
 
 // What to do next, on the player's turn, following the turn's plan: place the card picked where the
