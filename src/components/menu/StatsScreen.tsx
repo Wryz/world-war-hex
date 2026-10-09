@@ -178,7 +178,13 @@ export const StatsScreen: React.FC = () => {
       <section className={`${CARD_CLASS} mt-4 p-4 text-xs text-slate-300`}>
         <h2 className="font-display mb-2 text-2xl text-slate-100">Credits</h2>
         <ul className="flex flex-col gap-1">
-          <li><b>Music:</b> &ldquo;Medieval: Exploration&rdquo;, &ldquo;Harvest Season&rdquo;, &ldquo;Battle&rdquo;, &ldquo;Victory Theme&rdquo; and &ldquo;Defeat Theme&rdquo; by RandomMind; &ldquo;Epic Boss Battle&rdquo; by Juhani Junkala (CC0, OpenGameArt)</li>
+          <li><b>Music:</b> &ldquo;Medieval: Exploration&rdquo;, &ldquo;Harvest Season&rdquo;, &ldquo;Battle&rdquo;, &ldquo;Victory Theme&rdquo; and &ldquo;Defeat Theme&rdquo; by RandomMind; &ldquo;Epic Boss Battle&rdquo; by Juhani Junkala; &ldquo;Battle Theme A&rdquo; by cynicmusic (all CC0, OpenGameArt)</li>
+          <li>
+            <b>Region battle music</b> (CC BY, OpenGameArt): &ldquo;Wind Run&rdquo; by TAD; &ldquo;Land of Misdeeds&rdquo; composed by Jonathan Shaw
+            (www.jshaw.co.uk); &ldquo;The Eternal Sands&rdquo; by HitCtrl; &ldquo;Steeps of Destiny&rdquo;, &ldquo;Ef Humeni Glorem&rdquo; and
+            &ldquo;Demonium&rdquo; by Alexandr Zhelanov (soundcloud.com/alexandr-zhelanov); &ldquo;Dark Descent&rdquo; and &ldquo;Colossal Boss
+            Battle Theme&rdquo; by Matthew Pablo (www.matthewpablo.com)
+          </li>
           <li><b>Characters:</b> KayKit Adventurers and Skeletons by Kay Lousberg (CC0); horse from the three.js examples (MIT)</li>
           <li><b>Battlefield:</b> KayKit Medieval Hexagon Pack, Halloween Bits and Dungeon Remastered by Kay Lousberg (CC0)</li>
           <li><b>Campaign map:</b> Map Pack by Kenney (kenney.nl, CC0)</li>

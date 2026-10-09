@@ -44,18 +44,25 @@ A battle in a region plays `battle-<faction>.mp3` when the manifest lists one (a
 `boss-<faction>.mp3`), and `battle.mp3` / `boss.mp3` otherwise. The faction is the region's enemy;
 the late-campaign rematch regions reuse their faction's music.
 
-| Faction    | Regions                                   | Battle file             |
-| ---------- | ----------------------------------------- | ----------------------- |
-| `bandits`  | Greenvale Meadows                         | `battle-bandits.mp3`    |
-| `goblins`  | Goblin Woods                              | `battle-goblins.mp3`    |
-| `beasts`   | Howling Hills                             | `battle-beasts.mp3`     |
-| `swamp`    | Mirefen Marsh                             | `battle-swamp.mp3`      |
-| `desert`   | Sunscorch Desert                          | `battle-desert.mp3`     |
-| `frost`    | Frostpeak Pass, Rimeholt                  | `battle-frost.mp3`      |
-| `undead`   | Gravemoor, Hallowmere                     | `battle-undead.mp3`     |
-| `orcs`     | Ironfang Badlands, The King's Road        | `battle-orcs.mp3`       |
-| `infernal` | Emberforge Wastes, The Underkeep          | `battle-infernal.mp3`   |
-| `dragons`  | Dragonspire Peaks, The Last Bastion       | `battle-dragons.mp3`    |
+| Faction    | Regions                              | Battle file           | Track                                        | Licence   |
+| ---------- | ------------------------------------ | --------------------- | -------------------------------------------- | --------- |
+| `bandits`  | Greenvale Meadows                    | (uses `battle.mp3`)   | Medieval: Battle, RandomMind                 | CC0       |
+| `goblins`  | Goblin Woods                         | `battle-goblins.mp3`  | Battle Theme A, cynicmusic                   | CC0       |
+| `beasts`   | Howling Hills                        | `battle-beasts.mp3`   | Wind Run, TAD                                | CC-BY 4.0 |
+| `swamp`    | Mirefen Marsh                        | `battle-swamp.mp3`    | Land of Misdeeds, Jonathan Shaw (InspectorJ) | CC-BY 3.0 |
+| `desert`   | Sunscorch Desert                     | `battle-desert.mp3`   | The Eternal Sands, HitCtrl                   | CC-BY 3.0 |
+| `frost`    | Frostpeak Pass, Rimeholt             | `battle-frost.mp3`    | Steeps of Destiny, Alexandr Zhelanov         | CC-BY 3.0 |
+| `undead`   | Gravemoor, Hallowmere                | `battle-undead.mp3`   | Dark Descent, Matthew Pablo                  | CC-BY 3.0 |
+| `orcs`     | Ironfang Badlands, The King's Road   | `battle-orcs.mp3`     | Ef Humeni Glorem, Alexandr Zhelanov          | CC-BY 4.0 |
+| `infernal` | Emberforge Wastes, The Underkeep     | `battle-infernal.mp3` | Demonium, Alexandr Zhelanov                  | CC-BY 4.0 |
+| `dragons`  | Dragonspire Peaks, The Last Bastion  | `battle-dragons.mp3`  | Colossal Boss Battle Theme (loop), Matthew Pablo | CC-BY 3.0 |
+
+The CC-BY tracks require credit, given in the game (Stats & Save > Credits); "Land of Misdeeds"
+must be credited as composed by Jonathan Shaw (www.jshaw.co.uk). Sources on OpenGameArt:
+/content/battle-theme-a, /wind-run, /land-of-misdeeds-rpg-orchestral-essentials-evil-music,
+/fantasy-music-the-eternal-sands, /steeps-of-destiny, /dark-descent, /ef-humeni-glorem, /demonium and
+/colossal-boss-battle-theme. Each was trimmed of silence, levelled to about -16.5 LUFS like the
+other tracks and re-encoded at 128 kbps.
 
 ## Stingers (play once, over the music)
 
