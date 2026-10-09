@@ -1,4 +1,4 @@
-/* World War Hex service worker: keeps the game playable offline.
+/* Hex Hordes service worker: keeps the game playable offline.
  *
  * - Pages: network first, so updates arrive as soon as you're online; the cached copy otherwise.
  * - Scripts, styles, fonts, models, sounds and music: served from the cache, fetched once.
@@ -19,7 +19,7 @@ const CACHE = `wwh-${VERSION}`;
 const PAGES = ['/', '/campaign', '/army', '/bestiary', '/stats', '/style', '/play'];
 const ASSETS = [
   '/music/manifest.json',
-  '/world-war-hex-logo.png',
+  '/logo.png',
   '/favicon.ico',
   ...self.__PRECACHE.files
 ];

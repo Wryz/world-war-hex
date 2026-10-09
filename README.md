@@ -1,4 +1,4 @@
-# World War Hex
+# Hex Hordes
 
 A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.js, React, TypeScript, Tailwind CSS and three.js (via React Three Fiber and drei).
 
