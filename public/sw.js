@@ -6,8 +6,9 @@
  *
  * sw-manifest.js (written by scripts/build-sw-manifest.mjs after each build) lists every built
  * file to cache on install, and the models and art to cache later, when the page says the game is
- * idle ('warm'), so a first visit on a slow connection gets the bandwidth; a new build changes it,
- * which installs a fresh copy of this worker.
+ * idle ('warm'), so a first visit on a slow connection gets the bandwidth. A new build changes it,
+ * which installs a fresh copy of this worker: it re-checks everything the old one had cached
+ * before taking over, then deletes the old cache.
  */
 self.__PRECACHE = { version: 'dev', files: [], later: [] };
 try {
@@ -37,12 +38,35 @@ self.addEventListener('install', event => {
         .then(response => (response.ok ? cache.put(url, response) : undefined))
         .catch(() => undefined)
     ));
+    // A returning player: everything an older version had cached that keeps its name from build to
+    // build (models, art, sounds, music) is fetched again now - checked with the server, so an
+    // unchanged file isn't downloaded again, and never served stale - while the older version still
+    // answers the page; taking charge then deletes the older caches. A first visit leaves the
+    // models and art for the warm step.
+    const had = new Set();
+    for (const key of (await caches.keys()).filter(key => key.startsWith('wwh-') && key !== CACHE)) {
+      for (const request of await (await caches.open(key)).keys()) {
+        const url = new URL(request.url);
+        if (!url.pathname.startsWith('/_next/static/') && !PAGES.includes(url.pathname)) had.add(url.pathname + url.search);
+      }
+    }
+    for (const url of had) {
+      if (await cache.match(url)) continue;
+      try {
+        const response = await fetch(url, { cache: 'no-cache' });
+        if (response.ok && response.status === 200) await cache.put(url, response);
+      } catch {
+        // Offline again: the rest are cached as they're used
+        break;
+      }
+    }
     await self.skipWaiting();
   })());
 });
 
-// The models and art, one at a time and only those not yet cached, when the page says it's idle
-// (again next time it asks, if the connection dropped part-way)
+// The models and art not yet cached, one at a time, when the page says it's idle (checked with the
+// server, so a stale browser copy isn't kept) - again next time it asks, if the connection dropped
+// part-way
 let warming = null;
 self.addEventListener('message', event => {
   if (event.data?.type !== 'warm' || warming) return;
@@ -51,7 +75,7 @@ self.addEventListener('message', event => {
     for (const url of self.__PRECACHE.later ?? []) {
       if (await cache.match(url)) continue;
       try {
-        const response = await fetch(url);
+        const response = await fetch(url, { cache: 'no-cache' });
         if (response.ok) await cache.put(url, response);
       } catch {
         // Offline again: the rest are cached as they're used

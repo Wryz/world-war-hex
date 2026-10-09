@@ -538,10 +538,11 @@ const terrainAt = (planner: Planner, position: HexCoordinates): TerrainType =>
 
 const isRanged = (unit: Unit) => getAttackRange(unit) > 1;
 
-// Whether `attacker` standing at `from` could strike a target standing at `at`
-const canStrikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, at: HexCoordinates): boolean => {
+// Whether `attacker` standing at `from` could strike a target standing at `at` (in the weather of
+// `round`'s state: this round's by default)
+const canStrikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, at: HexCoordinates, round: GameState = planner.state): boolean => {
   const distance = getHexDistance(from, at);
-  if (distance > getAttackRange(attacker, terrainAt(planner, from), planner.state)) return false;
+  if (distance > getAttackRange(attacker, terrainAt(planner, from), round)) return false;
   if (distance <= 1) return true;
   return attacker.abilities.includes('magic') || hasLineOfSight(planner.state.hexGrid, from, at);
 };
@@ -580,9 +581,11 @@ const enemyStride = (state: GameState, enemy: Unit) =>
 const dangerAt = (planner: Planner, unit: Unit, position: HexCoordinates): number => {
   const target = { ...unit, position };
   let danger = 0;
+  const next = nextRound(planner.state);
   for (const enemy of liveEnemies(planner)) {
     const distance = getHexDistance(enemy.position, position);
-    if (canStrikeFrom(planner, enemy, enemy.position, position)) {
+    // (from where it stands, in this round's weather or the next's)
+    if (canStrikeFrom(planner, enemy, enemy.position, position) || canStrikeFrom(planner, enemy, enemy.position, position, next)) {
       danger += strikeFrom(planner, enemy, enemy.position, target, position);
     } else if (distance <= enemyStride(planner.state, enemy) + enemyReach(planner.state, enemy)) {
       danger += 0.75 * getStrikePowerOnTerrain(enemy, 'plain', target, terrainAt(planner, position), enemyReach(planner.state, enemy));

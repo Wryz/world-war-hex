@@ -313,7 +313,7 @@ const GuideTab: React.FC = () => (
       </ul>
       <p>
         <b>Morale:</b> when a boss or champion falls, its army is shaken; and a badly hurt troop surrounded by two enemies with no friend
-        beside it wavers. Shaken troops hit {Math.round((1 - SHAKEN_ATTACK) * 100)}% softer until their side&apos;s next turn is over.
+        beside it wavers. Shaken troops hit {Math.round((1 - SHAKEN_ATTACK) * 100)}% softer until their side&apos;s next turn is over (two turns after a boss falls).
         Bosses and the undead are fearless.
       </p>
       <p>

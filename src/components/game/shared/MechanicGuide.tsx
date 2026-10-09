@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from 'react';
 import { GameState, HexCoordinates, Unit } from '@/types/game';
 import { findBaseHex, getFellTargets, getValidMoveTargets, getVisibleHexKeys, isFellOrder, isFogOfWar } from '@/lib/game/gameState';
 import { CATAPULT_RANGE } from '@/lib/game/structures';
+import { SANDSTORM_REACH } from '@/lib/game/regionRules';
 import { getHexDistance } from '@/lib/game/hexUtils';
 
 // After the tutorial battles, the tutorial's hand comes back once for each new thing a battle
@@ -65,7 +66,7 @@ const pointerFor = (id: MechanicId, state: GameState, selected: Unit | null): Me
       const live = selected && units.find(unit => unit.id === selected.id);
       const reachable = live && getValidMoveTargets(state, live).some(c => same(c, site));
       const caption = id === 'catapult'
-        ? `Catapult tower: hold it with a troop and it hurls stones at enemies within ${CATAPULT_RANGE} hexes`
+        ? `Catapult tower: hold it with a troop and it hurls stones at enemies within ${CATAPULT_RANGE} hexes${state.settings?.weather === 'sandstorm' ? ` (${CATAPULT_RANGE - SANDSTORM_REACH} in a sandstorm)` : ''}`
         : 'Gatehouse: hold it with a troop and only your side can pass the wall';
       return { id, hex: site, caption: reachable ? `${caption} - move here to take it` : caption };
     }
@@ -84,13 +85,18 @@ const ORDER: MechanicId[] = ['bossPower', 'fog', 'felling', 'catapult', 'gate'];
 
 export const useMechanicGuide = ({ active, gameState, selectedUnit }: { active: boolean; gameState: GameState; selectedUnit: Unit | null }): MechanicPointer | null => {
   const shownRef = useRef<{ id: MechanicId; turn: number } | null>(null);
+  // (read once; kept up to date as mechanics are done)
+  const seenRef = useRef<Set<MechanicId> | null>(null);
+  if (!seenRef.current) seenRef.current = readSeen();
   const planning = active && gameState.currentPhase === 'planning' && gameState.activePlayer === 'player';
 
   const pointer = useMemo(() => {
     if (!planning) return null;
-    const seen = readSeen();
-    // The one already being shown keeps the hand until it is done
+    const seen = new Set(seenRef.current);
+    // The one already being shown keeps the hand until it is done; once its turn is over it counts
+    // as seen (the effect below records that just after)
     const current = shownRef.current;
+    if (current && current.turn !== gameState.turnNumber) seen.add(current.id);
     const ids = current && current.turn === gameState.turnNumber ? [current.id] : ORDER.filter(id => !seen.has(id));
     for (const id of ids) {
       const next = pointerFor(id, gameState, selectedUnit);
@@ -105,10 +111,13 @@ export const useMechanicGuide = ({ active, gameState, selectedUnit }: { active: 
     if (current && (current.turn !== gameState.turnNumber || !planning ||
       (current.id === 'felling' && gameState.pendingMoves.some(move => isFellOrder(gameState, move))))) {
       markSeen(current.id);
+      seenRef.current?.add(current.id);
       shownRef.current = null;
     }
-    if (pointer && !shownRef.current) shownRef.current = { id: pointer.id, turn: gameState.turnNumber };
+    if (pointer && !shownRef.current && !seenRef.current?.has(pointer.id)) shownRef.current = { id: pointer.id, turn: gameState.turnNumber };
   }, [pointer, gameState, planning]);
 
-  return pointer && (!shownRef.current || shownRef.current.id === pointer.id) ? pointer : null;
+  // (one still being shown from a turn that's over doesn't hold the hand back)
+  const current = shownRef.current;
+  return pointer && !seenRef.current?.has(pointer.id) && (!current || current.turn !== gameState.turnNumber || current.id === pointer.id) ? pointer : null;
 };

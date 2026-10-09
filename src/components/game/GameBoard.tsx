@@ -812,7 +812,13 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   }
   // Morale and its faction's trait
   if (isShaken(unit)) {
-    buffs.push({ id: 'shaken', icon: 'shaken', label: 'Shaken', value: `-${pct(1 - SHAKEN_ATTACK)} attack until its next turn is over`, good: false });
+    // (it steadies at the end of each of its side's turns: on its own turn, this one counts)
+    const turns = unit.shaken ?? 1;
+    const ownTurn = getActivePlayer(state) === unit.owner;
+    const lasting = ownTurn
+      ? turns === 1 ? 'until the end of this turn' : `this turn and ${turns - 1 === 1 ? 'its next' : `its next ${turns - 1} turns`}`
+      : turns === 1 ? 'until the end of its next turn' : `for its next ${turns} turns`;
+    buffs.push({ id: 'shaken', icon: 'shaken', label: 'Shaken', value: `-${pct(1 - SHAKEN_ATTACK)} attack ${lasting}`, good: false });
   }
   if (canRise(unit)) buffs.push({ id: 'undying', icon: 'undying', label: 'Undying', value: 'Rises again once (not against Clerics or fire)', good: true, quiet: true });
   if (furyMultiplier(unit) >= 1.05) buffs.push({ id: 'fury', icon: 'fury', label: 'Fury', value: `+${pct(furyMultiplier(unit) - 1)} attack`, good: true });

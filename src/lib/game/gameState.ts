@@ -1143,7 +1143,8 @@ export const unitEnterCost = (unit: { abilities: Ability[]; type?: UnitType; isB
   return cost;
 };
 
-// How far a unit can walk this turn: its movement, less what the weather takes (a blizzard)
+// How far a unit can walk this turn: its movement, less what the weather takes (a blizzard slows a
+// troop to one hex at the least)
 export const getMovementRange = (state: GameState, unit: Unit): number =>
   Math.max(1, unit.movementRange - weatherMovePenalty(state, unit));
 
@@ -2432,7 +2433,12 @@ const finishTurn = (state: GameState): GameState => {
   for (const unit of burned) {
     newState.players[unit.owner].units = newState.players[unit.owner].units.filter(u => u.id !== unit.id);
     // (a boss the ground finishes off is slain all the same, and counts for the other side)
-    if (unit.isBoss) creditKill(newState, unit, getOpponent(unit.owner));
+    if (unit.isBoss) {
+      const killer = getOpponent(unit.owner);
+      creditKill(newState, unit, killer);
+      earnGold(newState, killer, getKillBounty(unit));
+      addLog(newState, killer, `${killer === 'player' ? 'You earn' : 'The enemy earns'} ${getKillBounty(unit)} gold in bounty.`);
+    }
     else sideStats(newState, unit.owner).lost++;
     if (unit.isBoss || unit.isChampion) shakeArmy(newState, unit.owner, unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE, unit);
     const inFire = findHexByCoordinates(newState.hexGrid, unit.position)?.fire?.stage === 'burning';
@@ -2683,8 +2689,10 @@ const bombard = (state: GameState, side: PlayerType): void => {
   for (const tower of state.hexGrid.filter(hex => hex.terrain === 'catapult')) {
     const crew = state.players[side].units.find(unit => coordsEqual(unit.position, tower.coordinates));
     if (!crew) continue;
+    // (a sandstorm shortens its throw like every other shot - unless the Sand Court crews it)
+    const range = CATAPULT_RANGE - weatherReachPenalty(state, crew);
     const target = state.players[enemySide].units
-      .filter(enemy => getHexDistance(enemy.position, tower.coordinates) <= CATAPULT_RANGE && isUnitVisibleTo(state, side, enemy))
+      .filter(enemy => getHexDistance(enemy.position, tower.coordinates) <= range && isUnitVisibleTo(state, side, enemy))
       .sort((a, b) => a.lifespan - b.lifespan || getHexDistance(a.position, tower.coordinates) - getHexDistance(b.position, tower.coordinates))[0];
     const serial = (state.lastBombard?.serial ?? 0) + 1;
     if (target) {
@@ -2695,7 +2703,7 @@ const bombard = (state: GameState, side: PlayerType): void => {
       continue;
     }
     const castle = findBaseHex(state, enemySide);
-    if (!castle || getHexDistance(castle.coordinates, tower.coordinates) > CATAPULT_RANGE) continue;
+    if (!castle || getHexDistance(castle.coordinates, tower.coordinates) > range) continue;
     const before = state.players[enemySide].baseHealth ?? BASE_MAX_HEALTH;
     const after = Math.max(0, before - CATAPULT_CASTLE_DAMAGE);
     state.players[enemySide].baseHealth = after;
@@ -2792,6 +2800,10 @@ export interface CombatPreview {
 // Gold awarded for destroying an enemy unit
 export const getKillBounty = (unit: Unit) => Math.max(2, Math.round(unit.cost * KILL_BOUNTY_FRACTION));
 
+// An undying troop slain in a fight rises again, unless a War Cleric among its foes finishes it (fire
+// finishes it on the burning ground, at the turn's end)
+const finishesUndead = (foes: Unit[]) => foes.some(foe => foe.type === 'cleric');
+
 // Work out what a combat will do, using the units' current stats, terrain and reach.
 // Every attacker strikes the defender; the defender strikes back, splitting its attack between the
 // attackers it can reach. Each strike is scaled by height, counters and the target's cover, and
@@ -2884,9 +2896,6 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     ? distributeDamage(attackers.map(a => a.canBeHitBack ? getStrikePower(state, defenders[0].unit, a.unit) : null))
     : attackers.map(() => 0);
 
-  // An undying troop slain rises again, unless a War Cleric among its foes finishes it (fire finishes
-  // it on the burning ground, at the turn's end)
-  const finishesUndead = (foes: Unit[]) => foes.some(foe => foe.type === 'cleric');
   const withDamage = (
     entry: { unit: Unit; terrain: TerrainType; power: number; modifiers: CombatEffect[] },
     rawDamage: number,
@@ -2982,7 +2991,7 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     add(bonuses.size === 1 ? [...bonuses.keys()][0] : 'Bonuses', 'good', `+${total}%`, total);
   }
   if (hasAbility(target, 'armored')) add('Armored', 'bad', `-${ARMOR_REDUCTION}`, 15);
-  if (canRise(target)) add('Undying', 'bad', undefined, 10);
+  if (canRise(target) && !finishesUndead(attackers)) add('Undying', 'bad', undefined, 10);
   for (const protection of getProtections(state, target)) {
     add(protection.label, 'bad', `-${Math.round(protection.reduction * 100)}%`, Math.round(protection.reduction * 100));
   }
