@@ -15,10 +15,10 @@ import {
   GiAngelWings, GiRegeneration, GiChestArmor, GiSiegeRam, GiAngryEyes, GiRaiseSkeleton, GiWingfoot, GiFireRing,
   GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog,
   GiSparkles, GiAxeInStump, GiFire, GiBurningEmbers, GiLog, GiWatchtower, GiHouse, GiCatapult, GiAnvil, GiBarracksTent,
-  GiBeerStein, GiWoodPile, GiDemolish, GiTorch, GiHammerNails, GiStoneWall, GiGate, GiStoneBridge, GiSpikedFence
+  GiBeerStein, GiWoodPile, GiPointing, GiTargeted, GiDemolish, GiTorch, GiHammerNails, GiStoneWall, GiGate, GiStoneBridge, GiSpikedFence
 } from 'react-icons/gi';
 import {
-  LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
+  LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuCheck, LuSkipForward, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
   LuVolume2, LuVolumeX, LuHouse, LuStar, LuDownload, LuUpload, LuMusic, LuShare2, LuX, LuChevronLeft, LuTrash2, LuPlay,
   LuSettings, LuBookOpen, LuGamepad2
 } from 'react-icons/lu';
@@ -212,6 +212,8 @@ export const GuideIcon = icon(LuBookOpen);
 export const GameplayIcon = icon(LuGamepad2);
 export const LogIcon = icon(LuScrollText);
 export const ArrowIcon = icon(LuArrowRight);
+export const CheckIcon = icon(LuCheck);
+export const SkipIcon = icon(LuSkipForward);
 export const UndoIcon = icon(LuUndo2);
 export const BackIcon = icon(LuChevronLeft);
 export const ChevronIcon = icon(LuChevronDown);
@@ -250,3 +252,7 @@ export const ActionIcon: React.FC<IconProps & { action: UnitAction }> = ({ actio
   const Icon = ACTION_ICONS[action];
   return <Icon {...props} />;
 };
+
+// The tutorial's guiding hand, and the target it marks
+export const PointingHandIcon = icon(GiPointing, '#fde68a');
+export const TargetIcon = icon(GiTargeted, '#ef4444');

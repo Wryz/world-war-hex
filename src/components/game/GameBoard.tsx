@@ -58,6 +58,8 @@ import { ActionIcon, StakesIcon, CampIcon, EmbersIcon, FallenLogIcon, FellIcon, 
 import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
 import { isCapturable } from '@/lib/game/structures';
 import type { UnitBuff } from './UnitMesh';
+import type { TutorialVisuals } from './shared/TutorialGuide';
+import { TutorialMarkers } from './shared/TutorialMarkers';
 import { describeBonus, getBond } from '@/lib/game/bonds';
 import type { TroopId } from '@/lib/game/troops';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
@@ -123,6 +125,8 @@ interface GameBoardProps {
   unitIds?: Set<string>;
   // Tint the hexes enemies can strike next turn, and label damage for the selected troop
   showThreats?: boolean;
+  // The first battle's tutorial: where it points the camera, and what it marks on the board
+  tutorial?: TutorialVisuals | null;
 }
 
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
@@ -145,6 +149,8 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
             focus={props.selectedUnit?.position ?? (props.selectedHex && (props.selectedHex.isCamp || props.selectedHex.isBase) ? props.selectedHex.coordinates : null)}
             focusIsOurs={props.selectedUnit ? props.selectedUnit.owner === 'player' : props.selectedHex?.owner === 'player'}
             deployingCard={props.selectedUnitTypeForPurchase}
+            showcase={props.tutorial?.showcase ?? null}
+            keepInView={props.tutorial?.keepInView ?? null}
           />
         </Suspense>
       </Canvas>
@@ -185,8 +191,21 @@ const nearestSide = (azimuth: number, castleAzimuth: number) => {
   return best;
 };
 
-const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; focusIsOurs?: boolean; deployingCard?: UnitType | null }> = ({
-  gameState, focus, focusIsOurs = true, deployingCard
+// Where on screen (as shares of its width and height) a hex the tutorial points at should be: clear
+// of the edges, the top HUD and the hand of cards
+const KEEP_IN_VIEW = { left: 0.12, right: 0.88, top: 0.16, bottom: 0.66 };
+
+const CameraRig: React.FC<{
+  gameState: GameState;
+  focus: HexCoordinates | null;
+  focusIsOurs?: boolean;
+  deployingCard?: UnitType | null;
+  // A point the tutorial is showing: the camera flies there, and back to your side when it's done
+  showcase?: TutorialVisuals['showcase'];
+  // A hex the tutorial is pointing at: the camera drifts until it is well on screen
+  keepInView?: HexCoordinates | null;
+}> = ({
+  gameState, focus, focusIsOurs = true, deployingCard, showcase = null, keepInView = null
 }) => {
   const { camera, size, gl } = useThree();
 
@@ -352,6 +371,24 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
     // Only reacts to a new turn of yours
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yourTurn]);
+
+  // The tutorial showing a spot on the board: fly there, close and from higher up; then come back
+  const showcaseKey = showcase ? `${showcase.at.q},${showcase.at.r},${showcase.zoom}` : null;
+  const wasShowcasingRef = useRef(false);
+  useEffect(() => {
+    if (showcase) {
+      const [x, , z] = axialToWorld(showcase.at);
+      desiredLookAtRef.current = new THREE.Vector3(x, 0, z);
+      desiredZoomRef.current = showcase.zoom;
+      desiredElevationRef.current = THREE.MathUtils.degToRad(62);
+      wasShowcasingRef.current = true;
+    } else if (wasShowcasingRef.current) {
+      wasShowcasingRef.current = false;
+      showSide(0);
+    }
+    // Only reacts to the tutorial moving the camera
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showcaseKey]);
 
   // A camp you've just captured: swing round to its side
   const ownedCamps = gameState.hexGrid.filter(hex => hex.isCamp && hex.owner === viewSide).map(hex => coordKey(hex.coordinates)).sort().join(' ');
@@ -535,9 +572,29 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
     }
   }, [camera]);
 
+  const keepInViewRef = useRef(keepInView);
+  keepInViewRef.current = keepInView;
+  const probe = useMemo(() => new THREE.Vector3(), []);
+
   useFrame((frame, rawDelta) => {
     const delta = Math.min(rawDelta, 0.1);
     const ease = Math.min(1, delta * CAMERA_TURN_SPEED);
+
+    // Drift towards the hex the tutorial points at while it is near an edge or under the HUD
+    const spot = keepInViewRef.current;
+    if (spot) {
+      const [x, , z] = axialToWorld(spot);
+      probe.set(x, 0, z).project(camera);
+      const screenX = (probe.x + 1) / 2;
+      const screenY = (1 - probe.y) / 2;
+      if (probe.z > 1 || screenX < KEEP_IN_VIEW.left || screenX > KEEP_IN_VIEW.right || screenY < KEEP_IN_VIEW.top || screenY > KEEP_IN_VIEW.bottom) {
+        const desired = desiredLookAtRef.current ?? defaultLookAt.clone();
+        const pull = Math.min(1, delta * 1.5);
+        desired.x += (x - desired.x) * pull;
+        desired.z += (z - desired.z) * pull;
+        desiredLookAtRef.current = desired;
+      }
+    }
     const [shakeX, shakeY, shakeZ] = takeShake(delta, frame.clock.getElapsedTime());
     const desiredAzimuth = targetAzimuth + azimuthOffsetRef.current;
     const current = azimuthRef.current ?? desiredAzimuth;
@@ -774,7 +831,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   assetsLoaded,
   selectedUnitTypeForPurchase = null,
   unitIds,
-  showThreats = false
+  showThreats = false,
+  tutorial = null
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const unitIdsRef = useRef(unitIds);
@@ -1447,6 +1505,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
       {/* Trees, peaks, dunes and gold that show each hex's terrain */}
       <BoardDecorations hexGrid={hexGrid} decor={decor} />
+      {/* The tutorial's marks: your castle, the enemy castle to take, the hex to tap, the way there */}
+      {tutorial && <TutorialMarkers visuals={tutorial} hexByKey={hexByKey} />}
       {/* Great trees, felled trunks and fires */}
       <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} lastBombard={gameState.lastBombard} visibleKeys={visibleKeys} />
 

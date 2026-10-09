@@ -105,9 +105,11 @@ interface GameHandlerOptions {
   resume: boolean;
   // False while the loading screen still covers the board: turn timers and the AI wait until then
   isReady: boolean;
+  // No turn timer (the first battle's tutorial: a new player takes their time)
+  untimed?: boolean;
 }
 
-export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions) => {
+export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: GameHandlerOptions) => {
   // Created once: either the saved battle or a fresh one
   const [initialGame] = useState(() => createInitialGame(battle, resume));
   const [gameState, setGameState] = useState<GameState>(initialGame.gameState);
@@ -203,7 +205,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
   // End the player's turn: execute their pending moves and purchases
   const executeAllMoves = useCallback(() => {
     const current = stateRef.current;
-    // The turn may already have ended (e.g. the timer ran out just before End Turn was clicked)
+    // The turn may already have ended (e.g. the timer ran out just before Confirm was clicked)
     if (current.currentPhase !== 'planning' || (current.activePlayer ?? 'player') !== 'player') return;
 
     clearSelection();
@@ -213,7 +215,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
   // Planning timer for the player's turn - when it runs out the turn ends automatically.
   // It doesn't start until the board is visible, and pauses while the tab is in the background.
   useEffect(() => {
-    if (!isReady || currentPhase !== 'planning' || isAITurn) return;
+    if (!isReady || currentPhase !== 'planning' || isAITurn || untimed) return;
 
     let remaining = stateRef.current.planningTimeRemaining;
     setTimer(remaining);
@@ -230,7 +232,7 @@ export const useGameHandlers = ({ battle, resume, isReady }: GameHandlerOptions)
     }, 1000);
 
     return () => clearInterval(timerInterval);
-  }, [isReady, currentPhase, isAITurn, turnNumber, executeAllMoves]);
+  }, [isReady, currentPhase, isAITurn, turnNumber, executeAllMoves, untimed]);
 
   // AI turn: plan purchases and moves, then execute them
   useEffect(() => {

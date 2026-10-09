@@ -221,10 +221,33 @@ body {
   animation: pointerBob 0.9s ease-in-out infinite;
 }
 
+/* The tutorial's hand: it lifts away and taps down, and a ripple spreads where it lands */
+@keyframes tapHand {
+  0%, 100% { transform: translate(14px, 22px) rotate(-12deg) scale(1); }
+  45% { transform: translate(2px, 4px) rotate(-12deg) scale(0.92); }
+  55% { transform: translate(2px, 4px) rotate(-12deg) scale(0.92); }
+}
+
+@keyframes tapRipple {
+  0%, 40% { opacity: 0; transform: scale(0.3); }
+  50% { opacity: 1; transform: scale(0.5); }
+  100% { opacity: 0; transform: scale(1.6); }
+}
+
+.tap-hand {
+  animation: tapHand 1.2s ease-in-out infinite;
+}
+
+.tap-ripple {
+  animation: tapRipple 1.2s ease-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .card-shine::after,
   .card-holo,
   .node-pulse,
+  .tap-hand,
+  .tap-ripple,
   .pointer-bob {
     animation: none;
   }

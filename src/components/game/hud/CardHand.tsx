@@ -3,7 +3,7 @@ import { useIsNarrow } from '../../shared/useIsNarrow';
 import { GameState, UnitType } from '@/types/game';
 import { getHand, getNextCard, getRosterStats, getTroopName } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
-import { ArrowIcon, BondIcon, GoldIcon, UndoIcon } from '../icons';
+import { BondIcon, CheckIcon, GoldIcon, UndoIcon } from '../icons';
 import { BondDef, describeBond, getBond } from '@/lib/game/bonds';
 import { PANEL_CLASS } from './styles';
 
@@ -32,7 +32,7 @@ const BondBadge: React.FC<{ bonds: BondDef[] }> = ({ bonds }) => {
   );
 };
 
-// Phones get smaller cards so a full hand and the End Turn button fit across the screen
+// Phones get smaller cards so a full hand and the Confirm button fit across the screen
 
 interface CardHandProps {
   gameState: GameState;
@@ -55,6 +55,8 @@ export const CardHand: React.FC<CardHandProps> = ({
   const hand = getHand(gameState);
   const nextCard = getNextCard(gameState);
   const gold = gameState.players.player.points;
+  // The card the first battle's guide points at
+  const firstAffordable = hand.findIndex(type => gold >= (getRosterStats(gameState, 'player', type)?.cost ?? Infinity));
   const isNarrow = useIsNarrow();
   const bonds = (gameState.bonds ?? []).map(getBond);
 
@@ -116,7 +118,7 @@ export const CardHand: React.FC<CardHandProps> = ({
                 key={`${index}-${type}`}
                 className={drawn.has(index) ? 'card-draw' : ''}
                 style={{ transform: isSelected ? undefined : `rotate(${tilt}deg)`, transformOrigin: 'bottom center' }}
-                data-tutorial={index === 0 ? 'first-card' : undefined}
+                data-tutorial={index === firstAffordable ? 'first-card' : undefined}
               >
                 <TroopCard
                   type={type}
@@ -160,9 +162,11 @@ export const CardHand: React.FC<CardHandProps> = ({
           <button
             onClick={onEndTurn}
             data-tutorial="end-turn"
+            aria-label="Confirm your orders and end the turn"
+            title="Confirm your orders: your troops move and fight, then the enemy takes its turn"
             className="font-display rounded-xl bg-amber-500 px-2 py-2.5 text-sm leading-tight text-slate-900 shadow-[0_5px_0_#b45309] transition-transform hover:-translate-y-0.5 hover:bg-amber-400 active:translate-y-1 active:shadow-[0_1px_0_#b45309] sm:px-5 sm:py-3 sm:text-lg"
           >
-            <span className="flex items-center gap-1 sm:gap-1.5">End{isNarrow ? <br /> : ' '}Turn <ArrowIcon /></span>
+            <span className="flex items-center gap-1 sm:gap-1.5"><CheckIcon /> Confirm</span>
           </button>
         </div>
       </div>
