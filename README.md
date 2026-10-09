@@ -33,7 +33,7 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 
 ## How to Play
 
-1. **Pick a battle.** Open the campaign map and tap the next level: the battle starts straight away. Tap one of the glowing sites to build your castle.
+1. **Pick a battle.** Open the campaign map and tap the next level: a callout shows the enemy, your power against the recommended power and the optional challenge. Press **Fight!**, then tap one of the glowing sites to build your castle.
 2. **Play cards.** Tap a card in your hand, then a glowing hex next to your castle or a camp you hold. Its gold cost comes out of your treasury. Tap a troop you queued this turn to take it back.
 3. **Move.** Tap one of your troops, then a highlighted hex. Rough ground costs more movement; water and mountains block the way (flyers pass over them).
 4. **End your turn.** Troops arrive and move, then every troop in range attacks one enemy it can reach automatically - preferring one it can finish off, then one it is strong against. A defender splits its strike-back between the attackers it can reach, so archers shooting from 2 hexes and sneak attacks take no damage. The other side's troops strike back too: any troop of theirs that can reach an attacker (and isn't in a fight of its own) hits it, and the attacker, busy with its own target, can't hit back. The battle card shows every modifier, and health bars count down blow by blow. Then the enemy takes its turn.
@@ -119,7 +119,7 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 ### Screens (`src/app`)
 
 - `page.tsx`: Main menu (`components/game/intro/IntroScreen`, with a 3D island of troops and monsters)
-- `campaign`: The campaign map (each region an island of map tiles, laid out in `lib/campaign/mapArt.ts` and drawn by `components/menu/RegionMap`) tapping a level goes straight into its battle, with any empty deck slots filled for it (`components/menu/CampaignScreen`, `lib/campaign/startLevel.ts`; suggestions in `lib/meta/loadout.ts`)
+- `campaign`: The campaign map (each region an island of map tiles, laid out in `lib/campaign/mapArt.ts` and drawn by `components/menu/RegionMap`) tapping a level opens a callout from its spot (the enemy, your power against the recommended, weather, the challenge, the reward) with the button to fight it, any empty deck slots filled for it (`components/menu/CampaignScreen`, `LevelPopup`, `lib/campaign/startLevel.ts`; suggestions in `lib/meta/loadout.ts`)
 - `army`: Your cards, the card shop and upgrades (`components/menu/ArmyScreen`)
 - `bestiary`: The bestiary and its 3D model viewer (`components/menu/BestiaryScreen`, `TroopModelViewer`)
 - `stats`: Stats and save files (`components/menu/StatsScreen`); the main menu's settings and guide are in `components/menu/SettingsPanel`
