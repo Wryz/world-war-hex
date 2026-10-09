@@ -214,9 +214,8 @@ const announce = (
   // The battle is decided
   if (gameState.currentPhase === 'gameOver' && previous.currentPhase !== 'gameOver') {
     const won = gameState.winner === 'player';
-    // (a battle given up just ends: no castle falls)
-    const resigned = gameState.winReason === 'resigned';
-    if (!resigned) {
+    // (only a castle destroyed falls in slow motion: a battle won on points or given up just ends)
+    if (gameState.winReason === 'destroyed') {
       triggerSlowMotion(0.35, 1600);
       shakeScreen(won ? 0.8 : 1);
     }

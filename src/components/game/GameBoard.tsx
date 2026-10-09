@@ -125,6 +125,10 @@ const ACTION_SIDE_MARGIN = 0.1;
 const ARRIVED = { distance: 0.25, zoom: 0.02, angle: 0.1 };
 // Longest a flight keeps the camera from the player (its slow last stretch is theirs to cut short)
 const FLIGHT_LOCK_MAX_MS = 1500;
+// Watching a castle fall at the end of the battle: the tilt, and how far down the screen the castle
+// stands (-1 the bottom of the screen, 1 the top)
+const FALL_VIEW_ELEVATION = THREE.MathUtils.degToRad(52);
+const FALL_VIEW_SCREEN_Y = -0.5;
 // How long the camera looks down on a boss's marked ground or power
 const BOSS_FOCUS_HOLD_MS = 3200;
 
@@ -180,6 +184,14 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
 
 // Memoised so HUD updates (like the turn timer) don't re-render the 3D scene
 export const GameBoard = memo(GameBoardComponent);
+
+// Keep a point the camera looks at over the battlefield (a board framed at `viewRadius`)
+const keepOverBoard = (point: THREE.Vector3, viewRadius: number): THREE.Vector3 => {
+  const maxPan = viewRadius * CAMERA_MAX_PAN;
+  const horizontal = Math.hypot(point.x, point.z);
+  if (horizontal > maxPan) point.multiplyScalar(maxPan / horizontal);
+  return point;
+};
 
 // Camera distance at which a circle of `radius` fits the screen, scaled by the zoom level
 const getViewDistance = (radius: number, tanHalfFov: number, aspect: number, zoom: number) =>
@@ -283,6 +295,11 @@ const CameraRig: React.FC<{
   const autoMovingRef = useRef(false);
   // (and when it set off: a flight locks the camera for a moment at most)
   const flightStartedRef = useRef(0);
+  const desiredZoomRef = useRef(CAMERA_DEFAULT_ZOOM);
+  // Extra rotation around the centre of the map and camera tilt chosen by the player
+  const azimuthOffsetRef = useRef(0);
+  const elevationRef = useRef(CAMERA_ELEVATION);
+  const desiredElevationRef = useRef(CAMERA_ELEVATION);
   // Send the camera somewhere on its own
   const flyTo = useCallback((lookAt: THREE.Vector3, zoom: number, elevation: number) => {
     autoMovingRef.current = true;
@@ -291,11 +308,6 @@ const CameraRig: React.FC<{
     desiredZoomRef.current = zoom;
     desiredElevationRef.current = elevation;
   }, []);
-  const desiredZoomRef = useRef(CAMERA_DEFAULT_ZOOM);
-  // Extra rotation around the centre of the map and camera tilt chosen by the player
-  const azimuthOffsetRef = useRef(0);
-  const elevationRef = useRef(CAMERA_ELEVATION);
-  const desiredElevationRef = useRef(CAMERA_ELEVATION);
 
   // The camera always works from your side of the board, whoever's turn it is
   const viewSide: PlayerType = 'player';
@@ -397,9 +409,7 @@ const CameraRig: React.FC<{
     // below the top HUD
     const along = ((nearest - bottom * distance) + (furthest - top * distance)) / 2;
     const lookAt = towards.multiplyScalar(along).add(right.multiplyScalar((leftmost + rightmost) / 2));
-    const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
-    const horizontal = Math.hypot(lookAt.x, lookAt.z);
-    if (horizontal > maxPan) lookAt.multiplyScalar(maxPan / horizontal);
+    keepOverBoard(lookAt, viewRadiusRef.current);
     return { lookAt, zoom };
   }, [camera]);
 
@@ -532,15 +542,16 @@ const CameraRig: React.FC<{
       world.reduce((sum, [, , z]) => sum + z, 0) / world.length
     );
     const spread = Math.max(...world.map(([x, , z]) => Math.hypot(x - centre.x, z - centre.z))) + pad;
-    const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
-    const horizontal = Math.hypot(centre.x, centre.z);
-    if (horizontal > maxPan) centre.multiplyScalar(maxPan / horizontal);
+    keepOverBoard(centre, viewRadiusRef.current);
     flyTo(centre, THREE.MathUtils.clamp(spread * BATTLE_VIEW_MARGIN / viewRadiusRef.current, BATTLE_VIEW_MIN_ZOOM, BATTLE_VIEW_MAX_ZOOM), BATTLE_VIEW_ELEVATION);
   };
+  // Set while the camera holds on a turn's battles once they're over, before settling
+  const battleHoldRef = useRef(false);
   const settleRef = useRef<() => void>(() => {});
   settleRef.current = () => {
-    // (a boss's power still being shown settles when it is done)
-    if (Date.now() < bossFocusUntilRef.current) return;
+    // (a boss's power still being shown settles when it is done; once the battle is over the camera
+    // stays on its ending)
+    if (Date.now() < bossFocusUntilRef.current || isGameOver) return;
     battleViewRef.current = false;
     const side = pendingSideRef.current ?? nearestHomeSide(azimuthRef.current ?? targetAzimuth);
     pendingSideRef.current = null;
@@ -568,9 +579,14 @@ const CameraRig: React.FC<{
       return;
     }
     // Hold on the aftermath for a moment, then settle
-    const settle = setTimeout(() => settleRef.current(), BATTLE_VIEW_HOLD_MS / getGameSpeed());
+    battleHoldRef.current = true;
+    const settle = setTimeout(() => {
+      battleHoldRef.current = false;
+      settleRef.current();
+    }, BATTLE_VIEW_HOLD_MS / getGameSpeed());
     return () => {
       clearTimeout(settle);
+      battleHoldRef.current = false;
       battleViewRef.current = false;
     };
     // Only reacts to battles starting and ending
@@ -599,20 +615,20 @@ const CameraRig: React.FC<{
     const settle = setTimeout(() => settleRef.current(), hold);
     return () => {
       clearTimeout(settle);
-      // (cut short - by a new mark, or the mark going: let the camera go, unless battles are being
-      // watched, which settle on their own)
+      // (cut short - by a new mark, or the mark going: hand the camera back where it is, unless
+      // battles are being watched or held on, which settle on their own; a new mark takes it again)
       if (Date.now() < bossFocusUntilRef.current) {
         bossFocusUntilRef.current = 0;
-        if (phaseRef.current !== 'combat') settleRef.current();
+        if (phaseRef.current !== 'combat' && !battleHoldRef.current) battleViewRef.current = false;
       }
     };
     // Only reacts to a new mark or power
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bossFocusKey]);
 
-  // The battle is won: swoop down on the losing castle as it falls (not when you resign: your
-  // castle still stands)
-  const loser = gameState.currentPhase === 'gameOver' && gameState.winner && gameState.winReason !== 'resigned'
+  // A castle destroyed: swoop down on it as it falls (a battle won on points or given up leaves
+  // both standing)
+  const loser = gameState.currentPhase === 'gameOver' && gameState.winner && gameState.winReason === 'destroyed'
     ? (gameState.winner === 'player' ? 'ai' : 'player')
     : null;
   useEffect(() => {
@@ -620,7 +636,19 @@ const CameraRig: React.FC<{
     const base = findBaseHex(gameState, loser);
     if (!base) return;
     const [x, , z] = axialToWorld(base.coordinates);
-    flyTo(new THREE.Vector3(x, 0, z), CAMERA_MIN_ZOOM, THREE.MathUtils.degToRad(52));
+    // (looking a little beyond the castle, so it stands in the lower part of the screen with room
+    // below it, clear of the results that follow)
+    const perspective = camera as THREE.PerspectiveCamera;
+    const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(perspective.fov / 2));
+    const { width, height } = sizeRef.current;
+    const distance = getViewDistance(viewRadiusRef.current, tanHalfFov, width / Math.max(height, 1), CAMERA_MIN_ZOOM);
+    const sin = Math.sin(FALL_VIEW_ELEVATION);
+    const cos = Math.cos(FALL_VIEW_ELEVATION);
+    const y = FALL_VIEW_SCREEN_Y;
+    const towardsCamera = y * tanHalfFov * distance / (y * tanHalfFov * cos - sin);
+    const azimuth = targetAzimuth + azimuthOffsetRef.current;
+    const lookAt = new THREE.Vector3(x - Math.sin(azimuth) * towardsCamera, 0, z - Math.cos(azimuth) * towardsCamera);
+    flyTo(lookAt, CAMERA_MIN_ZOOM, FALL_VIEW_ELEVATION);
     // Only reacts to the battle ending
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loser]);
@@ -673,12 +701,8 @@ const CameraRig: React.FC<{
       const towards = new THREE.Vector3(Math.sin(azimuth), 0, Math.cos(azimuth));
       const shift = right.multiplyScalar(-dx * perPixel)
         .add(towards.multiplyScalar(-dy * perPixel / Math.max(0.3, Math.sin(elevationRef.current))));
-      const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
       for (const target of [desiredLookAtRef.current, lookAtRef.current]) {
-        if (!target) continue;
-        target.add(shift);
-        const horizontal = Math.hypot(target.x, target.z);
-        if (horizontal > maxPan) target.multiplyScalar(maxPan / horizontal);
+        if (target) keepOverBoard(target.add(shift), viewRadiusRef.current);
       }
     };
 
@@ -811,10 +835,7 @@ const CameraRig: React.FC<{
       if (anchor) {
         desiredLookAt.sub(anchor).multiplyScalar(nextZoom / currentZoom).add(anchor);
         desiredLookAt.y = 0;
-        // Keep the view over the battlefield
-        const horizontal = Math.hypot(desiredLookAt.x, desiredLookAt.z);
-        const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
-        if (horizontal > maxPan) desiredLookAt.multiplyScalar(maxPan / horizontal);
+        keepOverBoard(desiredLookAt, viewRadiusRef.current);
       }
       desiredZoomRef.current = nextZoom;
     };
@@ -827,7 +848,7 @@ const CameraRig: React.FC<{
   // when the player may move it, and the zoom it is heading for)
   useEffect(() => {
     if (process.env.NODE_ENV !== 'production') {
-      Object.assign(window, { __wwhCamera: camera, __wwhCameraRig: { locked: cameraLocked, zoom: () => desiredZoomRef.current, lookAt: () => desiredLookAtRef.current?.toArray() } });
+      Object.assign(window, { __wwhCamera: camera, __wwhCameraRig: { locked: cameraLocked, moving: () => autoMovingRef.current, zoom: () => desiredZoomRef.current, lookAt: () => desiredLookAtRef.current?.toArray() } });
     }
   }, [camera, cameraLocked]);
 
@@ -1826,7 +1847,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           health={timeline.castleHealth('player', players.player.baseHealth ?? BASE_MAX_HEALTH)}
           maxHealth={players.player.maxBaseHealth ?? BASE_MAX_HEALTH}
           incoming={castleIncoming?.owner === 'player' ? castleIncoming.incoming : undefined}
-          fallen={currentPhase === 'gameOver' && gameState.winner === 'ai' && gameState.winReason !== 'resigned'}
+          fallen={currentPhase === 'gameOver' && gameState.winner === 'ai' && gameState.winReason === 'destroyed'}
         />
       )}
       {aiCastlePosition && (
@@ -1836,7 +1857,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           health={timeline.castleHealth('ai', players.ai.baseHealth ?? BASE_MAX_HEALTH)}
           maxHealth={players.ai.maxBaseHealth ?? BASE_MAX_HEALTH}
           incoming={castleIncoming?.owner === 'ai' ? castleIncoming.incoming : undefined}
-          fallen={currentPhase === 'gameOver' && gameState.winner === 'player'}
+          fallen={currentPhase === 'gameOver' && gameState.winner === 'player' && gameState.winReason === 'destroyed'}
         />
       )}
 

@@ -52,6 +52,7 @@ const useStableCallback = <T extends (...args: any[]) => any>(fn: T): T => {
 
 // How long the castle takes to fall before the results appear
 const RESULTS_DELAY = 2600;
+const RESULTS_DELAY_RESIGNED = 700;
 
 interface FinishedBattle {
   won: boolean;
@@ -230,11 +231,13 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     });
     // Now there's progress worth keeping, ask the browser not to clear it
     void requestPersistentStorage();
-    // The first battle keeps showing the way until it is won
+    // (the first battle counts as the tutorial done once it is won - it still guides every time
+    // it's played)
     if (level?.id === 1 && won) completeTutorial();
     setShowTutorial(false);
     setFinished({ won, stars, record });
-    const timeout = setTimeout(() => setShowResults(true), RESULTS_DELAY);
+    // (after the castle has fallen - or at once for a battle given up, with nothing to watch)
+    const timeout = setTimeout(() => setShowResults(true), gameState.winReason === 'resigned' ? RESULTS_DELAY_RESIGNED : RESULTS_DELAY);
     return () => clearTimeout(timeout);
     // Runs once when the battle ends
     // eslint-disable-next-line react-hooks/exhaustive-deps
