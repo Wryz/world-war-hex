@@ -1,6 +1,5 @@
 import type { TroopId } from '@/lib/game/troops';
 import type { BondId } from '@/lib/game/bonds';
-import type { TacticId } from '@/lib/game/tactics';
 
 export type TerrainType =
   | 'plain'
@@ -18,7 +17,19 @@ export type TerrainType =
   | 'ruins'
   | 'cursed'
   // Houses, mills and wells: cover, and buildings that block arrows
-  | 'village';
+  | 'village'
+  // Buildings with a job of their own (see lib/game/structures)
+  | 'watchtower'
+  | 'house'
+  | 'catapult'
+  | 'blacksmith'
+  | 'barracks'
+  | 'tavern'
+  | 'lumbermill'
+  // Fortifications and crossings
+  | 'wall'
+  | 'gate'
+  | 'bridge';
 
 export type PlayerType = 'player' | 'ai';
 
@@ -43,7 +54,18 @@ export interface Hex {
   // How far the ground here has been raised (positive) or dug out (negative) during the battle,
   // on top of its natural height (see lib/game/hexHeight)
   heightOffset?: number;
+  // Something standing or lying on the hex (see lib/game/battlefield): a great tree that can be
+  // felled, the log one left when it fell, or that log lying across water as a bridge
+  feature?: HexFeature;
+  // Where the tree that left this log (or bridge) stood, so it lies the way it fell
+  fellFrom?: HexCoordinates;
+  // Fire: smouldering embers (it catches next turn) or burning, with the turns it has left
+  fire?: { stage: 'smoulder' | 'burning'; turnsLeft: number };
+  // Burnt out by a fire (the ground is blackened)
+  scorched?: boolean;
 }
+
+export type HexFeature = 'greatTree' | 'log' | 'logBridge' | 'stakes';
 
 export interface Unit {
   id: string;
@@ -89,7 +111,10 @@ export type Ability =
   | 'undead'       // healed rather than hurt by cursed ground
   | 'pathfinder'   // rough ground (desert, swamp, snow, ice) costs 1 to enter
   | 'fireborn'     // unharmed by lava
-  | 'magic';       // spells ignore line of sight and cover
+  | 'magic'        // spells ignore line of sight and cover
+  | 'demolition'   // tears down walls, gates, bridges, trunks and stakes next to it
+  | 'firebrand'    // sets dry ground next to it alight
+  | 'engineering'; // builds bridges over water and stakes against cavalry next to it
 
 // The stats a side recruits a troop type with this battle (cards are levelled, monsters scaled)
 export interface TroopStats {
@@ -172,48 +197,12 @@ export interface GameState {
   // guards, posted once the castles stand
   castleChoices?: HexCoordinates[];
   pendingGuards?: { type: UnitType; stats: TroopStats; isBoss?: boolean }[];
-  // Tactic cards: the three each side brought and the ones it holds now
-  tactics?: Record<PlayerType, SideTactics>;
-  // Tactic cards still working on the battle (until the end of the turn, or the owner's next turn)
-  effects?: BattleEffect[];
-  // Seeds the random tactic card draws
-  tacticSeed?: number;
-  // The tactic card played most recently, for the callout announcing it (serial counts plays)
-  lastTactic?: { side: PlayerType; id: TacticId; level: number; at?: HexCoordinates; serial: number };
-}
-
-export interface TacticCard {
-  id: TacticId;
-  level: number;
-}
-
-export interface HeldTactic extends TacticCard {
-  // Tells two copies of the same card apart
-  uid: string;
-}
-
-export interface SideTactics {
-  // The cards drawn from, at their levels
-  loadout: TacticCard[];
-  hand: HeldTactic[];
-  // Cards drawn so far (numbers each new card)
-  drawn: number;
-}
-
-export type BattleEffectKind = 'rally' | 'march' | 'bulwark' | 'smoke' | 'shadowstep';
-
-export interface BattleEffect {
-  kind: BattleEffectKind;
-  // The side that played it
-  side: PlayerType;
-  // The troop it works on, if it works on one
-  unitId?: string;
-  // The hexes it covers, as "q,r" keys
-  hexes?: string[];
-  // Its strength: a share (0.2 for 20%) or a number of hexes or points
-  value: number;
-  // 'turn': until the end of this turn; 'nextTurn': until its side's next turn begins
-  lasts: 'turn' | 'nextTurn';
+  // Seeds the battle's chance events (fires flaring up around lava)
+  battleSeed?: number;
+  // The catapult's most recent stone, for the board to show it flying (serial counts stones)
+  lastBombard?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
+  // The tree felled most recently, for the board to show it falling (serial counts fellings)
+  lastFell?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
 }
 
 export interface Sighting {
@@ -240,7 +229,12 @@ export interface Move {
   playerId: string;
   from: HexCoordinates;
   to: HexCoordinates;
+  // Work done on the hex `to` instead of moving onto it (see lib/game/battlefield): the troop stays
+  // where it is. (Felling a great tree is an order onto the tree, without an action.)
+  action?: UnitAction;
 }
+
+export type UnitAction = 'demolish' | 'ignite' | 'bridge' | 'stakes';
 
 export interface Purchase {
   playerId: string;

@@ -10,13 +10,15 @@ import { loadGltf } from './unitModelCache';
 
 // Each pack downloads only when a battle needs it: the medieval one always (castles, camps, most
 // scenery), the others for haunted ground and dungeon maps
-export type PropPack = 'medieval' | 'halloween' | 'dungeon' | 'castles';
+export type PropPack = 'medieval' | 'halloween' | 'dungeon' | 'castles' | 'buildings';
 const PACK_URLS: Record<PropPack, string> = {
   medieval: '/models/kaykit/medieval.glb',
   halloween: '/models/kaykit/halloween.glb',
   dungeon: '/models/kaykit/dungeon.glb',
   // The castle styles' buildings, for your own castle and the Style screen
-  castles: '/models/kaykit/castles.glb'
+  castles: '/models/kaykit/castles.glb',
+  // The battlefield's buildings (watchtowers, workshops, the catapult tower, houses) in each side's colour
+  buildings: '/models/kaykit/buildings.glb'
 };
 const MEDIEVAL_ONLY: PropPack[] = ['medieval'];
 

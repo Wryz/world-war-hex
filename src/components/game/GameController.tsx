@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { GameBoard } from './GameBoard';
 import { CombatResolver } from './combat/CombatResolver';
 import { ResultsScreen } from './shared/ResultsScreen';
-import { TutorialCoach } from './shared/TutorialCoach';
+import { TutorialOverlay, useTutorial } from './shared/TutorialGuide';
 import { RuleTips } from './shared/RuleTips';
 import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
@@ -20,19 +20,17 @@ import { SelectionCard } from './hud/SelectionCard';
 import { EventFeed } from './hud/EventFeed';
 import { TurnBanner } from './hud/TurnBanner';
 import { getUnitTypeName } from './utils/UnitHelpers';
-import { WarningIcon } from './icons';
+import { ActionIcon, ArrowIcon, WarningIcon } from './icons';
 import { EffectsLayer } from './effects/EffectsLayer';
 import { emitMoment, resetEffects } from './effects/effects';
 import { useBattleMoments } from './effects/useBattleMoments';
-import { castleHealthRatio, getMaxRounds, getSideView, getStarScore, isFogOfWar } from '@/lib/game/gameState';
+import { ACTION_NAMES, castleHealthRatio, getMaxRounds, getSideView, getStarScore, isFogOfWar } from '@/lib/game/gameState';
 import { getLevel, starsForWin, LEVEL_COUNT } from '@/lib/campaign/levels';
 import { battleTroopTypes } from '@/lib/campaign/battleSetup';
 import {
   BattleRecordResult, completeTutorial, getProfile, profilePower, recordBattle
 } from '@/lib/meta/profile';
-import { playStinger, setMusicIntensity, useMusic } from '@/lib/audio/music';
-import { TACTICS } from '@/lib/game/tactics';
-import { getTacticHand } from '@/lib/game/battleTactics';
+import { setMusicIntensity, useMusic } from '@/lib/audio/music';
 
 interface GameControllerProps {
   battle: BattleConfig;
@@ -67,6 +65,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const isMuted = useMuted();
   const level = battle.mode === 'campaign' ? getLevel(battle.levelId) : undefined;
 
+  // The first battle is a tutorial for new players (see TutorialGuide)
+  const [showTutorial, setShowTutorial] = useState(() => battle.mode === 'campaign' && battle.levelId === 1 && !getProfile().tutorialDone);
   const {
     gameState,
     selectedHex,
@@ -87,9 +87,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     handleUndo,
     canUndo,
     notice,
-    selectedTactic,
-    handleTacticSelect
-  } = useGameHandlers({ battle, resume: shouldContinueGame, isReady });
+    actionChoice,
+    handleActionChoice
+  } = useGameHandlers({ battle, resume: shouldContinueGame, isReady, untimed: showTutorial });
 
   useMusic(level?.isBoss ? 'boss' : 'battle');
   useEffect(() => {
@@ -104,7 +104,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     if (!isReady || startedRef.current) return;
     startedRef.current = true;
     if (isFogOfWar(gameState)) {
-      setTimeout(() => emitMoment({ title: 'Fog of War', subtitle: 'You only see what your troops can see', tone: 'purple' }), 1200);
+      setTimeout(() => emitMoment({ title: 'Fog of War', subtitle: 'You only see what your troops can see', tone: 'purple', explain: true }), 1200);
     }
     if (shouldContinueGame && gameState.turnNumber > 1) return;
     const profile = getProfile();
@@ -134,7 +134,15 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const [finished, setFinished] = useState<FinishedBattle | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [showBossIntro, setShowBossIntro] = useState(() => !!level?.isBoss && gameState.turnNumber <= 1);
-  const [showTutorial, setShowTutorial] = useState(() => battle.mode === 'campaign' && battle.levelId === 1 && !getProfile().tutorialDone);
+
+  // The first battle shows what to do (see TutorialGuide); it counts as done once the battle is over
+  const tutorial = useTutorial({
+    active: showTutorial, ready: isReady, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
+  });
+  // (the board only redraws its marks when they actually change)
+  const tutorialVisualsKey = JSON.stringify(tutorial.visuals);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const tutorialVisuals = useMemo(() => tutorial.visuals, [tutorialVisualsKey]);
 
   // Stable handlers so the memoised 3D board doesn't re-render on every timer tick
   const onBoardHexClick = useStableCallback(handleHexClick);
@@ -205,7 +213,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     });
     // Now there's progress worth keeping, ask the browser not to clear it
     void requestPersistentStorage();
-    if (level?.id === 1) completeTutorial();
+    // The first battle keeps showing the way until it is won
+    if (level?.id === 1 && won) completeTutorial();
     setShowTutorial(false);
     setFinished({ won, stars, record });
     const timeout = setTimeout(() => setShowResults(true), RESULTS_DELAY);
@@ -266,40 +275,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  // Tactic cards: announce each one played, and each new one drawn into the player's hand
-  const lastTactic = gameState.lastTactic;
-  useEffect(() => {
-    if (!lastTactic || !isReady) return;
-    const tactic = TACTICS[lastTactic.id];
-    emitMoment({
-      title: lastTactic.side === 'player' ? tactic.name : `Enemy: ${tactic.name}`,
-      subtitle: tactic.describe(lastTactic.level),
-      tone: lastTactic.side === 'player' ? 'purple' : 'red'
-    });
-    // Announced once per card played
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lastTactic?.serial]);
-  const playerTactics = getTacticHand(gameState, 'player');
-  const drawnCount = gameState.tactics?.player.drawn ?? 0;
-  const drawnRef = useRef(drawnCount);
-  useEffect(() => {
-    if (drawnCount > drawnRef.current && isReady) {
-      const card = playerTactics[playerTactics.length - 1];
-      if (card) {
-        setToast({ id: Date.now(), text: `New tactic card: ${TACTICS[card.id].name}` });
-        playStinger('unlock');
-      }
-    }
-    drawnRef.current = drawnCount;
-    // Only a new draw announces itself
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [drawnCount]);
-
   // Short instruction while the player is in the middle of an action
-  const aimedTactic = selectedTactic ? playerTactics.find(card => card.uid === selectedTactic) : undefined;
-  const hint = aimedTactic
-    ? `Tap a pink hex to play ${TACTICS[aimedTactic.id].name} · tap the card again to put it back`
-    : selectedUnitTypeForPurchase
+  const hint = selectedUnitTypeForPurchase
     ? `Tap a glowing hex to deploy ${getUnitTypeName(selectedUnitTypeForPurchase)} · Esc to cancel`
     : selectedUnit?.owner === 'player' && isPlayerPlanning
       ? validMoves.length > 0
@@ -313,7 +290,6 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         gameState={viewState}
         unitIds={unitIds}
         showThreats={showThreats && isPlayerPlanning}
-        targetingTactic={!!selectedTactic}
         selectedHex={selectedHex ?? undefined}
         selectedUnit={selectedUnit}
         validMoves={validMoves}
@@ -321,6 +297,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         onHexClick={onBoardHexClick}
         onUnitClick={onBoardUnitClick}
         onUnitPurchase={onBoardUnitPurchase}
+        tutorial={tutorialVisuals}
       />
 
       {(currentPhase === 'planning' || currentPhase === 'combat') && (
@@ -331,7 +308,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
             onToggleThreats={() => setShowThreats(value => !value)}
             isAITurn={isAITurn}
             timer={timer}
-            showTimer={isPlayerPlanning}
+            showTimer={isPlayerPlanning && !showTutorial}
             onSave={isPlayerPlanning ? handleSave : undefined}
             isMuted={isMuted}
             onToggleMute={() => setMuted(!isMuted)}
@@ -353,15 +330,31 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           gameState={gameState}
           isAITurn={isAITurn}
           selectedUnitType={selectedUnitTypeForPurchase}
-          hint={hint}
+          hint={showTutorial ? null : hint}
           onCardSelect={handleUnitTypeSelect}
           onEndTurn={handleEndTurn}
           canUndo={canUndo}
           onUndo={handleUndo}
-          tactics={playerTactics}
-          selectedTactic={selectedTactic}
-          onTacticSelect={handleTacticSelect}
         />
+      )}
+
+      {/* Move onto the hex, or work on it? */}
+      {actionChoice && isPlayerPlanning && (
+        <div className="fixed inset-x-0 bottom-48 z-40 flex justify-center px-3">
+          <div className="animate-fadeIn flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-slate-900/95 p-2 shadow-2xl ring-1 ring-white/10" role="group" aria-label="Choose an order">
+            {actionChoice.canMove && (
+              <button onClick={() => handleActionChoice(null)} className="font-display flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-900 hover:bg-white">
+                <ArrowIcon /> Move here
+              </button>
+            )}
+            {actionChoice.actions.map(action => (
+              <button key={action} onClick={() => handleActionChoice(action)} className="font-display flex items-center gap-1.5 rounded-xl bg-amber-400 px-3 py-2 text-sm text-slate-900 hover:bg-amber-300">
+                <ActionIcon action={action} /> {ACTION_NAMES[action]}
+              </button>
+            ))}
+            <button onClick={handleCancelSelection} className="rounded-xl px-3 py-2 text-sm font-bold text-slate-300 hover:bg-slate-800" aria-label="Cancel">✕</button>
+          </div>
+        </div>
       )}
 
       {/* Before the first turn: choose the castle's site */}
@@ -381,14 +374,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       {/* First-time tips for the newer rules (not while the first battle's tutorial is running) */}
       {!showTutorial && isReady && currentPhase !== 'gameOver' && <RuleTips gameState={gameState} />}
       {showTutorial && isReady && currentPhase !== 'gameOver' && (
-        <TutorialCoach
-          gameState={gameState}
-          selectedUnitType={selectedUnitTypeForPurchase}
-          onDone={() => {
-            completeTutorial();
-            setShowTutorial(false);
-          }}
-        />
+        <TutorialOverlay gameState={gameState} pointer={tutorial.pointer} introRunning={tutorial.introRunning} onSkipIntro={tutorial.skipIntro} />
       )}
 
       {showBossIntro && isReady && level && (

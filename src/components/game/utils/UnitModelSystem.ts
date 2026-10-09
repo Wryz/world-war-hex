@@ -111,6 +111,11 @@ const LOOKS: Record<TroopId, UnitLook> = {
   rogue: humanoid({ model: 'rogue', scale: 0.41, weapons: ['Knife', 'Knife_Offhand'], animations: DUAL }),
   helicopter: humanoid({ model: 'knight', scale: 0.41, weapons: ['1H_Sword', 'Badge_Shield'], mount: {}, animations: { ...SWORD, walk: 'Idle' } }),
   medic: humanoid({ model: 'mage', scale: 0.43, weapons: ['2H_Staff'], animations: SPELL, projectile: 'magic' }),
+  // Engineers: woodsmen with an axe and a work apron
+  engineer: humanoid({
+    model: 'barbarian', scale: 0.45, weapons: ['1H_Axe', 'Badge_Shield'], animations: CHOP, hide: ['Barbarian_Hat'],
+    palette: { cloth: '#c2410c', leather: '#7c4a2a' }
+  }),
   shieldbearer: humanoid({
     model: 'knight', scale: 0.46, weapons: ['1H_Sword', 'Rectangle_Shield'], animations: { ...STAB, idle: 'Blocking' },
     palette: { metal: '#9aa7b4' }

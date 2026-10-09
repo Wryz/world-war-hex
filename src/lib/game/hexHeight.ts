@@ -1,7 +1,7 @@
 import type { Hex, HexCoordinates, TerrainType } from '@/types/game';
 
 // How tall each hex stands: its terrain's height plus a small, fixed per-hex variation, and any
-// digging or earthworks during the battle. The board draws hexes this tall and shows the number,
+// ground dug out during the battle (Siege Sappers' Undermine). The board draws hexes this tall and shows the number,
 // and the height advantage in a fight comes from it.
 
 const BASE_HEIGHT = 1.0;
@@ -22,6 +22,17 @@ const TERRAIN_HEIGHTS: Record<TerrainType, number> = {
   ice: 0.3,
   ruins: 1.1,
   village: 1.1,
+  // A watchtower stands on a rise as high as a hill; the other buildings on open ground
+  watchtower: 1.8,
+  house: 1.1,
+  catapult: 1.2,
+  blacksmith: 1.1,
+  barracks: 1.1,
+  tavern: 1.1,
+  lumbermill: 1.1,
+  wall: 1.3,
+  gate: 1.2,
+  bridge: 0.2,
   cursed: 0.8
 };
 
@@ -44,7 +55,7 @@ export const getTerrainHeight = (terrain: TerrainType): number => (TERRAIN_HEIGH
 export const MAX_HEIGHT_OFFSET = 1.2;
 const MIN_HEIGHT = 0.1;
 
-// A hex's height as it stands now, earthworks and digging included
+// A hex's height as it stands now, digging included
 export const getHexHeightOf = (hex: Pick<Hex, 'coordinates' | 'terrain' | 'heightOffset'>): number =>
   Math.max(MIN_HEIGHT, getHeightAt(hex.coordinates, hex.terrain) + (hex.heightOffset ?? 0));
 

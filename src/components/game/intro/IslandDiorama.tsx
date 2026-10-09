@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { Hex, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
+import { Hex, HexCoordinates, PlayerType, TerrainType, Unit, UnitType } from '@/types/game';
 import { DEFAULT_SETTINGS, isImpassable } from '@/lib/game/gameState';
 import { cardStats } from '@/lib/game/troops';
 import { createHexagonalGrid, REGION_THEMES as MAP_THEMES } from '@/lib/game/mapGenerator';
@@ -13,13 +13,18 @@ import { useProfile } from '@/lib/meta/profile';
 import { Camp } from '../Camp';
 import { UnitMesh } from '../UnitMesh';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
+import { PropPack, usePropLibrary } from '../utils/kaykitProps';
 
 // A small, slowly turning island made of the game's own pieces: themed terrain, both castles,
 // the two camps and a few troops squaring up. It reshapes into a new map theme every few seconds.
+// The landing page shows a picture of the first island's terrain (public/hero-island.webp, made
+// with scripts/render-hero-poster.mjs) until the live island's terrain and scenery are ready; only
+// then does it start turning and the troops' models load in.
 
 const ISLAND_RADIUS = 3;
 const THEME_DURATION = 7000;
 const SPIN_SPEED = 0.12;
+const CAMERA_FOV = 36;
 
 const CASTLES: [HexCoordinates, PlayerType][] = [[{ q: 0, r: 3 }, 'player'], [{ q: 0, r: -3 }, 'ai']];
 const CAMPS: [HexCoordinates, PlayerType | null][] = [[{ q: -2, r: 1 }, 'player'], [{ q: 2, r: -1 }, null]];
@@ -34,10 +39,12 @@ const TROOPS: [UnitType, PlayerType, HexCoordinates][] = [
   ['skeleton_archer', 'ai', { q: -1, r: -1 }],
   ['wyvern', 'ai', { q: 2, r: -2 }]
 ];
+// A watchtower and a cottage, so the battlefield's buildings show from the first screen
+const BUILDINGS: [HexCoordinates, TerrainType][] = [[{ q: 2, r: 0 }, 'watchtower'], [{ q: -2, r: 3 }, 'house']];
 // Skirmishes that play on a loop: [attacker index, target index] into TROOPS
 const SKIRMISHES: [number, number][] = [[0, 4], [4, 0], [1, 4], [5, 1], [3, 0]];
 // Hexes that must be open ground so the pieces above have somewhere to stand
-const OPEN_HEXES = [...CASTLES.map(([c]) => c), ...CAMPS.map(([c]) => c), ...TROOPS.map(([, , c]) => c)];
+const OPEN_HEXES = [...CASTLES.map(([c]) => c), ...CAMPS.map(([c]) => c), ...TROOPS.map(([, , c]) => c), ...BUILDINGS.map(([c]) => c)];
 
 const key = (c: HexCoordinates) => `${c.q},${c.r}`;
 const noop = () => {};
@@ -54,6 +61,8 @@ const buildIsland = (themeIndex: number): Hex[] => {
     const camp = CAMPS.find(([c]) => key(c) === coordinates);
     if (castle) return { ...hex, terrain: 'plain', isResourceHex: false, isBase: true, owner: castle[1] };
     if (camp) return { ...hex, terrain: 'plain', isResourceHex: false, isCamp: true, owner: camp[1] ?? undefined };
+    const building = BUILDINGS.find(([c]) => key(c) === coordinates);
+    if (building) return { ...hex, terrain: building[1], isResourceHex: false };
     if (open.has(coordinates) && (isImpassable(hex) || hex.isResourceHex)) {
       return { ...hex, terrain: 'plain', isResourceHex: false };
     }
@@ -67,10 +76,17 @@ const surface = (hexGrid: Hex[], c: HexCoordinates): [number, number, number] =>
   return [x, hex ? getHexSurfaceHeight(hex) : 1, z];
 };
 
-const Island: React.FC<{ themeIndex: number }> = ({ themeIndex }) => {
+// Frames drawn with the scenery in place before the island counts as ready
+const SETTLE_FRAMES = 3;
+
+const Island: React.FC<{ themeIndex: number; live: boolean; onReady: () => void }> = ({ themeIndex, live, onReady }) => {
   const playerCastleStyle = getCastleStyle(useProfile().cosmetics.castleStyle);
   const spinRef = useRef<THREE.Group>(null);
   const hexGrid = useMemo(() => buildIsland(themeIndex), [themeIndex]);
+  // The scenery packs this island needs (as the board's decorations pick them)
+  const packs = useMemo((): PropPack[] => ['medieval', 'buildings', ...(hexGrid.some(hex => hex.terrain === 'cursed') ? ['halloween' as const] : [])], [hexGrid]);
+  const scenery = usePropLibrary(packs);
+  const settledRef = useRef(0);
 
   // Troops never change, so their unit objects (and models) are created once
   const troops = useMemo(() => TROOPS.map(([type, owner, position], index): Unit => ({
@@ -91,7 +107,8 @@ const Island: React.FC<{ themeIndex: number }> = ({ themeIndex }) => {
   );
 
   useFrame((_, delta) => {
-    if (spinRef.current) spinRef.current.rotation.y += Math.min(delta, 0.1) * SPIN_SPEED;
+    if (scenery && settledRef.current <= SETTLE_FRAMES && ++settledRef.current === SETTLE_FRAMES) onReady();
+    if (live && spinRef.current) spinRef.current.rotation.y += Math.min(delta, 0.1) * SPIN_SPEED;
   });
 
   return (
@@ -106,7 +123,7 @@ const Island: React.FC<{ themeIndex: number }> = ({ themeIndex }) => {
       {CAMPS.map(([c, owner]) => (
         <Camp key={key(c)} owner={owner} position={surface(hexGrid, c)} hideLabel />
       ))}
-      {troops.map((unit, index) => {
+      {live && troops.map((unit, index) => {
         // Everyone faces the enemy castle, apart from the units locked in a skirmish
         const [enemyCastle] = CASTLES.find(([, owner]) => owner !== unit.owner)!;
         const [tx, , tz] = axialToWorld(enemyCastle);
@@ -127,24 +144,37 @@ const Island: React.FC<{ themeIndex: number }> = ({ themeIndex }) => {
 };
 
 interface IslandDioramaProps {
-  // Called with the theme on show, so the page can name it
+  // Called with the theme on show (once the island is ready), so the page can name it
   onThemeChange?: (name: string) => void;
+  // Called once the first island's terrain and scenery are on screen
+  onReady?: () => void;
+  // For the poster picture: the first island's terrain alone, standing still
+  poster?: boolean;
 }
 
-const IslandDiorama: React.FC<IslandDioramaProps> = ({ onThemeChange }) => {
+const IslandDiorama: React.FC<IslandDioramaProps> = ({ onThemeChange, onReady, poster = false }) => {
   const [themeIndex, setThemeIndex] = useState(0);
+  const [ready, setReady] = useState(false);
+  const live = ready && !poster;
 
   useEffect(() => {
+    if (!live) return;
     const interval = setInterval(() => setThemeIndex(index => (index + 1) % MAP_THEMES.length), THEME_DURATION);
     return () => clearInterval(interval);
-  }, []);
+  }, [live]);
 
   useEffect(() => {
-    onThemeChange?.(MAP_THEMES[themeIndex].name);
-  }, [themeIndex, onThemeChange]);
+    if (live) onThemeChange?.(MAP_THEMES[themeIndex].name);
+  }, [live, themeIndex, onThemeChange]);
+
+  const handleReady = () => {
+    if (ready) return;
+    setReady(true);
+    onReady?.();
+  };
 
   return (
-    <Canvas shadows flat dpr={[1, 1.5]} camera={{ position: [0, 15, 19], fov: 36 }}>
+    <Canvas shadows flat dpr={poster ? 1 : [1, 1.5]} gl={poster ? { preserveDrawingBuffer: true, alpha: true } : undefined} camera={{ position: [0, 15, 19], fov: CAMERA_FOV }}>
       <hemisphereLight args={['#ffffff', '#9ccfe8', 1.6]} />
       <directionalLight
         position={[8, 20, 12]}
@@ -159,7 +189,7 @@ const IslandDiorama: React.FC<IslandDioramaProps> = ({ onThemeChange }) => {
         shadow-bias={-0.0005}
       />
       <group position={[0, -1.5, 0]}>
-        <Island themeIndex={themeIndex} />
+        <Island themeIndex={themeIndex} live={live} onReady={handleReady} />
       </group>
     </Canvas>
   );

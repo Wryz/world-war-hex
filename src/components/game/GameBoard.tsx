@@ -8,6 +8,7 @@ import { UnitMesh, UnitBattle, OWNER_COLORS, DEATH_DURATION } from './UnitMesh';
 import { Castle, CastleIncoming } from './Castle';
 import { Camp } from './Camp';
 import { BoardDecorations } from './BoardDecorations';
+import { BattlefieldObjects } from './BattlefieldObjects';
 import { MovePath } from './MovePath';
 import {
   DEFAULT_SETTINGS,
@@ -24,17 +25,20 @@ import {
   getRememberedEnemies,
   isFogOfWar,
   getMovePath,
+  getFellLanding,
+  getActionTargets,
+  ACTION_NAMES,
   getValidBaseLocations,
   getSiegeDamage,
   getCombatEffects,
+  strongestEffects,
   HIGH_GROUND_ELEVATION,
   HEIGHT_DAMAGE_PER_UNIT,
   BERSERK_ATTACK_MULTIPLIER,
   TERRAIN_BONUS_ATTACK_MULTIPLIER,
   getSituationalBonuses,
   getProtections,
-  getEffects,
-  isSmoked
+
 } from '@/lib/game/gameState';
 import { ROMAN, unitSignature } from '@/lib/game/signatures';
 import { getHexDistance } from '@/lib/game/hexUtils';
@@ -50,8 +54,12 @@ import { getBattleStartDelay, getDeathTime, getImpactTimes, getImpactTimesUntil 
 import { getUnitTypeName } from './utils/UnitHelpers';
 import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale, getGameSpeed } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
-import { CampIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
+import { ActionIcon, StakesIcon, CampIcon, EmbersIcon, FallenLogIcon, FellIcon, FireIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
+import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
+import { isCapturable } from '@/lib/game/structures';
 import type { UnitBuff } from './UnitMesh';
+import type { TutorialVisuals } from './shared/TutorialGuide';
+import { TutorialMarkers } from './shared/TutorialMarkers';
 import { describeBonus, getBond } from '@/lib/game/bonds';
 import type { TroopId } from '@/lib/game/troops';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
@@ -117,8 +125,8 @@ interface GameBoardProps {
   unitIds?: Set<string>;
   // Tint the hexes enemies can strike next turn, and label damage for the selected troop
   showThreats?: boolean;
-  // A tactic card is being aimed: the highlighted hexes are its targets
-  targetingTactic?: boolean;
+  // The first battle's tutorial: where it points the camera, and what it marks on the board
+  tutorial?: TutorialVisuals | null;
 }
 
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
@@ -141,6 +149,8 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
             focus={props.selectedUnit?.position ?? (props.selectedHex && (props.selectedHex.isCamp || props.selectedHex.isBase) ? props.selectedHex.coordinates : null)}
             focusIsOurs={props.selectedUnit ? props.selectedUnit.owner === 'player' : props.selectedHex?.owner === 'player'}
             deployingCard={props.selectedUnitTypeForPurchase}
+            showcase={props.tutorial?.showcase ?? null}
+            keepInView={props.tutorial?.keepInView ?? null}
           />
         </Suspense>
       </Canvas>
@@ -181,8 +191,21 @@ const nearestSide = (azimuth: number, castleAzimuth: number) => {
   return best;
 };
 
-const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; focusIsOurs?: boolean; deployingCard?: UnitType | null }> = ({
-  gameState, focus, focusIsOurs = true, deployingCard
+// Where on screen (as shares of its width and height) a hex the tutorial points at should be: clear
+// of the edges, the top HUD and the hand of cards
+const KEEP_IN_VIEW = { left: 0.12, right: 0.88, top: 0.16, bottom: 0.66 };
+
+const CameraRig: React.FC<{
+  gameState: GameState;
+  focus: HexCoordinates | null;
+  focusIsOurs?: boolean;
+  deployingCard?: UnitType | null;
+  // A point the tutorial is showing: the camera flies there, and back to your side when it's done
+  showcase?: TutorialVisuals['showcase'];
+  // A hex the tutorial is pointing at: the camera drifts until it is well on screen
+  keepInView?: HexCoordinates | null;
+}> = ({
+  gameState, focus, focusIsOurs = true, deployingCard, showcase = null, keepInView = null
 }) => {
   const { camera, size, gl } = useThree();
 
@@ -348,6 +371,24 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
     // Only reacts to a new turn of yours
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yourTurn]);
+
+  // The tutorial showing a spot on the board: fly there, close and from higher up; then come back
+  const showcaseKey = showcase ? `${showcase.at.q},${showcase.at.r},${showcase.zoom}` : null;
+  const wasShowcasingRef = useRef(false);
+  useEffect(() => {
+    if (showcase) {
+      const [x, , z] = axialToWorld(showcase.at);
+      desiredLookAtRef.current = new THREE.Vector3(x, 0, z);
+      desiredZoomRef.current = showcase.zoom;
+      desiredElevationRef.current = THREE.MathUtils.degToRad(62);
+      wasShowcasingRef.current = true;
+    } else if (wasShowcasingRef.current) {
+      wasShowcasingRef.current = false;
+      showSide(0);
+    }
+    // Only reacts to the tutorial moving the camera
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showcaseKey]);
 
   // A camp you've just captured: swing round to its side
   const ownedCamps = gameState.hexGrid.filter(hex => hex.isCamp && hex.owner === viewSide).map(hex => coordKey(hex.coordinates)).sort().join(' ');
@@ -531,9 +572,29 @@ const CameraRig: React.FC<{ gameState: GameState; focus: HexCoordinates | null; 
     }
   }, [camera]);
 
+  const keepInViewRef = useRef(keepInView);
+  keepInViewRef.current = keepInView;
+  const probe = useMemo(() => new THREE.Vector3(), []);
+
   useFrame((frame, rawDelta) => {
     const delta = Math.min(rawDelta, 0.1);
     const ease = Math.min(1, delta * CAMERA_TURN_SPEED);
+
+    // Drift towards the hex the tutorial points at while it is near an edge or under the HUD
+    const spot = keepInViewRef.current;
+    if (spot) {
+      const [x, , z] = axialToWorld(spot);
+      probe.set(x, 0, z).project(camera);
+      const screenX = (probe.x + 1) / 2;
+      const screenY = (1 - probe.y) / 2;
+      if (probe.z > 1 || screenX < KEEP_IN_VIEW.left || screenX > KEEP_IN_VIEW.right || screenY < KEEP_IN_VIEW.top || screenY > KEEP_IN_VIEW.bottom) {
+        const desired = desiredLookAtRef.current ?? defaultLookAt.clone();
+        const pull = Math.min(1, delta * 1.5);
+        desired.x += (x - desired.x) * pull;
+        desired.z += (z - desired.z) * pull;
+        desiredLookAtRef.current = desired;
+      }
+    }
     const [shakeX, shakeY, shakeZ] = takeShake(delta, frame.clock.getElapsedTime());
     const desiredAzimuth = targetAzimuth + azimuthOffsetRef.current;
     const current = azimuthRef.current ?? desiredAzimuth;
@@ -641,6 +702,9 @@ interface BoardSceneProps extends GameBoardProps {
   assetsLoaded: boolean;
 }
 
+// Effects called out over a battle at most (the biggest ones)
+const MAX_CALLOUTS = 2;
+
 // High above a hex, clear of the troops fighting on it
 const calloutPosition = (hex: Hex): [number, number, number] => {
   const [x, y, z] = surfacePosition(hex);
@@ -661,76 +725,87 @@ const surfacePosition = (hex: Hex): [number, number, number] => {
 
 const toVector = ([x, y, z]: [number, number, number]) => new THREE.Vector3(x, y, z);
 
-// The buffs (and the odd drawback) working on a unit right now, shown under its health tag: cover,
-// height, healing, a held gold mine, berserk fury and the bonds it fights with
+// The buffs (and the odd drawback) working on a unit right now, shown under its health tag, most
+// telling first: its signature while its condition is met, hazards, then the ground.
+// Bonds are always on, so they only show in the list a tap opens.
 const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitBuff[] => {
   if (!hex) return [];
   const buffs: UnitBuff[] = [];
   const effect = TERRAIN_EFFECTS[hex.terrain];
   const pct = (value: number) => `${Math.round(value * 100)}%`;
-  const ranged = unit.abilities.includes('rangedAttack');
 
-  if (effect.damageTakenMultiplier < 1) {
-    buffs.push({ id: 'cover', terrain: hex.terrain, label: `${effect.name} cover`, value: `-${pct(1 - effect.damageTakenMultiplier)} damage taken`, good: true });
+  // Its signature, while it is working
+  const signature = unitSignature(unit);
+  const situational = getSituationalBonuses(state, unit);
+  if (signature) {
+    const bonus = situational.find(entry => entry.label === signature.def.name);
+    const warding = signature.def.id === 'ward' &&
+      state.players[unit.owner].units.some(ally => ally.id !== unit.id && getHexDistance(ally.position, unit.position) === 1);
+    if (bonus || warding) {
+      buffs.push({
+        id: 'signature', icon: 'signature', label: `${signature.def.name} ${ROMAN[signature.rank]}`,
+        value: bonus ? `+${pct(bonus.multiplier - 1)} attack` : signature.def.short(signature.rank), good: true
+      });
+    }
   }
-  if (effect.elevation >= HIGH_GROUND_ELEVATION) {
-    buffs.push({ id: 'high', terrain: hex.terrain, label: 'High ground', value: `+${pct(HEIGHT_DAMAGE_PER_UNIT)} attack per 1.0 height above the target${ranged ? ', +1 range' : ''}`, good: true });
+  // Its bonuses from others (Ward)
+  for (const bonus of situational) {
+    if (bonus.label !== signature?.def.name) {
+      // (a blacksmith's edge is on every troop, so it only shows in the list)
+      buffs.push({ id: `bonus-${bonus.label}`, icon: 'attack', label: bonus.label, value: `+${pct(bonus.multiplier - 1)} attack`, good: true, quiet: bonus.label === 'Blacksmith' });
+    }
   }
-  if (effect.elevation < 1) {
-    buffs.push({ id: 'low', terrain: hex.terrain, label: 'Low ground', value: `+${pct(HEIGHT_DAMAGE_PER_UNIT)} damage taken per 1.0 height an attacker stands above`, good: false });
+  for (const protection of getProtections(state, unit)) {
+    buffs.push({ id: `guard-${protection.label}`, icon: 'shield', label: protection.label, value: `-${pct(protection.reduction)} damage`, good: true });
   }
-  if (hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) {
-    buffs.push({ id: 'pikes', icon: 'attack', label: 'Forest pikes', value: `+${pct(TERRAIN_BONUS_ATTACK_MULTIPLIER - 1)} attack`, good: true });
+  // Its own fury
+  if (unit.abilities.includes('berserk') && unit.lifespan * 2 <= unit.maxLifespan) {
+    buffs.push({ id: 'berserk', icon: 'attack', label: 'Berserk', value: `+${pct(BERSERK_ATTACK_MULTIPLIER - 1)} attack`, good: true });
   }
-  if (effect.healPerTurn) {
-    buffs.push({ id: 'heal', terrain: hex.terrain, label: effect.name, value: `+${effect.healPerTurn} health per turn`, good: true });
+  // Hazards
+  if (hex.fire?.stage === 'burning') {
+    buffs.push(unit.abilities.includes('fireborn')
+      ? { id: 'fire', icon: 'fire', label: 'On fire', value: 'Unharmed', good: true }
+      : { id: 'fire', icon: 'fire', label: 'On fire', value: `-${FIRE_DAMAGE} health/turn`, good: false });
+  } else if (hex.fire?.stage === 'smoulder' && !unit.abilities.includes('fireborn')) {
+    buffs.push({ id: 'embers', icon: 'fire', label: 'Embers', value: 'Catches fire next turn', good: false });
   }
   if (effect.damagePerTurn) {
     const immune = (hex.terrain === 'lava' && unit.abilities.includes('fireborn')) || (hex.terrain === 'cursed' && unit.abilities.includes('undead'));
     buffs.push(immune
-      ? { id: 'scorch', terrain: hex.terrain, label: effect.name, value: hex.terrain === 'cursed' ? `+${effect.damagePerTurn} health per turn` : 'Unharmed', good: true }
-      : { id: 'scorch', terrain: hex.terrain, label: effect.name, value: `-${effect.damagePerTurn} health per turn`, good: false });
+      ? { id: 'scorch', terrain: hex.terrain, label: effect.name, value: hex.terrain === 'cursed' ? `+${effect.damagePerTurn} health/turn` : 'Unharmed', good: true }
+      : { id: 'scorch', terrain: hex.terrain, label: effect.name, value: `-${effect.damagePerTurn} health/turn`, good: false });
   }
-  if (hex.isResourceHex) {
-    buffs.push({ id: 'gold', icon: 'gold', label: 'Gold mine', value: `+${hex.resourceValue ?? 0} gold per turn`, good: true });
-  }
-  if (unit.abilities.includes('berserk') && unit.lifespan * 2 <= unit.maxLifespan) {
-    buffs.push({ id: 'berserk', icon: 'attack', label: 'Berserk', value: `+${pct(BERSERK_ATTACK_MULTIPLIER - 1)} attack`, good: true });
-  }
-  // Its signature ability (awake), and the signature and tactic bonuses at work right now
-  const signature = unitSignature(unit);
-  const situational = getSituationalBonuses(state, unit);
-  if (signature) {
-    const active = situational.some(bonus => bonus.label === signature.def.name);
-    buffs.push({
-      id: 'signature', icon: 'signature', label: `${signature.def.name} ${ROMAN[signature.rank]}`,
-      value: `${active ? 'Active: ' : ''}${signature.def.describe(signature.rank)}`, good: true
-    });
-  }
-  for (const bonus of situational) {
-    if (bonus.label !== signature?.def.name) {
-      buffs.push({ id: `bonus-${bonus.label}`, icon: 'attack', label: bonus.label, value: `+${pct(bonus.multiplier - 1)} attack`, good: true });
-    }
-  }
-  for (const protection of getProtections(state, unit)) {
-    buffs.push({ id: `guard-${protection.label}`, icon: 'shield', label: protection.label, value: `-${pct(protection.reduction)} damage taken`, good: true });
-  }
-  const march = getEffects(state, 'march').find(effect => effect.unitId === unit.id);
-  if (march) buffs.push({ id: 'march', icon: 'attack', label: 'Forced March', value: `+${march.value} movement this turn`, good: true });
-  if (isSmoked(state, unit.position)) {
-    buffs.push({ id: 'smoke', icon: 'shield', label: 'Smoke Screen', value: "Can't be shot at from 2 or more hexes", good: true });
-  }
+  // The ground
   if (hex.heightOffset) {
     buffs.push({
       id: 'dug', terrain: hex.terrain, label: hex.heightOffset > 0 ? 'Raised ground' : 'Sunken ground',
       value: `${hex.heightOffset > 0 ? '+' : ''}${hex.heightOffset.toFixed(2)} height`, good: hex.heightOffset > 0
     });
   }
+  if (effect.damageTakenMultiplier < 1) {
+    buffs.push({ id: 'cover', terrain: hex.terrain, label: `${effect.name} cover`, value: `-${pct(1 - effect.damageTakenMultiplier)} damage`, good: true });
+  }
+  if (effect.elevation >= HIGH_GROUND_ELEVATION) {
+    buffs.push({ id: 'high', terrain: hex.terrain, label: 'High ground', value: `+${pct(HEIGHT_DAMAGE_PER_UNIT)} attack per height${unit.abilities.includes('rangedAttack') ? ', +1 range' : ''}`, good: true });
+  }
+  if (effect.elevation < 1) {
+    buffs.push({ id: 'low', terrain: hex.terrain, label: 'Low ground', value: `+${pct(HEIGHT_DAMAGE_PER_UNIT)} damage taken per height`, good: false });
+  }
+  if (hex.terrain === 'forest' && unit.abilities.includes('terrainBonus')) {
+    buffs.push({ id: 'pikes', icon: 'attack', label: 'Forest pikes', value: `+${pct(TERRAIN_BONUS_ATTACK_MULTIPLIER - 1)} attack`, good: true });
+  }
+  if (effect.healPerTurn) {
+    buffs.push({ id: 'heal', terrain: hex.terrain, label: effect.name, value: `+${effect.healPerTurn} health/turn`, good: true });
+  }
+  if (hex.isResourceHex) {
+    buffs.push({ id: 'gold', icon: 'gold', label: 'Gold mine', value: `+${hex.resourceValue ?? 0} gold/turn`, good: true });
+  }
   if (unit.owner === 'player') {
     for (const bondId of state.bonds ?? []) {
       const bond = getBond(bondId);
       const bonus = bond.bonuses[unit.type as TroopId];
-      if (bonus) buffs.push({ id: `bond-${bond.id}`, icon: 'bond', label: bond.name, value: describeBonus(unit.type as TroopId, bonus), good: true });
+      if (bonus) buffs.push({ id: `bond-${bond.id}`, icon: 'bond', label: bond.name, value: describeBonus(unit.type as TroopId, bonus), good: true, quiet: true });
     }
   }
   return buffs;
@@ -757,7 +832,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   selectedUnitTypeForPurchase = null,
   unitIds,
   showThreats = false,
-  targetingTactic = false
+  tutorial = null
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const unitIdsRef = useRef(unitIds);
@@ -787,16 +862,19 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [isSetupPhase, hexGrid, gameState.castleChoices]
   );
-  // Hexes under a Smoke Screen
-  const smokedKeys = useMemo(
-    () => new Set((gameState.effects ?? []).filter(effect => effect.kind === 'smoke').flatMap(effect => effect.hexes ?? [])),
-    [gameState.effects]
-  );
+
+  // Hexes the selected troop can work on (demolish, set alight, build), highlighted like trees to fell
+  const actionKeys = useMemo(() => {
+    const live = selectedUnit && players[selectedUnit.owner].units.find(unit => unit.id === selectedUnit.id);
+    return new Set(live && live.owner === 'player' ? getActionTargets(gameState, live).map(target => coordKey(target.at)) : []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedUnit, players, hexGrid, pendingMoves]);
 
   const getHighlight = (key: string): HexHighlight => {
     if (isSetupPhase) return validBaseKeys.has(key) ? 'base' : 'none';
     if (!validMoveKeys.has(key)) return 'none';
-    return targetingTactic ? 'tactic' : selectedUnitTypeForPurchase ? 'deploy' : 'move';
+    if (hexByKey.get(key)?.feature === 'greatTree' || actionKeys.has(key)) return 'fell';
+    return selectedUnitTypeForPurchase ? 'deploy' : 'move';
   };
 
   const selectedKey = selectedHex ? coordKey(selectedHex.coordinates) : null;
@@ -1153,7 +1231,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   const plannedPaths = useMemo(() => pendingMoves.flatMap(move => {
     const unit = allUnits.find(u => u.id === move.unitId);
-    if (!unit) return [];
+    // (orders to fell a tree show where it will land instead)
+    if (!unit || move.action || hexByKey.get(coordKey(move.to))?.feature === 'greatTree') return [];
 
     const stateWithoutMove = { ...gameState, pendingMoves: pendingMoves.filter(m => m !== move) };
     const route = getMovePath(stateWithoutMove, unit, move.to) ?? [unit.position, move.to];
@@ -1165,6 +1244,24 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     return [{ id: move.unitId, points, color: OWNER_COLORS[unit.owner] }];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [pendingMoves, allUnits, hexByKey]);
+
+  // Trees about to fall: the ones ordered felled, and the one the selected troop is pointing at
+  const fellMarkers = useMemo(() => {
+    const orders = pendingMoves
+      .filter(move => hexByKey.get(coordKey(move.to))?.feature === 'greatTree')
+      .map(move => ({ unit: allUnits.find(u => u.id === move.unitId), tree: move.to }));
+    const hovered = hoveredKey && hexByKey.get(hoveredKey);
+    if (selectedUnit && hovered && hovered.feature === 'greatTree' && validMoveKeys.has(hoveredKey) &&
+      !orders.some(order => coordKey(order.tree) === hoveredKey)) {
+      orders.push({ unit: selectedUnit, tree: hovered.coordinates });
+    }
+    return orders.flatMap(({ unit, tree }) => {
+      const landing = unit && getFellLanding(gameState, unit.position, tree);
+      const hex = landing && hexByKey.get(coordKey(landing));
+      return hex ? [{ key: coordKey(tree), hex, crushes: !!hex.unit }] : [];
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMoves, allUnits, hexByKey, hoveredKey, selectedUnit, validMoveKeys]);
 
   // Preview the route to the hovered hex while a unit is selected
   const hoverPreviewPath = useMemo(() => {
@@ -1334,7 +1431,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             onHexHoverEnd={handleHexHoverEnd}
             fogged={!!visibleKeys && !visibleKeys.has(key)}
             threat={threatLevels?.get(key) ?? 0}
-            smoked={smokedKeys.has(key)}
             decor={decor}
           />
         );
@@ -1362,7 +1458,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {battleCallouts.map(({ key, hex, effects, playerAttacking }) => (
         <Html key={key} position={calloutPosition(hex)} center zIndexRange={[7, 0]} style={{ pointerEvents: 'none' }}>
           <div className="flex flex-col items-center gap-0.5">
-            {effects.slice(0, 3).map((effect, index) => {
+            {strongestEffects(effects, MAX_CALLOUTS).map((effect, index) => {
               const helpsYou = effect.tone === 'neutral' ? null : (effect.tone === 'good') === playerAttacking;
               return (
                 <span
@@ -1409,6 +1505,10 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
       {/* Trees, peaks, dunes and gold that show each hex's terrain */}
       <BoardDecorations hexGrid={hexGrid} decor={decor} />
+      {/* The tutorial's marks: your castle, the enemy castle to take, the hex to tap, the way there */}
+      {tutorial && <TutorialMarkers visuals={tutorial} hexByKey={hexByKey} />}
+      {/* Great trees, felled trunks and fires */}
+      <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} lastBombard={gameState.lastBombard} visibleKeys={visibleKeys} />
 
       {/* Castles */}
       {playerCastlePosition && (
@@ -1470,6 +1570,30 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         />
       ))}
 
+      {/* Work ordered this turn: what each troop will do to the hex next to it */}
+      {pendingMoves.filter(move => move.action).map(move => {
+        const hex = hexByKey.get(coordKey(move.to));
+        return hex && (
+          <Html key={`work-${move.unitId}`} position={labelPosition(hex)} center zIndexRange={[6, 0]} style={{ pointerEvents: 'none' }}>
+            <span className="flex items-center gap-1 whitespace-nowrap rounded-full bg-amber-400 px-1.5 py-0.5 text-[0.6875rem] font-bold text-slate-900 shadow select-none">
+              <ActionIcon action={move.action!} />{ACTION_NAMES[move.action!]}
+            </span>
+          </Html>
+        );
+      })}
+
+      {/* Where felled trees will land */}
+      {fellMarkers.map(marker => (
+        <Html key={`fell-${marker.key}`} position={labelPosition(marker.hex)} center zIndexRange={[6, 0]} style={{ pointerEvents: 'none' }}>
+          <span
+            className={`flex items-center gap-0.5 whitespace-nowrap rounded-full px-1.5 py-0.5 text-[0.6875rem] font-bold shadow select-none ${marker.crushes ? 'bg-rose-600 text-white' : 'bg-slate-900/85 text-amber-200'}`}
+            title={`The tree lands here${marker.crushes ? `: -${FELL_DAMAGE} to the troop on it` : ', leaving its trunk across the hex'}`}
+          >
+            <FellIcon color="currentColor" />{marker.crushes ? `-${FELL_DAMAGE}` : <FallenLogIcon color="currentColor" />}
+          </span>
+        </Html>
+      ))}
+
       {/* Planned routes */}
       {assetsLoaded && plannedPaths.map(path => (
         <MovePath key={path.id} points={path.points} color={path.color} />
@@ -1528,6 +1652,20 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
     : hex.isResourceHex
       ? `+${hex.resourceValue ?? 0} gold/turn`
       : TERRAIN_SHORT_EFFECTS[hex.terrain];
+  // What is on the hex, which matters more than its ground
+  const object = hex.fire?.stage === 'burning'
+    ? <><FireIcon /> On fire: impassable, -{FIRE_DAMAGE} health/turn to troops caught in it</>
+    : hex.fire?.stage === 'smoulder'
+      ? <><EmbersIcon /> Embers: catches fire next turn</>
+      : hex.feature === 'greatTree'
+        ? <><FellIcon /> Great tree: blocks the way and arrows. Chop it from a hex next to it: it falls away from you (-{FELL_DAMAGE})</>
+        : hex.feature === 'log'
+          ? <><FallenLogIcon /> Fallen trunk: blocks the way</>
+          : hex.feature === 'logBridge'
+            ? <><FallenLogIcon /> Log bridge: troops can cross</>
+            : hex.feature === 'stakes'
+              ? <><StakesIcon /> Stakes: cavalry can&apos;t cross, +1 movement for others</>
+              : null;
 
   return (
     <Html position={[x, y + 0.2, z]} zIndexRange={[9, 0]} style={{ pointerEvents: 'none' }}>
@@ -1536,7 +1674,12 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
           {hex.isCamp ? <><CampIcon /> Camp</> : <><TerrainIcon terrain={hex.terrain} /> {TERRAIN_EFFECTS[hex.terrain].name}</>}
         </span>
         <span className="text-slate-400"> · height {getHexHeight(hex).toFixed(1)}</span>
-        <span className="text-slate-400"> · {effect}</span>
+        {isCapturable(hex.terrain) && (
+          <span className="font-semibold" style={{ color: hex.owner ? OWNER_COLORS[hex.owner] : '#cbd5e1' }}>
+            {' '}· {hex.owner === 'player' ? 'yours' : hex.owner === 'ai' ? 'enemy' : 'unclaimed'}
+          </span>
+        )}
+        {object ? <span className="text-amber-200"> · {object}</span> : <span className="text-slate-400"> · {effect}</span>}
         {hex.unit && (
           <span className="ml-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>
             · {getUnitTypeName(hex.unit.type)} <HealthIcon /> {hex.unit.lifespan}

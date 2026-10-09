@@ -17,7 +17,7 @@ import { MELEE_IMPACT_POINT, PROJECTILE_FLIGHT_TIME, RANGED_RELEASE_POINT, WALK_
 import { playBattleSound, BattleSound } from './utils/battleSounds';
 import { DRAG_CLICK_TOLERANCE } from './HexTile';
 import { instantiateUnitModel, findAnimationClip, disposeUnitModel, UnitModelInstance } from './utils/unitModelCache';
-import { ArrowIcon, AttackIcon, BondIcon, CrownIcon, GoldIcon, ShieldIcon, SignatureIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
+import { ArrowIcon, AttackIcon, BondIcon, CrownIcon, GoldIcon, FireIcon, ShieldIcon, SignatureIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
 
 // Small lift so the unit's indicator doesn't z-fight with the tile surface
 const UNIT_ELEVATION = 0.02;
@@ -115,20 +115,26 @@ const DustPuff: React.FC<{ delay: number }> = ({ delay }) => {
 export interface UnitBuff {
   id: string;
   terrain?: TerrainType;
-  icon?: 'bond' | 'gold' | 'attack' | 'signature' | 'shield';
+  icon?: 'bond' | 'gold' | 'attack' | 'signature' | 'shield' | 'fire';
   label: string;
   value: string;
   good: boolean;
+  // Always on (bonds): listed when the row is opened, but no icon of its own
+  quiet?: boolean;
 }
+
+// Icons shown under a unit at most; the rest are counted
+const MAX_BUFF_ICONS = 3;
 
 const NO_BUFFS: UnitBuff[] = [];
 
 const BuffIcon: React.FC<{ buff: UnitBuff }> = ({ buff }) =>
   buff.icon === 'bond' ? <BondIcon /> : buff.icon === 'gold' ? <GoldIcon /> : buff.icon === 'attack' ? <AttackIcon />
-    : buff.icon === 'signature' ? <SignatureIcon /> : buff.icon === 'shield' ? <ShieldIcon />
+    : buff.icon === 'signature' ? <SignatureIcon /> : buff.icon === 'shield' ? <ShieldIcon /> : buff.icon === 'fire' ? <FireIcon />
       : <TerrainIcon terrain={buff.terrain ?? 'plain'} />;
 
-// A unit's buffs as a row of icons; tapping it opens each one's name and numbers
+// A unit's buffs as a short row of icons (the first few, then a count); tapping it opens each one's
+// name and numbers
 // Only the icons take clicks: the open details let clicks through to the board, and close on the
 // next click anywhere else
 const BuffRow: React.FC<{ buffs: UnitBuff[]; open: boolean; setOpen: (update: (open: boolean) => boolean) => void }> = ({ buffs, open, setOpen }) => {
@@ -141,6 +147,10 @@ const BuffRow: React.FC<{ buffs: UnitBuff[]; open: boolean; setOpen: (update: (o
     window.addEventListener('pointerdown', close);
     return () => window.removeEventListener('pointerdown', close);
   }, [open, setOpen]);
+  const loud = buffs.filter(buff => !buff.quiet);
+  const shown = loud.slice(0, MAX_BUFF_ICONS);
+  const hidden = loud.length - shown.length;
+  if (loud.length === 0) return null;
   return (
     <div className="flex flex-col items-center gap-0.5">
       <button
@@ -152,9 +162,15 @@ const BuffRow: React.FC<{ buffs: UnitBuff[]; open: boolean; setOpen: (update: (o
         title="Buffs - tap for details"
         className="flex items-center gap-0.5 rounded-full bg-slate-900/75 px-1 py-px text-[0.6875rem] leading-none shadow hover:bg-slate-800"
       >
-        {buffs.map(buff => (
-          <span key={buff.id} className={buff.good ? '' : 'opacity-80 grayscale-[30%]'}><BuffIcon buff={buff} /></span>
+        {shown.map(buff => (
+          <span
+            key={buff.id}
+            className={buff.icon === 'signature' ? 'rounded-full bg-fuchsia-500/40 px-px shadow-[0_0_6px_#e879f9]' : buff.good ? '' : 'opacity-80 grayscale-[30%]'}
+          >
+            <BuffIcon buff={buff} />
+          </span>
         ))}
+        {hidden > 0 && <span className="px-px text-[0.5625rem] font-bold text-slate-300">+{hidden}</span>}
       </button>
       {open && (
         <div className="flex flex-col gap-0.5 rounded-lg bg-slate-900/90 px-2 py-1 text-[0.625rem] leading-tight shadow-lg">
@@ -743,7 +759,8 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       )}
 
       {/* Simple placeholder while the model is loading (no external assets so it can't suspend the scene) */}
-      {!modelLoaded && !dying && (
+      {/* (decorative troops, as on the landing page, simply appear once their model is in) */}
+      {!modelLoaded && !dying && !decorative && (
         <mesh position={[0, 0.5, 0]}>
           <capsuleGeometry args={[0.2, 0.5, 4, 8]} />
           <meshStandardMaterial color={ownerColor} />
@@ -751,7 +768,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       )}
 
       {/* Owner ring so it's always clear which side a unit belongs to */}
-      <mesh visible={!dying && !killed && !hideRing} position={[0, RING_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>
+      <mesh visible={!dying && !killed && !hideRing && (modelLoaded || !decorative)} position={[0, RING_HEIGHT, 0]} rotation={[-Math.PI / 2, 0, 0]}>
         <ringGeometry args={[0.42, isSelected ? 0.62 : 0.54, 32]} />
         <meshBasicMaterial
           color={isSelected ? '#facc15' : ownerColor}

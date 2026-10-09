@@ -14,15 +14,11 @@ import { getLevel, enemyRosterStats, LEVEL_COUNT, targetWinRate } from '@/lib/ca
 import { expectedProgression } from '@/lib/meta/economy';
 import { deckRoster } from '@/lib/campaign/battleSetup';
 import { TROOPS, cardStats, scaleTroop } from '@/lib/game/troops';
-import { FACTION_TACTICS, STARTER_TACTICS, enemyTacticLevel } from '@/lib/game/tactics';
 
 const args = process.argv.slice(2);
 // --no-fog plays every battle without the fog of war, to see what the fog changes
 const noFog = args.includes('--no-fog');
 if (noFog) args.splice(args.indexOf('--no-fog'), 1);
-// --no-tactics plays every battle without tactic cards
-const noTactics = args.includes('--no-tactics');
-if (noTactics) args.splice(args.indexOf('--no-tactics'), 1);
 // --strength x plays every battle with the enemy x times as strong as the level's setting
 const strengthAt = args.indexOf('--strength');
 const fixedStrength = strengthAt >= 0 ? Number(args[strengthAt + 1]) : 1;
@@ -64,12 +60,7 @@ const playBattle = (levelId: number, strength = 1): GameState => {
     },
     deck: shuffle(deck),
     levelId,
-    guards,
-    // The model player brings the starter tactic cards, upgraded in step with the enemy's
-    tactics: noTactics || levelId === 1 ? undefined : {
-      player: STARTER_TACTICS.map(id => ({ id, level: enemyTacticLevel(levelId) })),
-      ai: FACTION_TACTICS[level.region.faction].map(id => ({ id, level: enemyTacticLevel(levelId) }))
-    }
+    guards
   });
 
   peakArmy = 0;

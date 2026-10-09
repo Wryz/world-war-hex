@@ -1,16 +1,12 @@
 import React, { useState } from 'react';
-import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TROOPS, TroopId, cardPower, cardStats } from '@/lib/game/troops';
+import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TROOPS, TroopId } from '@/lib/game/troops';
+import { CARD_UNLOCK_LEVEL, ELITE_UNLOCK_LEVEL, MAX_DECK_SIZE, cardPrice, upgradeCost } from '@/lib/meta/economy';
 import {
-  CARD_UNLOCK_LEVEL, ELITE_UNLOCK_LEVEL, MAX_DECK_SIZE, TACTIC_UNLOCK_LEVEL, cardPrice, tacticPrice, tacticUpgradeCost, upgradeCost
-} from '@/lib/meta/economy';
-import {
-  buyCard, buyTactic, eliteUnlocked, highestCleared, isCardAvailable, isTacticAvailable, ownedTactics, profilePower, toggleDeckCard,
-  toggleTacticLoadout, upgradeCard, upgradeTactic, useHasHydrated, useProfile
+  buyCard, eliteUnlocked, highestCleared, isCardAvailable, profilePower, toggleDeckCard, upgradeCard, useHasHydrated, useProfile
 } from '@/lib/meta/profile';
 import { ROMAN, getSignature, signatureRank } from '@/lib/game/signatures';
-import { MAX_TACTIC_LEVEL, TACTICS, TACTIC_IDS, TACTIC_LOADOUT_SIZE, TacticId } from '@/lib/game/tactics';
-import { TacticCard } from '../game/cards/TacticCard';
-import { devSetCardLevel, devSetTacticLevel, useDevMode } from '@/lib/meta/devTools';
+import { CardDetailSheet } from './CardDetailSheet';
+import { devSetCardLevel, useDevMode } from '@/lib/meta/devTools';
 
 // Dev tools only: step a card's level down or up for free
 const DevLevelControls: React.FC<{ level: number; max: number; onSet: (level: number) => void }> = ({ level, max, onSet }) => (
@@ -24,19 +20,10 @@ import { playStinger, useMusic } from '@/lib/audio/music';
 import { getLevel } from '@/lib/campaign/levels';
 import { TroopCard, RARITY_STYLES } from '../game/cards/TroopCard';
 import { MenuShell, CARD_CLASS } from './MenuShell';
-import { AttackIcon, BondIcon, CardsIcon, CoinIcon, HealthIcon, LockIcon, PowerIcon, SignatureIcon, TacticBackIcon, UnitIcon, UpgradeIcon } from '../game/icons';
+import { BondIcon, CardsIcon, CoinIcon, LockIcon, PowerIcon, SignatureIcon, UnitIcon, UpgradeIcon } from '../game/icons';
 import { BondList } from '../game/cards/BondList';
 import { useIsNarrow } from '../shared/useIsNarrow';
 import { BONDS, describeBond } from '@/lib/game/bonds';
-
-// Stat gains from the next upgrade, e.g. "+0.2 atk +1 hp"
-const upgradeGains = (id: TroopId, level: number) => {
-  const now = cardStats(id, level);
-  const next = cardStats(id, level + 1);
-  const attack = Math.round((next.attackPower - now.attackPower) * 10) / 10;
-  const health = next.maxLifespan - now.maxLifespan;
-  return { attack, health, power: cardPower(id, level + 1) - cardPower(id, level) };
-};
 
 // Your cards: choose the four to bring into battle, buy new cards as the campaign unlocks them, and upgrade them with coins
 export const ArmyScreen: React.FC = () => {
@@ -44,12 +31,14 @@ export const ArmyScreen: React.FC = () => {
   // Cards may train past level 10 once level 100 is won
   const eliteOpen = eliteUnlocked(profile);
   const hydrated = useHasHydrated();
-  const [flash, setFlash] = useState<{ id: TroopId | TacticId; text: string } | null>(null);
+  const [flash, setFlash] = useState<{ id: TroopId; text: string } | null>(null);
+  // The card whose details are open
+  const [detail, setDetail] = useState<TroopId | null>(null);
   const isNarrow = useIsNarrow();
   const devMode = useDevMode();
   useMusic('menu');
 
-  const announce = (id: TroopId | TacticId, text: string) => {
+  const announce = (id: TroopId, text: string) => {
     setFlash({ id, text });
     setTimeout(() => setFlash(current => (current?.id === id ? null : current)), 1400);
   };
@@ -68,20 +57,6 @@ export const ArmyScreen: React.FC = () => {
       const signature = getSignature(id);
       const after = signatureRank((profile.cards[id] ?? 1) + 1);
       announce(id, signature && after > before ? `${signature.name} ${ROMAN[after]}!` : 'Level up!');
-    }
-  };
-
-  const handleBuyTactic = (id: TacticId) => {
-    if (buyTactic(id)) {
-      playStinger('unlock');
-      announce(id, 'New tactic!');
-    }
-  };
-
-  const handleUpgradeTactic = (id: TacticId) => {
-    if (upgradeTactic(id)) {
-      playStinger('levelUp');
-      announce(id, 'Level up!');
     }
   };
 
@@ -126,7 +101,6 @@ export const ArmyScreen: React.FC = () => {
             const level = profile.cards[id]!;
             const cost = upgradeCost(id, level, eliteOpen);
             const inDeck = profile.deck.includes(id);
-            const gains = cost !== null ? upgradeGains(id, level) : null;
             return (
               <div key={id} className="relative flex flex-col items-center gap-2">
                 <TroopCard
@@ -135,37 +109,28 @@ export const ArmyScreen: React.FC = () => {
                   size="lg"
                   fill
                   selected={inDeck}
-                  onClick={() => toggleDeckCard(id)}
-                  title={inDeck ? 'In your battle cards - tap to leave it behind' : 'Tap to bring it into battle'}
+                  onClick={() => setDetail(id)}
+                  title="Tap for details"
                 />
                 {flash?.id === id && (
                   <span className="moment-pop font-display pointer-events-none absolute top-1/3 text-2xl text-amber-300" style={{ WebkitTextStroke: '1.5px #0f172a', paintOrder: 'stroke fill' }}>
                     {flash.text}
                   </span>
                 )}
-                {cost !== null && gains ? (
+                {cost !== null ? (
                   <button
                     onClick={() => handleUpgrade(id)}
                     disabled={profile.coins < cost}
-                    className="flex w-full flex-col items-center rounded-xl bg-emerald-600 px-2 py-2 text-white shadow-[0_4px_0_#065f46] transition-transform hover:-translate-y-0.5 hover:bg-emerald-500 active:translate-y-0.5 disabled:bg-slate-600 disabled:shadow-[0_4px_0_#1e293b] disabled:hover:translate-y-0"
-                    title={`Upgrade to level ${level + 1}`}
+                    className="font-display flex w-full items-center justify-center gap-1 rounded-xl bg-emerald-600 px-2 py-2 text-base text-white shadow-[0_4px_0_#065f46] transition-transform hover:-translate-y-0.5 hover:bg-emerald-500 active:translate-y-0.5 disabled:bg-slate-600 disabled:shadow-[0_4px_0_#1e293b] disabled:hover:translate-y-0"
+                    title={`Upgrade to level ${level + 1} (tap the card for what it gains)`}
                   >
-                    <span className="font-display flex items-center gap-1 text-base"><UpgradeIcon color="currentColor" /> Lv{level + 1} · <CoinIcon />{cost}</span>
-                    <span className="flex gap-2 text-sm font-bold opacity-90">
-                      {gains.attack > 0 && <span className="flex items-center gap-0.5"><AttackIcon />+{gains.attack}</span>}
-                      {gains.health > 0 && <span className="flex items-center gap-0.5"><HealthIcon />+{gains.health}</span>}
-                      <span className="flex items-center gap-0.5"><PowerIcon />+{gains.power}</span>
-                    </span>
-                    {signatureRank(level + 1) > signatureRank(level) && getSignature(id) && (
-                      <span className="flex items-center gap-1 text-xs font-bold text-fuchsia-100">
-                        <SignatureIcon /> {getSignature(id)!.name} {ROMAN[signatureRank(level + 1)]}
-                      </span>
-                    )}
+                    <UpgradeIcon color="currentColor" /> Lv{level + 1} · <CoinIcon />{cost}
+                    {signatureRank(level + 1) > signatureRank(level) && getSignature(id) && <SignatureIcon />}
                   </button>
                 ) : (
                   level < MAX_CARD_LEVEL ? (
                     <span className="flex w-full items-center justify-center gap-1 rounded-xl bg-slate-800/80 px-2 py-2 text-center text-sm font-bold text-slate-300" title="Elite levels 11-15 open once you win level 100">
-                      <LockIcon /> Elite levels: beat level {ELITE_UNLOCK_LEVEL}
+                      <LockIcon /> Elite: beat {ELITE_UNLOCK_LEVEL}
                     </span>
                   ) : (
                     <span className="font-display w-full rounded-xl bg-amber-500 px-3 py-2 text-center text-base text-slate-900">Max level</span>
@@ -177,9 +142,6 @@ export const ArmyScreen: React.FC = () => {
           })}
         </div>
       </section>
-
-      {/* Tactic cards */}
-      <TacticSection flash={flash} onBuy={handleBuyTactic} onUpgrade={handleUpgradeTactic} />
 
       {/* Every bond, so players know what to work towards */}
       <section className="mt-8">
@@ -199,7 +161,6 @@ export const ArmyScreen: React.FC = () => {
                   {active && <span className="ml-1.5 rounded-full bg-amber-400 px-1.5 text-[0.625rem] font-bold text-slate-900">Active</span>}
                   {!ready && <span className="ml-1.5 rounded-full bg-slate-700 px-1.5 text-[0.625rem] font-bold text-slate-300">Need both cards</span>}
                   <span className="block text-slate-300">{bond.cards.map(card => TROOPS[card].name).join(' + ')}: {describeBond(bond)}</span>
-                  <span className="mt-0.5 block italic text-slate-400">{bond.flavor}</span>
                 </span>
               </li>
             );
@@ -217,7 +178,7 @@ export const ArmyScreen: React.FC = () => {
               const price = cardPrice(id);
               return (
                 <div key={id} className="flex flex-col items-center gap-2">
-                  <TroopCard type={id} size="lg" fill />
+                  <TroopCard type={id} size="lg" fill onClick={() => setDetail(id)} title="Tap for details" />
                   <button
                     onClick={() => handleBuy(id)}
                     disabled={profile.coins < price}
@@ -233,7 +194,7 @@ export const ArmyScreen: React.FC = () => {
               const unlockAt = CARD_UNLOCK_LEVEL[id] ?? 0;
               return (
                 <div key={id} className="flex flex-col items-center gap-2">
-                  <TroopCard type={id} size="lg" fill locked />
+                  <TroopCard type={id} size="lg" fill locked onClick={() => setDetail(id)} title="Tap for details" />
                   <span className="flex w-full items-center justify-center gap-1 rounded-xl bg-slate-800/80 px-2 py-2.5 text-center text-sm font-bold text-slate-300">
                     <LockIcon /> Beat level {unlockAt}
                   </span>
@@ -244,88 +205,19 @@ export const ArmyScreen: React.FC = () => {
           </div>
         </section>
       )}
-    </MenuShell>
-  );
-};
 
-// Tactic cards: the three brought into battle, upgrades for the ones owned, and the ones to buy
-const TacticSection: React.FC<{
-  flash: { id: TroopId | TacticId; text: string } | null;
-  onBuy: (id: TacticId) => void;
-  onUpgrade: (id: TacticId) => void;
-}> = ({ flash, onBuy, onUpgrade }) => {
-  const profile = useProfile();
-  const devMode = useDevMode();
-  const owned = ownedTactics(profile);
-  const forSale = TACTIC_IDS.filter(id => profile.tactics[id] === undefined && isTacticAvailable(profile, id));
-  const locked = TACTIC_IDS.filter(id => profile.tactics[id] === undefined && !isTacticAvailable(profile, id));
-  return (
-    <section className="mt-8">
-      <h2 className="font-display mb-1 flex items-center gap-2 text-2xl text-slate-800"><TacticBackIcon color="#334155" /> Tactic cards</h2>
-      <p className="mb-3 text-sm font-semibold text-slate-700">
-        Bring {TACTIC_LOADOUT_SIZE}. From round 2, every second round you draw one of them at random (hold up to 3) and play it on your turn. So does the enemy.
-      </p>
-      <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 md:grid-cols-4">
-        {owned.map(id => {
-          const level = profile.tactics[id]!;
-          const cost = tacticUpgradeCost(level);
-          const inLoadout = profile.tacticLoadout.includes(id);
-          return (
-            <div key={id} className="relative flex flex-col items-center gap-2">
-              <TacticCard
-                id={id}
-                level={level}
-                size="lg"
-                fill
-                selected={inLoadout}
-                onClick={() => toggleTacticLoadout(id)}
-                title={inLoadout ? 'In your battle tactics - tap to leave it behind' : 'Tap to bring it into battle'}
-              />
-              {flash?.id === id && (
-                <span className="moment-pop font-display pointer-events-none absolute top-1/3 text-2xl text-amber-300" style={{ WebkitTextStroke: '1.5px #0f172a', paintOrder: 'stroke fill' }}>
-                  {flash.text}
-                </span>
-              )}
-              {cost !== null ? (
-                <button
-                  onClick={() => onUpgrade(id)}
-                  disabled={profile.coins < cost}
-                  title={`Level ${level + 1}: ${TACTICS[id].describe(level + 1)}`}
-                  className="flex w-full flex-col items-center rounded-xl bg-emerald-600 px-2 py-2 text-white shadow-[0_4px_0_#065f46] transition-transform hover:-translate-y-0.5 hover:bg-emerald-500 active:translate-y-0.5 disabled:bg-slate-600 disabled:shadow-[0_4px_0_#1e293b] disabled:hover:translate-y-0"
-                >
-                  <span className="font-display flex items-center gap-1 text-base"><UpgradeIcon color="currentColor" /> Lv{level + 1} · <CoinIcon />{cost}</span>
-                </button>
-              ) : (
-                <span className="font-display w-full rounded-xl bg-amber-500 px-3 py-2 text-center text-base text-slate-900">Max level</span>
-              )}
-              {devMode && <DevLevelControls level={level} max={MAX_TACTIC_LEVEL} onSet={next => devSetTacticLevel(id, next)} />}
-            </div>
-          );
-        })}
-        {forSale.map(id => {
-          const price = tacticPrice(id);
-          return (
-            <div key={id} className="flex flex-col items-center gap-2">
-              <TacticCard id={id} size="lg" fill />
-              <button
-                onClick={() => onBuy(id)}
-                disabled={profile.coins < price}
-                className="font-display flex w-full items-center justify-center gap-1 rounded-xl bg-amber-500 px-2 py-2.5 text-lg text-slate-900 shadow-[0_4px_0_#b45309] transition-transform hover:-translate-y-0.5 hover:bg-amber-400 active:translate-y-0.5 disabled:bg-slate-600 disabled:text-slate-300 disabled:shadow-[0_4px_0_#1e293b] disabled:hover:translate-y-0"
-              >
-                Buy <CoinIcon color={profile.coins < price ? '#cbd5e1' : '#0f172a'} />{price}
-              </button>
-            </div>
-          );
-        })}
-        {locked.map(id => (
-          <div key={id} className="flex flex-col items-center gap-2">
-            <TacticCard id={id} size="lg" fill locked />
-            <span className="flex w-full items-center justify-center gap-1 rounded-xl bg-slate-800/80 px-2 py-2.5 text-center text-sm font-bold text-slate-300">
-              <LockIcon /> Beat level {TACTIC_UNLOCK_LEVEL[id]}
-            </span>
-          </div>
-        ))}
-      </div>
-    </section>
+      {detail && (
+        <CardDetailSheet
+          id={detail}
+          onClose={() => setDetail(null)}
+          onUpgrade={handleUpgrade}
+          onBuy={handleBuy}
+          flash={flash?.id === detail ? flash.text : null}
+          devControls={devMode && profile.cards[detail] !== undefined && (
+            <DevLevelControls level={profile.cards[detail]!} max={MAX_CARD_LEVEL} onSet={next => devSetCardLevel(detail, next)} />
+          )}
+        />
+      )}
+    </MenuShell>
   );
 };
