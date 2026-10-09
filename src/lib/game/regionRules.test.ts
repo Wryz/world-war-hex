@@ -175,3 +175,14 @@ test('a War Cleric of any level finishes the undead', () => {
   place(state, bones, cleric);
   assert.equal(find(playTurn(state), bones), undefined);
 });
+
+test('a champion falling on its own side\'s turn still shakes its army through the next turn', () => {
+  const { state, centre } = makeBattle('ai');
+  const champion = troop('ai', 'bandit_thug', centre, { isChampion: true, lifespan: 1, maxLifespan: 30, attackPower: 1 });
+  const thug = troop('ai', 'bandit_thug', at(centre, 3, -1));
+  const sword = troop('player', 'infantry', at(centre, 1, 0), { attackPower: 10, lifespan: 40, maxLifespan: 40 });
+  place(state, champion, thug, sword);
+  const after = playTurn(state);
+  assert.equal(find(after, champion), undefined, 'struck down attacking');
+  assert.equal(find(after, thug)!.shaken, 1, 'still shaken on the player\'s turn');
+});

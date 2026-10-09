@@ -816,8 +816,10 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   }
   if (canRise(unit)) buffs.push({ id: 'undying', icon: 'undying', label: 'Undying', value: 'Rises again once (not against Clerics or fire)', good: true, quiet: true });
   if (furyMultiplier(unit) >= 1.05) buffs.push({ id: 'fury', icon: 'fury', label: 'Fury', value: `+${pct(furyMultiplier(unit) - 1)} attack`, good: true });
-  if (hasTrait(unit, 'pack') && friends.some(friend => friend.id !== unit.id && hasTrait(friend, 'pack') && getHexDistance(friend.position, unit.position) <= 2)) {
-    buffs.push({ id: 'pack', icon: 'pack', label: 'Pack Hunters', value: `+${pct(PACK_BONUS)} attack for each other beast beside its prey`, good: true, quiet: true });
+  // (when an enemy beside it has another of its pack beside it too)
+  if (hasTrait(unit, 'pack') && foes.some(foe => getHexDistance(foe.position, unit.position) === 1 &&
+    friends.some(friend => friend.id !== unit.id && hasTrait(friend, 'pack') && getHexDistance(friend.position, foe.position) === 1))) {
+    buffs.push({ id: 'pack', icon: 'pack', label: 'Pack Hunters', value: `+${pct(PACK_BONUS)} attack for each other beast beside its prey`, good: true });
   }
   // Its own fury
   if (unit.abilities.includes('berserk') && unit.lifespan * 2 <= unit.maxLifespan) {

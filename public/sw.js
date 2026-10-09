@@ -42,6 +42,7 @@ self.addEventListener('install', event => {
 });
 
 // The models and art, one at a time and only those not yet cached, when the page says it's idle
+// (again next time it asks, if the connection dropped part-way)
 let warming = null;
 self.addEventListener('message', event => {
   if (event.data?.type !== 'warm' || warming) return;
@@ -57,7 +58,7 @@ self.addEventListener('message', event => {
         break;
       }
     }
-  })();
+  })().finally(() => { warming = null; });
   event.waitUntil(warming);
 });
 
@@ -75,7 +76,7 @@ const isCacheFirst = url =>
   url.pathname.startsWith('/models/') ||
   url.pathname.startsWith('/sounds/') ||
   url.pathname.startsWith('/music/') ||
-  /\.(?:png|jpg|svg|ico|woff2?)$/.test(url.pathname);
+  /\.(?:png|jpg|webp|svg|ico|woff2?)$/.test(url.pathname);
 
 // A cached file, fetching (and caching) the whole of it if needed
 const cachedFile = async (request, url) => {

@@ -21,7 +21,10 @@ export const registerServiceWorker = () => {
         setTimeout(warm, WARM_DELAY_MS);
         return;
       }
-      navigator.serviceWorker.ready.then(registration => registration.active?.postMessage({ type: 'warm' })).catch(() => undefined);
+      // (a new version still waiting to take over warms its own cache, not the outgoing one's)
+      navigator.serviceWorker.ready
+        .then(registration => (registration.waiting ?? registration.installing ?? registration.active)?.postMessage({ type: 'warm' }))
+        .catch(() => undefined);
     };
     setTimeout(() => {
       if ('requestIdleCallback' in window) window.requestIdleCallback(warm, { timeout: 10000 });

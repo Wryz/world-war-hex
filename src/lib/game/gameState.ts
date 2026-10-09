@@ -2431,13 +2431,10 @@ const finishTurn = (state: GameState): GameState => {
   // Units worn down by lava, cursed ground or fire fall
   for (const unit of burned) {
     newState.players[unit.owner].units = newState.players[unit.owner].units.filter(u => u.id !== unit.id);
-    sideStats(newState, unit.owner).lost++;
+    // (a boss the ground finishes off is slain all the same, and counts for the other side)
+    if (unit.isBoss) creditKill(newState, unit, getOpponent(unit.owner));
+    else sideStats(newState, unit.owner).lost++;
     if (unit.isBoss || unit.isChampion) shakeArmy(newState, unit.owner, unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE, unit);
-    // (a boss the ground finishes off is slain all the same)
-    if (unit.isBoss) {
-      sideStats(newState, getOpponent(unit.owner)).bossesSlain++;
-      addLog(newState, getOpponent(unit.owner), `${getTroopName(unit.type)} has been slain!`);
-    }
     const inFire = findHexByCoordinates(newState.hexGrid, unit.position)?.fire?.stage === 'burning';
     addLog(newState, unit.owner, inFire
       ? `${unitLabel(unit)} perished in the flames.`
@@ -2887,8 +2884,9 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     ? distributeDamage(attackers.map(a => a.canBeHitBack ? getStrikePower(state, defenders[0].unit, a.unit) : null))
     : attackers.map(() => 0);
 
-  // An undying troop slain rises again, unless a War Cleric or a firebrand among its foes finishes it
-  const finishesUndead = (foes: Unit[]) => foes.some(foe => foe.type === 'cleric' || rankOf(foe, 'holySmite') > 0 || hasAbility(foe, 'firebrand'));
+  // An undying troop slain rises again, unless a War Cleric among its foes finishes it (fire finishes
+  // it on the burning ground, at the turn's end)
+  const finishesUndead = (foes: Unit[]) => foes.some(foe => foe.type === 'cleric');
   const withDamage = (
     entry: { unit: Unit; terrain: TerrainType; power: number; modifiers: CombatEffect[] },
     rawDamage: number,
@@ -3098,7 +3096,11 @@ export const resolveAllCombats = (state: GameState): GameState => {
 const removeUnit = (state: GameState, unit: Unit): void => {
   state.players[unit.owner].units = state.players[unit.owner].units.filter(u => u.id !== unit.id);
   if (unit.isBoss) scatterMinions(state);
-  if (unit.isBoss || unit.isChampion) shakeArmy(state, unit.owner, unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE, unit);
+  // (falling on its own side's turn, the turn's end would count one off at once: it gets one more)
+  if (unit.isBoss || unit.isChampion) {
+    const turns = (unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE) + (getActivePlayer(state) === unit.owner ? 1 : 0);
+    shakeArmy(state, unit.owner, turns, unit);
+  }
   syncHexUnits(state);
 };
 
