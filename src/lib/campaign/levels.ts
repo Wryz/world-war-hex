@@ -161,8 +161,9 @@ const FACTION_STRENGTH: Partial<Record<Faction, number>> = {
 // Later levels in a region are a little harder than earlier ones; the first meets a new enemy, so it is gentler
 const IN_REGION_RAMP = 0.012;
 const FIRST_LEVEL_EASE = 0.92;
-// The tutorial battle is gentler still
+// The tutorial battles are gentler still (the second, where the guide still leads, a little less so)
 const TUTORIAL_EASE = 0.75;
+const SECOND_TUTORIAL_EASE = 0.85;
 // Bosses and champions are far tougher than a regular troop, so their stats are scaled less - a
 // boss's attack much less than its health: it is a fortress of a troop that takes a whole army to
 // bring down, and it fights with its power (bosses.ts) as much as its blows
@@ -242,7 +243,7 @@ export const getLevel = (levelId: number): LevelDef => {
   // Scale the enemy's troops so their average power tracks the player's expected cards
   const enemyScale = Math.round(
     expectedCardPower(id) / baseRosterPower(enemyRoster) * ENEMY_STRENGTH * (FACTION_STRENGTH[region.faction] ?? 1) *
-    (1 + IN_REGION_RAMP * index) * (index === 0 ? FIRST_LEVEL_EASE : 1) * (isTutorial ? TUTORIAL_EASE : 1) *
+    (1 + IN_REGION_RAMP * index) * (index === 0 ? FIRST_LEVEL_EASE : 1) * (isTutorial ? TUTORIAL_EASE : id === 2 ? SECOND_TUTORIAL_EASE : 1) *
     (LEVEL_TUNING[id - 1] ?? 1) * 100
   ) / 100;
   const enemyTier = Math.max(1, Math.round((enemyScale - 1) / 0.1) + 1);

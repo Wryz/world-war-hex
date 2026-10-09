@@ -29,8 +29,6 @@ export const CardHand: React.FC<CardHandProps> = ({
   const hand = getHand(gameState);
   const nextCard = getNextCard(gameState);
   const gold = gameState.players.player.points;
-  // The card the first battle's guide points at
-  const firstAffordable = hand.findIndex(type => gold >= (getRosterStats(gameState, 'player', type)?.cost ?? Infinity));
   const isNarrow = useIsNarrow();
 
   // Cards that just arrived in the hand animate in; keyed by slot so each slot redraws when its card changes
@@ -89,7 +87,8 @@ export const CardHand: React.FC<CardHandProps> = ({
                 key={`${index}-${type}`}
                 className={drawn.has(index) ? 'card-draw' : ''}
                 style={{ transform: isSelected ? undefined : `rotate(${tilt}deg)`, transformOrigin: 'bottom center' }}
-                data-tutorial={index === firstAffordable ? 'first-card' : undefined}
+                // (the tutorial points at a card by its type)
+                data-tutorial={hand.indexOf(type) === index ? `card-${type}` : undefined}
               >
                 <TroopCard
                   type={type}
