@@ -1,19 +1,25 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { REGIONS, Region, getRegionLevels, getLevel, LevelDef } from '@/lib/campaign/levels';
+import { REGIONS, Region, getLevel, getRegionLevels, LevelDef } from '@/lib/campaign/levels';
 import { FACTIONS, TROOPS } from '@/lib/game/troops';
 import { highestUnlocked, useHasHydrated, useProfile } from '@/lib/meta/profile';
 import { useMusic } from '@/lib/audio/music';
 import { MenuShell, CARD_CLASS } from './MenuShell';
-import { PreBattleSheet } from './PreBattleSheet';
 import { LockIcon, MapIcon, StarIcon, TerrainIcon, UnitIcon } from '../game/icons';
 import { RegionMap } from './RegionMap';
+import { LevelPopup } from './LevelPopup';
 import { MAP_SEA_URL } from '@/lib/campaign/mapArt';
 
 // The sea the region islands sit in
 const SEA_STYLE: React.CSSProperties = { backgroundColor: '#a6e1f5', backgroundImage: `url(${MAP_SEA_URL})`, backgroundSize: '64px 64px' };
 
-const RegionBand: React.FC<{ region: Region; onSelect: (level: LevelDef) => void }> = ({ region, onSelect }) => {
+const RegionBand: React.FC<{
+  region: Region;
+  selected: LevelDef | null;
+  onSelect: (level: LevelDef) => void;
+  onFight: (level: LevelDef) => void;
+  onClose: () => void;
+}> = ({ region, selected, onSelect, onFight, onClose }) => {
   const profile = useProfile();
   const unlockedUpTo = highestUnlocked(profile);
   const levels = getRegionLevels(region.id);
@@ -22,7 +28,7 @@ const RegionBand: React.FC<{ region: Region; onSelect: (level: LevelDef) => void
   const faction = FACTIONS[region.faction];
 
   return (
-    <section className="relative mb-6 overflow-hidden rounded-3xl shadow-[0_8px_0_rgba(15,23,42,0.35)]" style={SEA_STYLE}>
+    <section className="relative mb-6 rounded-3xl shadow-[0_8px_0_rgba(15,23,42,0.35)]" style={SEA_STYLE}>
       {/* Region title */}
       <div className={`${CARD_CLASS} m-3 flex flex-wrap items-center gap-3 p-3`}>
         <div className="min-w-0 flex-1">
@@ -57,13 +63,16 @@ const RegionBand: React.FC<{ region: Region; onSelect: (level: LevelDef) => void
             </span>
           )}
           onSelect={onSelect}
+          selectedId={selected?.id ?? null}
+          popup={selected && <LevelPopup key={selected.id} level={selected} onFight={() => onFight(selected)} onClose={onClose} />}
         />
       </div>
     </section>
   );
 };
 
-// The campaign map: fifteen regions of ten battles, from Greenvale to the Last Bastion
+// The campaign map: fifteen regions of ten battles, from Greenvale to the Last Bastion. Tapping a
+// level opens a callout from its spot with what to know about it and the button to fight it.
 export const CampaignScreen: React.FC<{ initialLevel?: number }> = ({ initialLevel }) => {
   const router = useRouter();
   const profile = useProfile();
@@ -72,7 +81,7 @@ export const CampaignScreen: React.FC<{ initialLevel?: number }> = ({ initialLev
   const scrolledRef = useRef(false);
   useMusic('map');
 
-  // Open the requested level (or scroll to the next one) once progress has loaded
+  // Scroll to the requested level (or the next one) once progress has loaded, and open a requested one
   useEffect(() => {
     if (!hydrated || scrolledRef.current) return;
     scrolledRef.current = true;
@@ -82,16 +91,21 @@ export const CampaignScreen: React.FC<{ initialLevel?: number }> = ({ initialLev
     if (initialLevel && initialLevel <= next) setSelected(getLevel(initialLevel));
   }, [hydrated, profile, initialLevel]);
 
+  const fight = (level: LevelDef) => router.push(`/play?level=${level.id}`);
+  const close = useCallback(() => setSelected(null), []);
+
   return (
     <MenuShell title="Campaign" icon={<MapIcon />}>
-      {REGIONS.map(region => <RegionBand key={region.id} region={region} onSelect={setSelected} />)}
-      {selected && (
-        <PreBattleSheet
-          level={selected}
-          onClose={() => setSelected(null)}
-          onFight={() => router.push(`/play?level=${selected.id}`)}
+      {REGIONS.map(region => (
+        <RegionBand
+          key={region.id}
+          region={region}
+          selected={selected && selected.region.id === region.id ? selected : null}
+          onSelect={level => setSelected(current => (current?.id === level.id ? null : level))}
+          onFight={fight}
+          onClose={close}
         />
-      )}
+      ))}
     </MenuShell>
   );
 };

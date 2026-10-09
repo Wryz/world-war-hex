@@ -18,7 +18,9 @@ import {
   Sighting,
   Combat,
   GameSettings,
-  WinReason
+  WinReason,
+  HealthCause,
+  HealthEvent
 } from '@/types/game';
 import {
   getHexDistance,
@@ -1010,7 +1012,7 @@ export const getOwnedCamps = (state: GameState, playerType: PlayerType): Hex[] =
   state.hexGrid.filter(hex => hex.isCamp && hex.owner === playerType);
 
 // Where a side's recruits may appear: next to its castle, and on or next to any camp it holds
-const getDeploymentSpots = (state: GameState, playerType: PlayerType): HexCoordinates[] => {
+export const getDeploymentSpots = (state: GameState, playerType: PlayerType): HexCoordinates[] => {
   const baseHex = findBaseHex(state, playerType);
   const spots = baseHex ? getNeighbors(baseHex.coordinates) : [];
   for (const camp of [...getOwnedCamps(state, playerType), ...getHeldBuildings(state, playerType, 'barracks')]) {
@@ -1501,17 +1503,22 @@ const fellTree = (state: GameState, order: Move): void => {
   else if (landing.terrain !== 'mountain') updateHex(state, landing.coordinates, { feature: 'log', fellFrom: tree.coordinates, fire: undefined });
   state.lastFell = { side, from: tree.coordinates, to: landing.coordinates, serial: (state.lastFell?.serial ?? 0) + 1 };
 
-  const crushed = victim && inflictDamage(state, victim, FELL_DAMAGE, side);
+  const crushed = victim && inflictDamage(state, victim, FELL_DAMAGE, side, 'fell', { from: order.to });
   addLog(state, side, `${unitLabel(unit)} felled a great tree` + (victim && crushed
     ? ` - it crushed ${victim.owner === side ? 'their own' : 'the'} ${getTroopName(victim.type)} (-${crushed.damage}${crushed.destroyed ? ', destroyed' : ''})!`
     : landing.terrain === 'water' ? ' across the water: a bridge!' : '.'));
 };
 
 // Execute all pending moves and then purchases, then either start combat or end the turn
-export const executeMoves = (state: GameState): GameState => {
+// With `holdTurnEnd`, a turn without a fight stops after the moves, in the 'execution' phase, so the
+// board can show the troops walking before the end of the turn's healing, burning and the rest
+// (endTurn finishes it); otherwise it is finished at once.
+export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTurnEnd?: boolean } = {}): GameState => {
   if (state.currentPhase !== 'planning') return state;
 
   const newState = cloneState(state);
+  // (the last turn's health changes have been shown)
+  newState.healthEvents = [];
   const activePlayer = getActivePlayer(newState);
   const occupied = new Set(
     [...newState.players.player.units, ...newState.players.ai.units].map(u => coordKey(u.position))
@@ -1602,7 +1609,7 @@ export const executeMoves = (state: GameState): GameState => {
     if (passed.length === 0) continue;
     let destroyed = 0;
     for (const enemy of passed) {
-      const result = inflictDamage(newState, enemy, strafeDamage(rank), unit.owner);
+      const result = inflictDamage(newState, enemy, strafeDamage(rank), unit.owner, 'strafe', { from: unit.position });
       if (result.destroyed) {
         destroyed++;
         occupied.delete(coordKey(enemy.position));
@@ -1711,9 +1718,17 @@ export const executeMoves = (state: GameState): GameState => {
     syncHexUnits(newState);
     return { ...newState, combats, siege, currentPhase: 'combat' };
   }
+  if (holdTurnEnd) {
+    syncHexUnits(newState);
+    return { ...newState, currentPhase: 'execution' };
+  }
 
   return finishTurn(newState);
 };
+
+// Finishes a turn held after its moves (see executeMoves)
+export const endTurn = (state: GameState): GameState =>
+  state.currentPhase === 'execution' ? finishTurn(cloneState(state)) : state;
 
 const terrainUnder = (state: GameState, unit: Unit): TerrainType =>
   findHexByCoordinates(state.hexGrid, unit.position)?.terrain ?? 'plain';
@@ -2322,6 +2337,15 @@ const turnEndHealthChange = (state: GameState, unit: Unit, healers: Unit[]): { s
   return { spring, mages, terrain };
 };
 
+// What changed a troop's health at the end of its turn, other than springs and mages
+const groundCause = (state: GameState, unit: Unit): HealthCause => {
+  const hex = findHexByCoordinates(state.hexGrid, unit.position);
+  if (hex?.fire?.stage === 'burning') return 'fire';
+  if (hex?.terrain === 'lava') return 'lava';
+  if (hex?.terrain === 'cursed') return 'cursed';
+  return 'regenerate';
+};
+
 // Fires move on at the end of every turn: burning hexes burn down (and burn out at last, leaving
 // scorched open ground - a forest loses its trees), smouldering ones catch, and the flames spread to
 // dry ground next to them. At the end of each round (`roundEnds`) the lava fields may set new hexes
@@ -2417,6 +2441,10 @@ const finishTurn = (state: GameState): GameState => {
         const mended = Math.min(unit.maxLifespan, springed + change.mages);
         healedByMages += mended - springed;
         lifespan = Math.max(0, Math.min(unit.maxLifespan, mended + change.terrain));
+        // (each shown on the board in turn: the spring, the mages, then the ground)
+        noteHealth(newState, unit, springed - unit.lifespan, 'spring');
+        noteHealth(newState, { ...unit, lifespan: springed }, mended - springed, 'mage');
+        noteHealth(newState, { ...unit, lifespan: mended }, lifespan - mended, groundCause(newState, unit), { fatal: lifespan <= 0 });
       }
       // A side's troops slip back into the fog when its own turn comes round again
       // ...and a shaken troop steadies a little at the end of each of its side's turns
@@ -2607,7 +2635,11 @@ const unleashBossPowers = (state: GameState, side: PlayerType): void => {
       let hits = 0;
       let downed = 0;
       for (const target of state.players[enemySide].units.filter(unit => marked.has(coordKey(unit.position)))) {
-        const hit = inflictDamage(state, target, live.attackPower * strike.damage, side);
+        const hit = inflictDamage(state, target, live.attackPower * strike.damage, side, 'boss', {
+          from: live.position,
+          // (a dragon's breath sweeps across its hexes one after another; other strikes land at once)
+          ...(power.id === 'dragonBreath' ? { order: Math.max(0, hexes.findIndex(c => coordsEqual(c, target.position))) } : {})
+        });
         hits++;
         if (hit.destroyed) downed++;
         const still = state.players[enemySide].units.find(unit => unit.id === target.id);
@@ -2662,7 +2694,7 @@ const unleashBossPowers = (state: GameState, side: PlayerType): void => {
       const bitten = state.players[enemySide].units.filter(unit => getHexDistance(unit.position, live.position) === 1);
       if (bitten.length === 0) continue;
       let damage = 0;
-      for (const target of bitten) damage += inflictDamage(state, target, live.attackPower * power.bite, side).damage;
+      for (const target of bitten) damage += inflictDamage(state, target, live.attackPower * power.bite, side, 'boss', { from: live.position }).damage;
       used(bitten.map(unit => unit.position));
       addLog(state, side, `${name}'s ${power.name} lash out at ${bitten.length === 1 ? 'a troop' : `${bitten.length} troops`} (-${damage}).`);
     }
@@ -2696,7 +2728,7 @@ const bombard = (state: GameState, side: PlayerType): void => {
       .sort((a, b) => a.lifespan - b.lifespan || getHexDistance(a.position, tower.coordinates) - getHexDistance(b.position, tower.coordinates))[0];
     const serial = (state.lastBombard?.serial ?? 0) + 1;
     if (target) {
-      const hit = inflictDamage(state, target, CATAPULT_DAMAGE, side);
+      const hit = inflictDamage(state, target, CATAPULT_DAMAGE, side, 'catapult', { from: tower.coordinates });
       state.lastBombard = { side, from: tower.coordinates, to: target.position, serial };
       addLog(state, side, `The catapult hurls a stone at ${unitLabel(target).replace(/^Your|^Enemy/, side === 'player' ? 'the enemy' : 'your')}` +
         ` (-${hit.damage}${hit.destroyed ? ', destroyed' : ''}).`);
@@ -2709,6 +2741,7 @@ const bombard = (state: GameState, side: PlayerType): void => {
     state.players[enemySide].baseHealth = after;
     updateHex(state, castle.coordinates, { baseHealth: after });
     sideStats(state, side).siegeDamage += before - after;
+    noteHealth(state, null, after - before, 'catapult', { castle: enemySide, from: tower.coordinates });
     state.lastBombard = { side, from: tower.coordinates, to: castle.coordinates, serial };
     addLog(state, side, `The catapult pounds ${enemySide === 'player' ? 'your' : 'the enemy'} castle (-${before - after}).`);
   }
@@ -3037,6 +3070,7 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
         const rank = unit ? rankOf(unit, 'bloodlust') : 0;
         if (!unit || rank === 0 || kills === 0 || unit.lifespan >= unit.maxLifespan) continue;
         const healed = Math.min(unit.maxLifespan - unit.lifespan, bloodlustHeal(rank) * kills);
+        noteHealth(newState, unit, healed, 'bloodlust');
         unit.lifespan += healed;
         addLog(newState, unit.owner, `Bloodlust! ${unitLabel(unit)} recovers ${healed} health.`);
       }
@@ -3048,7 +3082,7 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
       const splash = Math.max(1, Math.round(entry.damageTaken * SWARM_SPLASH));
       const crowd = newState.players[entry.unit.owner].units.filter(other =>
         !fighting.has(other.id) && hasTrait(other, 'swarm') && getHexDistance(other.position, entry.unit.position) === 1);
-      for (const goblin of crowd) inflictDamage(newState, goblin, splash, getOpponent(goblin.owner));
+      for (const goblin of crowd) inflictDamage(newState, goblin, splash, getOpponent(goblin.owner), 'swarm');
       if (crowd.length > 0) addLog(newState, entry.unit.owner, `Packed together: ${crowd.length === 1 ? 'the goblin beside it takes' : `${crowd.length} goblins beside it take`} ${splash} too.`);
     }
     syncHexUnits(newState);
@@ -3153,16 +3187,34 @@ const creditKill = (state: GameState, unit: Unit, killer: PlayerType): void => {
   sideStats(state, unit.owner).lost++;
 };
 
+// Notes a change to a troop's health outside a fight (or a castle's), for the board to show when its
+// animation lands. `unit` is the troop as it was just before.
+export const noteHealth = (
+  state: GameState, unit: Unit | null, amount: number, cause: HealthCause,
+  extra: { from?: HexCoordinates; order?: number; fatal?: boolean; castle?: PlayerType; shown?: number } = {}
+): void => {
+  if (amount === 0 && !extra.shown) return;
+  const serial = (state.healthSerial ?? 0) + 1;
+  state.healthSerial = serial;
+  const event: HealthEvent = { serial, cause, amount, ...(unit ? { unit: { ...unit } } : {}), ...extra };
+  state.healthEvents = [...(state.healthEvents ?? []), event];
+};
+
 // Damage dealt outside a fight (Pegasus Knights' Strafe, a falling tree, fire), softened by armour
 // and Ward as in a fight. A unit it destroys is removed and pays its bounty to `by` - unless nobody
 // (null) or its own side (a tree felled onto a friend) did it. Works on a state the caller has cloned.
-export const inflictDamage = (state: GameState, unit: Unit, amount: number, by: PlayerType | null): { damage: number; destroyed: boolean } => {
+export const inflictDamage = (
+  state: GameState, unit: Unit, amount: number, by: PlayerType | null, cause: HealthCause,
+  event: { from?: HexCoordinates; order?: number } = {}
+): { damage: number; destroyed: boolean } => {
   const live = state.players[unit.owner].units.find(u => u.id === unit.id);
   if (!live || amount <= 0) return { damage: 0, destroyed: false };
+  const before = { ...live };
   const damage = applyArmor(live, Math.max(1, Math.round(amount * getDamageTakenMultiplier(state, live))));
   live.lifespan = Math.max(0, live.lifespan - damage);
   live.revealed = true;
   if (live.lifespan > 0) {
+    noteHealth(state, before, -damage, cause, event);
     syncHexUnits(state);
     return { damage, destroyed: false };
   }
@@ -3170,8 +3222,10 @@ export const inflictDamage = (state: GameState, unit: Unit, amount: number, by: 
     // (struck down all the same: the bounty is paid, as in a fight)
     if (by && by !== live.owner) earnGold(state, by, getKillBounty(live));
     riseAgain(state, live);
+    noteHealth(state, before, live.lifespan - before.lifespan, cause, { ...event, shown: -damage });
     return { damage, destroyed: false };
   }
+  noteHealth(state, before, -before.lifespan, cause, { ...event, fatal: true });
   removeUnit(state, live);
   if (by && by !== live.owner) {
     creditKill(state, live, by);

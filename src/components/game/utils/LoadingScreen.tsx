@@ -29,7 +29,7 @@ const LOADING_TIPS = [
   'You bring four cards into each battle. Pick ones that counter the enemy before you fight.',
   'If time runs out, kills, gold earned and camps held decide the winner.',
   'Lost a battle? You still earn coins - spend them on upgrades in the Army.',
-  'Check the recommended power before a battle. Below it? Upgrade your cards.',
+  'Stuck on a level? Upgrade your cards in the Army.',
   'Lava burns and cursed ground drains your troops - but the undead love it.'
 ];
 

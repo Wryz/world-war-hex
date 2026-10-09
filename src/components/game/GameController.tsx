@@ -69,10 +69,12 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const isMuted = useMuted();
   const level = battle.mode === 'campaign' ? getLevel(battle.levelId) : undefined;
 
-  // The first battle is a tutorial for new players (see TutorialGuide)
-  // The first two battles are always tutorials, however often they are played (the first opens with
-  // a flight over the field; the second shows where to build a castle)
-  const [showTutorial, setShowTutorial] = useState(() => battle.mode === 'campaign' && battle.levelId <= TUTORIAL_BATTLES);
+  // The first two battles are tutorials for new players (see TutorialGuide): the first opens with a
+  // flight over the field, the second shows where to build a castle. The hand guides their turns
+  // only until the player has won a battle - from then on it's theirs to play (players found its
+  // plays weaker than their own by then) - but still points out the castle site
+  const tutorialBattle = battle.mode === 'campaign' && battle.levelId <= TUTORIAL_BATTLES;
+  const [showTutorial, setShowTutorial] = useState(() => tutorialBattle && getProfile().stats.wins === 0);
   const {
     gameState,
     selectedHex,
@@ -143,7 +145,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   // The first battle shows what to do (see TutorialGuide); it counts as done once the battle is over
   const tutorial = useTutorial({
-    active: showTutorial, intro: battle.mode === 'campaign' && battle.levelId === 1, ready: isReady, choosingOrder: !!actionChoice, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
+    active: showTutorial || tutorialBattle, siteOnly: !showTutorial, intro: showTutorial && battle.mode === 'campaign' && battle.levelId === 1, ready: isReady, choosingOrder: !!actionChoice, gameState, selectedUnit, selectedUnitType: selectedUnitTypeForPurchase, validMoves
   });
   // Later battles: the hand points out each new mechanic the first time it turns up
   const mechanic = useMechanicGuide({
@@ -151,8 +153,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   });
   // (the board only redraws its marks when they actually change)
   // (a mechanic being pointed out gets the same gold ring, kept in view)
-  const boardGuide: TutorialVisuals | null = tutorial.visuals ?? (mechanic
-    ? { showcase: null, rings: [{ at: mechanic.hex, tone: 'tap' }], path: null, target: null, keepInView: mechanic.hex }
+  const mechanicHex = mechanic?.hex;
+  const boardGuide: TutorialVisuals | null = tutorial.visuals ?? (mechanicHex
+    ? { showcase: null, rings: [{ at: mechanicHex, tone: 'tap' }], path: null, target: null, keepInView: mechanicHex }
     : null);
   const tutorialVisualsKey = JSON.stringify(boardGuide);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -317,7 +320,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         tutorial={tutorialVisuals}
       />
 
-      {(currentPhase === 'planning' || currentPhase === 'combat') && (
+      {(currentPhase === 'planning' || currentPhase === 'combat' || currentPhase === 'execution') && (
         <>
           <TopBar
             gameState={viewState}
@@ -392,10 +395,17 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
       {/* First-time tips for the newer rules (not while the first battle's tutorial is running) */}
       {!showTutorial && isReady && currentPhase !== 'gameOver' && <RuleTips gameState={gameState} />}
-      {showTutorial && isReady && currentPhase !== 'gameOver' && (
+      {(showTutorial || tutorialBattle) && isReady && currentPhase !== 'gameOver' && (
         <TutorialOverlay gameState={gameState} pointer={tutorial.pointer} introRunning={tutorial.introRunning} introCaption={tutorial.introCaption} onSkipIntro={tutorial.skipIntro} />
       )}
-      {mechanic && <TutorialOverlay gameState={gameState} pointer={mechanic} introRunning={false} onSkipIntro={() => undefined} />}
+      {mechanic?.hex && <TutorialOverlay gameState={gameState} pointer={{ hex: mechanic.hex, caption: mechanic.caption }} introRunning={false} onSkipIntro={() => undefined} />}
+      {mechanic && !mechanic.hex && (
+        <div className="pointer-events-none fixed inset-x-0 top-20 z-[45] flex justify-center px-4">
+          <span className="animate-fadeIn max-w-md rounded-xl bg-slate-900/90 px-4 py-2 text-center text-sm font-bold leading-snug text-amber-100 shadow-lg ring-2 ring-amber-300/70">
+            {mechanic.caption}
+          </span>
+        </div>
+      )}
 
       {showBossIntro && isReady && level && (
         <BossIntro boss={level.region.boss} level={level.enemyTier} stats={level.guards.find(guard => guard.isBoss)?.stats} onDone={() => setShowBossIntro(false)} />

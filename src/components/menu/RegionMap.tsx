@@ -55,8 +55,9 @@ const LevelNode: React.FC<{
   medal?: boolean;
   unlocked: boolean;
   isNext: boolean;
+  selected?: boolean;
   onSelect: () => void;
-}> = ({ level, stars, medal, unlocked, isNext, onSelect }) => {
+}> = ({ level, stars, medal, unlocked, isNext, selected = false, onSelect }) => {
   const diamond = !unlocked ? '#94a3b8' : level.isBoss ? '#ef4444' : stars > 0 ? '#f59e0b' : level.isElite ? '#8b5cf6' : '#2ecc71';
   return (
     <button
@@ -66,13 +67,14 @@ const LevelNode: React.FC<{
       data-level={level.id}
       title={unlocked ? `${level.id}. ${level.name}` : 'Locked'}
       aria-label={unlocked ? `Level ${level.id}: ${level.name}` : `Level ${level.id} (locked)`}
+      aria-expanded={unlocked ? selected : undefined}
       className={`group flex h-full w-full flex-col items-center justify-center focus:outline-none ${unlocked ? 'cursor-pointer' : 'cursor-not-allowed'}`}
     >
       <span
-        className={`relative flex aspect-square items-center justify-center rounded-[18%] transition-transform ${level.isBoss ? 'w-[92%]' : 'w-[78%]'} ${unlocked ? 'group-hover:scale-110 group-focus-visible:scale-110' : ''} ${isNext ? 'node-pulse' : ''}`}
+        className={`relative flex aspect-square items-center justify-center rounded-[18%] transition-transform ${level.isBoss ? 'w-[92%]' : 'w-[78%]'} ${unlocked ? 'group-hover:scale-110 group-focus-visible:scale-110' : ''} ${selected ? 'scale-110' : ''} ${isNext && !selected ? 'node-pulse' : ''}`}
         style={{
           background: unlocked ? '#ffffff' : '#e2e8f0',
-          border: isNext ? '3px solid #facc15' : '3px solid #1e293b',
+          border: isNext || selected ? '3px solid #facc15' : '3px solid #1e293b',
           boxShadow: '0 4px 0 rgba(15,23,42,0.45)'
         }}
       >
@@ -106,7 +108,10 @@ export const RegionMap: React.FC<{
   locked: boolean;
   lockedLabel?: React.ReactNode;
   onSelect: (level: LevelDef) => void;
-}> = ({ regionId, levels, starsFor, medalFor, unlockedUpTo, isNext, locked, lockedLabel, onSelect }) => {
+  // The level picked, and what to show in a callout from its spot
+  selectedId?: number | null;
+  popup?: React.ReactNode;
+}> = ({ regionId, levels, starsFor, medalFor, unlockedUpTo, isNext, locked, lockedLabel, onSelect, selectedId = null, popup = null }) => {
   const map = useMemo(() => buildRegionMap(regionId), [regionId]);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [width, setWidth] = useState(0);
@@ -161,11 +166,41 @@ export const RegionMap: React.FC<{
               medal={medalFor?.(level)}
               unlocked={level.id <= unlockedUpTo}
               isNext={isNext(level)}
+              selected={level.id === selectedId}
               onSelect={() => onSelect(level)}
             />
           </div>
         );
       })}
+      {(() => {
+        const index = levels.findIndex(level => level.id === selectedId);
+        if (index === -1 || !popup) return null;
+        const node = map.nodes[index];
+        const x = (node.col + 0.5) / MAP_COLS * 100;
+        // Below a spot in the top half of the island, above one in the bottom half; across, centred
+        // on it as far as the island's edges allow
+        const below = node.row < MAP_ROWS / 2;
+        const edge = below ? { top: `calc(${(node.row + 1) / MAP_ROWS * 100}% + 2px)` } : { bottom: `calc(${100 - node.row / MAP_ROWS * 100}% + 2px)` };
+        return (
+          <>
+            <span
+              aria-hidden
+              className="pointer-events-none absolute z-30 h-0 w-0 -translate-x-1/2 border-x-[10px] border-x-transparent"
+              style={{ left: `${x}%`, ...edge, ...(below ? { borderBottom: '10px solid #0f172a' } : { borderTop: '10px solid #0f172a' }) }}
+            />
+            <div
+              className="absolute z-30"
+              style={{
+                width: 'min(17rem, 100%)',
+                left: `clamp(0px, calc(${x}% - min(8.5rem, 50%)), calc(100% - min(17rem, 100%)))`,
+                ...(below ? { top: `calc(${(node.row + 1) / MAP_ROWS * 100}% + 11px)` } : { bottom: `calc(${100 - node.row / MAP_ROWS * 100}% + 11px)` })
+              }}
+            >
+              {popup}
+            </div>
+          </>
+        );
+      })()}
       {locked && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-2xl"
           style={{ background: 'rgba(226,232,240,0.55)' }}>

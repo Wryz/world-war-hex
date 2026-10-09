@@ -11,6 +11,7 @@ import { BoardDecorations } from './BoardDecorations';
 import { BattlefieldObjects } from './BattlefieldObjects';
 import { BossPowerBursts, BossThreats } from './BossPowers';
 import { FormationLinks } from './FormationLinks';
+import { useHealthTimeline } from './effects/healthTimeline';
 import { WeatherEffects } from './WeatherEffects';
 import { PIN_BONUS, SCREEN_REDUCTION, SHIELD_WALL_REDUCTION, hasScreenBeside, inShieldWall, isPinned } from '@/lib/game/formations';
 import { PACK_BONUS, SHAKEN_ATTACK, canRise, furyMultiplier, hasTrait, isShaken } from '@/lib/game/regionRules';
@@ -110,6 +111,15 @@ const BATTLE_VIEW_MARGIN = 1.35;
 const BATTLE_VIEW_MIN_ZOOM = 0.5;
 const BATTLE_VIEW_MAX_ZOOM = 0.95;
 const BATTLE_VIEW_HOLD_MS = 600;
+// The action view, the camera's usual one once you have troops: it takes in all your troops and the
+// enemies in sight within this many hexes of them (or of your castle) - or with none that near, the
+// nearest enemy in sight within twice that, or else the ground this many hexes ahead of your troops towards the enemy
+// castle - as close as that allows (but no closer than the nearest zoom here), with this share of
+// the screen's width left clear each side
+const ACTION_REACH = 3;
+const ACTION_LOOK_AHEAD = 4;
+const ACTION_MIN_ZOOM = 0.55;
+const ACTION_SIDE_MARGIN = 0.1;
 // How long the camera looks down on a boss's marked ground or power
 const BOSS_FOCUS_HOLD_MS = 3200;
 
@@ -199,6 +209,37 @@ const nearestSide = (azimuth: number, castleAzimuth: number) => {
 // Where on screen (as shares of its width and height) a hex the tutorial points at should be: clear
 // of the edges, the top HUD and the hand of cards
 const KEEP_IN_VIEW = { left: 0.12, right: 0.88, top: 0.16, bottom: 0.66 };
+
+// What the action view takes in: your troops; the enemies in sight near them or your castle; the
+// enemy castle when your troops are near it; and your castle while a card is being played or
+// enemies are near it. Null (nothing to frame: the overview instead) before you have troops.
+const getActionPoints = (state: GameState, deploying: boolean): HexCoordinates[] | null => {
+  if (state.currentPhase === 'setup' || state.currentPhase === 'gameOver') return null;
+  const ours = state.players.player.units.map(unit => unit.position);
+  if (ours.length === 0) return null;
+  const home = findBaseHex(state, 'player')?.coordinates;
+  const enemyCastle = findBaseHex(state, 'ai')?.coordinates;
+  const near = (at: HexCoordinates, anchors: HexCoordinates[]) => anchors.some(anchor => getHexDistance(anchor, at) <= ACTION_REACH);
+  const foes = state.players.ai.units.map(unit => unit.position).filter(at => near(at, home ? [...ours, home] : ours));
+  const points = [...ours, ...foes];
+  if (enemyCastle && near(enemyCastle, ours)) points.push(enemyCastle);
+  // (nothing to fight close by: where the fight is, or lies)
+  if (foes.length === 0) {
+    const closest = (from: HexCoordinates[], to: HexCoordinates[]) =>
+      Math.min(...from.flatMap(a => to.map(b => getHexDistance(a, b))));
+    const seen = state.players.ai.units.map(unit => unit.position);
+    const nearest = [...seen].sort((a, b) => closest(ours, [a]) - closest(ours, [b]))[0];
+    if (nearest && closest(ours, [nearest]) <= ACTION_REACH * 2) points.push(nearest);
+    else if (enemyCastle) {
+      const ahead = state.hexGrid
+        .filter(hex => closest(ours, [hex.coordinates]) <= ACTION_LOOK_AHEAD)
+        .sort((a, b) => getHexDistance(a.coordinates, enemyCastle) - getHexDistance(b.coordinates, enemyCastle))[0];
+      if (ahead) points.push(ahead.coordinates);
+    }
+  }
+  if (home && (deploying || foes.some(at => getHexDistance(at, home) <= ACTION_REACH))) points.push(home);
+  return points;
+};
 
 const CameraRig: React.FC<{
   gameState: GameState;
@@ -292,14 +333,68 @@ const CameraRig: React.FC<{
   }, [camera, viewRadius, nearEdgeDistance, targetAzimuth, nearEdgeMargin]);
   const defaultLookAt = useMemo(() => getDefaultLookAt(), [getDefaultLookAt]);
 
-  // The default view, from one of the four sides of the board
+  // What the action view is worked out from (only when the camera reframes)
+  const actionSourceRef = useRef({ gameState, deploying: !!deployingCard });
+  actionSourceRef.current = { gameState, deploying: !!deployingCard };
+  const nearEdgeMarginRef = useRef(nearEdgeMargin);
+  nearEdgeMarginRef.current = nearEdgeMargin;
+
+  // Where to look and how far to pull back for the action view from a direction (an azimuth around
+  // the board): everything in it on screen between the top HUD and the hand of cards, centred
+  const frameAction = useCallback((azimuth: number): { lookAt: THREE.Vector3; zoom: number } | null => {
+    const points = getActionPoints(actionSourceRef.current.gameState, actionSourceRef.current.deploying);
+    if (!points) return null;
+    const perspective = camera as THREE.PerspectiveCamera;
+    const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(perspective.fov / 2));
+    const { width, height } = sizeRef.current;
+    const aspect = width / Math.max(height, 1);
+    const sin = Math.sin(CAMERA_ELEVATION);
+    const cos = Math.cos(CAMERA_ELEVATION);
+    // Per unit of camera distance, how far in front of the look-at point (towards the camera) a
+    // ground point appears at a screen height (-1 the bottom of the screen, 1 the top)
+    const groundAt = (screenY: number) => screenY * tanHalfFov / (screenY * tanHalfFov * cos - sin);
+    const bottom = groundAt(Math.min(0, -1 + (2 * nearEdgeMarginRef.current) / Math.max(height, 1)));
+    const top = groundAt(Math.max(0, 1 - (2 * BOARD_FAR_EDGE_MARGIN) / Math.max(height, 1)));
+    // Each point across the view (to the right) and along it (towards the camera); troops stand
+    // tall, so the far ones get more room above them
+    const towards = new THREE.Vector3(Math.sin(azimuth), 0, Math.cos(azimuth));
+    const right = new THREE.Vector3(Math.cos(azimuth), 0, -Math.sin(azimuth));
+    const world = points.map(point => {
+      const [x, , z] = axialToWorld(point);
+      return { across: x * right.x + z * right.z, along: x * towards.x + z * towards.z };
+    });
+    const nearest = Math.max(...world.map(point => point.along)) + HEX_SIZE;
+    const furthest = Math.min(...world.map(point => point.along)) - HEX_SIZE * 2;
+    const leftmost = Math.min(...world.map(point => point.across)) - HEX_SIZE;
+    const rightmost = Math.max(...world.map(point => point.across)) + HEX_SIZE;
+    const fit = getViewDistance(viewRadiusRef.current, tanHalfFov, aspect, 1);
+    const needed = Math.max(
+      (nearest - furthest) / (bottom - top),
+      (rightmost - leftmost) / 2 / (tanHalfFov * aspect * (1 - 2 * ACTION_SIDE_MARGIN))
+    );
+    // (as far out as it takes to get them all in)
+    const zoom = THREE.MathUtils.clamp(needed / fit, ACTION_MIN_ZOOM, CAMERA_MAX_ZOOM);
+    const distance = zoom * fit;
+    // Along the view: midway between keeping the nearest point above the cards and the furthest
+    // below the top HUD
+    const along = ((nearest - bottom * distance) + (furthest - top * distance)) / 2;
+    const lookAt = towards.multiplyScalar(along).add(right.multiplyScalar((leftmost + rightmost) / 2));
+    const maxPan = viewRadiusRef.current * CAMERA_MAX_PAN;
+    const horizontal = Math.hypot(lookAt.x, lookAt.z);
+    if (horizontal > maxPan) lookAt.multiplyScalar(maxPan / horizontal);
+    return { lookAt, zoom };
+  }, [camera]);
+
+  // The usual view from one of the four sides of the board: the action view, or before you have
+  // troops the overview
   const showSide = useCallback((side: number) => {
     const turn = side * Math.PI / 2;
-    desiredLookAtRef.current = defaultLookAt.clone().applyAxisAngle(Y_AXIS, turn);
-    desiredZoomRef.current = CAMERA_DEFAULT_ZOOM;
+    const action = frameAction(targetAzimuth + turn);
+    desiredLookAtRef.current = action?.lookAt ?? defaultLookAt.clone().applyAxisAngle(Y_AXIS, turn);
+    desiredZoomRef.current = action?.zoom ?? CAMERA_DEFAULT_ZOOM;
     azimuthOffsetRef.current = turn;
     desiredElevationRef.current = CAMERA_ELEVATION;
-  }, [defaultLookAt]);
+  }, [defaultLookAt, frameAction, targetAzimuth]);
 
   // Set while the camera is looking down on a turn's battles (until it settles back on a side)
   const battleViewRef = useRef(false);
@@ -355,24 +450,23 @@ const CameraRig: React.FC<{
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusKey]);
 
-  // Picking a card to play: stay on this side if it shows the castle or a camp of ours to deploy
-  // at, otherwise swing to the nearest side that does
+  // Picking a card to play: frame the action with your castle in it too - from this side if it
+  // shows the castle or a camp of ours to deploy at, otherwise from the nearest side that does
   useEffect(() => {
     if (!deployingCard || gameState.currentPhase !== 'planning') return;
     const sides = homeSides();
-    if (!sides || sides.includes(currentSide())) return;
-    goToSide(nearestHomeSide(azimuthRef.current ?? targetAzimuth));
+    showSide(!sides || sides.includes(currentSide()) ? currentSide() : nearestHomeSide(azimuthRef.current ?? targetAzimuth));
     // Only reacts to picking a card
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [deployingCard]);
 
-  // Your turn begins: if the camera ended up somewhere with none of your castle or camps in view,
-  // come back to the nearest side that has some
+  // Your turn begins: frame the action afresh - from the nearest side with your castle or a camp in
+  // view, if the camera ended up somewhere with none
   const yourTurn = gameState.currentPhase === 'planning' && getActivePlayer(gameState) === 'player' ? gameState.turnNumber : null;
   useEffect(() => {
     if (yourTurn === null || battleViewRef.current) return;
     const sides = homeSides();
-    if (sides && !sides.includes(currentSide())) goToSide(nearestHomeSide(azimuthRef.current ?? targetAzimuth));
+    showSide(sides && !sides.includes(currentSide()) ? nearestHomeSide(azimuthRef.current ?? targetAzimuth) : currentSide());
     // Only reacts to a new turn of yours
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [yourTurn]);
@@ -526,11 +620,16 @@ const CameraRig: React.FC<{
   // Click and drag: left/right orbits around the centre of the map, up/down tilts the view
   useEffect(() => {
     const element = gl.domElement;
-    let drag: { startX: number; startY: number; lastX: number; lastY: number; active: boolean } | null = null;
+    let drag: { startX: number; startY: number; lastX: number; lastY: number; active: boolean; onLabel: boolean } | null = null;
+    // A drag that began on a troop's label doesn't then pick the troop when it ends
+    let swallowClickUntil = 0;
 
+    // (a drag can begin on the board or on a troop's label over it)
     const onPointerDown = (event: PointerEvent) => {
       if (event.button !== 0) return;
-      drag = { startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, active: false };
+      const onLabel = event.target instanceof Element && !!event.target.closest('[data-unit]');
+      if (event.target !== element && !onLabel) return;
+      drag = { startX: event.clientX, startY: event.clientY, lastX: event.clientX, lastY: event.clientY, active: false, onLabel };
     };
     const onPointerMove = (event: PointerEvent) => {
       if (!drag) return;
@@ -547,19 +646,27 @@ const CameraRig: React.FC<{
       drag.lastY = event.clientY;
     };
     const onPointerUp = () => {
+      if (drag?.active && drag.onLabel) swallowClickUntil = performance.now() + 400;
       drag = null;
     };
+    const onClick = (event: MouseEvent) => {
+      if (performance.now() > swallowClickUntil) return;
+      swallowClickUntil = 0;
+      event.stopPropagation();
+    };
 
-    element.addEventListener('pointerdown', onPointerDown);
+    window.addEventListener('pointerdown', onPointerDown);
     // Track the drag on the window so it keeps working when the cursor passes over the HUD
     window.addEventListener('pointermove', onPointerMove);
     window.addEventListener('pointerup', onPointerUp);
     window.addEventListener('pointercancel', onPointerUp);
+    window.addEventListener('click', onClick, true);
     return () => {
-      element.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointerdown', onPointerDown);
       window.removeEventListener('pointermove', onPointerMove);
       window.removeEventListener('pointerup', onPointerUp);
       window.removeEventListener('pointercancel', onPointerUp);
+      window.removeEventListener('click', onClick, true);
     };
   }, [gl, rotateBy]);
 
@@ -1035,7 +1142,13 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       .map(hex => toVector(surfacePosition(hex)));
   }, []);
 
-  const allUnits = useMemo(() => [...players.player.units, ...players.ai.units], [players]);
+  const stateUnits = useMemo(() => [...players.player.units, ...players.ai.units], [players]);
+  // The units as the board shows them: each change to their health outside a fight shows when its
+  // animation lands, and a troop it destroyed stands until then (see healthTimeline)
+  const timeline = useHealthTimeline(gameState, stateUnits);
+  const allUnits = timeline.units;
+  const landedRef = useRef(timeline.landed);
+  landedRef.current = timeline.landed;
 
   // Per-unit render data, memoised so units only re-render when something about them changes
   const unitRenderData = useMemo(() => {
@@ -1379,6 +1492,16 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           color: '#ffffff',
           bounty
         });
+        // (the blow that destroyed it outside a fight, which it fell before it could show)
+        const blow = landedRef.current.get(id)?.find(change => change.fatal);
+        if (blow) {
+          created.push({
+            id: ++popupIdRef.current,
+            position: [before.position[0], before.position[1] + 0.7, before.position[2]],
+            text: `${blow.amount}`,
+            color: '#f87171'
+          });
+        }
         fallen.push(before);
         playBattleSound('unitFalls', 0.8);
         // Coins fly from the fallen enemy to the player's treasury
@@ -1584,7 +1707,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           owner="player"
           look={playerCastleStyle}
           position={playerCastlePosition}
-          health={players.player.baseHealth ?? BASE_MAX_HEALTH}
+          health={timeline.castleHealth('player', players.player.baseHealth ?? BASE_MAX_HEALTH)}
           maxHealth={players.player.maxBaseHealth ?? BASE_MAX_HEALTH}
           incoming={castleIncoming?.owner === 'player' ? castleIncoming.incoming : undefined}
           fallen={currentPhase === 'gameOver' && gameState.winner === 'ai'}
@@ -1594,7 +1717,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         <Castle
           owner="ai"
           position={aiCastlePosition}
-          health={players.ai.baseHealth ?? BASE_MAX_HEALTH}
+          health={timeline.castleHealth('ai', players.ai.baseHealth ?? BASE_MAX_HEALTH)}
           maxHealth={players.ai.maxBaseHealth ?? BASE_MAX_HEALTH}
           incoming={castleIncoming?.owner === 'ai' ? castleIncoming.incoming : undefined}
           fallen={currentPhase === 'gameOver' && gameState.winner === 'player'}
@@ -1619,6 +1742,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
           hasPlannedMove={data.hasPlannedMove}
           battle={data.battle}
           buffs={data.buffs}
+          changes={timeline.landed.get(data.unit.id)}
         />
       ))}
 

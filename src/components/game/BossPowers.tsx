@@ -6,6 +6,7 @@ import { GameState, Hex, HexCoordinates, Unit } from '@/types/game';
 import { getBossPower } from '@/lib/game/bosses';
 import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
 import { BOSS_POWER_COLORS, BossPowerIcon } from './icons';
+import { getTimeScale } from './effects/effects';
 
 // Bosses' powers on the board: the ground a boss has marked to strike glows red and pulses, with the
 // power's icon over it, through the turn the enemy has to get clear; and when a power is used, each
@@ -65,7 +66,9 @@ export const BossThreats: React.FC<{ units: Unit[]; hexByKey: Map<string, Hex> }
 );
 
 // One hex flaring as a power hits it: a flash, a ring racing outwards and sparks thrown up
-const BURST_SECONDS = 1.1;
+export const BURST_SECONDS = 1.1;
+// A breath sweeps out along its line, hex after hex
+export const BREATH_SWEEP = 0.12;
 const SPARKS = 7;
 const Burst: React.FC<{ at: THREE.Vector3; color: string; delay: number }> = ({ at, color, delay }) => {
   const groupRef = useRef<THREE.Group>(null);
@@ -76,7 +79,7 @@ const Burst: React.FC<{ at: THREE.Vector3; color: string; delay: number }> = ({ 
   useFrame((_, delta) => {
     const group = groupRef.current;
     if (!group) return;
-    timeRef.current += Math.min(delta, 0.05);
+    timeRef.current += Math.min(delta, 0.1) * getTimeScale();
     const t = timeRef.current / BURST_SECONDS;
     group.visible = t > 0 && t < 1;
     if (!group.visible) return;
@@ -117,7 +120,7 @@ export const BossPowerBursts: React.FC<{ last: GameState['lastBossPower']; hexBy
   if (!last || last.serial <= firstSerialRef.current) return null;
   const color = BOSS_POWER_COLORS[last.power];
   // A breath sweeps out along its line; everything else lands at once
-  const sweep = last.power === 'dragonBreath' ? 0.12 : 0;
+  const sweep = last.power === 'dragonBreath' ? BREATH_SWEEP : 0;
   return (
     <group key={last.serial}>
       {last.hexes.map((c, i) => <Burst key={i} at={surfaceOf(hexByKey.get(key(c)), c)} color={color} delay={i * sweep} />)}

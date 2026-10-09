@@ -1,18 +1,22 @@
-import React, { memo, useMemo, useRef, useState } from 'react';
+import React, { memo, useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GameState, Hex, HexCoordinates } from '@/types/game';
 import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
 import { PropModel, usePropLibrary } from './utils/kaykitProps';
 import { isStructure } from '@/lib/game/structures';
+import { getTimeScale } from './effects/effects';
 
 // The battlefield's objects (see lib/game/battlefield): great trees standing in the forests, the
 // trunks of felled ones lying where they fell (toppling over when it has just happened), and fires -
 // smouldering embers, then flames and smoke.
 
-// How tall a great tree stands, and how long one takes to fall
+// How tall a great tree stands, and how long one takes to fall (at normal speed: the board shows
+// the crush when it lands, see the health timeline)
 const GREAT_TREE_HEIGHT = 2.4;
-const FALL_SECONDS = 1.1;
+export const FALL_SECONDS = 1.1;
+// A felled tree comes to rest a little short of flat, on its branches
+const LYING_ANGLE = Math.PI * 0.47;
 
 const key = (c: HexCoordinates) => `${c.q},${c.r}`;
 
@@ -50,54 +54,17 @@ const TreeShape: React.FC<{ model: PropModel | null }> = ({ model }) => {
   );
 };
 
-// A felled trunk lying across the hex it fell onto (`at`), pointing away from where it stood
-// (`from`): bark, a couple of snapped branches and its crown crushed on the ground. Over water it
-// rests at the height of the bank, as a bridge.
-const FallenLog: React.FC<{ from: THREE.Vector3; at: THREE.Vector3; bridge: boolean }> = ({ from, at, bridge }) => {
-  const heading = Math.atan2(at.x - from.x, at.z - from.z);
-  const y = bridge ? Math.max(from.y, at.y) : at.y;
-  return (
-    <group position={[at.x, y, at.z]} rotation={[0, heading, 0]}>
-      {/* The trunk, lying along the way it fell */}
-      <mesh position={[0, 0.17, -0.25]} rotation={[Math.PI / 2, 0, 0]} castShadow receiveShadow>
-        <cylinderGeometry args={[0.13, 0.19, 1.7, 8]} />
-        <meshStandardMaterial color="#7c4a2d" flatShading />
-      </mesh>
-      {/* Its sawn-off end, pale wood */}
-      <mesh position={[0, 0.17, -1.1]} rotation={[Math.PI / 2, 0, 0]}>
-        <cylinderGeometry args={[0.19, 0.19, 0.02, 8]} />
-        <meshStandardMaterial color="#e7c08a" flatShading />
-      </mesh>
-      {/* Snapped branches */}
-      {[[0.22, 0.1, 0.9], [-0.25, -0.2, -0.8]].map(([x, z, turn]) => (
-        <mesh key={x} position={[x, 0.24, z]} rotation={[0, turn, Math.PI / 2.4]} castShadow>
-          <cylinderGeometry args={[0.03, 0.05, 0.45, 5]} />
-          <meshStandardMaterial color="#6b3f26" flatShading />
-        </mesh>
-      ))}
-      {/* The crown, crushed flat at the far end */}
-      {[[0, 0.62, 0.42], [0.28, 0.45, 0.3], [-0.26, 0.5, 0.28]].map(([x, z, r]) => (
-        <mesh key={`${x},${z}`} position={[x, 0.18, z]} scale={[1, 0.55, 1]} castShadow>
-          <icosahedronGeometry args={[r, 0]} />
-          <meshStandardMaterial color="#2f6b2f" flatShading />
-        </mesh>
-      ))}
-    </group>
-  );
-};
-
-// A great tree, standing - or lying towards `toward` (the hex it fell onto), toppling if `falling`
+// A great tree, standing - or lying towards `toward` (the hex it fell onto), toppling if `falling`.
+// It is the same tree throughout: felled, it stays the tree it was, lying where it fell (across
+// water, as a bridge).
 const GreatTree: React.FC<{
   base: THREE.Vector3;
   model: PropModel | null;
   toward?: THREE.Vector3;
   falling?: boolean;
-  bridge?: boolean;
-}> = ({ base, model, toward, falling = false, bridge = false }) => {
+}> = ({ base, model, toward, falling = false }) => {
   const pivotRef = useRef<THREE.Group>(null);
   const progressRef = useRef(falling ? 0 : 1);
-  // Once down, it is shown as a log lying across the hex
-  const [landed, setLanded] = useState(!falling);
   // Tipping over means turning about the horizontal axis square to the way it falls
   const axis = useMemo(() => {
     if (!toward) return null;
@@ -105,17 +72,18 @@ const GreatTree: React.FC<{
     return new THREE.Vector3(direction.z, 0, -direction.x);
   }, [base, toward]);
 
+  // (the axis it was last laid to rest about: once down, it has nothing more to do each frame)
+  const restedRef = useRef<THREE.Vector3 | null>(null);
   useFrame((_, delta) => {
     const pivot = pivotRef.current;
-    if (!pivot || !axis) return;
-    progressRef.current = Math.min(1, progressRef.current + Math.min(delta, 0.05) / FALL_SECONDS);
-    // Slow to start, then crashing down; a lying trunk rests a little short of flat, on its branches
+    if (!pivot || !axis || restedRef.current === axis) return;
+    // (following the game speed, so it lands when the board shows its crush)
+    progressRef.current = Math.min(1, progressRef.current + Math.min(delta, 0.1) * getTimeScale() / FALL_SECONDS);
+    // Slow to start, then crashing down
     const t = progressRef.current;
-    pivot.quaternion.setFromAxisAngle(axis, t * t * Math.PI * 0.47);
-    if (t >= 1 && !landed) setLanded(true);
+    pivot.quaternion.setFromAxisAngle(axis, t * t * LYING_ANGLE);
+    if (t >= 1) restedRef.current = axis;
   });
-
-  if (toward && landed) return <FallenLog from={base} at={toward} bridge={bridge} />;
 
   return (
     <group position={base}>
@@ -225,7 +193,7 @@ const Embers: React.FC<{ at: THREE.Vector3; seed: number }> = ({ at, seed }) => 
 };
 
 // A catapult stone flying in a high arc from the tower to where it lands, then gone
-const STONE_SECONDS = 1.1;
+export const STONE_SECONDS = 1.1;
 const CatapultStone: React.FC<{ from: THREE.Vector3; to: THREE.Vector3; model: PropModel | null }> = ({ from, to, model }) => {
   const ref = useRef<THREE.Group>(null);
   const progressRef = useRef(0);
@@ -233,7 +201,7 @@ const CatapultStone: React.FC<{ from: THREE.Vector3; to: THREE.Vector3; model: P
   useFrame((_, delta) => {
     const stone = ref.current;
     if (!stone) return;
-    progressRef.current = Math.min(1, progressRef.current + Math.min(delta, 0.05) / STONE_SECONDS);
+    progressRef.current = Math.min(1, progressRef.current + Math.min(delta, 0.1) * getTimeScale() / STONE_SECONDS);
     const t = progressRef.current;
     stone.position.lerpVectors(from, to, t);
     stone.position.y += 1.2 + Math.sin(t * Math.PI) * height - t * 1.2;
@@ -309,7 +277,6 @@ const BattlefieldObjectsComponent: React.FC<BattlefieldObjectsProps> = ({ hexGri
                 toward={at}
                 model={treeModel}
                 falling={!!lastFell && key(lastFell.to) === id && lastFell.serial > firstSerialRef.current}
-                bridge={hex.feature === 'logBridge'}
               />
             )}
             {hex.fire?.stage === 'burning' && (!visibleKeys || visibleKeys.has(id)) && <Flames at={at} seed={seed} />}

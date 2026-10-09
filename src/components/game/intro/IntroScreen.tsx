@@ -170,7 +170,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
             </div>
 
             <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-              <Link href={`/campaign?level=${nextLevel.id}`} className={`${PRIMARY_BUTTON} flex-1 py-4 text-center text-2xl sm:text-3xl`}>
+              <Link href={`/play?level=${nextLevel.id}`} className={`${PRIMARY_BUTTON} flex-1 py-4 text-center text-2xl sm:text-3xl`}>
                 <span className="inline-flex items-center gap-2"><AttackIcon color="currentColor" /> {cleared === 0 ? 'Start Campaign' : 'Battle!'}</span>
               </Link>
               {savedBattle && onContinueBattle && (

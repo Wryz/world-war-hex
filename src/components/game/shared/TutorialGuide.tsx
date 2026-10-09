@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { GameState, HexCoordinates, Unit, UnitType } from '@/types/game';
-import { findBaseHex, findTerrainPath, getHand, getMovePath, getRosterStats, getValidMoveTargets } from '@/lib/game/gameState';
-import { PlanStep, bestCastleSite, deployCaption, deploySpot, planTutorialTurn } from '@/lib/game/tutorialPlan';
+import { findBaseHex, findTerrainPath, getDeploymentHexes, getHand, getMovePath, getRosterStats, getValidMoveTargets } from '@/lib/game/gameState';
+import { PlanStep, bestCastleSite, deployCaption, deploySpot, planTutorialTurn, withPlannedMoves } from '@/lib/game/tutorialPlan';
 import { getHexDistance } from '@/lib/game/hexUtils';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
 import { projectToScreen } from '../effects/effects';
@@ -14,7 +14,7 @@ import { PointingHandIcon, SkipIcon } from '../icons';
 // same spot with a gold ring. It follows the battle as it unfolds, so whatever the player does, the
 // hand always shows a sensible next step.
 
-// The campaign battles that are tutorials
+// The campaign battles that are tutorials (only until the player has won a battle)
 export const TUTORIAL_BATTLES = 2;
 
 export interface TutorialVisuals {
@@ -57,6 +57,9 @@ const INTRO_CAPTIONS: Record<Exclude<IntroStage, 'done'>, string> = {
 
 interface TutorialArgs {
   active: boolean;
+  // Only point at the best castle site (the tutorial battles once the player has won one: the rest
+  // of the hand's guidance is for players who haven't)
+  siteOnly?: boolean;
   // Open with the flight from castle to castle (the first battle)
   intro: boolean;
   // A hex tapped that a troop could move onto or work on: the choice is showing
@@ -69,7 +72,9 @@ interface TutorialArgs {
   validMoves: HexCoordinates[];
 }
 
-export const useTutorial = ({ active, intro, ready, gameState, selectedUnit, selectedUnitType, validMoves, choosingOrder = false }: TutorialArgs) => {
+export const useTutorial = ({ active: shown, siteOnly = false, intro, ready, gameState, selectedUnit, selectedUnitType, validMoves, choosingOrder = false }: TutorialArgs) => {
+  // (the castle site is pointed out either way; everything else only for the full tutorial)
+  const active = shown && !siteOnly;
   // (a battle resumed part-way through skips the opening flight)
   const [stage, setStage] = useState<IntroStage>(() => (!intro || gameState.turnNumber > 1 ? 'done' : 'home'));
   const started = active && ready && gameState.currentPhase === 'planning';
@@ -103,7 +108,7 @@ export const useTutorial = ({ active, intro, ready, gameState, selectedUnit, sel
       : nextStep(gameState, planRef.current.steps, selectedUnit, selectedUnitType, validMoves);
 
   // Before the castles stand: point at the best site to build yours
-  const site = active && ready && gameState.currentPhase === 'setup' ? bestCastleSite(gameState) : null;
+  const site = shown && ready && gameState.currentPhase === 'setup' ? bestCastleSite(gameState) : null;
   if (site) {
     const visuals: TutorialVisuals = { showcase: null, rings: [{ at: site, tone: 'tap' }], path: null, target: null, keepInView: site };
     return { visuals, introRunning: false, introCaption: null, pointer: { hex: site, caption: 'Build your castle here: near camps and high ground' } as Pointer, skipIntro: () => {} };
@@ -171,17 +176,18 @@ const nextStep = (
       getValidMoveTargets(state, unit).some(c => c.q === step.to.q && c.r === step.to.r);
   });
 
+  // The card picked: the spot nearest the fight among those it can go on now, on the board as it will
+  // be once the plan's moves still to come are given (the hexes those troops will march onto are
+  // spoken for)
   if (selectedUnitType && validMoves.length > 0) {
-    const buy = buys.find(step => step.unitType === selectedUnitType);
-    if (buy && validMoves.some(c => c.q === buy.at.q && c.r === buy.at.r)) return { hex: buy.at, caption: buy.placeCaption };
-    // (the planned spot has been taken: the next best, towards the fight, leaving the spots the
-    // plan's moves and other cards will use)
-    const spoken = new Set([...moves.map(step => key(step.to)), ...buys.filter(step => step !== buy).map(step => key(step.at))]);
-    const spot = deploySpot(state, selectedUnitType, spoken);
-    if (spot && validMoves.some(c => c.q === spot.q && c.r === spot.r)) return { hex: spot, caption: deployCaption(state, spot) };
+    const board = withPlannedMoves(state, moves);
+    const now = new Set(validMoves.map(key));
+    const notNow = new Set(getDeploymentHexes(board, 'player').map(hex => key(hex.coordinates)).filter(at => !now.has(at)));
+    const spot = deploySpot(board, selectedUnitType, notNow);
+    if (spot) return { hex: spot, caption: deployCaption(board, spot, notNow) };
     const enemy = findBaseHex(state, 'ai')?.coordinates;
     const nearest = enemy ? nearestOf(validMoves, enemy) : validMoves[0];
-    return { hex: nearest, caption: deployCaption(state, nearest) };
+    return { hex: nearest, caption: deployCaption(board, nearest, notNow) };
   }
 
   const live = selectedUnit && units.find(unit => unit.id === selectedUnit.id);
