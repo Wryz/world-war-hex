@@ -7,10 +7,9 @@ import {
   getCastleMaxHealth
 } from '@/lib/game/gameState';
 import { getUnitTypeName } from '../utils/UnitHelpers';
-import { describeBonus, getBond } from '@/lib/game/bonds';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
 import { TERRAIN_SHORT_EFFECTS } from './terrainInfo';
-import { AbilityIcon, AttackIcon, BossPowerIcon, CampIcon, CrownIcon, FireIcon, FrozenIcon, MoveIcon, TerrainIcon, UnitIcon, BondIcon, FogIcon } from '../icons';
+import { AbilityIcon, AttackIcon, BossPowerIcon, CampIcon, CrownIcon, FireIcon, FrozenIcon, MoveIcon, TerrainIcon, UnitIcon, FogIcon } from '../icons';
 import { getBossPower, isBossEnraged } from '@/lib/game/bosses';
 
 interface SelectionCardProps {
@@ -128,11 +127,6 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
                 : unit.revealed ? 'Gave its position away' : 'In sight of your troops'}
             </div>
           )}
-          {unit.owner === 'player' && (gameState.bonds ?? []).map(getBond).filter(bond => bond.bonuses[unit.type]).map(bond => (
-            <div key={bond.id} className="mt-1.5 flex items-center gap-1 text-[0.6875rem] text-amber-200" title={describeBonus(unit.type, bond.bonuses[unit.type]!)}>
-              <BondIcon /> <b>{bond.name}</b>
-            </div>
-          ))}
           {unit.owner === 'player' && unit.hasMoved && gameState.currentPhase === 'planning' && (
             <div className="mt-2 text-slate-400">Moves next turn</div>
           )}

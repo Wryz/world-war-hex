@@ -43,6 +43,7 @@ import {
   getSiegeDamage,
   getTimeScore,
   getSituationalMultiplier,
+  getFormationMultiplier,
   getDamageTakenMultiplier,
   getFellLanding,
   getFellTargets,
@@ -543,7 +544,8 @@ const strikeFrom = (planner: Planner, attacker: Unit, from: HexCoordinates, targ
   getStrikePowerOnTerrain(attacker, terrainAt(planner, from), target, terrainAt(planner, at), getHexDistance(from, at),
     heightAt(planner, from) - heightAt(planner, at)) *
   getSituationalMultiplier(planner.state, attacker, from, getHexDistance(attacker.position, from)) *
-  getDamageTakenMultiplier(planner.state, target, at);
+  getDamageTakenMultiplier(planner.state, target, at) *
+  getFormationMultiplier(planner.state, attacker, target, from, at);
 
 const remainingHealth = (planner: Planner, enemy: Unit) =>
   enemy.lifespan - (planner.plannedDamage.get(enemy.id) ?? 0);

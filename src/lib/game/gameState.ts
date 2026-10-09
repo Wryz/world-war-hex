@@ -20,7 +20,6 @@ import {
   GameSettings,
   WinReason
 } from '@/types/game';
-import type { BondId } from './bonds';
 import {
   getHexDistance,
   findHexByCoordinates,
@@ -41,6 +40,9 @@ import {
 import { MAX_HEIGHT_OFFSET, getHexHeightOf, getTerrainHeight, shiftHeightOffset } from './hexHeight';
 import { cardStats, getClassCounter, getTroop, getTroopClass, scaleTroop } from './troops';
 import { aimStrike, getBossPower, isBossEnraged, powerCooldown } from './bosses';
+import {
+  PIN_BONUS, SHIELD_WALL_REDUCTION, findScreen, inShieldWall, isPinned, screenReduction, strikesPinned
+} from './formations';
 import {
   CHARGE_DISTANCE, EYE_OF_STORM_RADIUS, LONE_BLADE_RADIUS, SHOULDER_MAX_ALLIES, bloodlustHeal, braceBonus,
   challengePulls, challengeRange, chargeBonus, eyeOfStormBonus, holySmiteBonus, isSmitable, loneBladeBonus,
@@ -361,8 +363,6 @@ export interface BattleSetup {
   rosters: Record<PlayerType, Roster>;
   // The player's cards in draw order
   deck?: UnitType[];
-  // Bonds active for the player (their bonuses are already in the roster)
-  bonds?: BondId[];
   levelId?: number;
   // Units the enemy starts with next to its castle
   guards?: GuardSpec[];
@@ -420,7 +420,6 @@ export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS, s
     mapName: theme.name,
     rosters: setup?.rosters ?? { player: defaultRoster(), ai: defaultRoster() },
     deck: setup?.deck,
-    bonds: setup?.bonds,
     levelId: setup?.levelId,
     battleStats: { player: emptySideStats(), ai: emptySideStats() },
     battleSeed
@@ -1974,8 +1973,33 @@ export const getProtections = (state: GameState, unit: Unit, at: HexCoordinates 
 export const getDamageTakenMultiplier = (state: GameState, unit: Unit, at?: HexCoordinates): number =>
   getProtections(state, unit, at).reduce((product, protection) => product * (1 - protection.reduction), 1);
 
-// Troops garrisoned in a house can't be flanked: only one side of it can be got at
-const canBeFlanked = (state: GameState, target: Unit) => terrainUnder(state, target) !== 'house';
+// Troops garrisoned in a house, or holding a bridge or gateway, can't be flanked: only one or two
+// sides of them can be got at
+const canBeFlanked = (state: GameState, target: Unit) => {
+  const hex = findHexByCoordinates(state.hexGrid, target.position);
+  return !hex || !(['house', 'bridge', 'gate'] as TerrainType[]).includes(hex.terrain) && hex.feature !== 'logBridge';
+};
+
+// Formations (formations.ts): a strike from `from` on a target at `at` is harder when the target is
+// pinned and the striker is an archer or rider; softer when the target is screened by a front-line
+// friend between it and the striker, or stands in a shield wall. Each with its share, for the
+// combat preview: positive for the striker, negative for the target.
+export const getFormationEffects = (
+  state: GameState, attacker: Unit, target: Unit, from: HexCoordinates = attacker.position, at: HexCoordinates = target.position
+): { label: string; share: number }[] => {
+  const effects: { label: string; share: number }[] = [];
+  const strikers = state.players[attacker.owner].units;
+  const guards = state.players[target.owner].units;
+  if (strikesPinned(attacker) && isPinned(at, strikers, attacker.id)) effects.push({ label: 'Pinned', share: PIN_BONUS });
+  const screen = screenReduction(findScreen(target, at, from, guards));
+  if (screen > 0) effects.push({ label: 'Screened', share: -screen });
+  if (inShieldWall(target, at, guards)) effects.push({ label: 'Shield wall', share: -SHIELD_WALL_REDUCTION });
+  return effects;
+};
+
+export const getFormationMultiplier = (
+  state: GameState, attacker: Unit, target: Unit, from?: HexCoordinates, at?: HexCoordinates
+): number => getFormationEffects(state, attacker, target, from, at).reduce((product, effect) => product * (1 + effect.share), 1);
 
 // A strike where the two units actually stand, including flanking when `attackersOnTarget` troops
 // (this one included) attack the target together, the attacker's situational bonuses and whatever
@@ -1986,7 +2010,8 @@ const getStrikePower = (state: GameState, attacker: Unit, target: Unit, attacker
     getHexDistance(attacker.position, target.position), getHeightDifference(state, attacker.position, target.position)
   ) * (1 + FLANK_BONUS * (canBeFlanked(state, target) ? getFlankers(attackersOnTarget) : 0)) *
   getSituationalMultiplier(state, attacker) *
-  getDamageTakenMultiplier(state, target);
+  getDamageTakenMultiplier(state, target) *
+  getFormationMultiplier(state, attacker, target);
 
 // Split one unit's attack between the enemy units it can reach (each share already scaled for that
 // enemy's height, counters and cover), then round the total and hand it out so the shares add up to it
@@ -2732,6 +2757,10 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     if (flankers > 0) modifiers.push(mod('Flanking', 'good', `+${Math.round(FLANK_BONUS * flankers * 100)}%`, Math.round(FLANK_BONUS * flankers * 100)));
     const pierce = piercingShare(rankOf(unit, 'piercingShot'));
     if (pierce > 0 && TERRAIN_EFFECTS[targetTerrain].damageTakenMultiplier < 1) modifiers.push(mod('Piercing Shot', 'good', `${Math.round(pierce * 100)}% cover`, 20));
+    for (const effect of getFormationEffects(state, unit, target)) {
+      const share = Math.round(Math.abs(effect.share) * 100);
+      modifiers.push(mod(effect.label, effect.share > 0 ? 'good' : 'bad', `${effect.share > 0 ? '+' : '-'}${share}%`, share));
+    }
     return modifiers;
   };
   const describeDefence = (unit: Unit): CombatEffect[] => {
@@ -2860,6 +2889,10 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     if (cover < 1) {
       if (hasAbility(unit, 'magic')) add('Spells pierce cover', 'good', undefined, size(cover));
       else add('Cover', 'bad', `-${pct(cover)}`, size(cover));
+    }
+    for (const effect of getFormationEffects(state, unit, target)) {
+      const share = Math.round(Math.abs(effect.share) * 100);
+      add(effect.label, effect.share > 0 ? 'good' : 'bad', `${effect.share > 0 ? '+' : '-'}${share}%`, share);
     }
   }
   if (bonuses.size > 0) {

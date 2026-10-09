@@ -194,8 +194,9 @@ export const CardsIcon = icon(GiPokerHand, '#93c5fd');
 // Threat preview toggle, and the fog of war
 export const ThreatIcon = icon(GiCrosshair, '#f87171');
 export const FogIcon = icon(GiFog, '#cbd5e1');
-// Bonds between cards
-export const BondIcon = icon(GiLinkedRings, '#fbbf24');
+// Formations: troops fighting together, and an enemy pinned in place
+export const FormationIcon = icon(GiLinkedRings, '#fbbf24');
+export const PinnedIcon = icon(GiCrossedSwords, '#f87171');
 // Cosmetics: card frames and castle styles
 export const StyleIcon = icon(GiPaintBrush, '#f0abfc');
 export const MapIcon = icon(GiTreasureMap, '#fcd34d');

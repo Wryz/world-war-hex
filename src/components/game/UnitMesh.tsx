@@ -17,7 +17,7 @@ import { MELEE_IMPACT_POINT, PROJECTILE_FLIGHT_TIME, RANGED_RELEASE_POINT, WALK_
 import { playBattleSound, BattleSound } from './utils/battleSounds';
 import { DRAG_CLICK_TOLERANCE } from './HexTile';
 import { instantiateUnitModel, findAnimationClip, disposeUnitModel, UnitModelInstance } from './utils/unitModelCache';
-import { ArrowIcon, AttackIcon, BondIcon, CrownIcon, GoldIcon, FireIcon, ShieldIcon, SignatureIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
+import { ArrowIcon, AttackIcon, CrownIcon, PinnedIcon, GoldIcon, FireIcon, ShieldIcon, SignatureIcon, TerrainIcon, UnitIcon, WaitIcon } from './icons';
 
 // Small lift so the unit's indicator doesn't z-fight with the tile surface
 const UNIT_ELEVATION = 0.02;
@@ -111,15 +111,15 @@ const DustPuff: React.FC<{ delay: number }> = ({ delay }) => {
 };
 
 // A buff (or drawback) working on a unit, shown under its health tag: its icon (a terrain, or a
-// bond, gold or attack symbol), name and what it does in numbers
+// gold or attack symbol), name and what it does in numbers
 export interface UnitBuff {
   id: string;
   terrain?: TerrainType;
-  icon?: 'bond' | 'gold' | 'attack' | 'signature' | 'shield' | 'fire';
+  icon?: 'gold' | 'attack' | 'signature' | 'shield' | 'fire' | 'pinned';
   label: string;
   value: string;
   good: boolean;
-  // Always on (bonds): listed when the row is opened, but no icon of its own
+  // Always on (a blacksmith's edge): listed when the row is opened, but no icon of its own
   quiet?: boolean;
 }
 
@@ -129,8 +129,8 @@ const MAX_BUFF_ICONS = 3;
 const NO_BUFFS: UnitBuff[] = [];
 
 const BuffIcon: React.FC<{ buff: UnitBuff }> = ({ buff }) =>
-  buff.icon === 'bond' ? <BondIcon /> : buff.icon === 'gold' ? <GoldIcon /> : buff.icon === 'attack' ? <AttackIcon />
-    : buff.icon === 'signature' ? <SignatureIcon /> : buff.icon === 'shield' ? <ShieldIcon /> : buff.icon === 'fire' ? <FireIcon />
+  buff.icon === 'gold' ? <GoldIcon /> : buff.icon === 'attack' ? <AttackIcon />
+    : buff.icon === 'signature' ? <SignatureIcon /> : buff.icon === 'shield' ? <ShieldIcon /> : buff.icon === 'fire' ? <FireIcon /> : buff.icon === 'pinned' ? <PinnedIcon />
       : <TerrainIcon terrain={buff.terrain ?? 'plain'} />;
 
 // A unit's buffs as a short row of icons (the first few, then a count); tapping it opens each one's

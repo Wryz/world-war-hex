@@ -117,8 +117,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       difficulty: battle.mode === 'quick' ? battle.difficulty : level?.settings.aiDifficulty,
       power: profilePower(profile),
       recommended_power: level?.recommendedPower,
-      deck: profile.deck,
-      bonds: gameState.bonds ?? []
+      deck: profile.deck
     });
     // Runs once per battle
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -3,14 +3,13 @@ import { ABILITIES, FACTIONS, MAX_CARD_LEVEL, TROOPS, TROOP_CLASSES, TroopId, ca
 import { CARD_UNLOCK_LEVEL, ELITE_UNLOCK_LEVEL, cardPrice, upgradeCost } from '@/lib/meta/economy';
 import { eliteUnlocked, isCardAvailable, toggleDeckCard, useProfile } from '@/lib/meta/profile';
 import { MAX_SIGNATURE_RANK, ROMAN, SIGNATURE_UNLOCK_LEVEL, getSignature, signatureRank } from '@/lib/game/signatures';
-import { BONDS, describeBond } from '@/lib/game/bonds';
 import { TroopCard, RARITY_STYLES } from '../game/cards/TroopCard';
 import { CounterLine } from '../game/hud/SelectionCard';
 import { CARD_CLASS } from './MenuShell';
-import { AbilityIcon, AttackIcon, BondIcon, CoinIcon, HealthIcon, LockIcon, MoveIcon, PowerIcon, SignatureIcon, UnitIcon, UpgradeIcon } from '../game/icons';
+import { AbilityIcon, AttackIcon, CoinIcon, HealthIcon, LockIcon, MoveIcon, PowerIcon, SignatureIcon, UpgradeIcon } from '../game/icons';
 
 // Everything about one card, opened by tapping it in the Army: what it does, its signature ability
-// rank by rank, the bonds it is part of, and buying, upgrading and bringing it. The cards themselves
+// rank by rank, and buying, upgrading and bringing it. The cards themselves
 // stay short (picture, cost, stats and SIG badge) so the screen isn't a wall of text.
 
 // Stat gains from the next upgrade
@@ -51,7 +50,6 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, o
   const cost = owned ? upgradeCost(id, shownLevel, eliteUnlocked(profile)) : null;
   const gains = cost !== null ? upgradeGains(id, shownLevel) : null;
   const nextRank = owned && rank < MAX_SIGNATURE_RANK ? rank + 1 : null;
-  const bonds = BONDS.filter(bond => bond.cards.includes(id));
   const abilities = stats.abilities.filter(ability => ability !== 'rapidMovement');
 
   useEffect(() => {
@@ -169,23 +167,6 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, o
               </div>
             )}
 
-            {bonds.length > 0 && (
-              <ul className="mt-3 flex flex-col gap-1 text-xs">
-                {bonds.map(bond => {
-                  const partner = bond.cards.find(card => card !== id)!;
-                  const active = bond.cards.every(card => profile.deck.includes(card));
-                  return (
-                    <li key={bond.id} className="flex items-start gap-1.5" title={bond.flavor}>
-                      <span className="mt-0.5 flex shrink-0 items-center gap-0.5"><BondIcon /><UnitIcon type={partner} /></span>
-                      <span>
-                        <b className={active ? 'text-amber-200' : 'text-slate-100'}>{bond.name}</b>
-                        <span className="text-slate-400"> with {TROOPS[partner].name}: {describeBond(bond)}</span>
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
             <p className="mt-3 text-xs italic text-slate-400">{troop.lore}</p>
           </div>
         </div>

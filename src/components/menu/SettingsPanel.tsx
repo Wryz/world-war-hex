@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
+import { ARMORED_SCREEN_REDUCTION, PIN_BONUS, SCREEN_REDUCTION, SHIELD_WALL_REDUCTION } from '@/lib/game/formations';
 import {
   CAMP_INCOME, FLANK_BONUS, HEIGHT_DAMAGE_PER_UNIT, MAX_HEIGHT_BONUS, FREE_UPKEEP_UNITS, MAX_FLANKERS, SIGHT_RANGE,
   SPEED_POINTS_PER_ROUND, TERRAIN_EFFECTS, TIME_SCORE_WEIGHTS, TURN_INCOME, UPKEEP_PER_UNIT
@@ -14,7 +15,7 @@ import { setGameSpeed, useGameSpeed } from '../game/effects/effects';
 import { TERRAIN_ORDER, TERRAIN_SHORT_EFFECTS } from '../game/hud/terrainInfo';
 import { CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
 import {
-  AttackIcon, BondIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
+  AttackIcon, FormationIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
   SettingsIcon, ShieldIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon, FellIcon, AbilityIcon
 } from '../game/icons';
 import type { Difficulty } from '../game/storage/GameStorage';
@@ -282,11 +283,14 @@ const GuideTab: React.FC = () => (
         ))}
       </ul>
     </GuideSection>
-    <GuideSection title="Cards and bonds" icon={<BondIcon />}>
-      <p>
-        You bring four cards into each battle. Some pairs of cards form bonds: bring both and their troops fight better.
-        The Army screen lists every bond.
-      </p>
+    <GuideSection title="Fighting together" icon={<FormationIcon />}>
+      <p>Troops fight better for where they stand beside each other. The enemy forms up the same way.</p>
+      <ul className="grid gap-1.5 sm:grid-cols-2">
+        <li><b>Screen:</b> archers and mages with swords, spears or brutes between them and the enemy take {Math.round(SCREEN_REDUCTION * 100)}% less damage ({Math.round(ARMORED_SCREEN_REDUCTION * 100)}% behind armour).</li>
+        <li><b>Pinned:</b> an enemy next to one of your front-line troops takes {Math.round(PIN_BONUS * 100)}% more from your archers and riders.</li>
+        <li><b>Shield wall:</b> front-line troops side by side take {Math.round(SHIELD_WALL_REDUCTION * 100)}% less damage.</li>
+        <li><b>Hold the crossing:</b> a troop on a bridge, log bridge or gateway can&apos;t be flanked.</li>
+      </ul>
     </GuideSection>
     <GuideSection title="Signature abilities" icon={<SignatureIcon />}>
       <p>

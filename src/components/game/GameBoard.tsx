@@ -10,6 +10,8 @@ import { Camp } from './Camp';
 import { BoardDecorations } from './BoardDecorations';
 import { BattlefieldObjects } from './BattlefieldObjects';
 import { BossPowerBursts, BossThreats } from './BossPowers';
+import { FormationLinks } from './FormationLinks';
+import { PIN_BONUS, SCREEN_REDUCTION, SHIELD_WALL_REDUCTION, hasScreenBeside, inShieldWall, isPinned } from '@/lib/game/formations';
 import { MovePath } from './MovePath';
 import {
   DEFAULT_SETTINGS,
@@ -61,8 +63,6 @@ import { isCapturable } from '@/lib/game/structures';
 import type { UnitBuff } from './UnitMesh';
 import type { TutorialVisuals } from './shared/TutorialGuide';
 import { TutorialMarkers } from './shared/TutorialMarkers';
-import { describeBonus, getBond } from '@/lib/game/bonds';
-import type { TroopId } from '@/lib/game/troops';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
 import { SKY_COLOR } from '@/components/menu/MenuShell';
 
@@ -766,7 +766,6 @@ const toVector = ([x, y, z]: [number, number, number]) => new THREE.Vector3(x, y
 
 // The buffs (and the odd drawback) working on a unit right now, shown under its health tag, most
 // telling first: its signature while its condition is met, hazards, then the ground.
-// Bonds are always on, so they only show in the list a tap opens.
 const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitBuff[] => {
   if (!hex) return [];
   const buffs: UnitBuff[] = [];
@@ -796,6 +795,18 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   }
   for (const protection of getProtections(state, unit)) {
     buffs.push({ id: `guard-${protection.label}`, icon: 'shield', label: protection.label, value: `-${pct(protection.reduction)} damage`, good: true });
+  }
+  // Formations: screened by a front-line friend, standing in a shield wall, or pinned by the enemy
+  const friends = state.players[unit.owner].units;
+  const foes = state.players[unit.owner === 'player' ? 'ai' : 'player'].units;
+  if (hasScreenBeside(unit, unit.position, friends)) {
+    buffs.push({ id: 'screened', icon: 'shield', label: 'Screened', value: `-${pct(SCREEN_REDUCTION)} damage from beyond its screen`, good: true });
+  }
+  if (inShieldWall(unit, unit.position, friends)) {
+    buffs.push({ id: 'shieldwall', icon: 'shield', label: 'Shield wall', value: `-${pct(SHIELD_WALL_REDUCTION)} damage`, good: true });
+  }
+  if (isPinned(unit.position, foes)) {
+    buffs.push({ id: 'pinned', icon: 'pinned', label: 'Pinned', value: `Archers and riders deal +${pct(PIN_BONUS)}`, good: false });
   }
   // Its own fury
   if (unit.abilities.includes('berserk') && unit.lifespan * 2 <= unit.maxLifespan) {
@@ -839,13 +850,6 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   }
   if (hex.isResourceHex) {
     buffs.push({ id: 'gold', icon: 'gold', label: 'Gold mine', value: `+${hex.resourceValue ?? 0} gold/turn`, good: true });
-  }
-  if (unit.owner === 'player') {
-    for (const bondId of state.bonds ?? []) {
-      const bond = getBond(bondId);
-      const bonus = bond.bonuses[unit.type as TroopId];
-      if (bonus) buffs.push({ id: `bond-${bond.id}`, icon: 'bond', label: bond.name, value: describeBonus(unit.type as TroopId, bonus), good: true, quiet: true });
-    }
   }
   return buffs;
 };
@@ -1548,6 +1552,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {tutorial && <TutorialMarkers visuals={tutorial} hexByKey={hexByKey} />}
       {/* Great trees, felled trunks and fires */}
       <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} lastBombard={gameState.lastBombard} visibleKeys={visibleKeys} />
+      {/* Your formations: screens and shield walls */}
+      {currentPhase === 'planning' && <FormationLinks units={players.player.units} hexByKey={hexByKey} />}
       {/* Bosses' powers: the ground they have marked to strike, and each power as it lands */}
       <BossThreats units={players.ai.units} hexByKey={hexByKey} />
       <BossPowerBursts last={gameState.lastBossPower} hexByKey={hexByKey} />
