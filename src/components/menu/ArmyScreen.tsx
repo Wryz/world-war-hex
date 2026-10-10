@@ -96,7 +96,8 @@ export const ArmyScreen: React.FC = () => {
   // Your troops: one entry for each lineage, showing the form in the deck (or the base card)
   const lineages = LINEAGE_IDS.filter(lineage => profile.cards[LINEAGES[lineage].base] !== undefined);
   const forSale = BASE_CARD_IDS.filter(id => profile.cards[id] === undefined && isCardAvailable(profile, id));
-  const locked = BASE_CARD_IDS.filter(id => profile.cards[id] === undefined && !isCardAvailable(profile, id));
+  const locked = BASE_CARD_IDS.filter(id => profile.cards[id] === undefined && !isCardAvailable(profile, id))
+    .sort((a, b) => (SHOP_UNLOCK_LEVEL[a] ?? 0) - (SHOP_UNLOCK_LEVEL[b] ?? 0));
   // A card's stats with what its lineage has learnt
   const trainedStats = (id: TroopId) => {
     const lineage = lineageOf(id);
@@ -138,7 +139,7 @@ export const ArmyScreen: React.FC = () => {
         <h2 className="font-display mb-1 text-2xl text-slate-800">Your troops</h2>
         {!treeSeen && (
           <p className="mb-3 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-amber-100 shadow">
-            New: spend the materials you gather on your troops&apos; skill trees - and evolve them into new forms!
+            Spend the materials you gather on your troops&apos; skill trees - and evolve them into new forms!
           </p>
         )}
         <p className="mb-6 text-sm font-semibold text-slate-700">Train a troop with coins. Its skill tree takes materials from the battlefield, and can evolve it into new forms.</p>

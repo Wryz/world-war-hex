@@ -628,7 +628,7 @@ const Details: React.FC<DetailsProps> = ({ selection, lineage, viewing, deckFull
           <button
             onClick={() => toggleDeckCard(form.id)}
             disabled={inDeck || deckFull}
-            className={`${BUTTON} bg-sky-500 text-slate-900 shadow-[0_3px_0_#0369a1] hover:bg-sky-400 ${inDeck ? 'disabled:bg-emerald-700 disabled:text-white' : ''}`}
+            className={`${BUTTON} bg-sky-500 text-slate-900 shadow-[0_3px_0_#0369a1] hover:bg-sky-400 ${inDeck ? 'disabled:!bg-emerald-700 disabled:!text-white' : ''}`}
             title={deckFull ? 'Your battle cards are full: leave one behind in the Army first' : undefined}
           >
             {inDeck ? 'In battle' : deckFull ? 'Battle cards full' : 'Bring to battle'}
@@ -645,7 +645,9 @@ const Details: React.FC<DetailsProps> = ({ selection, lineage, viewing, deckFull
           {form.unlockLevel > cleared && ` (${form.unlockLevel - cleared} to go)`}
         </p>
       ) : block === 'previous' ? (
-        <p className="flex items-center gap-1 text-xs font-bold text-slate-400"><LockIcon /> Evolve {TROOPS[evolvesFrom(form.id)].name} first</p>
+        <p className="flex items-center gap-1 text-xs font-bold text-slate-400">
+          <LockIcon /> Evolve {TROOPS[evolvesFrom(form.id)].name} first{form.unlockLevel > cleared && `, and beat level ${form.unlockLevel}`}
+        </p>
       ) : (
         <>
           <CostList cost={form.cost} have={profile.materials} />

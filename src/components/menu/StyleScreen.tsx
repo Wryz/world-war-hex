@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { applyTree, lineageOf } from '@/lib/game/lineages';
+import { cardStats } from '@/lib/game/troops';
 import { CARD_SKINS, CASTLE_STYLES, CastleStyleId, getCastleStyle } from '@/lib/meta/cosmetics';
 import { CosmeticKind, buyCosmetic, equipCosmetic, ownsCosmetic, useHasHydrated, useProfile } from '@/lib/meta/profile';
 import { playStinger, useMusic } from '@/lib/audio/music';
@@ -66,6 +68,9 @@ export const StyleScreen: React.FC = () => {
   };
   const shownCastle = getCastleStyle(previewCastle ?? profile.cosmetics.castleStyle);
   const previewCard = profile.deck[0] ?? 'infantry';
+  // (with its skill tree, as in the Army)
+  const previewLineage = lineageOf(previewCard);
+  const previewStats = applyTree(cardStats(previewCard, profile.cards[previewCard] ?? 1), previewLineage ? profile.trees[previewLineage] : undefined);
 
   return (
     <MenuShell title="Style" icon={<StyleIcon />} wide>
@@ -81,7 +86,7 @@ export const StyleScreen: React.FC = () => {
             const equipped = profile.cosmetics.cardSkin === skin.id;
             return (
               <div key={skin.id} className="relative flex flex-col items-center gap-2">
-                <TroopCard type={previewCard} level={profile.cards[previewCard]} size="sm" skin={skin.id} selected={equipped} />
+                <TroopCard type={previewCard} level={profile.cards[previewCard]} stats={previewStats} size="sm" skin={skin.id} selected={equipped} />
                 {flash === skin.id && (
                   <span className="moment-pop font-display pointer-events-none absolute top-1/4 text-xl text-amber-300" style={{ WebkitTextStroke: '1.5px #0f172a', paintOrder: 'stroke fill' }}>
                     New look!

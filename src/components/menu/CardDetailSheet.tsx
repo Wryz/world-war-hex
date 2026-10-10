@@ -1,9 +1,9 @@
 import React, { useEffect } from 'react';
-import { ABILITIES, FACTIONS, MAX_CARD_LEVEL, TROOPS, TROOP_CLASSES, TroopId, cardPower, cardStats } from '@/lib/game/troops';
-import { CARD_UNLOCK_LEVEL, ELITE_UNLOCK_LEVEL, MAX_DECK_SIZE, cardPrice, upgradeCost } from '@/lib/meta/economy';
+import { ABILITIES, FACTIONS, MAX_CARD_LEVEL, TROOPS, TROOP_CLASSES, TroopId, cardStats } from '@/lib/game/troops';
+import { CARD_UNLOCK_LEVEL, ELITE_UNLOCK_LEVEL, MAX_DECK_SIZE, cardPrice, treeCardPower, upgradeCost } from '@/lib/meta/economy';
 import { MonsterSkillIcon } from '../game/icons';
 import { eliteUnlocked, isCardAvailable, toggleDeckCard, treeOf, useProfile } from '@/lib/meta/profile';
-import { PLAYER_SKILLS, applyTree, baseOf, isBaseCard, lineageOf } from '@/lib/game/lineages';
+import { LineageTree, PLAYER_SKILLS, Trees, applyTree, baseOf, isBaseCard, lineageOf } from '@/lib/game/lineages';
 import { MAX_SIGNATURE_RANK, ROMAN, SIGNATURE_UNLOCK_LEVEL, getSignature, signatureRank } from '@/lib/game/signatures';
 import { TroopCard, RARITY_STYLES } from '../game/cards/TroopCard';
 import { CounterLine } from '../game/hud/SelectionCard';
@@ -15,13 +15,14 @@ import { AbilityIcon, AttackIcon, CoinIcon, HealthIcon, LockIcon, MoveIcon, Powe
 // stay short (picture, cost, stats and SIG badge) so the screen isn't a wall of text.
 
 // Stat gains from the next upgrade
-const upgradeGains = (id: TroopId, level: number) => {
-  const now = cardStats(id, level);
-  const next = cardStats(id, level + 1);
+// Stat gains from the next upgrade, with the card's skill tree
+const upgradeGains = (id: TroopId, level: number, tree: LineageTree | undefined, trees: Trees) => {
+  const now = applyTree(cardStats(id, level), tree);
+  const next = applyTree(cardStats(id, level + 1), tree);
   return {
     attack: Math.round((next.attackPower - now.attackPower) * 10) / 10,
     health: next.maxLifespan - now.maxLifespan,
-    power: cardPower(id, level + 1) - cardPower(id, level)
+    power: treeCardPower(id, level + 1, trees) - treeCardPower(id, level, trees)
   };
 };
 
@@ -58,7 +59,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, o
   // No room for it among the battle cards (another form of its lineage there just swaps for it)
   const deckFull = profile.deck.length >= MAX_DECK_SIZE && !profile.deck.some(card => lineageOf(card) === lineage);
   const cost = owned ? upgradeCost(id, shownLevel, eliteUnlocked(profile)) : null;
-  const gains = cost !== null ? upgradeGains(id, shownLevel) : null;
+  const gains = cost !== null ? upgradeGains(id, shownLevel, tree, profile.trees) : null;
   const nextRank = owned && rank < MAX_SIGNATURE_RANK ? rank + 1 : null;
   const abilities = stats.abilities.filter(ability => ability !== 'rapidMovement');
 

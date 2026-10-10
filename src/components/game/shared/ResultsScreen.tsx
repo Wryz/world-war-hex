@@ -85,7 +85,7 @@ const StarProgress: React.FC<{ level: LevelDef; points: number; won: boolean }> 
   }, [points]);
   return (
     <div className="mx-auto mt-4 max-w-md">
-      <div className="mb-1.5 flex items-baseline justify-between text-sm">
+      <div className="mb-9 flex items-baseline justify-between text-sm">
         <span className="font-bold text-slate-300">Points</span>
         <span className="font-display text-xl text-amber-300">{points}</span>
       </div>
@@ -97,9 +97,15 @@ const StarProgress: React.FC<{ level: LevelDef; points: number; won: boolean }> 
         {[{ value: two, stars: 2 }, { value: three, stars: 3 }].map(mark => {
           const reached = won && points >= mark.value;
           return (
-            <div key={mark.stars} className="absolute -top-1.5 flex -translate-x-1/2 flex-col items-center" style={{ left: at(mark.value) }}>
+            // (the two-star mark is labelled above the bar and the three-star one below, so the labels
+            // never run into each other when the marks sit close together)
+            <div
+              key={mark.stars}
+              className={`absolute flex -translate-x-1/2 items-center ${mark.stars === 2 ? 'bottom-[-0.375rem] flex-col-reverse' : '-top-1.5 flex-col'}`}
+              style={{ left: at(mark.value) }}
+            >
               <span className="h-7 w-1 rounded-full bg-slate-900/80" />
-              <span className={`mt-1 flex items-center gap-0.5 whitespace-nowrap text-sm font-bold ${reached ? 'text-amber-300' : 'text-slate-400'}`}>
+              <span className={`${mark.stars === 2 ? 'mb-1' : 'mt-1'} flex items-center gap-0.5 whitespace-nowrap text-sm font-bold ${reached ? 'text-amber-300' : 'text-slate-400'}`}>
                 {Array.from({ length: mark.stars }, (_, i) => reached ? <FilledStarIcon key={i} /> : <StarIcon key={i} color="#64748b" />)}
                 <span className="ml-0.5 tabular-nums">{mark.value}</span>
               </span>

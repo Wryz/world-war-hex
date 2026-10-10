@@ -22,6 +22,7 @@ import {
   upgradeCost
 } from './economy';
 import { LEVEL_COUNT } from '../campaign/levels';
+import { suggestLoadout } from './loadout';
 import { challengeBonus } from '../campaign/challenges';
 import {
   CARD_SKINS, CASTLE_STYLES, CardSkinId, CastleStyleId, DEFAULT_CARD_SKIN, DEFAULT_CASTLE_STYLE, isCardSkinId, isCastleStyleId
@@ -353,7 +354,14 @@ export const eliteUnlocked = (profile: Profile) => highestCleared(profile) >= EL
 export const totalStars = (profile: Profile) =>
   Object.values(profile.levels).reduce((sum, record) => sum + record.stars, 0);
 
-export const profilePower = (profile: Profile) => deckPower(profile.deck, profile.cards, profile.trees);
+// The power of the cards brought into battle - with any empty slots filled from the other cards owned,
+// as they are in battle
+export const profilePower = (profile: Profile) => {
+  const extra = profile.deck.length < MAX_DECK_SIZE
+    ? suggestLoadout(profile.cards, []).filter(id => !profile.deck.some(card => lineageOf(card) === lineageOf(id)))
+    : [];
+  return deckPower([...profile.deck, ...extra].slice(0, MAX_DECK_SIZE), profile.cards, profile.trees);
+};
 
 // Whether a base card can be bought in the shop yet
 export const isCardAvailable = (profile: Profile, id: TroopId) => {
