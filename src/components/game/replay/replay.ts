@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GameState } from '@/types/game';
+import { isAiSide } from '@/lib/game/sides';
 import { getGameSpeed } from '../effects/effects';
 import { BATTLE_DURATION_MS, getBattleStartDelay, setBattleStartDelay } from '../utils/battleTiming';
 
@@ -41,7 +42,8 @@ const firstFrame = (frames: ReplayFrame[]) => Math.max(0, frames.findIndex(frame
 
 export const canReplay = (frames: ReplayFrame[]) => frames.length - firstFrame(frames) >= 3;
 
-const isPlayerPlanning = (state: GameState) => state.currentPhase === 'planning' && (state.activePlayer ?? 'player') === 'player';
+// (a human's turn: the player's against the AI, any side the AI doesn't play in a bigger battle)
+const isPlayerPlanning = (state: GameState) => state.currentPhase === 'planning' && !isAiSide(state, state.activePlayer ?? 'player');
 
 // The time the player spent thinking is cut short (but long enough to see their orders on the board);
 // anything else plays at the pace it was fought, up to a limit (a tab left in the background)

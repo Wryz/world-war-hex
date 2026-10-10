@@ -1,8 +1,11 @@
 import React, { useState } from 'react';
-import { GameState } from '@/types/game';
-import { BASE_MAX_HEALTH, getCastleMaxHealth, getIncome, getMaxRounds, getTimeScore, isFogOfWar } from '@/lib/game/gameState';
+import { GameState, PlayerType } from '@/types/game';
+import { BASE_MAX_HEALTH, getActivePlayer, getCastleMaxHealth, getIncome, getMaxRounds, getTimeScore, isFogOfWar } from '@/lib/game/gameState';
+import { getSides, isMultiSide } from '@/lib/game/sides';
+import { sideColor } from '../sideColors';
+import { sideLabel } from './sideLabels';
 import { WEATHER, activeWeather, stormForecast } from '@/lib/game/regionRules';
-import { PANEL_CLASS, SIDE_COLORS } from './styles';
+import { PANEL_CLASS } from './styles';
 import { CrownIcon, FogIcon, GoldIcon, HomeIcon, ResignIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon, WeatherIcon } from '../icons';
 import { setGameSpeed, useCastleShownDamage, useGameSpeed } from '../effects/effects';
 import { useShownCastleHealth } from '../effects/healthTimeline';
@@ -24,6 +27,10 @@ interface TopBarProps {
   // The threat preview: hexes enemies can strike next turn
   showThreats: boolean;
   onToggleThreats: () => void;
+  // The side the battle is seen from
+  viewer?: PlayerType;
+  // What resigning means (a defeat against the AI; leaving the battle when others play on)
+  resignNote?: string;
 }
 
 const ICON_BUTTON_CLASS = 'rounded-md p-1 text-slate-300 hover:bg-slate-700 hover:text-white';
@@ -51,7 +58,8 @@ const CastleHealth: React.FC<{ title: string; health: number; max: number; color
 
 // Compact status bar: whose turn it is, both castles' health, and the player's gold
 export const TopBar: React.FC<TopBarProps> = ({
-  gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit, onResign, showThreats, onToggleThreats
+  gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit, onResign, showThreats, onToggleThreats,
+  viewer = 'player', resignNote = 'It counts as a defeat.'
 }) => {
   // Asking to make sure before giving up: on the turn it was asked on, while resigning is on offer
   const [confirmTurn, setConfirmTurn] = useState<number | null>(null);
@@ -61,14 +69,17 @@ export const TopBar: React.FC<TopBarProps> = ({
   // Hits landing on a castle in the battle being fought, ahead of its result
   const castleHits = useCastleShownDamage();
   // (only while the attack is being fought, so it never counts twice once its result is in)
-  const shownDamage = gameState.currentPhase === 'combat' && gameState.siege ? castleHits : { player: 0, ai: 0 };
+  const shownDamage: Record<string, number> = gameState.currentPhase === 'combat' && gameState.siege ? castleHits : {};
+  const multi = isMultiSide(gameState);
+  const enemy = multi ? viewer : 'ai';
   // (and a stone from a catapult once it has landed)
-  const yourCastle = useShownCastleHealth('player', Math.max(0, (players.player.baseHealth ?? BASE_MAX_HEALTH) - shownDamage.player));
-  const enemyCastle = useShownCastleHealth('ai', Math.max(0, (players.ai.baseHealth ?? BASE_MAX_HEALTH) - shownDamage.ai));
+  const yourCastle = useShownCastleHealth(viewer, Math.max(0, (players[viewer]?.baseHealth ?? BASE_MAX_HEALTH) - (shownDamage[viewer] ?? 0)));
+  const enemyCastle = useShownCastleHealth(enemy, Math.max(0, (players[enemy]?.baseHealth ?? BASE_MAX_HEALTH) - (shownDamage[enemy] ?? 0)));
   const maxRounds = getMaxRounds(gameState);
   const isFinalRound = turnNumber >= maxRounds;
   const speed = useGameSpeed();
-  const income = getIncome(gameState, 'player');
+  const income = getIncome(gameState, viewer);
+  const active = getActivePlayer(gameState);
   const incomeDetails = [
     `+${income.base} income`,
     income.mines > 0 && `+${income.mines} gold mines`,
@@ -86,9 +97,9 @@ export const TopBar: React.FC<TopBarProps> = ({
         </span>
         <span
           className="rounded-full px-2 py-0.5 text-xs font-bold text-white sm:px-2.5"
-          style={{ background: isAITurn ? SIDE_COLORS.ai : SIDE_COLORS.player }}
+          style={{ background: sideColor(active), color: active === viewer || !multi ? undefined : '#0f172a' }}
         >
-          {isAITurn ? 'Enemy turn' : 'Your turn'}
+          {multi ? (active === viewer ? 'Your turn' : `${sideLabel(gameState, active, viewer)}'s turn`) : isAITurn ? 'Enemy turn' : 'Your turn'}
         </span>
         {/* The weather: lit while a storm rages, with a word when it is about to change */}
         {gameState.settings?.weather && (() => {
@@ -114,7 +125,7 @@ export const TopBar: React.FC<TopBarProps> = ({
           </span>
         )}
         {/* Near the end: the points that decide the battle if time runs out */}
-        {turnNumber > maxRounds - POINTS_SHOWN_ROUNDS && (() => {
+        {!multi && turnNumber > maxRounds - POINTS_SHOWN_ROUNDS && (() => {
           const you = getTimeScore(gameState, 'player');
           const enemy = getTimeScore(gameState, 'ai');
           return (
@@ -130,28 +141,37 @@ export const TopBar: React.FC<TopBarProps> = ({
 
       {/* Castles (from the width it fits at: below that, a landscape phone or small tablet, the
           castles' own health tags on the board show it, and the buttons on the right stay on screen) */}
+      {multi ? (
+        // (a battle between more sides: every side, its castle's health and its points, in turn order)
+        <div className={`${PANEL_CLASS} pointer-events-auto hidden lg:flex items-center gap-2.5 px-3 py-2`}>
+          {getSides(gameState).map(side => (
+            <SideChip key={side} gameState={gameState} side={side} viewer={viewer} shownDamage={shownDamage[side] ?? 0} active={side === active} />
+          ))}
+        </div>
+      ) : (
       <div className={`${PANEL_CLASS} pointer-events-auto hidden lg:flex items-center gap-3 px-3 py-2`}>
         <CastleHealth
           title="Your castle"
           health={yourCastle}
           max={getCastleMaxHealth(gameState, 'player')}
-          color={SIDE_COLORS.player}
+          color={sideColor('player')}
         />
         <span className="text-xs font-bold text-slate-500">VS</span>
         <CastleHealth
           title="Enemy castle"
           health={enemyCastle}
           max={getCastleMaxHealth(gameState, 'ai')}
-          color={SIDE_COLORS.ai}
+          color={sideColor('ai')}
           alignRight
         />
       </div>
+      )}
 
       {/* Treasury */}
       <div className={`${PANEL_CLASS} pointer-events-auto relative flex items-center gap-1 px-2 py-1.5 sm:gap-2 sm:px-3`}>
         {/* (a phone shows the gold beside the hand instead) */}
         <span id="hud-gold" className="font-display hidden items-center gap-1 text-base text-amber-300 sm:flex" title={`${income.total >= 0 ? '+' : ''}${income.total} gold per turn (${incomeDetails})`}>
-          <GoldIcon className="text-lg" /> {players.player.points}
+          <GoldIcon className="text-lg" /> {players[viewer]?.points ?? 0}
           <span className={`text-xs ${income.upkeep > 0 ? 'text-rose-300' : 'text-amber-200/70'}`}>
             {income.total >= 0 ? '+' : ''}{income.total}
           </span>
@@ -205,7 +225,7 @@ export const TopBar: React.FC<TopBarProps> = ({
         {confirmingResign && onResign && (
           <div role="dialog" aria-label="Resign this battle?" className={`${PANEL_CLASS} absolute right-0 top-full z-50 mt-2 w-60 p-3 text-left`}>
             <div className="text-sm font-bold text-slate-100">Resign this battle?</div>
-            <p className="mt-1 text-xs text-slate-400">It counts as a defeat.</p>
+            <p className="mt-1 text-xs text-slate-400">{resignNote}</p>
             <div className="mt-2.5 flex gap-2">
               <button
                 onClick={() => { setConfirmingResign(false); onResign(); }}
@@ -221,5 +241,26 @@ export const TopBar: React.FC<TopBarProps> = ({
         )}
       </div>
     </div>
+  );
+};
+
+// One side of a battle between more sides: its colour, name, castle health and points (out of the
+// battle once its castle has fallen)
+const SideChip: React.FC<{ gameState: GameState; side: PlayerType; viewer: PlayerType; shownDamage: number; active: boolean }> = ({
+  gameState, side, viewer, shownDamage, active
+}) => {
+  const player = gameState.players[side];
+  const health = useShownCastleHealth(side, Math.max(0, (player?.baseHealth ?? BASE_MAX_HEALTH) - shownDamage));
+  const out = !!player?.eliminated;
+  const score = getTimeScore(gameState, side).total;
+  return (
+    <span
+      className={`flex items-center gap-1 rounded-full px-1.5 py-0.5 text-xs font-bold tabular-nums ${active ? 'ring-2 ring-white/70' : ''} ${out ? 'opacity-40 line-through' : ''}`}
+      title={`${player?.name ?? side}${side === viewer ? ' (you)' : ''}: castle ${health}/${getCastleMaxHealth(gameState, side)}, ${score} points${out ? ' - out of the battle' : ''}`}
+    >
+      <CrownIcon color={sideColor(side)} />
+      <span className="max-w-[5rem] truncate" style={{ color: sideColor(side) }}>{side === viewer ? 'You' : player?.name ?? side}</span>
+      <span className="text-slate-200">{out ? 0 : health}</span>
+    </span>
   );
 };

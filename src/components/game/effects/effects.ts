@@ -55,11 +55,11 @@ export const useGameSpeed = () => useSyncExternalStore(speedSignal.subscribe, sp
 
 // Damage a castle has visibly taken so far in the battle being fought (before the battle's result
 // is applied), so the top bar's castle health counts down with the castle's own label
-const castleShownDamage = createSignal<Record<'player' | 'ai', number>>({ player: 0, ai: 0 });
-export const setCastleShownDamage = (owner: 'player' | 'ai', damage: number) => {
-  if (castleShownDamage.get()[owner] !== damage) castleShownDamage.set({ ...castleShownDamage.get(), [owner]: damage });
+const castleShownDamage = createSignal<Record<string, number>>({ player: 0, ai: 0 });
+export const setCastleShownDamage = (owner: string, damage: number) => {
+  if ((castleShownDamage.get()[owner] ?? 0) !== damage) castleShownDamage.set({ ...castleShownDamage.get(), [owner]: damage });
 };
-const NO_DAMAGE = { player: 0, ai: 0 };
+const NO_DAMAGE: Record<string, number> = { player: 0, ai: 0 };
 export const useCastleShownDamage = () => useSyncExternalStore(castleShownDamage.subscribe, castleShownDamage.get, () => NO_DAMAGE);
 
 // How fast animations run right now: the chosen speed, slowed during slow motion

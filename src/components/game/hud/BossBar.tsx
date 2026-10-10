@@ -10,7 +10,7 @@ import { BossIcon, BossPowerIcon, FireIcon } from '../icons';
 // (the bar burns), and its power - lit when it is ready or has marked the ground, with a pip for each
 // turn it still needs otherwise
 export const BossBar: React.FC<{ gameState: GameState }> = ({ gameState }) => {
-  const live = gameState.players.ai.units.find(unit => unit.isBoss);
+  const live = Object.values(gameState.players).flatMap(player => player.units).find(unit => unit.isBoss);
   // (a boss just destroyed outside a fight stays until the board shows its fatal blow land)
   const lastRef = useRef(live);
   if (live) lastRef.current = live;

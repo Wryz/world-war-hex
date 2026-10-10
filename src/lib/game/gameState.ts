@@ -27,6 +27,10 @@ import {
   findHexByCoordinates,
   getNeighbors,
   getHexesInRange,
+  getRing,
+  canonicalHex,
+  hexOrbit,
+  rotateHex,
   DIRECTIONS
 } from './hexUtils';
 import { createHexagonalGrid } from './mapGenerator';
@@ -59,6 +63,10 @@ import {
   furyMultiplier, getFogBankKeys, hasTrait, isFearless, isInFogBank, isNativeGround, isSurrounded, moraleMultiplier, riseHealth,
   traitOf, weatherMovePenalty, weatherReachPenalty
 } from './regionRules';
+import {
+  areAllies, getAllUnits, getEnemySides, getEnemyUnits, getFriendlyUnits, getLivingSides, getSides, isLastInRound,
+  isMultiSide, lastTeamStanding, nextSide, sideName, sidePossessive, sideVerb, TWO_SIDES
+} from './sides';
 
 // Default game settings: a small board and short turns so a battle takes a few minutes
 export const DEFAULT_SETTINGS: GameSettings = {
@@ -390,6 +398,18 @@ export interface BattleSetup {
   // Seeds the battle's chance events (the great trees, fires around lava): random unless given, so
   // the same battle can be fought again (a quick battle shared with a friend)
   battleSeed?: number;
+  // A battle between more sides (lib/game/sides): who fights, in turn order. Their rosters are in
+  // `rosters` and their cards in `decks`, both by side id
+  sides?: SideSetup[];
+  decks?: Record<PlayerType, UnitType[]>;
+}
+
+export interface SideSetup {
+  id: PlayerType;
+  name: string;
+  team?: number;
+  color?: number;
+  ai?: boolean;
 }
 
 const emptySideStats = (): SideStats => ({
@@ -408,31 +428,49 @@ export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS, s
   const { hexGrid, theme } = createHexagonalGrid(settings, settings.seed, settings.themeName);
   const battleSeed = setup?.battleSeed ?? Math.floor(Math.random() * 2 ** 31);
   let draws = 0;
-  const trees = new Set(pickGreatTrees(hexGrid, settings.gridSize, () => seededRandom(battleSeed + 7 * draws++)).map(coordKey));
+  const picked = pickGreatTrees(hexGrid, settings.gridSize, () => seededRandom(battleSeed + 7 * draws++));
+  // (on a mirrored map, the trees in its first part grow in every part)
+  const symmetry = mapSymmetry(settings);
+  const trees = new Set((symmetry > 1
+    ? picked.filter(c => coordKey(canonicalHex(c, symmetry)) === coordKey(c)).flatMap(c => hexOrbit(c, symmetry))
+      .filter(c => findHexByCoordinates(hexGrid, c)?.terrain === 'forest')
+    : picked).map(coordKey));
   for (const hex of hexGrid) if (trees.has(coordKey(hex.coordinates))) hex.feature = 'greatTree';
   const startingGold = settings.startingGold ?? DEFAULT_SETTINGS.startingGold!;
 
   // Initialize players
-  const players: Record<PlayerType, Player> = {
-    player: {
-      id: 'player-' + uuidv4(),
-      type: 'player',
+  const players: Record<PlayerType, Player> = setup?.sides
+    ? Object.fromEntries(setup.sides.map(side => [side.id, {
+      id: `${side.id}-${uuidv4()}`,
+      type: side.id,
       points: startingGold,
-      units: []
-    },
-    ai: {
-      id: 'ai-' + uuidv4(),
-      type: 'ai',
-      points: startingGold,
-      units: []
-    }
-  };
+      units: [],
+      name: side.name,
+      team: side.team,
+      color: side.color,
+      ai: side.ai || undefined
+    }]))
+    : {
+      player: {
+        id: 'player-' + uuidv4(),
+        type: 'player',
+        points: startingGold,
+        units: []
+      },
+      ai: {
+        id: 'ai-' + uuidv4(),
+        type: 'ai',
+        points: startingGold,
+        units: []
+      }
+    };
+  const sides = setup?.sides?.map(side => side.id);
 
   return {
     hexGrid,
     players,
     currentPhase: 'setup',
-    activePlayer: 'player',
+    activePlayer: sides?.[0] ?? 'player',
     turnNumber: 0,
     planningTimeRemaining: settings.planningPhaseTime,
     pendingMoves: [],
@@ -442,8 +480,9 @@ export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS, s
     mapName: theme.name,
     rosters: setup?.rosters ?? { player: defaultRoster(), ai: defaultRoster() },
     deck: setup?.deck,
+    ...(sides ? { sides, decks: setup?.decks ?? {} } : {}),
     levelId: setup?.levelId,
-    battleStats: { player: emptySideStats(), ai: emptySideStats() },
+    battleStats: Object.fromEntries((sides ?? TWO_SIDES).map(side => [side, emptySideStats()])),
     battleSeed
   };
 };
@@ -452,6 +491,7 @@ export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS, s
 // the player picks their castle's site, waiting in setup with the sites to choose from
 export const createBattle = (settings: GameSettings, setup?: BattleSetup): GameState => {
   const state = initializeGameState(settings, setup);
+  if (isMultiSide(state)) return placeAllCastles(state);
   if (setup?.levelId === TUTORIAL_LEVEL_ID) return placeGuards(layTutorialField(state), setup.guards ?? []);
   if (setup?.chooseCastle) {
     const castleChoices = getCastleChoices(state);
@@ -469,12 +509,17 @@ const coordKey = (c: HexCoordinates) => `${c.q},${c.r}`;
 
 export const coordsEqual = (a: HexCoordinates, b: HexCoordinates) => a.q === b.q && a.r === b.r;
 
+// The other side of a battle between the player and the AI
 export const getOpponent = (playerType: PlayerType): PlayerType =>
   playerType === 'player' ? 'ai' : 'player';
 
-export const getActivePlayer = (state: GameState): PlayerType => state.activePlayer ?? 'player';
+export const getActivePlayer = (state: GameState): PlayerType => state.activePlayer ?? getSides(state)[0];
 
 const getSettings = (state: GameState): GameSettings => state.settings ?? DEFAULT_SETTINGS;
+
+// How many equal parts a mirrored map turns through (1: not mirrored)
+const mapSymmetry = (settings: GameSettings | undefined): number =>
+  settings?.symmetry && [2, 3, 6].includes(settings.symmetry) ? settings.symmetry : 1;
 
 export const getMaxRounds = (state: GameState): number => getSettings(state).maxRounds ?? DEFAULT_SETTINGS.maxRounds!;
 
@@ -492,9 +537,10 @@ export const hexMoveCost = (hex: Hex): number | null => {
 };
 
 // Whether a hex is shut to a side's troops whatever their movement: a gatehouse the enemy holds, and
-// for cavalry on the ground, stakes
-export const isClosedTo = (hex: Hex, unit: Pick<Unit, 'owner' | 'type' | 'abilities' | 'isBoss'>): boolean =>
-  (hex.terrain === 'gate' && !!hex.owner && hex.owner !== unit.owner && !(hasAbility(unit, 'flying') && hasTrait(unit, 'skyborne'))) ||
+// for cavalry on the ground, stakes. (Pass the battle so a gate an ally holds stays open.)
+export const isClosedTo = (hex: Hex, unit: Pick<Unit, 'owner' | 'type' | 'abilities' | 'isBoss'>, state?: Pick<GameState, 'players'>): boolean =>
+  (hex.terrain === 'gate' && !!hex.owner && hex.owner !== unit.owner && !(state && areAllies(state, hex.owner, unit.owner)) &&
+    !(hasAbility(unit, 'flying') && hasTrait(unit, 'skyborne'))) ||
   (hex.feature === 'stakes' && !hasAbility(unit, 'flying') && getTroopClass(unit.type) === 'cavalry');
 
 export const isImpassable = (hex: Hex) => hexMoveCost(hex) === null;
@@ -505,41 +551,48 @@ const findPlayerById = (state: GameState, playerId: string): Player | undefined 
 export const findBaseHex = (state: GameState, playerType: PlayerType): Hex | undefined =>
   state.hexGrid.find(hex => hex.isBase && hex.owner === playerType);
 
-const sideLabel = (side: PlayerType) => side === 'player' ? 'Your' : 'Enemy';
-export const unitLabel = (unit: Unit) => `${sideLabel(unit.owner)} ${getTroopName(unit.type)}`;
+export const unitLabel = (state: Pick<GameState, 'players' | 'sides'>, unit: Unit) => `${sidePossessive(state, unit.owner)} ${getTroopName(unit.type)}`;
 
 export const hasAbility = (unit: { abilities: Ability[] }, ability: Ability) => unit.abilities.includes(ability);
 
 // The stats a side recruits a troop type with, or undefined if it can't recruit it
 export const getRosterStats = (state: GameState, side: PlayerType, type: UnitType): TroopStats | undefined =>
-  state.rosters ? state.rosters[side][type] : cardStats(type, 1);
+  state.rosters ? state.rosters[side]?.[type] : cardStats(type, 1);
 
 // Troop types a side may recruit
 export const getRosterTypes = (state: GameState, side: PlayerType): UnitType[] =>
   Object.keys(state.rosters?.[side] ?? defaultRoster()) as UnitType[];
 
-// The player's hand: the top cards of their deck. Without a deck every roster card is in hand.
-export const getHand = (state: GameState): UnitType[] =>
-  state.deck ? state.deck.slice(0, HAND_SIZE) : getRosterTypes(state, 'player');
+// A side's cards in draw order: the player's deck, or in a battle between more sides each side's own
+export const getDeck = (state: Pick<GameState, 'deck' | 'decks'>, side: PlayerType = 'player'): UnitType[] | undefined =>
+  state.decks ? state.decks[side] : side === 'player' ? state.deck : undefined;
+
+// A side's hand: the top cards of its deck. Without a deck every roster card is in hand.
+export const getHand = (state: GameState, side: PlayerType = 'player'): UnitType[] => {
+  const deck = getDeck(state, side);
+  return deck ? deck.slice(0, HAND_SIZE) : getRosterTypes(state, side);
+};
 
 // The card that will be drawn next
-export const getNextCard = (state: GameState): UnitType | undefined => state.deck?.[HAND_SIZE];
+export const getNextCard = (state: GameState, side: PlayerType = 'player'): UnitType | undefined => getDeck(state, side)?.[HAND_SIZE];
+
+// A copy of the state with a side's deck replaced
+const withDeck = (state: GameState, side: PlayerType, deck: UnitType[] | undefined): Pick<GameState, 'deck' | 'decks'> =>
+  state.decks
+    ? { deck: state.deck, decks: deck ? { ...state.decks, [side]: deck } : state.decks }
+    : { deck: side === 'player' ? deck : state.deck, decks: state.decks };
 
 // Copy the parts of the state that the game logic mutates so React state is never mutated in place
 export const cloneState = (state: GameState): GameState => ({
   ...state,
   hexGrid: [...state.hexGrid],
-  players: {
-    player: { ...state.players.player, units: state.players.player.units.map(u => ({ ...u })) },
-    ai: { ...state.players.ai, units: state.players.ai.units.map(u => ({ ...u })) }
-  },
+  players: Object.fromEntries(Object.entries(state.players).map(([side, player]) =>
+    [side, { ...player, units: player.units.map(u => ({ ...u })) }])),
   pendingMoves: [...state.pendingMoves],
   pendingPurchases: [...state.pendingPurchases],
   combats: state.combats.map(c => ({ ...c })),
-  battleStats: state.battleStats && {
-    player: cloneSideStats(state.battleStats.player),
-    ai: cloneSideStats(state.battleStats.ai)
-  }
+  battleStats: state.battleStats &&
+    Object.fromEntries(Object.entries(state.battleStats).map(([side, stats]) => [side, cloneSideStats(stats)]))
 });
 
 const cloneSideStats = (stats: SideStats): SideStats => ({
@@ -547,14 +600,15 @@ const cloneSideStats = (stats: SideStats): SideStats => ({
 });
 
 export const sideStats = (state: GameState, side: PlayerType): SideStats => {
-  state.battleStats ??= { player: emptySideStats(), ai: emptySideStats() };
+  state.battleStats ??= Object.fromEntries(getSides(state).map(each => [each, emptySideStats()]));
+  state.battleStats[side] ??= emptySideStats();
   return state.battleStats[side];
 };
 
 // The players' unit lists are the source of truth; hex.unit is derived from them
 export const syncHexUnits = (state: GameState): void => {
   const unitsByKey = new Map<string, Unit>();
-  for (const unit of [...state.players.player.units, ...state.players.ai.units]) {
+  for (const unit of getAllUnits(state)) {
     unitsByKey.set(coordKey(unit.position), unit);
   }
 
@@ -568,15 +622,15 @@ export const syncHexUnits = (state: GameState): void => {
 // each side last saw each enemy troop
 const noteSightings = (state: GameState): void => {
   const fog = isFogOfWar(state);
-  const sightings = { player: [...(state.sightings?.player ?? [])], ai: [...(state.sightings?.ai ?? [])] };
-  for (const side of ['player', 'ai'] as const) {
+  const sightings: Record<PlayerType, Sighting[]> = Object.fromEntries(getLivingSides(state).map(side => [side, [...(state.sightings?.[side] ?? [])]]));
+  for (const side of getLivingSides(state)) {
     const stats = sideStats(state, side);
     const visible = getVisibleEnemies(state, side);
     for (const enemy of visible) {
       if (!stats.seen.includes(enemy.type)) stats.seen.push(enemy.type);
     }
     if (!fog) continue;
-    const alive = new Set(state.players[getOpponent(side)].units.map(unit => unit.id));
+    const alive = new Set(getEnemyUnits(state, side).map(unit => unit.id));
     const seenNow = new Set(visible.map(unit => unit.id));
     sightings[side] = [
       ...visible.map(unit => ({ unit: { ...unit }, turn: state.turnNumber })),
@@ -673,23 +727,35 @@ export const getValidBaseLocations = (state: GameState): Hex[] => {
 const CAMP_COUNT = 2;
 const MIN_CAMP_CASTLE_DISTANCE = 3;
 
+// How fairly a hex lies between the castles: the gap between its marches from the two nearest castles
+// (0 when both are equally far) and the march from the nearest. With two castles, that is simply how
+// much nearer one side is than the other.
+const castleMarches = (at: HexCoordinates, castles: HexCoordinates[]): { gap: number; nearest: number } => {
+  const [first, second = first] = castles.map(castle => getHexDistance(at, castle)).sort((a, b) => a - b);
+  return { gap: second - first, nearest: first };
+};
+
 // Put the neutral camps where both sides have an equally long march to them, one on each flank:
 // hexes the same distance from both castles, as far apart from each other as possible.
+// (With more castles, one between each pair of neighbouring castles - see placeCampsBetween.)
 // The camp hex becomes open ground with room around it to deploy recruits.
-const placeCamps = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoordinates): void => {
+const placeCamps = (state: GameState, castles: HexCoordinates[], symmetry = 1): void => {
   const gridSize = getSettings(state).gridSize;
   const center = { q: 0, r: 0 };
 
   const candidatesWithin = (tolerance: number) => state.hexGrid.filter(hex => {
     // Camps don't replace gold mines or healing springs
     if (hex.isBase || hex.isResourceHex || isImpassable(hex) || TERRAIN_EFFECTS[hex.terrain].healPerTurn) return false;
-    const toPlayer = getHexDistance(hex.coordinates, playerBase);
-    const toAi = getHexDistance(hex.coordinates, aiBase);
-    return Math.abs(toPlayer - toAi) <= tolerance &&
-      Math.min(toPlayer, toAi) >= MIN_CAMP_CASTLE_DISTANCE &&
+    const { gap, nearest } = castleMarches(hex.coordinates, castles);
+    return gap <= tolerance &&
+      nearest >= MIN_CAMP_CASTLE_DISTANCE &&
       // Off the outer ring so camps can be approached from every side
       getHexDistance(hex.coordinates, center) < gridSize;
   });
+  if (castles.length > 2 || symmetry > 1) {
+    placeCampsBetween(state, castles, candidatesWithin, symmetry);
+    return;
+  }
 
   let candidates = candidatesWithin(0);
   if (candidates.length < CAMP_COUNT) candidates = candidatesWithin(1);
@@ -711,14 +777,74 @@ const placeCamps = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoo
     }
   }
   if (!best) return;
+  for (const camp of best) setUpCamp(state, camp);
+};
 
-  for (const camp of best) {
-    updateHex(state, camp.coordinates, { isCamp: true, terrain: 'plain', owner: undefined });
-    // Clear blocked neighbours until there is room to deploy around the camp
-    for (const neighbor of getNeighbors(camp.coordinates)) {
-      if (countOpenNeighbors(state.hexGrid, camp.coordinates) >= MIN_OPEN_BASE_NEIGHBORS) break;
-      const hex = findHexByCoordinates(state.hexGrid, neighbor);
-      if (hex && isImpassable(hex)) updateHex(state, neighbor, { terrain: 'plain', feature: undefined });
+// The camp hex becomes open ground with room around it to deploy recruits
+const setUpCamp = (state: GameState, camp: Hex): void => {
+  updateHex(state, camp.coordinates, { isCamp: true, terrain: 'plain', owner: undefined });
+  // Clear blocked neighbours until there is room to deploy around the camp
+  for (const neighbor of getNeighbors(camp.coordinates)) {
+    if (countOpenNeighbors(state.hexGrid, camp.coordinates) >= MIN_OPEN_BASE_NEIGHBORS) break;
+    const hex = findHexByCoordinates(state.hexGrid, neighbor);
+    if (hex && isImpassable(hex)) updateHex(state, neighbor, { terrain: 'plain', feature: undefined });
+  }
+};
+
+// A hex of the edge made fit for a castle that has nowhere better to go: open ground, with room
+// around it to deploy recruits
+const clearForCastle = (state: GameState, at: HexCoordinates): void => {
+  updateHex(state, at, { terrain: 'plain', isResourceHex: false, resourceValue: undefined, feature: undefined, fire: undefined, isCamp: false });
+  for (const neighbor of getNeighbors(at)) {
+    if (countOpenNeighbors(state.hexGrid, at) >= MIN_OPEN_BASE_NEIGHBORS) break;
+    const hex = findHexByCoordinates(state.hexGrid, neighbor);
+    if (hex && (isImpassable(hex) || hex.isResourceHex)) updateHex(state, neighbor, { terrain: 'plain', feature: undefined, isResourceHex: false, resourceValue: undefined });
+  }
+};
+
+// With more than two castles (in the order they stand around the map), a camp between each pair of
+// neighbouring castles: a fair hex whose two nearest castles are that pair, as far as it can be from
+// every other castle and from the camps already placed
+// (with two castles, one camp on each flank between them; on a mirrored map the camps of its first
+// part are turned into the others)
+const placeCampsBetween = (state: GameState, castles: HexCoordinates[], candidatesWithin: (tolerance: number) => Hex[], symmetry = 1): void => {
+  const placed: Hex[] = [];
+  const campOf: (Hex | undefined)[] = [];
+  const pairs = castles.length === 2 ? 2 : castles.length;
+  const perPart = pairs % symmetry === 0 ? pairs / symmetry : pairs;
+  for (let i = 0; i < pairs; i++) {
+    if (i >= perPart) {
+      const original = campOf[i % perPart];
+      const turned = original && findHexByCoordinates(state.hexGrid, rotateHex(original.coordinates, Math.floor(i / perPart) * 6 / symmetry));
+      if (turned && !turned.isBase && !isImpassable(turned) && !placed.some(camp => coordsEqual(camp.coordinates, turned.coordinates))) {
+        setUpCamp(state, turned);
+        placed.push(turned);
+        campOf[i] = turned;
+        continue;
+      }
+    }
+    const pair = [castles[i % castles.length], castles[(i + 1) % castles.length]];
+    const others = castles.filter(castle => !pair.includes(castle));
+    for (const tolerance of [0, 1, 2]) {
+      const options = candidatesWithin(tolerance).filter(hex => {
+        const toPair = Math.max(...pair.map(castle => getHexDistance(hex.coordinates, castle)));
+        // (on a mirrored map, one whose copies stand apart from it, to be turned into the other parts)
+        const copies = symmetry > 1 ? hexOrbit(hex.coordinates, symmetry) : [hex.coordinates];
+        return !placed.some(camp => copies.some(copy => getHexDistance(camp.coordinates, copy) < 2)) &&
+          copies.length === symmetry && copies.every((copy, n) => copies.slice(n + 1).every(next => getHexDistance(copy, next) >= 2)) &&
+          copies.every(copy => { const at = findHexByCoordinates(state.hexGrid, copy); return !!at && !at.isBase && !isImpassable(at); }) &&
+          others.every(castle => getHexDistance(hex.coordinates, castle) > toPair);
+      });
+      if (options.length === 0) continue;
+      const score = (hex: Hex) =>
+        Math.min(...others.map(castle => getHexDistance(hex.coordinates, castle)), 99) * 3 +
+        Math.min(...placed.map(camp => getHexDistance(camp.coordinates, hex.coordinates)), 9) +
+        countOpenNeighbors(state.hexGrid, hex.coordinates) * 0.1;
+      const camp = options.reduce((best, hex) => (score(hex) > score(best) ? hex : best));
+      setUpCamp(state, camp);
+      placed.push(camp);
+      campOf[i] = camp;
+      break;
     }
   }
 };
@@ -731,7 +857,7 @@ const STRUCTURE_SPACING = 2;
 const MIN_STRUCTURE_CASTLE_DISTANCE = 3;
 const BUILDABLE: TerrainType[] = ['plain', 'forest', 'hills', 'desert', 'swamp', 'snow', 'ruins', 'village'];
 
-const placeStructures = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoordinates): void => {
+const placeStructures = (state: GameState, castles: HexCoordinates[]): void => {
   const gridSize = getSettings(state).gridSize;
   const center = { q: 0, r: 0 };
   let draws = 0;
@@ -739,9 +865,8 @@ const placeStructures = (state: GameState, playerBase: HexCoordinates, aiBase: H
   const taken = state.hexGrid.filter(hex => hex.isCamp).map(hex => hex.coordinates);
   const canBuild = (hex: Hex) => !hex.isBase && !hex.isCamp && !hex.isResourceHex && !hex.feature && BUILDABLE.includes(hex.terrain);
   const isFair = (hex: Hex, tolerance: number) => {
-    const toPlayer = getHexDistance(hex.coordinates, playerBase);
-    const toAi = getHexDistance(hex.coordinates, aiBase);
-    return Math.abs(toPlayer - toAi) <= tolerance && Math.min(toPlayer, toAi) >= MIN_STRUCTURE_CASTLE_DISTANCE &&
+    const { gap, nearest } = castleMarches(hex.coordinates, castles);
+    return gap <= tolerance && nearest >= MIN_STRUCTURE_CASTLE_DISTANCE &&
       getHexDistance(hex.coordinates, center) < gridSize;
   };
   const build = (terrain: StructureTerrain, tolerance: number, preference: (hex: Hex) => number = () => 0, spacing = STRUCTURE_SPACING): Hex | null => {
@@ -763,8 +888,8 @@ const placeStructures = (state: GameState, playerBase: HexCoordinates, aiBase: H
   if (random() < WALL_CHANCE) {
     const blockedBy = (wall: Set<string>) => (hex: Hex) => !isImpassable(hex) && !wall.has(coordKey(hex.coordinates));
     const stillConnected = (wall: Set<string>) => {
-      const reached = searchPaths(state.hexGrid, playerBase, Infinity, blockedBy(wall));
-      return reached.has(coordKey(aiBase)) && taken.every(c => reached.has(coordKey(c)));
+      const reached = searchPaths(state.hexGrid, castles[0], Infinity, blockedBy(wall));
+      return castles.every(c => reached.has(coordKey(c))) && taken.every(c => reached.has(coordKey(c)));
     };
     const gates = state.hexGrid.filter(hex => canBuild(hex) && isFair(hex, 0) && taken.every(other => getHexDistance(other, hex.coordinates) >= 2))
       .sort((a, b) => getHexDistance(a.coordinates, center) - getHexDistance(b.coordinates, center) || random() - 0.5)
@@ -830,7 +955,7 @@ const placeStructures = (state: GameState, playerBase: HexCoordinates, aiBase: H
       if (houses >= HAMLET_SIZE) break;
       const hex = findHexByCoordinates(state.hexGrid, c);
       if (!hex || !canBuild(hex) || taken.some(other => coordsEqual(other, c) || (getHexDistance(other, c) < 2 && !coordsEqual(other, heart.coordinates)))) continue;
-      if (Math.min(getHexDistance(c, playerBase), getHexDistance(c, aiBase)) < MIN_STRUCTURE_CASTLE_DISTANCE) continue;
+      if (castleMarches(c, castles).nearest < MIN_STRUCTURE_CASTLE_DISTANCE) continue;
       updateHex(state, c, { terrain: 'house', feature: undefined });
       taken.push(c);
       houses++;
@@ -878,10 +1003,11 @@ export const placeBases = (state: GameState, coordinates: HexCoordinates): GameS
       maxBaseHealth: castleHealth
     };
   }
-  placeCamps(newState, playerHex.coordinates, aiHex.coordinates);
+  const castles = [playerHex.coordinates, aiHex.coordinates];
+  placeCamps(newState, castles);
   // The first battle teaches the basics on a field without buildings
-  if (newState.levelId !== 1) placeStructures(newState, playerHex.coordinates, aiHex.coordinates);
-  placeHarvest(newState, playerHex.coordinates, aiHex.coordinates);
+  if (newState.levelId !== 1) placeStructures(newState, castles);
+  placeHarvest(newState, castles);
 
   const startedState: GameState = {
     ...newState,
@@ -930,6 +1056,78 @@ export const autoPlaceBases = (state: GameState): GameState => {
     if (placed !== state) return placed;
   }
   return state;
+};
+
+// A battle between more sides: every side's castle goes up on the edge of the map, spread evenly
+// around it (teammates side by side), then the camps and buildings go where no side has the longer
+// march, and the first side's turn begins
+export const placeAllCastles = (state: GameState): GameState => {
+  if (state.currentPhase !== 'setup') return state;
+  const { gridSize } = getSettings(state);
+  const sides = getSides(state);
+  // Teammates stand together around the map (the turn order passes between the teams)
+  const seats = sides.map((side, index) => ({ side, index }))
+    .sort((a, b) => (state.players[a.side].team ?? a.index) - (state.players[b.side].team ?? b.index) || a.index - b.index)
+    .map(seat => seat.side);
+  const rim = getRing({ q: 0, r: 0 }, gridSize);
+  const valid = new Set(getValidBaseLocations(state).map(hex => coordKey(hex.coordinates)));
+  // Where around the edge the first castle goes comes from the map's seed
+  const offset = Math.floor(seededRandom((state.battleSeed ?? 0) + 1361) * rim.length);
+  const castleHealth = getSettings(state).castleHealth ?? BASE_MAX_HEALTH;
+  // On a mirrored map the castles of the map's first part are turned into the others (seat i of the
+  // first part's `perPart` stands for seats i, i + perPart, ...)
+  const symmetry = mapSymmetry(getSettings(state));
+  const perPart = seats.length % symmetry === 0 ? seats.length / symmetry : seats.length;
+  // Every side's castle, at least `spacing` hexes apart - on ground a castle may stand on or, as a last
+  // resort (`anyGround`), on any hex of the edge, cleared for it
+  const seatCastles = (spacing: number, anyGround: boolean) => {
+    const newState = cloneState(state);
+    const castles: HexCoordinates[] = [];
+    const used = new Set<string>();
+    const usable = (at: HexCoordinates) => !used.has(coordKey(at)) && (valid.has(coordKey(at)) || anyGround) &&
+      castles.every(castle => getHexDistance(castle, at) >= spacing);
+    const build = (side: PlayerType, at: HexCoordinates) => {
+      used.add(coordKey(at));
+      castles.push(at);
+      if (!valid.has(coordKey(at))) clearForCastle(newState, at);
+      updateHex(newState, at, { isBase: true, owner: side, baseHealth: castleHealth });
+      newState.players[side] = { ...newState.players[side], baseLocation: at, baseHealth: castleHealth, maxBaseHealth: castleHealth };
+    };
+    for (const [seat, side] of seats.entries()) {
+      if (seat >= perPart) {
+        const original = castles[seat % perPart];
+        const turned = original && rotateHex(original, Math.floor(seat / perPart) * 6 / symmetry);
+        if (turned && usable(turned)) {
+          build(side, turned);
+          continue;
+        }
+      }
+      const target = offset + Math.round(seat * rim.length / seats.length);
+      // The nearest usable spot along the edge to its share of it
+      const at = Array.from({ length: rim.length }, (_, step) =>
+        rim[(((target + (step % 2 ? 1 : -1) * Math.ceil(step / 2)) % rim.length) + rim.length) % rim.length]).find(usable);
+      if (!at) return null;
+      build(side, at);
+    }
+    return { newState, castles };
+  };
+  // (never next to another castle if it can be helped)
+  const seated = seatCastles(3, false) ?? seatCastles(2, false) ?? seatCastles(2, true) ?? seatCastles(1, true);
+  if (!seated) return state;
+  const { newState, castles } = seated;
+  // (castles in the order they stand around the map)
+  placeCamps(newState, castles, symmetry);
+  placeStructures(newState, castles);
+  const started: GameState = {
+    ...newState,
+    currentPhase: 'planning',
+    activePlayer: sides[0],
+    turnNumber: 1,
+    planningTimeRemaining: getSettings(state).planningPhaseTime
+  };
+  addLog(started, 'neutral', 'The battle begins! Play your cards and march on the enemy castles.');
+  noteSightings(started);
+  return started;
 };
 
 // How many castle sites the player chooses between, and how far apart they must be
@@ -1085,8 +1283,8 @@ export const addPendingPurchase = (
   const stats = getRosterStats(state, player.type, unitType);
   if (!stats || player.points < stats.cost) return state;
 
-  const usesDeck = player.type === 'player' && !!state.deck;
-  if (usesDeck && !getHand(state).includes(unitType)) return state;
+  const deck = getDeck(state, player.type);
+  if (deck && !getHand(state, player.type).includes(unitType)) return state;
 
   const isDeployable = getDeploymentHexes(state, player.type)
     .some(hex => coordsEqual(hex.coordinates, position));
@@ -1101,7 +1299,7 @@ export const addPendingPurchase = (
   return {
     ...state,
     pendingPurchases: [...state.pendingPurchases, purchase],
-    deck: usesDeck ? cycleCard(state.deck!, unitType) : state.deck,
+    ...withDeck(state, player.type, deck && cycleCard(deck, unitType)),
     players: {
       ...state.players,
       [player.type]: { ...player, points: player.points - stats.cost }
@@ -1125,7 +1323,7 @@ export const cancelPendingPurchase = (
   return {
     ...state,
     pendingPurchases: state.pendingPurchases.filter(p => p !== purchase),
-    deck: player.type === 'player' && state.deck ? returnCard(state.deck, purchase.unitType) : state.deck,
+    ...withDeck(state, player.type, getDeck(state, player.type) && returnCard(getDeck(state, player.type)!, purchase.unitType)),
     players: {
       ...state.players,
       [player.type]: { ...player, points: player.points + cost }
@@ -1239,7 +1437,7 @@ const getReachableHexes = (state: GameState, unit: Unit) => {
     state.hexGrid,
     unit.position,
     movement,
-    hex => (hasAbility(unit, 'flying') || !isImpassable(hex)) && !isClosedTo(hex, unit) && !enemyHexes.has(coordKey(hex.coordinates)),
+    hex => (hasAbility(unit, 'flying') || !isImpassable(hex)) && !isClosedTo(hex, unit, state) && !enemyHexes.has(coordKey(hex.coordinates)),
     (from, to) => {
       const cost = unitEnterCost(unit, to);
       return coordsEqual(from.coordinates, unit.position) ? Math.min(cost, movement) : cost;
@@ -1288,7 +1486,7 @@ export const getValidMoveTargets = (state: GameState, unit: Unit): HexCoordinate
     if (!hex || entry.cost === 0 || isImpassable(hex)) continue;
 
     const occupant = hex.unit && !(hex.unit.owner === unit.owner && leaving.has(hex.unit.id)) ? hex.unit : undefined;
-    if (occupant && occupant.owner === unit.owner) continue;
+    if (occupant && areAllies(state, occupant.owner, unit.owner)) continue;
     if (!(occupant && isUnitVisibleTo(state, unit.owner, occupant)) && !hex.isBase && !reserved.has(key)) {
       targets.push(hex.coordinates);
     }
@@ -1355,9 +1553,9 @@ export const getActionTargets = (state: GameState, unit: Unit): ActionTarget[] =
   // (the next hex is always in sight, so troops working only there see every troop on it)
   const occupied = new Set([
     ...state.players[unit.owner].units,
-    ...state.players[getOpponent(unit.owner)].units.filter(enemy => reach === 1 || isUnitVisibleTo(state, unit.owner, enemy))
+    ...getAllUnits(state).filter(other => other.owner !== unit.owner && (reach === 1 || isUnitVisibleTo(state, unit.owner, other)))
   ].map(u => coordKey(u.position)));
-  const friendly = new Set(state.players[unit.owner].units.map(u => coordKey(u.position)));
+  const friendly = new Set(getFriendlyUnits(state, unit.owner).map(u => coordKey(u.position)));
   const targets: ActionTarget[] = [];
   const around = reach === 1
     ? getNeighbors(unit.position)
@@ -1367,7 +1565,7 @@ export const getActionTargets = (state: GameState, unit: Unit): ActionTarget[] =
     const key = coordKey(c);
     if (!hex || claimed.has(key) || hex.isBase) continue;
     if (hasAbility(unit, 'demolition')) {
-      const fortification = hex.terrain === 'wall' || (hex.terrain === 'gate' && hex.owner !== unit.owner) ||
+      const fortification = hex.terrain === 'wall' || (hex.terrain === 'gate' && !areAllies(state, hex.owner, unit.owner)) ||
         hex.terrain === 'bridge' || hex.feature === 'logBridge';
       if ((fortification && !occupied.has(key)) || hex.feature === 'log' || hex.feature === 'stakes') targets.push({ at: c, action: 'demolish' });
     }
@@ -1395,11 +1593,11 @@ const carryOutWork = (state: GameState, order: Move): void => {
   if (!side || !unit || unit.hasMoved || !hex || getHexDistance(unit.position, hex.coordinates) < 1) return;
   if (!getActionTargets({ ...state, pendingMoves: [] }, unit).some(t => t.action === order.action && coordsEqual(t.at, hex.coordinates))) return;
   // Stakes can't go up, nor a wall, gate or bridge come down, under a troop the builder couldn't see
-  const hiddenOccupant = [...state.players.player.units, ...state.players.ai.units].some(u => coordsEqual(u.position, hex.coordinates));
+  const hiddenOccupant = getAllUnits(state).some(u => coordsEqual(u.position, hex.coordinates));
   const blockedByTroop = order.action === 'stakes' || (order.action === 'demolish' && !hex.feature?.match(/^(log|stakes)$/));
   if (hiddenOccupant && blockedByTroop) {
     unit.hasMoved = true;
-    addLog(state, side, `${unitLabel(unit)} found the way blocked and couldn't finish the work.`);
+    addLog(state, side, `${unitLabel(state, unit)} found the way blocked and couldn't finish the work.`);
     return;
   }
   unit.hasMoved = true;
@@ -1409,19 +1607,19 @@ const carryOutWork = (state: GameState, order: Move): void => {
       if (hex.terrain === 'wall' || hex.terrain === 'gate') updateHex(state, hex.coordinates, { terrain: 'ruins', owner: undefined });
       else if (hex.terrain === 'bridge') updateHex(state, hex.coordinates, { terrain: 'water' });
       else updateHex(state, hex.coordinates, { feature: undefined, fellFrom: undefined });
-      addLog(state, side, `${unitLabel(unit)} tore down ${what}.`);
+      addLog(state, side, `${unitLabel(state, unit)} tore down ${what}.`);
       break;
     case 'ignite':
       updateHex(state, hex.coordinates, { fire: { stage: 'smoulder', turnsLeft: 2 } });
-      addLog(state, side, `${unitLabel(unit)} set the ${TERRAIN_EFFECTS[hex.terrain].name.toLowerCase()} alight.`);
+      addLog(state, side, `${unitLabel(state, unit)} set the ${TERRAIN_EFFECTS[hex.terrain].name.toLowerCase()} alight.`);
       break;
     case 'bridge':
       updateHex(state, hex.coordinates, { terrain: 'bridge' });
-      addLog(state, side, `${unitLabel(unit)} built a bridge.`);
+      addLog(state, side, `${unitLabel(state, unit)} built a bridge.`);
       break;
     case 'stakes':
       updateHex(state, hex.coordinates, { feature: 'stakes' });
-      addLog(state, side, `${unitLabel(unit)} planted stakes against cavalry.`);
+      addLog(state, side, `${unitLabel(state, unit)} planted stakes against cavalry.`);
       break;
   }
 };
@@ -1519,11 +1717,23 @@ export const cancelPendingMove = (state: GameState, unitId: string): GameState =
 const endGame = (state: GameState, winner: PlayerType, reason: WinReason): GameState =>
   ({ ...state, winner, winReason: reason, currentPhase: 'gameOver', combats: [], siege: undefined });
 
-// The player gives up the battle (on their own turn): it is lost
-export const resign = (state: GameState): GameState =>
-  state.currentPhase === 'planning' && state.activePlayer === 'player'
+// The player gives up the battle (on their own turn): it is lost. In a battle between more sides
+// (`side` says which gives up, on its turn or not) only that side is out, and the others fight on.
+export const resign = (state: GameState, side: PlayerType = 'player'): GameState => {
+  if (isMultiSide(state)) {
+    if (state.currentPhase === 'gameOver' || state.players[side]?.eliminated) return state;
+    const newState = cloneState(state);
+    addLog(newState, side, `${sideName(newState, side)} gives up the battle.`);
+    eliminate(newState, side);
+    const settled = settleEliminations(newState, 'resigned');
+    if (settled.currentPhase === 'gameOver' || getActivePlayer(state) !== side) return settled;
+    // (on its own turn: its orders are dropped and the next side's turn begins)
+    return passTurn({ ...settled, pendingMoves: [], pendingPurchases: [], combats: [], siege: undefined, currentPhase: 'planning' }, side);
+  }
+  return state.currentPhase === 'planning' && state.activePlayer === 'player'
     ? { ...endGame(state, 'ai', 'resigned'), pendingMoves: [], pendingPurchases: [] }
     : state;
+};
 
 // A troop chops down the great tree next to it: the tree falls away from it onto the next hex,
 // crushing whatever stands there (friend or foe), and its trunk lies there as a barrier - or, across
@@ -1540,7 +1750,7 @@ const fellTree = (state: GameState, order: Move): void => {
 
   unit.hasMoved = true;
   updateHex(state, tree.coordinates, { feature: undefined });
-  const victim = [...state.players.player.units, ...state.players.ai.units].find(u => coordsEqual(u.position, landing.coordinates));
+  const victim = getAllUnits(state).find(u => coordsEqual(u.position, landing.coordinates));
   if (landing.terrain === 'water') updateHex(state, landing.coordinates, { feature: 'logBridge', fellFrom: tree.coordinates });
   // (a trunk breaks up against a mountain, or the ruins of a story site still to be searched)
   else if (landing.terrain !== 'mountain' && !(landing.storySite && !landing.plundered)) {
@@ -1550,7 +1760,7 @@ const fellTree = (state: GameState, order: Move): void => {
   if (side === 'player') gather(state, 'heartwood', tree.coordinates);
 
   const crushed = victim && inflictDamage(state, victim, FELL_DAMAGE, side, 'fell', { from: order.to });
-  addLog(state, side, `${unitLabel(unit)} felled a great tree` + (victim && crushed
+  addLog(state, side, `${unitLabel(state, unit)} felled a great tree` + (victim && crushed
     ? ` - it crushed ${victim.owner === side ? 'their own' : 'the'} ${getTroopName(victim.type)} (-${crushed.damage}${crushed.destroyed ? ', destroyed' : ''})!`
     : landing.terrain === 'water' ? ' across the water: a bridge!' : '.'));
 };
@@ -1566,11 +1776,9 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
   // (the last turn's health changes have been shown)
   newState.healthEvents = [];
   const activePlayer = getActivePlayer(newState);
-  const occupied = new Set(
-    [...newState.players.player.units, ...newState.players.ai.units].map(u => coordKey(u.position))
-  );
+  const occupied = new Set(getAllUnits(newState).map(u => coordKey(u.position)));
   const recruited: Unit[] = [];
-  for (const unit of [...newState.players.player.units, ...newState.players.ai.units]) unit.ambushed = false;
+  for (const unit of getAllUnits(newState)) unit.ambushed = false;
   // Pegasus Knights and the hexes they flew over on the way (Strafe)
   const strafes: { unit: Unit; path: HexCoordinates[] }[] = [];
 
@@ -1583,7 +1791,7 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
   // Orders to fell a tree are carried out once everyone has moved
   const workOrders = state.pendingMoves.filter(m => isWorkOrder(state, m));
   let remaining = state.pendingMoves.filter(m => !workOrders.includes(m));
-  const plannedAt = new Map([...newState.players.player.units, ...newState.players.ai.units].map(u => [u.id, coordKey(u.position)]));
+  const plannedAt = new Map(getAllUnits(newState).map(u => [u.id, coordKey(u.position)]));
   while (remaining.length > 0) {
     const stillThere = new Set(remaining.map(m => plannedAt.get(m.unitId)));
     const ready = remaining.filter(m => !stillThere.has(coordKey(m.to)) || plannedAt.get(m.unitId) === coordKey(m.to));
@@ -1600,7 +1808,7 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
 
     const planned = state.players[player.type].units.find(u => u.id === unit.id);
     const route = (planned && getMovePath(state, planned, move.to)) ?? [unit.position, move.to];
-    const enemies = newState.players[getOpponent(player.type)].units;
+    const enemies = getEnemyUnits(newState, player.type);
     const enemyAt = new Map(enemies.map(enemy => [coordKey(enemy.position), enemy]));
     const zone = ignoresZoneOfControl(unit) ? new Set<string>() : zoneOfControl(enemies);
 
@@ -1622,7 +1830,7 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
     // Back off along the route to a hex the unit can stand on (never a castle)
     const canEndAt = (index: number) => {
       const hex = findHexByCoordinates(newState.hexGrid, route[index]);
-      if (!hex || isImpassable(hex) || isClosedTo(hex, unit) || occupied.has(coordKey(route[index]))) return false;
+      if (!hex || isImpassable(hex) || isClosedTo(hex, unit, newState) || occupied.has(coordKey(route[index]))) return false;
       return !hex.isBase;
     };
     while (stop > 0 && !canEndAt(stop)) stop--;
@@ -1630,9 +1838,11 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
       ambusher.revealed = true;
       unit.ambushed = true;
       sideStats(newState, player.type).ambushed = (sideStats(newState, player.type).ambushed ?? 0) + 1;
-      addLog(newState, getOpponent(player.type), player.type === 'player'
-        ? `Ambush! Your ${getTroopName(unit.type)} ran into a hidden ${getTroopName(ambusher.type)}.`
-        : `The enemy ${getTroopName(unit.type)} stumbled onto your hidden ${getTroopName(ambusher.type)}.`);
+      addLog(newState, ambusher.owner, isMultiSide(newState)
+        ? `Ambush! ${unitLabel(newState, unit)} ran into ${unitLabel(newState, ambusher)}, hidden in wait.`
+        : player.type === 'player'
+          ? `Ambush! Your ${getTroopName(unit.type)} ran into a hidden ${getTroopName(ambusher.type)}.`
+          : `The enemy ${getTroopName(unit.type)} stumbled onto your hidden ${getTroopName(ambusher.type)}.`);
     }
     const destination = route[stop];
     if (stop === 0 || coordsEqual(destination, unit.position)) continue;
@@ -1649,8 +1859,7 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
   // Strafe: every enemy a Pegasus Knight flew past takes damage
   for (const { unit, path } of strafes) {
     const rank = rankOf(unit, 'strafe');
-    const enemySide = getOpponent(unit.owner);
-    const passed = newState.players[enemySide].units.filter(enemy =>
+    const passed = getEnemyUnits(newState, unit.owner).filter(enemy =>
       path.some(step => getHexDistance(step, enemy.position) <= 1));
     if (passed.length === 0) continue;
     let destroyed = 0;
@@ -1661,7 +1870,7 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
         occupied.delete(coordKey(enemy.position));
       }
     }
-    addLog(newState, unit.owner, `${unitLabel(unit)} strafed ${passed.length} ${passed.length === 1 ? 'enemy' : 'enemies'} on the way` +
+    addLog(newState, unit.owner, `${unitLabel(newState, unit)} strafed ${passed.length} ${passed.length === 1 ? 'enemy' : 'enemies'} on the way` +
       ` (${strafeDamage(rank)} damage each${destroyed > 0 ? `, ${destroyed} destroyed` : ''}).`);
   }
 
@@ -1672,14 +1881,16 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
   }
 
   // Units ending their move on a camp or a building that can be held claim it
-  for (const side of ['player', 'ai'] as const) {
+  // (one an ally holds stays the ally's)
+  for (const side of getLivingSides(newState)) {
     for (const unit of newState.players[side].units) {
       const hex = findHexByCoordinates(newState.hexGrid, unit.position);
       if (hex && isCapturable(hex.terrain) && hex.owner !== side) {
+        if (hex.owner && areAllies(newState, hex.owner, side)) continue;
         const building = TERRAIN_EFFECTS[hex.terrain].name;
         addLog(newState, side, hex.owner
-          ? `${unitLabel(unit)} seized ${side === 'player' ? 'the enemy' : 'your'} ${building}!`
-          : `${unitLabel(unit)} took the ${building}.`);
+          ? `${unitLabel(newState, unit)} seized ${isMultiSide(newState) ? `${sidePossessive(newState, hex.owner)}` : side === 'player' ? 'the enemy' : 'your'} ${building}!`
+          : `${unitLabel(newState, unit)} took the ${building}.`);
         updateHex(newState, unit.position, { owner: side });
         plunder(newState, hex, side);
         continue;
@@ -1687,11 +1898,11 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
       // (a cottage or a village is never held, but whoever gets there first takes its stores)
       // (a story site keeps its relic for the end of the turn, whatever ground it lies on)
       if (hex && (hex.terrain === 'house' || hex.terrain === 'village') && !hex.plundered && !hex.storySite) plunder(newState, hex, side);
-      if (!hex?.isCamp || hex.owner === side) continue;
+      if (!hex?.isCamp || hex.owner === side || (hex.owner && areAllies(newState, hex.owner, side))) continue;
       plunder(newState, hex, side);
       addLog(newState, side, hex.owner
-        ? `${unitLabel(unit)} seized ${side === 'player' ? 'an enemy camp' : 'your camp'}!`
-        : `${unitLabel(unit)} captured a camp. Recruits can now deploy there.`);
+        ? `${unitLabel(newState, unit)} seized ${isMultiSide(newState) ? `${sidePossessive(newState, hex.owner)} camp` : side === 'player' ? 'an enemy camp' : 'your camp'}!`
+        : `${unitLabel(newState, unit)} captured a camp. Recruits can now deploy there.`);
       updateHex(newState, unit.position, { owner: side });
       sideStats(newState, side).campsCaptured++;
     }
@@ -1742,13 +1953,13 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
 
   if (recruited.length > 0) {
     const names = recruited.map(u => getTroopName(u.type)).join(', ');
-    addLog(newState, activePlayer, `${activePlayer === 'player' ? 'You' : 'The enemy'} deployed ${names}.`);
+    addLog(newState, activePlayer, `${sideName(newState, activePlayer)} deployed ${names}.`);
   }
   if (movedCount > 0) {
     addLog(
       newState,
       activePlayer,
-      `${activePlayer === 'player' ? 'You' : 'The enemy'} moved ${movedCount} ${movedCount === 1 ? 'unit' : 'units'}.`
+      `${sideName(newState, activePlayer)} moved ${movedCount} ${movedCount === 1 ? 'unit' : 'units'}.`
     );
   }
 
@@ -1870,16 +2081,22 @@ export const getSightRange = (state: GameState, unit: Unit): number =>
   (terrainUnder(state, unit) === 'watchtower' ? WATCHTOWER_SIGHT_BONUS : 0) +
   (hasAbility(unit, 'keenEyed') ? KEEN_SIGHT_BONUS : 0);
 
-// Everything that keeps watch for a side: its troops, its castle and the camps it holds
-const lookoutsOf = (state: GameState, side: PlayerType): { position: HexCoordinates; range: number }[] => {
-  const castle = findBaseHex(state, side);
-  return [
-    ...state.players[side].units.map(unit => ({ position: unit.position, range: getSightRange(state, unit) })),
-    ...(castle ? [{ position: castle.coordinates, range: CASTLE_SIGHT }] : []),
-    ...getOwnedCamps(state, side).map(camp => ({ position: camp.coordinates, range: CAMP_SIGHT })),
-    ...getHeldBuildings(state, side, 'watchtower').map(tower => ({ position: tower.coordinates, range: HELD_TOWER_SIGHT }))
-  ];
-};
+// Everything that keeps watch for a side: its troops, its castle and the camps it holds (and its
+// allies', who share what they see)
+const lookoutsOf = (state: GameState, side: PlayerType): { position: HexCoordinates; range: number }[] =>
+  getAllySidesOf(state, side).flatMap(watcher => {
+    const castle = findBaseHex(state, watcher);
+    return [
+      ...state.players[watcher].units.map(unit => ({ position: unit.position, range: getSightRange(state, unit) })),
+      ...(castle ? [{ position: castle.coordinates, range: CASTLE_SIGHT }] : []),
+      ...getOwnedCamps(state, watcher).map(camp => ({ position: camp.coordinates, range: CAMP_SIGHT })),
+      ...getHeldBuildings(state, watcher, 'watchtower').map(tower => ({ position: tower.coordinates, range: HELD_TOWER_SIGHT }))
+    ];
+  });
+
+// A side and its allies (in a battle against the AI, just the side)
+const getAllySidesOf = (state: GameState, side: PlayerType): PlayerType[] =>
+  isMultiSide(state) ? Object.values(state.players).filter(player => areAllies(state, player.type, side)).map(player => player.type) : [side];
 
 // Whether a lookout can see a troop standing on a hex: within its sight and line of sight, and
 // right next to it if the hex hides troops (forest)
@@ -1898,13 +2115,13 @@ const canSpot = (state: GameState, from: HexCoordinates, range: number, target: 
 // themselves away this turn)
 // (bosses tower over the battlefield: they are always seen, and so is the ground they mark)
 export const isUnitVisibleTo = (state: GameState, side: PlayerType, unit: Unit): boolean => {
-  if (unit.owner === side || !isFogOfWar(state) || unit.revealed || unit.isBoss) return true;
+  if (areAllies(state, unit.owner, side) || !isFogOfWar(state) || unit.revealed || unit.isBoss) return true;
   const fog = getFogBankKeys(state);
   return lookoutsOf(state, side).some(lookout => canSpot(state, lookout.position, lookout.range, unit.position, fog));
 };
 
 export const getVisibleEnemies = (state: GameState, side: PlayerType): Unit[] => {
-  const enemies = state.players[getOpponent(side)].units;
+  const enemies = getEnemyUnits(state, side);
   if (!isFogOfWar(state)) return enemies;
   const lookouts = lookoutsOf(state, side);
   const fog = getFogBankKeys(state);
@@ -1926,9 +2143,8 @@ export const getVisibleHexKeys = (state: GameState, side: PlayerType): Set<strin
 // where it last saw them. The AI plans on this (remembering), so it plays by the same fog as the player.
 export const getSideView = (state: GameState, side: PlayerType, remember = false): GameState => {
   if (!isFogOfWar(state)) return state;
-  const opponent = getOpponent(side);
   const visible = getVisibleEnemies(state, side);
-  const occupied = new Set([...state.players[side].units, ...visible].map(unit => coordKey(unit.position)));
+  const occupied = new Set([...getFriendlyUnits(state, side), ...visible].map(unit => coordKey(unit.position)));
   const remembered = remember
     ? getRememberedEnemies(state, side).map(sighting => sighting.unit).filter(unit => {
       const free = !occupied.has(coordKey(unit.position));
@@ -1936,15 +2152,20 @@ export const getSideView = (state: GameState, side: PlayerType, remember = false
       return free;
     })
     : [];
-  if (visible.length === state.players[opponent].units.length && remembered.length === 0) return state;
+  const enemySides = getEnemySides(state, side);
+  if (visible.length === getEnemyUnits(state, side).length && remembered.length === 0) return state;
   const units = [...visible, ...remembered];
   const at = new Map(units.map(unit => [coordKey(unit.position), unit]));
+  // (each enemy side keeps the troops of its own that this side sees or remembers)
+  const players = { ...state.players };
+  for (const enemy of enemySides) players[enemy] = { ...state.players[enemy], units: units.filter(unit => unit.owner === enemy) };
+  // (a remembered troop of a side that has since been knocked out is gone for good)
   return {
     ...state,
-    players: { ...state.players, [opponent]: { ...state.players[opponent], units } },
+    players,
     hexGrid: state.hexGrid.map(hex => {
       const key = coordKey(hex.coordinates);
-      if (hex.unit && hex.unit.owner === side) return hex;
+      if (hex.unit && areAllies(state, hex.unit.owner, side)) return hex;
       const unit = at.get(key);
       return hex.unit === unit ? hex : { ...hex, unit };
     })
@@ -2044,8 +2265,8 @@ export const getSituationalBonuses = (
 ): SituationalBonus[] => {
   const bonuses: SituationalBonus[] = [];
   const ownTurn = getActivePlayer(state) === attacker.owner;
-  const allies = state.players[attacker.owner].units.filter(unit => unit.id !== attacker.id);
-  const enemies = state.players[getOpponent(attacker.owner)].units;
+  const allies = getFriendlyUnits(state, attacker.owner).filter(unit => unit.id !== attacker.id);
+  const enemies = getEnemyUnits(state, attacker.owner);
   const add = (label: string, bonus: number) => {
     if (bonus > 0) bonuses.push({ label, multiplier: 1 + bonus });
   };
@@ -2085,7 +2306,7 @@ export interface Protection {
 // What shields a unit standing at `at` from damage: a friendly Mage's Ward beside it
 export const getProtections = (state: GameState, unit: Unit, at: HexCoordinates = unit.position): Protection[] => {
   const protections: Protection[] = [];
-  const ward = Math.max(0, ...state.players[unit.owner].units
+  const ward = Math.max(0, ...getFriendlyUnits(state, unit.owner)
     .filter(ally => ally.id !== unit.id && getHexDistance(ally.position, at) === 1)
     .map(ally => wardReduction(rankOf(ally, 'ward'))));
   if (ward > 0) protections.push({ label: 'Ward', reduction: ward });
@@ -2110,8 +2331,8 @@ export const getFormationEffects = (
   state: GameState, attacker: Unit, target: Unit, from: HexCoordinates = attacker.position, at: HexCoordinates = target.position
 ): { label: string; share: number }[] => {
   const effects: { label: string; share: number }[] = [];
-  const strikers = state.players[attacker.owner].units;
-  const guards = state.players[target.owner].units;
+  const strikers = getFriendlyUnits(state, attacker.owner);
+  const guards = getFriendlyUnits(state, target.owner);
   if (strikesPinned(attacker) && isPinned(at, strikers, attacker.id)) effects.push({ label: 'Pinned', share: PIN_BONUS });
   const screen = screenReduction(findScreen(target, at, from, guards));
   if (screen > 0) effects.push({ label: 'Screened', share: -screen });
@@ -2186,8 +2407,7 @@ const compareIds = (a: Unit, b: Unit) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0
 // enemy off (see detectSiege). Each defender then fights one combat against the attackers that picked it, so no unit
 // fights twice in a turn and the order the battles are fought in doesn't matter.
 const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
-  const defenderSide = getOpponent(attackerSide);
-  const enemies = state.players[defenderSide].units;
+  const enemies = getEnemyUnits(state, attackerSide);
   const attackerUnits = state.players[attackerSide].units;
 
   const choices = attackerUnits
@@ -2260,12 +2480,10 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
   if (combats.length > 0) {
     // Everyone in a fight gives away their position
     const engaged = new Set(combats.flatMap(c => [...c.attackers, ...c.defenders].map(u => u.id)));
-    for (const side of ['player', 'ai'] as const) {
-      for (const unit of state.players[side].units) {
-        if (engaged.has(unit.id)) {
-          unit.isEngagedInCombat = true;
-          unit.revealed = true;
-        }
+    for (const unit of getAllUnits(state)) {
+      if (engaged.has(unit.id)) {
+        unit.isEngagedInCombat = true;
+        unit.revealed = true;
       }
     }
     syncHexUnits(state);
@@ -2274,33 +2492,68 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
   return combats;
 };
 
-// Whether a troop can attack the enemy castle from where it stands: the castle is within its attack
+// Whether a troop can attack an enemy castle from where it stands: the castle is within its attack
 // reach and, for shots beyond the next hex, in its line of sight (spells arc over anything)
-export const canStrikeCastle = (state: GameState, unit: Unit): boolean => {
-  const castle = findBaseHex(state, getOpponent(unit.owner));
-  if (!castle) return false;
-  const distance = getHexDistance(unit.position, castle.coordinates);
-  if (distance > getUnitAttackRange(state, unit)) return false;
-  if (distance <= 1) return true;
-  return hasAbility(unit, 'magic') || hasLineOfSight(state.hexGrid, unit.position, castle.coordinates);
+export const canStrikeCastle = (state: GameState, unit: Unit): boolean => getCastleInReach(state, unit) !== undefined;
+
+// The enemy castle a troop would attack from where it stands: the weakest one in its reach (then the
+// nearest), if any. Against the AI there is only ever the one.
+export const getCastleInReach = (state: GameState, unit: Unit): Hex | undefined => {
+  const reach = getUnitAttackRange(state, unit);
+  return getEnemySides(state, unit.owner)
+    .map(side => findBaseHex(state, side))
+    .filter((castle): castle is Hex => {
+      if (!castle) return false;
+      const distance = getHexDistance(unit.position, castle.coordinates);
+      if (distance > reach) return false;
+      return distance <= 1 || hasAbility(unit, 'magic') || hasLineOfSight(state.hexGrid, unit.position, castle.coordinates);
+    })
+    .sort((a, b) => (a.baseHealth ?? BASE_MAX_HEALTH) - (b.baseHealth ?? BASE_MAX_HEALTH) ||
+      getHexDistance(unit.position, a.coordinates) - getHexDistance(unit.position, b.coordinates))[0];
+};
+
+// The side whose castle a troop besieging this turn attacks
+export const getSiegeTarget = (state: GameState, attackerId: string): PlayerType | undefined => {
+  const siege = state.siege;
+  if (!siege) return undefined;
+  return siege.targets?.[attackerId] ?? (isMultiSide(state) ? undefined : getOpponent(siege.side));
+};
+
+// The castles under attack this turn (by side), with the troops attacking each
+export const getBesiegedCastles = (state: GameState): { side: PlayerType; attackerIds: string[] }[] => {
+  const siege = state.siege;
+  if (!siege) return [];
+  const bySide = new Map<PlayerType, string[]>();
+  for (const id of siege.attackerIds) {
+    const target = getSiegeTarget(state, id);
+    if (target) bySide.set(target, [...(bySide.get(target) ?? []), id]);
+  }
+  return [...bySide].map(([side, attackerIds]) => ({ side, attackerIds }));
 };
 
 // The troops of the side that just moved that attack the enemy castle: those that can reach it and
 // didn't pick an enemy troop to fight
 const detectSiege = (state: GameState, side: PlayerType, combats: Combat[]): GameState['siege'] => {
   const fighting = new Set(combats.flatMap(combat => combat.attackers.map(unit => unit.id)));
-  const attackers = state.players[side].units.filter(unit => !fighting.has(unit.id) && canStrikeCastle(state, unit));
-  for (const unit of attackers) unit.revealed = true;
-  return attackers.length > 0 ? { side, attackerIds: attackers.map(unit => unit.id) } : undefined;
+  const attackers = state.players[side].units
+    .map(unit => ({ unit, castle: fighting.has(unit.id) ? undefined : getCastleInReach(state, unit) }))
+    .filter((entry): entry is { unit: Unit; castle: Hex } => !!entry.castle);
+  for (const { unit } of attackers) unit.revealed = true;
+  if (attackers.length === 0) return undefined;
+  return {
+    side,
+    attackerIds: attackers.map(({ unit }) => unit.id),
+    ...(isMultiSide(state) ? { targets: Object.fromEntries(attackers.map(({ unit, castle }) => [unit.id, castle.owner!])) } : {})
+  };
 };
 
-// Troops of the side not moving strike back at the enemies attacking within their reach - whether
-// those enemies attack a troop or the castle. Each troop not already in a fight strikes one attacker
+// Troops of the sides not moving strike back at the enemies attacking within their reach - whether
+// those enemies attack a troop or the castle. (In a battle between more sides, every side still in it
+// that fights the attackers strikes back, whoever they attacked.) Each troop not already in a fight strikes one attacker
 // it can reach: one it can finish off (with the others striking it) if it can, otherwise the
 // hardest-hitting. The attacker is busy with its own target, so it can't hit back; a castle attacker
 // that falls does no damage to the castle.
 const detectIntercepts = (state: GameState, attackerSide: PlayerType, siege: GameState['siege'], combats: Combat[]): Combat[] => {
-  const guardSide = getOpponent(attackerSide);
   const busy = new Set(combats.flatMap(combat => [...combat.attackers, ...combat.defenders].map(unit => unit.id)));
   const attackerIds = new Set([...combats.flatMap(combat => combat.attackers.map(unit => unit.id)), ...(siege?.attackerIds ?? [])]);
   const attackers = state.players[attackerSide].units.filter(unit => attackerIds.has(unit.id));
@@ -2308,9 +2561,9 @@ const detectIntercepts = (state: GameState, attackerSide: PlayerType, siege: Gam
 
   const assigned = new Map<string, Unit[]>();
   const damageOn = new Map<string, number>();
-  const guards = state.players[guardSide].units
+  const guards = getEnemyUnits(state, attackerSide)
     .filter(guard => !busy.has(guard.id))
-    .map(guard => ({ guard, targets: attackers.filter(enemy => canStrike(state, guard, enemy) && isUnitVisibleTo(state, guardSide, enemy)) }))
+    .map(guard => ({ guard, targets: attackers.filter(enemy => canStrike(state, guard, enemy) && isUnitVisibleTo(state, guard.owner, enemy)) }))
     .filter(choice => choice.targets.length > 0)
     // Guards with fewer options pick first
     .sort((a, b) => a.targets.length - b.targets.length || compareIds(a.guard, b.guard));
@@ -2459,34 +2712,43 @@ export const advanceFires = (state: GameState, roundEnds: boolean, random: (salt
     updateHex(state, hex.coordinates, { fire: turnsLeft > 0 ? { stage: 'smoulder', turnsLeft } : { stage: 'burning', turnsLeft: BURN_TURNS } });
   }
 
-  let fires = state.hexGrid.filter(hex => hex.fire).length;
-  const ignite = (c: HexCoordinates) => {
-    if (fires >= MAX_FIRES) return false;
-    updateHex(state, c, { fire: { stage: 'smoulder', turnsLeft: 1 } });
-    fires++;
-    return true;
-  };
+  const fires = { count: state.hexGrid.filter(hex => hex.fire).length };
   // Spreading from the hexes that were already burning
   for (const hex of burning) {
     for (const c of getNeighbors(hex.coordinates)) {
       const next = hexByKey.get(coordKey(c));
       const chance = (next && isFlammable(next) ? SPREAD_CHANCE[next.terrain] ?? 0 : 0) * (ashfall ? ASH_SPREAD : 1);
-      if (chance > 0 && random(salt++) < chance) ignite(c);
+      if (chance > 0 && random(salt++) < chance) igniteEmbers(state, c, fires);
     }
   }
   // New fires from the lava
-  let flared = 0;
-  if (roundEnds) {
-    for (const lava of state.hexGrid.filter(hex => hex.terrain === 'lava')) {
-      if (random(salt++) >= LAVA_FLARE_CHANCE * (ashfall ? ASH_FLARE : 1)) continue;
-      const dry = getNeighbors(lava.coordinates).map(c => hexByKey.get(coordKey(c))).filter((hex): hex is Hex => !!hex && isFlammable(hex));
-      if (dry.length > 0 && ignite(dry[Math.floor(random(salt++) * dry.length)].coordinates)) flared++;
-    }
-  }
-  if (flared > 0) addLog(state, 'neutral', `Embers from the lava: ${flared === 1 ? 'a fire is' : `${flared} fires are`} about to break out.`);
+  if (roundEnds) flareLava(state, random, salt, fires);
   const caught = smouldering.filter(hex => hex.fire!.turnsLeft <= 1).length;
   if (caught > 0) addLog(state, 'neutral', `${caught === 1 ? 'A fire breaks' : `${caught} fires break`} out!`);
   if (burntOut > 0) addLog(state, 'neutral', `${burntOut === 1 ? 'A fire has' : `${burntOut} fires have`} burned out.`);
+};
+
+// A hex catches (embers that burst into flame next turn), unless the battlefield already has as many
+// fires as it can take
+const igniteEmbers = (state: GameState, c: HexCoordinates, fires: { count: number }): boolean => {
+  if (fires.count >= MAX_FIRES) return false;
+  updateHex(state, c, { fire: { stage: 'smoulder', turnsLeft: 1 } });
+  fires.count++;
+  return true;
+};
+
+// At the end of a round the lava may set dry ground beside it smouldering (drawing chance from
+// `random` from `salt` on)
+const flareLava = (state: GameState, random: (salt: number) => number, salt = 0, fires = { count: state.hexGrid.filter(hex => hex.fire).length }): void => {
+  const hexByKey = new Map(state.hexGrid.map(hex => [coordKey(hex.coordinates), hex]));
+  const ashfall = activeWeather(state) === 'ashfall';
+  let flared = 0;
+  for (const lava of state.hexGrid.filter(hex => hex.terrain === 'lava')) {
+    if (random(salt++) >= LAVA_FLARE_CHANCE * (ashfall ? ASH_FLARE : 1)) continue;
+    const dry = getNeighbors(lava.coordinates).map(c => hexByKey.get(coordKey(c))).filter((hex): hex is Hex => !!hex && isFlammable(hex));
+    if (dry.length > 0 && igniteEmbers(state, dry[Math.floor(random(salt++) * dry.length)].coordinates, fires)) flared++;
+  }
+  if (flared > 0) addLog(state, 'neutral', `Embers from the lava: ${flared === 1 ? 'a fire is' : `${flared} fires are`} about to break out.`);
 };
 
 // Wrap up the active side's turn and hand control to the other side.
@@ -2511,7 +2773,7 @@ const finishTurn = (state: GameState): GameState => {
   let healedAtSprings = 0;
   let healedByMages = 0;
   const burned: Unit[] = [];
-  for (const side of ['player', 'ai'] as const) {
+  for (const side of getLivingSides(newState)) {
     newState.players[side].units = newState.players[side].units.map(unit => {
       let lifespan = unit.lifespan;
       if (side === activePlayer) {
@@ -2542,23 +2804,23 @@ const finishTurn = (state: GameState): GameState => {
   // Units worn down by lava, cursed ground or fire fall (all of them leave the field before any
   // bursts as it falls, so a blast can't catch one that has already fallen)
   const fallen = new Set(burned.map(unit => unit.id));
-  for (const side of ['player', 'ai'] as const) {
+  for (const side of getLivingSides(newState)) {
     newState.players[side].units = newState.players[side].units.filter(unit => !fallen.has(unit.id));
   }
   for (const unit of burned) {
     // (a boss the ground finishes off is slain all the same, and counts for the other side)
-    if (unit.isBoss) {
-      const killer = getOpponent(unit.owner);
+    const killer = unit.isBoss ? defaultKiller(newState, unit.owner) : undefined;
+    if (killer) {
       creditKill(newState, unit, killer);
       earnGold(newState, killer, getKillBounty(unit));
-      addLog(newState, killer, `${killer === 'player' ? 'You earn' : 'The enemy earns'} ${getKillBounty(unit)} gold in bounty.`);
+      addLog(newState, killer, `${sideVerb(newState, killer, 'earn', 'earns')} ${getKillBounty(unit)} gold in bounty.`);
     }
     else sideStats(newState, unit.owner).lost++;
     if (unit.isBoss || unit.isChampion) shakeArmy(newState, unit.owner, unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE, unit);
     const inFire = findHexByCoordinates(newState.hexGrid, unit.position)?.fire?.stage === 'burning';
     addLog(newState, unit.owner, inFire
-      ? `${unitLabel(unit)} perished in the flames.`
-      : `${unitLabel(unit)} perished on the ${TERRAIN_EFFECTS[terrainUnder(newState, unit)].name.toLowerCase()}.`);
+      ? `${unitLabel(newState, unit)} perished in the flames.`
+      : `${unitLabel(newState, unit)} perished on the ${TERRAIN_EFFECTS[terrainUnder(newState, unit)].name.toLowerCase()}.`);
   }
   for (const unit of burned) burstOnDeath(newState, unit, groundCause(newState, unit));
   scatterMinions(newState);
@@ -2574,8 +2836,8 @@ const finishTurn = (state: GameState): GameState => {
     }
     const amount = unit.poisoned;
     unit.poisoned = undefined;
-    const { destroyed } = inflictDamage(newState, unit, amount, getOpponent(activePlayer), 'venom', {}, true);
-    addLog(newState, activePlayer, `${unitLabel(unit)} ${destroyed ? 'succumbs to' : 'suffers'} the venom${destroyed ? '' : ` (-${amount})`}.`);
+    const { destroyed } = inflictDamage(newState, unit, amount, defaultKiller(newState, activePlayer) ?? null, 'venom', {}, true);
+    addLog(newState, activePlayer, `${unitLabel(newState, unit)} ${destroyed ? 'succumbs to' : 'suffers'} the venom${destroyed ? '' : ` (-${amount})`}.`);
   }
   // (a boss or champion the venom finishes shakes its army as though it fell on the enemy's turn:
   // this turn's count-down has already been taken, so the extra turn a fall on its own turn gets
@@ -2583,15 +2845,14 @@ const finishTurn = (state: GameState): GameState => {
   for (const unit of newState.players[activePlayer].units) {
     if ((unit.shaken ?? 0) > (shakenBefore.get(unit.id) ?? 0)) unit.shaken = Math.max(shakenBefore.get(unit.id) ?? 0, unit.shaken! - 1) || undefined;
   }
-  // Morale: the other side's badly hurt troops caught alone among this side's waver
-  const opponent = getOpponent(activePlayer);
-  for (const unit of newState.players[opponent].units) {
-    if (unit.shaken || !isSurrounded(unit, newState.players[activePlayer].units, newState.players[opponent].units)) continue;
+  // Morale: the other sides' badly hurt troops caught alone among this side's waver
+  for (const unit of getEnemyUnits(newState, activePlayer)) {
+    if (unit.shaken || !isSurrounded(unit, newState.players[activePlayer].units, getFriendlyUnits(newState, unit.owner))) continue;
     unit.shaken = 1;
-    addLog(newState, opponent, `${unitLabel(unit)} is surrounded and wavers!`);
+    addLog(newState, unit.owner, `${unitLabel(newState, unit)} is surrounded and wavers!`);
   }
   syncHexUnits(newState);
-  const sideTroops = activePlayer === 'player' ? 'Your' : 'Enemy';
+  const sideTroops = sidePossessive(newState, activePlayer);
   if (healedAtSprings > 0) {
     addLog(newState, activePlayer, `${sideTroops} troops recover ${healedAtSprings} health at the springs.`);
   }
@@ -2600,7 +2861,9 @@ const finishTurn = (state: GameState): GameState => {
   }
   bombard(newState, activePlayer);
   if (activePlayer === 'player') gatherFromTheLand(newState);
-  advanceFires(newState, activePlayer === 'ai');
+  // (in a battle between more sides, the lava flares once the turn has passed on and it is clear the
+  // round is over: a side knocked out this turn can end it early)
+  advanceFires(newState, !isMultiSide(newState) && isLastInRound(newState, activePlayer));
   unleashBossPowers(newState, activePlayer);
   applyChallenges(newState, activePlayer);
   undermine(newState, diggers.filter(digger => newState.players[activePlayer].units.some(unit => unit.id === digger.id)));
@@ -2609,7 +2872,7 @@ const finishTurn = (state: GameState): GameState => {
     if (!hex || hex.isBase || (hex.heightOffset ?? 0) >= MAX_HEIGHT_OFFSET) continue;
     const rise = fieldworksHeight(rankOf(builder, 'fieldworks'));
     updateHex(newState, builder.position, { heightOffset: shiftHeightOffset(hex.heightOffset, rise) });
-    addLog(newState, builder.owner, `${unitLabel(builder)} dig in (+${rise.toFixed(2)} height).`);
+    addLog(newState, builder.owner, `${unitLabel(newState, builder)} dig in (+${rise.toFixed(2)} height).`);
   }
 
   processDamageToBase(newState, activePlayer);
@@ -2625,41 +2888,130 @@ const finishTurn = (state: GameState): GameState => {
     ].filter(Boolean);
     addLog(newState, 'player', `You earn ${income.total} gold` + (parts.length > 0 ? ` (${parts.join(', ')}).` : '.'));
   } else if (income.mines + income.camps + income.taverns > 0) {
-    addLog(newState, 'ai', `The enemy earns ${income.mines + income.camps + income.taverns} gold from mines, camps and taverns.`);
+    addLog(newState, activePlayer, `${sideVerb(newState, activePlayer, 'earn', 'earns')} ${income.mines + income.camps + income.taverns} gold from mines, camps and taverns.`);
   }
 
+  // A battle between more sides: a side whose castle has fallen is out, and the last team standing wins
+  if (isMultiSide(newState)) {
+    const settled = settleEliminations(newState, 'destroyed');
+    return settled.currentPhase === 'gameOver' ? settled : passTurn(settled, activePlayer);
+  }
   const winner = checkBaseDestroyed(newState);
   if (winner) {
     addLog(newState, winner, winner === 'player' ? 'The enemy castle has fallen!' : 'Your castle has fallen!');
     return endGame(newState, winner, 'destroyed');
   }
+  return passTurn(newState, activePlayer);
+};
 
-  // The last round is over: it is decided on points
-  if (activePlayer === 'ai' && newState.turnNumber >= getMaxRounds(newState)) {
-    const timeWinner = decideOnTime(newState);
-    const yours = getTimeScore(newState, 'player');
-    const theirs = getTimeScore(newState, 'ai');
-    addLog(newState, timeWinner, `Time is up - ${timeWinner === 'player' ? 'you win' : 'the enemy wins'} on points, ${yours.total} to ${theirs.total} ` +
-      `(kills ${yours.kills}-${theirs.kills}, gold ${yours.gold}-${theirs.gold}, camps ${yours.camps}-${theirs.camps}).`);
-    return endGame(newState, timeWinner, 'timeout');
+// Hand the turn on from `side` to the next side still in the battle - or, after the last round,
+// decide the battle on points
+const passTurn = (state: GameState, side: PlayerType): GameState => {
+  if (isLastInRound(state, side) && state.turnNumber >= getMaxRounds(state)) return endOnTime(state);
+  noteSightings(state);
+  const { side: next, newRound } = nextSide(state, side);
+  if (isMultiSide(state) && newRound) {
+    flareLava(state, salt => seededRandom((state.battleSeed ?? 0) + state.turnNumber * 7919 + 104729 + 52361 + salt * 31));
   }
-
-  noteSightings(newState);
-  const next: GameState = {
-    ...newState,
+  return {
+    ...state,
     siege: undefined,
-    activePlayer: getOpponent(activePlayer),
+    activePlayer: next,
     currentPhase: 'planning',
-    turnNumber: activePlayer === 'ai' ? newState.turnNumber + 1 : newState.turnNumber,
+    turnNumber: newRound ? state.turnNumber + 1 : state.turnNumber,
     planningTimeRemaining: getSettings(state).planningPhaseTime
   };
-  return next;
+};
+
+// The last round is over: it is decided on points
+const endOnTime = (state: GameState): GameState => {
+  if (isMultiSide(state)) {
+    const [first, second] = getStandings(state);
+    const winner = first.sides[0];
+    addLog(state, winner, `Time is up - ${first.sides.map(side => sideName(state, side)).join(' & ')} ${first.sides.length > 1 ? 'win' : 'wins'} on points, ` +
+      `${first.score}${second ? ` to ${second.score}` : ''}.`);
+    return endGame(state, winner, 'timeout');
+  }
+  const timeWinner = decideOnTime(state);
+  const yours = getTimeScore(state, 'player');
+  const theirs = getTimeScore(state, 'ai');
+  addLog(state, timeWinner, `Time is up - ${timeWinner === 'player' ? 'you win' : 'the enemy wins'} on points, ${yours.total} to ${theirs.total} ` +
+    `(kills ${yours.kills}-${theirs.kills}, gold ${yours.gold}-${theirs.gold}, camps ${yours.camps}-${theirs.camps}).`);
+  return endGame(state, timeWinner, 'timeout');
+};
+
+// Who gets the credit for a troop of `side` that falls to no one in particular (the burning ground,
+// venom): the other side of a battle against the AI; nobody in a battle between more sides
+const defaultKiller = (state: GameState, side: PlayerType): PlayerType | undefined =>
+  isMultiSide(state) ? undefined : getOpponent(side);
+
+// A side is out of the battle (works on a cloned state): its troops leave the field, and the camps
+// and buildings it held are free for the taking
+const eliminate = (state: GameState, side: PlayerType): void => {
+  const player = state.players[side];
+  if (!player || player.eliminated) return;
+  const order = Object.values(state.players).filter(other => other.eliminated).length;
+  state.players[side] = { ...player, units: [], eliminated: true, eliminatedOnTurn: state.turnNumber, eliminatedOrder: order };
+  state.hexGrid = state.hexGrid.map(hex =>
+    hex.owner === side && !hex.isBase ? { ...hex, owner: undefined } : hex);
+  syncHexUnits(state);
+};
+
+// Knock out every side whose castle has fallen, then end the battle if only one team is left
+// (works on a cloned state)
+const settleEliminations = (state: GameState, reason: WinReason): GameState => {
+  for (const side of getLivingSides(state)) {
+    if ((state.players[side].baseHealth ?? BASE_MAX_HEALTH) > 0) continue;
+    addLog(state, side, `${sidePossessive(state, side)} castle has fallen - ${sideName(state, side)} is out of the battle!`);
+    eliminate(state, side);
+  }
+  if (!lastTeamStanding(state)) return state;
+  const winner = getLivingSides(state)[0];
+  if (!winner) return endGame(state, getSides(state)[0], reason);
+  addLog(state, winner, `${getStandings(state)[0].sides.map(side => sideName(state, side)).join(' & ')} won the battle!`);
+  return endGame(state, winner, reason);
+};
+
+export interface Standing {
+  // The sides placed here together (a team), and the place (1 for the winners)
+  sides: PlayerType[];
+  place: number;
+  // Points as the battle would be decided on time (the team's together)
+  score: number;
+  // Still in the battle, or the round it was knocked out in
+  eliminatedOnTurn?: number;
+}
+
+// How the sides of a battle between more sides stand: the teams still in it by points (the winners
+// first once it is over), then the ones knocked out, the last to fall first
+export const getStandings = (state: GameState): Standing[] => {
+  const teams = new Map<string, PlayerType[]>();
+  for (const side of getSides(state)) {
+    const team = isMultiSide(state) && state.players[side].team !== undefined ? `team:${state.players[side].team}` : `side:${side}`;
+    teams.set(team, [...(teams.get(team) ?? []), side]);
+  }
+  const entries = [...teams.values()].map(sides => {
+    const living = sides.filter(side => !state.players[side].eliminated);
+    return {
+      sides,
+      score: sides.reduce((sum, side) => sum + getTimeScore(state, side).total, 0),
+      army: living.reduce((sum, side) => sum + armyValue(state, side), 0),
+      eliminatedOnTurn: living.length > 0 ? undefined : Math.max(...sides.map(side => state.players[side].eliminatedOnTurn ?? 0)),
+      eliminatedOrder: living.length > 0 ? undefined : Math.max(...sides.map(side => state.players[side].eliminatedOrder ?? 0)),
+      won: state.winner !== undefined && sides.includes(state.winner)
+    };
+  });
+  entries.sort((a, b) =>
+    Number(b.won) - Number(a.won) ||
+    Number(a.eliminatedOnTurn !== undefined) - Number(b.eliminatedOnTurn !== undefined) ||
+    (b.eliminatedOrder ?? 0) - (a.eliminatedOrder ?? 0) ||
+    b.score - a.score || b.army - a.army);
+  return entries.map((entry, index) => ({ sides: entry.sides, place: index + 1, score: entry.score, eliminatedOnTurn: entry.eliminatedOnTurn }));
 };
 
 // Challenge: each of the side's Shieldbearers pulls the nearest enemies it can see within its reach one
 // hex closer, onto open ground (not onto a castle or a camp). Bosses hold their ground.
 const applyChallenges = (state: GameState, side: PlayerType): void => {
-  const enemySide = getOpponent(side);
   for (const bearer of state.players[side].units) {
     const rank = rankOf(bearer, 'challenge');
     if (rank === 0) continue;
@@ -2670,9 +3022,9 @@ const applyChallenges = (state: GameState, side: PlayerType): void => {
       .slice(0, challengePulls(rank));
     const pulled: Unit[] = [];
     for (const target of targets) {
-      const enemy = state.players[enemySide].units.find(unit => unit.id === target.id);
+      const enemy = state.players[target.owner]?.units.find(unit => unit.id === target.id);
       if (!enemy) continue;
-      const occupied = new Set([...state.players.player.units, ...state.players.ai.units].map(unit => coordKey(unit.position)));
+      const occupied = new Set(getAllUnits(state).map(unit => coordKey(unit.position)));
       const distance = getHexDistance(enemy.position, bearer.position);
       const step = getNeighbors(enemy.position)
         .map(coordinates => findHexByCoordinates(state.hexGrid, coordinates))
@@ -2687,7 +3039,7 @@ const applyChallenges = (state: GameState, side: PlayerType): void => {
       syncHexUnits(state);
     }
     if (pulled.length > 0) {
-      addLog(state, side, `Challenge! ${unitLabel(bearer)} pulls ${pulled.map(unit => unitLabel(unit)).join(' and ')} closer.`);
+      addLog(state, side, `Challenge! ${unitLabel(state, bearer)} pulls ${pulled.map(unit => unitLabel(state, unit)).join(' and ')} closer.`);
     }
   }
 };
@@ -2701,7 +3053,7 @@ const undermine = (state: GameState, diggers: Unit[]): void => {
       if (!hex || hex.isBase) continue;
       updateHex(state, coordinates, { heightOffset: shiftHeightOffset(hex.heightOffset, -depth) });
     }
-    addLog(state, digger.owner, `${unitLabel(digger)} undermine the ground around them (-${depth.toFixed(2)} height).`);
+    addLog(state, digger.owner, `${unitLabel(state, digger)} undermine the ground around them (-${depth.toFixed(2)} height).`);
   }
 };
 
@@ -2723,7 +3075,6 @@ export const getSiegeDamage = (unit: Unit): number =>
 // lands; a power that is ready is used (a strike is marked, minions are called, the Hydra bites)
 const MAX_MINIONS = 3;
 const unleashBossPowers = (state: GameState, side: PlayerType): void => {
-  const enemySide = getOpponent(side);
   const board = new Set(state.hexGrid.map(hex => coordKey(hex.coordinates)));
   for (const boss of [...state.players[side].units.filter(unit => unit.isBoss)]) {
     const power = getBossPower(boss.type);
@@ -2743,7 +3094,7 @@ const unleashBossPowers = (state: GameState, side: PlayerType): void => {
       const marked = new Set(hexes.map(coordKey));
       let hits = 0;
       let downed = 0;
-      for (const target of state.players[enemySide].units.filter(unit => marked.has(coordKey(unit.position)))) {
+      for (const target of getEnemyUnits(state, side).filter(unit => marked.has(coordKey(unit.position)))) {
         const hit = inflictDamage(state, target, live.attackPower * strike.damage, side, 'boss', {
           from: live.position,
           // (a dragon's breath sweeps across its hexes one after another; other strikes land at once)
@@ -2751,7 +3102,7 @@ const unleashBossPowers = (state: GameState, side: PlayerType): void => {
         });
         hits++;
         if (hit.destroyed) downed++;
-        const still = state.players[enemySide].units.find(unit => unit.id === target.id);
+        const still = state.players[target.owner].units.find(unit => unit.id === target.id);
         if (still && strike.freeze) {
           still.frozen = true;
           still.hasMoved = true;
@@ -2784,11 +3135,11 @@ const unleashBossPowers = (state: GameState, side: PlayerType): void => {
       // Called when the enemy comes near
       if (count <= 0 || !foes.some(foe => getHexDistance(foe.position, live.position) <= SUMMON_ALERT_RANGE)) continue;
       const stats = minionStats(state, side, power.summon.type);
-      const occupied = new Set([...state.players.player.units, ...state.players.ai.units].map(unit => coordKey(unit.position)));
+      const occupied = new Set(getAllUnits(state).map(unit => coordKey(unit.position)));
       const spots = getHexesInRange(state.hexGrid, live.position, 2)
         .sort((a, b) => getHexDistance(a.coordinates, live.position) - getHexDistance(b.coordinates, live.position))
         .filter(hex => !hex.isBase && !isImpassable(hex) && !occupied.has(coordKey(hex.coordinates)) &&
-          !TERRAIN_EFFECTS[hex.terrain].damagePerTurn && hex.fire?.stage !== 'burning' && !isClosedTo(hex, { owner: side, type: power.summon!.type, abilities: stats.abilities }))
+          !TERRAIN_EFFECTS[hex.terrain].damagePerTurn && hex.fire?.stage !== 'burning' && !isClosedTo(hex, { owner: side, type: power.summon!.type, abilities: stats.abilities }, state))
         .slice(0, count);
       if (spots.length === 0) continue;
       for (const spot of spots) {
@@ -2800,7 +3151,7 @@ const unleashBossPowers = (state: GameState, side: PlayerType): void => {
       used(spots.map(spot => spot.coordinates));
       addLog(state, side, `${name} uses ${power.name}: ${spots.length} ${getTroopName(power.summon.type)}${spots.length === 1 ? '' : 's'} answer the call!`);
     } else if (power.bite) {
-      const bitten = state.players[enemySide].units.filter(unit => getHexDistance(unit.position, live.position) === 1);
+      const bitten = getEnemyUnits(state, side).filter(unit => getHexDistance(unit.position, live.position) === 1);
       if (bitten.length === 0) continue;
       let damage = 0;
       for (const target of bitten) damage += inflictDamage(state, target, live.attackPower * power.bite, side, 'boss', { from: live.position }).damage;
@@ -2828,7 +3179,6 @@ const minionStats = (state: GameState, side: PlayerType, type: UnitType): TroopS
 // towers stand, in the fog or not - or at the enemy castle, if it can see that. An empty tower, or
 // one with nothing in sight, stays quiet; one that throws gives its crew away.
 const bombard = (state: GameState, side: PlayerType): void => {
-  const enemySide = getOpponent(side);
   const towers = state.hexGrid.filter(hex => hex.terrain === 'catapult');
   if (towers.length === 0) return;
   const lookouts = lookoutsOf(state, side);
@@ -2839,7 +3189,7 @@ const bombard = (state: GameState, side: PlayerType): void => {
     if (!crew) continue;
     // (a sandstorm shortens its throw like every other shot - unless the Sand Court crews it)
     const range = CATAPULT_RANGE - weatherReachPenalty(state, crew);
-    const target = state.players[enemySide].units
+    const target = getEnemyUnits(state, side)
       .filter(enemy => getHexDistance(enemy.position, tower.coordinates) <= range &&
         (inSight(enemy.position) || enemy.isBoss || (!!fog && !!enemy.revealed)))
       .sort((a, b) => a.lifespan - b.lifespan || getHexDistance(a.position, tower.coordinates) - getHexDistance(b.position, tower.coordinates))[0];
@@ -2848,12 +3198,16 @@ const bombard = (state: GameState, side: PlayerType): void => {
       crew.revealed = true;
       const hit = inflictDamage(state, target, CATAPULT_DAMAGE, side, 'catapult', { from: tower.coordinates });
       state.lastBombard = { side, from: tower.coordinates, to: target.position, serial };
-      addLog(state, side, `The catapult hurls a stone at ${unitLabel(target).replace(/^Your|^Enemy/, side === 'player' ? 'the enemy' : 'your')}` +
+      addLog(state, side, `The catapult hurls a stone at ${isMultiSide(state) ? unitLabel(state, target) : unitLabel(state, target).replace(/^Your|^Enemy/, side === 'player' ? 'the enemy' : 'your')}` +
         ` (-${hit.damage}${hit.destroyed ? ', destroyed' : ''}).`);
       continue;
     }
-    const castle = findBaseHex(state, enemySide);
-    if (!castle || getHexDistance(castle.coordinates, tower.coordinates) > range || !inSight(castle.coordinates)) continue;
+    // (the weakest enemy castle in reach and in sight)
+    const castle = getEnemySides(state, side).map(enemy => findBaseHex(state, enemy))
+      .filter((hex): hex is Hex => !!hex && getHexDistance(hex.coordinates, tower.coordinates) <= range && inSight(hex.coordinates))
+      .sort((a, b) => (a.baseHealth ?? BASE_MAX_HEALTH) - (b.baseHealth ?? BASE_MAX_HEALTH))[0];
+    if (!castle?.owner) continue;
+    const enemySide = castle.owner;
     crew.revealed = true;
     const before = state.players[enemySide].baseHealth ?? BASE_MAX_HEALTH;
     const after = Math.max(0, before - CATAPULT_CASTLE_DAMAGE);
@@ -2862,17 +3216,19 @@ const bombard = (state: GameState, side: PlayerType): void => {
     sideStats(state, side).siegeDamage += before - after;
     noteHealth(state, null, after - before, 'catapult', { castle: enemySide, from: tower.coordinates });
     state.lastBombard = { side, from: tower.coordinates, to: castle.coordinates, serial };
-    addLog(state, side, `The catapult pounds ${enemySide === 'player' ? 'your' : 'the enemy'} castle (-${before - after}).`);
+    addLog(state, side, `The catapult pounds ${isMultiSide(state) ? sidePossessive(state, enemySide) : enemySide === 'player' ? 'your' : 'the enemy'} castle (-${before - after}).`);
   }
 };
 
 const processDamageToBase = (state: GameState, besieger: PlayerType): void => {
-  const side = getOpponent(besieger);
+  if (state.siege?.side !== besieger) return;
+  for (const { side, attackerIds } of getBesiegedCastles(state)) damageCastle(state, besieger, side, new Set(attackerIds));
+};
+
+// The troops of `besieger` that attacked `side`'s castle this turn (and still stand) strike it
+const damageCastle = (state: GameState, besieger: PlayerType, side: PlayerType, attackerIds: Set<string>): void => {
   const baseHex = findBaseHex(state, side);
   if (!baseHex) return;
-
-  // The troops that attacked the castle this turn (and still stand)
-  const attackerIds = new Set(state.siege?.side === besieger ? state.siege.attackerIds : []);
   const besiegers = state.players[besieger].units.filter(unit => attackerIds.has(unit.id));
 
   // Each unit in range deals damage equal to its attack power (double for siege troops), and is seen doing it
@@ -2892,8 +3248,8 @@ const processDamageToBase = (state: GameState, besieger: PlayerType): void => {
   addLog(
     state,
     besieger,
-    `${side === 'player' ? 'Your' : 'The enemy'} castle takes ${totalDamage} siege damage (${newHealth}/${getCastleMaxHealth(state, side)})` +
-      (plunder > 0 ? ` - ${besieger === 'player' ? 'you plunder' : 'the enemy plunders'} ${plunder} gold.` : '.')
+    `${sidePossessive(state, side, 'The enemy')} castle takes ${totalDamage} siege damage (${newHealth}/${getCastleMaxHealth(state, side)})` +
+      (plunder > 0 ? ` - ${sideVerb(state, besieger, 'plunder', 'plunders').replace(/^You/, 'you').replace(/^The enemy/, 'the enemy')} ${plunder} gold.` : '.')
   );
 };
 
@@ -3190,7 +3546,7 @@ const applyBlowSkill = (state: GameState, hitter: Unit, victim: Unit, hitterFell
       if (taken <= 0) break;
       state.players[victim.owner].points -= taken;
       earnGold(state, hitter.owner, taken);
-      addLog(state, hitter.owner, `${skill.name}! ${unitLabel(hitter)} steals ${taken} gold.`);
+      addLog(state, hitter.owner, `${skill.name}! ${unitLabel(state, hitter)} steals ${taken} gold.`);
       break;
     }
   }
@@ -3207,7 +3563,15 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
     newState.players[unit.owner].units.find(u => u.id === unit.id);
 
   if (preview.attackers.length > 0 && preview.defenders.length > 0) {
-    const bounties: Record<PlayerType, number> = { player: 0, ai: 0 };
+    const bounties: Record<PlayerType, number> = {};
+    // Who struck a unit down: the side of whoever hit it hardest in this fight (the attackers' side, or
+    // the defender's striking back)
+    const killerOf = (entry: CombatantPreview): PlayerType => {
+      const isDefender = preview.defenders.includes(entry);
+      const foes = isDefender ? preview.attackers.map(a => a.unit) : preview.defenders.slice(0, 1).map(d => d.unit);
+      const hardest = [...foes].sort((a, b) => getStrikePower(newState, b, entry.unit) - getStrikePower(newState, a, entry.unit))[0];
+      return hardest?.owner ?? getOpponent(entry.unit.owner);
+    };
 
     for (const entry of [...preview.attackers, ...preview.defenders]) {
       const unit = getLiveUnit(entry.unit);
@@ -3216,12 +3580,13 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
       unit.lifespan = Math.max(0, unit.lifespan - entry.damageTaken);
       if (entry.rises) {
         // Struck down all the same: the bounty is paid, and paid again when it falls for good
-        bounties[getOpponent(unit.owner)] += getKillBounty(unit);
+        const killer = killerOf(entry);
+        bounties[killer] = (bounties[killer] ?? 0) + getKillBounty(unit);
         riseAgain(newState, unit);
       } else if (unit.lifespan <= 0) {
+        const killer = killerOf(entry);
         removeUnit(newState, unit);
-        const killer = getOpponent(unit.owner);
-        bounties[killer] += getKillBounty(unit);
+        bounties[killer] = (bounties[killer] ?? 0) + getKillBounty(unit);
         creditKill(newState, unit, killer);
       }
     }
@@ -3237,7 +3602,7 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
         const healed = Math.min(unit.maxLifespan - unit.lifespan, bloodlustHeal(rank) * kills);
         noteHealth(newState, unit, healed, 'bloodlust');
         unit.lifespan += healed;
-        addLog(newState, unit.owner, `Bloodlust! ${unitLabel(unit)} recovers ${healed} health.`);
+        addLog(newState, unit.owner, `Bloodlust! ${unitLabel(newState, unit)} recovers ${healed} health.`);
       }
     }
     // Swarm: goblins packed beside a goblin that was hit take a share of the blow
@@ -3247,7 +3612,7 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
       const splash = Math.max(1, Math.round(entry.damageTaken * SWARM_SPLASH));
       const crowd = newState.players[entry.unit.owner].units.filter(other =>
         !fighting.has(other.id) && hasTrait(other, 'swarm') && getHexDistance(other.position, entry.unit.position) === 1);
-      for (const goblin of crowd) inflictDamage(newState, goblin, splash, getOpponent(goblin.owner), 'swarm');
+      for (const goblin of crowd) inflictDamage(newState, goblin, splash, defaultKiller(newState, goblin.owner) ?? null, 'swarm');
       if (crowd.length > 0) addLog(newState, entry.unit.owner, `Packed together: ${crowd.length === 1 ? 'the goblin beside it takes' : `${crowd.length} goblins beside it take`} ${splash} too.`);
     }
     // Monster skills that work once a blow lands: venom, webs, curses, drained life, stolen gold
@@ -3267,21 +3632,21 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
       newState,
       getActivePlayer(newState),
       (combat.intercept
-        ? `${preview.attackers.map(a => unitLabel(a.unit)).join(' & ')} struck back at ${unitLabel(defender.unit)} as it attacked: ${outcome(defender)}.`
-        : `${preview.attackers.map(a => unitLabel(a.unit)).join(' & ')} attacked ${unitLabel(defender.unit)}: ` +
+        ? `${preview.attackers.map(a => unitLabel(newState, a.unit)).join(' & ')} struck back at ${unitLabel(newState, defender.unit)} as it attacked: ${outcome(defender)}.`
+        : `${preview.attackers.map(a => unitLabel(newState, a.unit)).join(' & ')} attacked ${unitLabel(newState, defender.unit)}: ` +
           `defender ${outcome(defender)}, attackers ${preview.attackers.map(outcome).join(', ')}.`) +
         (effects.length > 0
           ? ` (${strongestEffects(effects, 3).map(describeEffect).join(', ')})`
           : '')
     );
 
-    for (const side of ['player', 'ai'] as const) {
-      if (bounties[side] === 0) continue;
+    for (const side of getSides(newState)) {
+      if (!bounties[side]) continue;
       earnGold(newState, side, bounties[side]);
       addLog(
         newState,
         side,
-        `${side === 'player' ? 'You earn' : 'The enemy earns'} ${bounties[side]} gold in bounty.`
+        `${sideVerb(newState, side, 'earn', 'earns')} ${bounties[side]} gold in bounty.`
       );
     }
   }
@@ -3313,8 +3678,8 @@ export const resolveAllCombats = (state: GameState): GameState => {
 const burstOnDeath = (state: GameState, unit: Unit, cause?: HealthCause, order?: number): void => {
   const burst = hasMobSkill(unit, 'deathburst');
   if (!burst) return;
-  const caught = state.players[getOpponent(unit.owner)].units.filter(enemy => getHexDistance(enemy.position, unit.position) === 1);
-  if (caught.length > 0) addLog(state, unit.owner, `${burst.name}! ${unitLabel(unit)} bursts as it falls.`);
+  const caught = getEnemyUnits(state, unit.owner).filter(enemy => getHexDistance(enemy.position, unit.position) === 1);
+  if (caught.length > 0) addLog(state, unit.owner, `${burst.name}! ${unitLabel(state, unit)} bursts as it falls.`);
   for (const enemy of caught) inflictDamage(state, enemy, burst.amount!, unit.owner, 'burst', { from: unit.position, after: cause, order });
 };
 
@@ -3335,7 +3700,7 @@ const removeUnit = (state: GameState, unit: Unit, cause?: HealthCause, order?: n
 const shakeArmy = (state: GameState, side: PlayerType, turns: number, fallen: Unit): void => {
   const shaken = state.players[side].units.filter(unit => !isFearless(unit));
   for (const unit of shaken) unit.shaken = Math.max(unit.shaken ?? 0, turns);
-  if (shaken.length > 0) addLog(state, side, `With ${getTroopName(fallen.type)} fallen, ${side === 'player' ? 'your' : 'the enemy'} army is shaken!`);
+  if (shaken.length > 0) addLog(state, side, `With ${getTroopName(fallen.type)} fallen, ${isMultiSide(state) ? sidePossessive(state, side) : side === 'player' ? 'your' : 'the enemy'} army is shaken!`);
 };
 
 // Undying: a slain troop rises again (once) with part of its health
@@ -3343,13 +3708,13 @@ const riseAgain = (state: GameState, unit: Unit): void => {
   unit.lifespan = riseHealth(unit);
   unit.risen = true;
   unit.revealed = true;
-  addLog(state, unit.owner, `${unitLabel(unit)} rises again!`);
+  addLog(state, unit.owner, `${unitLabel(state, unit)} rises again!`);
   syncHexUnits(state);
 };
 
 // Minions whose boss has fallen scatter and leave the field
 const scatterMinions = (state: GameState): void => {
-  for (const side of ['player', 'ai'] as const) {
+  for (const side of getLivingSides(state)) {
     const units = state.players[side].units;
     const staying = units.filter(unit => !unit.summonedBy || units.some(boss => boss.id === unit.summonedBy));
     if (staying.length === units.length) continue;
@@ -3391,7 +3756,7 @@ const gatherFromTheLand = (state: GameState): void => {
     if (hex.storySite && !hex.plundered && site) {
       gather(state, site.relic, hex.coordinates);
       updateHex(state, hex.coordinates, { plundered: true });
-      addLog(state, 'player', `${unitLabel(unit)} recovered a relic from ${site.name.replace(/^(A|The) /, 'the ')}.`);
+      addLog(state, 'player', `${unitLabel(state, unit)} recovered a relic from ${site.name.replace(/^(A|The) /, 'the ')}.`);
     }
   }
 };
@@ -3402,20 +3767,21 @@ const HARVEST_SHARE = 0.2;
 const MIN_HARVEST = 5;
 const SITE_GROUND: TerrainType[] = ['plain', 'desert', 'snow'];
 
-const placeHarvest = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoordinates): void => {
+const placeHarvest = (state: GameState, castles: HexCoordinates[]): void => {
   let draws = 0;
   const random = () => seededRandom((state.battleSeed ?? 0) + 4243 + 17 * draws++);
   const theme = state.mapName;
   const open = (hex: Hex) => !hex.isBase && !hex.isCamp && !isImpassable(hex) && !isStructure(hex.terrain) && !hex.feature &&
-    getHexDistance(hex.coordinates, playerBase) > 1 && getHexDistance(hex.coordinates, aiBase) > 1;
+    castles.every(castle => getHexDistance(hex.coordinates, castle) > 1);
 
   // The story site: somewhere neither side reaches first, away from the castles
   // (the tutorial's field is laid out by hand and never comes here)
   const site = storySiteFor(theme);
   if (site) {
-    const fair = (hex: Hex, tolerance: number) =>
-      Math.abs(getHexDistance(hex.coordinates, playerBase) - getHexDistance(hex.coordinates, aiBase)) <= tolerance &&
-      Math.min(getHexDistance(hex.coordinates, playerBase), getHexDistance(hex.coordinates, aiBase)) >= 3;
+    const fair = (hex: Hex, tolerance: number) => {
+      const { gap, nearest } = castleMarches(hex.coordinates, castles);
+      return gap <= tolerance && nearest >= 3;
+    };
     for (const tolerance of [1, 2, 3]) {
       // (on open ground only: not in a forest or village whose scenery it would replace, and never on
       // lava or cursed ground, which would hurt - or heal the dead - whoever holds it)

@@ -190,6 +190,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
           <div className="mt-5 grid max-w-2xl grid-cols-2 gap-3">
             <MenuTile href="/campaign" icon={<MapIcon />} title="World Map" detail={`${REGIONS.length} regions · ${LEVEL_COUNT} battles`} />
             <MenuTile href="/army" icon={<CardsIcon />} title="Army" detail="Build your deck, upgrade cards" />
+            <MenuTile href="/pvp" icon={<AttackIcon />} title="Battle Friends" detail="Online free-for-all or teams, up to 8" />
             <MenuTile href="/bestiary" icon={<BookIcon />} title="Bestiary" detail={`${hydrated ? discovered : 0}/${MOB_IDS.length} monsters discovered`} />
             <MenuTile href="/satchel" icon={<SatchelIcon />} title="Satchel" detail={`${hydrated ? profile.materialsFound.length : 0}/${MATERIAL_IDS.length} materials · Chronicle`} />
             <MenuTile href="/style" icon={<StyleIcon />} title="Style" detail="Card frames, castle styles" />

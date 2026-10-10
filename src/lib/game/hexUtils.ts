@@ -95,3 +95,22 @@ export const getSpiral = (center: HexCoordinates, radius: number): HexCoordinate
   
   return results;
 };
+
+// A hex turned about the centre of the board by `steps` sixths of a turn (60 degrees each)
+export const rotateHex = (hex: HexCoordinates, steps: number): HexCoordinates => {
+  let { q, r } = hex;
+  for (let i = 0; i < ((steps % 6) + 6) % 6; i++) [q, r] = [-r, q + r];
+  // (no negative zeros)
+  return { q: q + 0, r: r + 0 };
+};
+
+// The hexes a hex stands for on a board with `symmetry`-fold rotational symmetry (2, 3 or 6): itself
+// turned through each of the board's equal parts
+export const hexOrbit = (hex: HexCoordinates, symmetry: number): HexCoordinates[] => {
+  const turns = Array.from({ length: symmetry }, (_, part) => rotateHex(hex, part * 6 / symmetry));
+  return [...new Map(turns.map(c => [`${c.q},${c.r}`, c])).values()];
+};
+
+// The hex that stands for all the hexes of its orbit (the first of them in reading order)
+export const canonicalHex = (hex: HexCoordinates, symmetry: number): HexCoordinates =>
+  hexOrbit(hex, symmetry).sort((a, b) => a.q - b.q || a.r - b.r)[0];

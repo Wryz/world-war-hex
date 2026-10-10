@@ -7,7 +7,9 @@ import {
   getActivePlayer, getCastleMaxHealth, getMovementRange
 } from '@/lib/game/gameState';
 import { getUnitTypeName } from '../utils/UnitHelpers';
-import { PANEL_CLASS, SIDE_COLORS } from './styles';
+import { PANEL_CLASS } from './styles';
+import { sideColor } from '../sideColors';
+import { sideLabel, sideOwnerLabel } from './sideLabels';
 import { TERRAIN_SHORT_EFFECTS } from './terrainInfo';
 import { AbilityIcon, AttackIcon, MonsterSkillIcon, SlowedIcon, VenomIcon, BossPowerIcon, CampIcon, CrownIcon, FireIcon, FrozenIcon, MoveIcon, TerrainIcon, UnitIcon, FogIcon } from '../icons';
 import { getBossPower, isBossEnraged } from '@/lib/game/bosses';
@@ -19,6 +21,8 @@ interface SelectionCardProps {
   gameState: GameState;
   selectedHex: Hex | null;
   selectedUnit: Unit | null;
+  // The side the battle is seen from
+  viewer?: PlayerType;
 }
 
 const HealthBar: React.FC<{ value: number; max: number }> = ({ value, max }) => {
@@ -53,7 +57,7 @@ export const CounterLine: React.FC<{ type: UnitType }> = ({ type }) => {
 };
 
 // Compact details for the selected unit or castle
-export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selectedHex, selectedUnit }) => {
+export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selectedHex, selectedUnit, viewer = 'player' }) => {
   // Always show the latest version of what's on the hex
   const liveHex = selectedHex && (gameState.hexGrid.find(
     h => h.coordinates.q === selectedHex.coordinates.q && h.coordinates.r === selectedHex.coordinates.r
@@ -93,9 +97,9 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
             </span>
             <span
               className="rounded-full px-2 py-0.5 text-[0.625rem] font-bold text-white"
-              style={{ background: SIDE_COLORS[unit.owner] }}
+              style={{ background: sideColor(unit.owner) }}
             >
-              {unit.owner === 'player' ? 'You' : 'Enemy'}
+              {sideLabel(gameState, unit.owner, viewer)}
             </span>
           </div>
           <div className="mt-2"><HealthBar value={shownHealth ?? unit.lifespan} max={unit.maxLifespan} /></div>
@@ -145,33 +149,33 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
           {isFogOfWar(gameState) && (
             <div className="mt-1.5 flex items-center gap-1 text-[0.6875rem] text-slate-400">
               <FogIcon />
-              {unit.owner === 'player'
+              {unit.owner === viewer
                 ? <>Sees {getSightRange(gameState, unit)} hexes{TERRAIN_EFFECTS[hex.terrain].conceals && !unit.revealed ? ' · hidden in the trees' : unit.revealed ? ' · spotted by the enemy' : ''}</>
                 : unit.revealed ? 'Gave its position away' : 'In sight of your troops'}
             </div>
           )}
-          {unit.owner === 'player' && unit.hasMoved && gameState.currentPhase === 'planning' && (
+          {unit.owner === viewer && unit.hasMoved && gameState.currentPhase === 'planning' && (
             <div className="mt-2 text-slate-400">Moves next turn</div>
           )}
         </>
       ) : hex.isCamp ? (
         <>
           <div className="flex items-center gap-1.5 text-sm font-bold">
-            <CampIcon color={hex.owner ? SIDE_COLORS[hex.owner] : SIDE_COLORS.neutral} />
-            {hex.owner === 'player' ? 'Your camp' : hex.owner === 'ai' ? 'Enemy camp' : 'Neutral camp'}
+            <CampIcon color={sideColor(hex.owner)} />
+            {hex.owner ? `${sideOwnerLabel(gameState, hex.owner, viewer)} camp` : 'Neutral camp'}
           </div>
           <div className="mt-2 text-slate-400">
-            {hex.owner === 'player' ? 'Recruits deploy here' : 'Step on it to capture it'}
+            {hex.owner === viewer ? 'Recruits deploy here' : 'Step on it to capture it'}
           </div>
         </>
       ) : (
         <>
-          <div className="flex items-center gap-1.5 text-sm font-bold"><CrownIcon /> {hex.owner === 'player' ? 'Your castle' : 'Enemy castle'}</div>
+          <div className="flex items-center gap-1.5 text-sm font-bold"><CrownIcon color={sideColor(hex.owner)} /> {sideOwnerLabel(gameState, hex.owner, viewer)} castle</div>
           <div className="mt-2">
-            <CastleBar gameState={gameState} side={hex.owner ?? 'player'} health={hex.baseHealth ?? BASE_MAX_HEALTH} />
+            <CastleBar gameState={gameState} side={hex.owner ?? viewer} health={hex.baseHealth ?? BASE_MAX_HEALTH} />
           </div>
           <div className="mt-2 text-slate-400">
-            {hex.owner === 'player' ? 'Recruits deploy next to it' : 'Attack it until its health runs out to win'}
+            {hex.owner === viewer ? 'Recruits deploy next to it' : gameState.players[hex.owner ?? '']?.eliminated ? 'In ruins: its side is out of the battle' : 'Attack it until its health runs out to win'}
           </div>
         </>
       )}

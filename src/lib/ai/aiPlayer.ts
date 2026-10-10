@@ -56,6 +56,7 @@ import { CATAPULT_DAMAGE, TAVERN_INCOME } from '../game/structures';
 import { Faction, TROOPS, TroopClass, TroopId, getTroopClass } from '../game/troops';
 import { getMobSkill } from '../game/mobSkills';
 import { SHAKEN_ATTACK, isFearless } from '../game/regionRules';
+import { getEnemySides, isMultiSide } from '../game/sides';
 
 /**
  * AI difficulty settings affecting various strategic parameters
@@ -198,9 +199,9 @@ const FACTION_DOCTRINES: Partial<Record<Faction, AIDoctrine>> = {
 };
 
 // The doctrine of the faction most of the AI's troops belong to
-const factionDoctrine = (state: GameState): AIDoctrine => {
+const factionDoctrine = (state: GameState, side: PlayerType = 'ai'): AIDoctrine => {
   const counts = new Map<Faction, number>();
-  for (const type of getRosterTypes(state, 'ai')) {
+  for (const type of getRosterTypes(state, side)) {
     const troop = TROOPS[type as TroopId];
     if (!troop || troop.isBoss) continue;
     counts.set(troop.faction, (counts.get(troop.faction) ?? 0) + 1);
@@ -300,6 +301,8 @@ const mirrorSides = (state: GameState): GameState => {
  * The game calls this with no options (the 'ai' side, its faction's doctrine).
  */
 export const planAITurn = (initial: GameState, options: AIPlanOptions = {}): GameState => {
+  // (in a battle between more sides, for whichever side's turn it is)
+  if (isMultiSide(initial)) return planSideTurn(initial, options.side ?? initial.activePlayer ?? 'ai', options);
   const side = options.side ?? 'ai';
   // (the monsters fight their own way; a side planned for the player keeps to a balanced war)
   const doctrine = options.doctrine ?? (side === 'ai' ? factionDoctrine(initial) : 'balanced');
@@ -329,6 +332,73 @@ export const planAITurn = (initial: GameState, options: AIPlanOptions = {}): Gam
   for (const purchase of planned.pendingPurchases) {
     result = addPendingPurchase(result, state.players.player.id, purchase.unitType, purchase.position);
   }
+  return result;
+};
+
+// A battle between more sides seen as the planner sees every battle: the side it plans for becomes
+// 'ai', and every enemy side 'player' - their troops together, with the nearest enemy castle (the
+// weakest, between castles as near) the one to march on; the other enemy castles still stand in the
+// way. Allies keep their own sides: their troops stand with the planner's, but it gives them no orders.
+const projectSides = (state: GameState, side: PlayerType): GameState => {
+  const enemies = getEnemySides(state, side);
+  const home = findBaseHex(state, side)?.coordinates;
+  const target = enemies
+    .map(enemy => findBaseHex(state, enemy))
+    .filter((hex): hex is Hex => !!hex)
+    .sort((a, b) => (home ? getHexDistance(home, a.coordinates) - getHexDistance(home, b.coordinates) : 0) ||
+      (a.baseHealth ?? 0) - (b.baseHealth ?? 0))[0];
+  const targetSide = target?.owner ?? enemies[0];
+  const rename = (owner: PlayerType | undefined) =>
+    owner === side ? 'ai' : owner !== undefined && enemies.includes(owner) ? 'player' : owner;
+  const renameUnit = (unit: Unit): Unit => ({ ...unit, owner: rename(unit.owner)! });
+  const me = state.players[side];
+  const foe = targetSide ? state.players[targetSide] : undefined;
+  const players: Record<PlayerType, Player> = {};
+  for (const player of Object.values(state.players)) {
+    if (player.type !== side && !enemies.includes(player.type) && !player.eliminated) players[player.type] = player;
+  }
+  players.ai = { ...me, type: 'ai', units: me.units.map(renameUnit) };
+  players.player = {
+    ...(foe ?? me), type: 'player', team: undefined, eliminated: undefined,
+    units: enemies.flatMap(enemy => state.players[enemy].units).map(renameUnit)
+  };
+  const unitsById = new Map(Object.values(players).flatMap(player => player.units).map(unit => [unit.id, unit]));
+  return {
+    ...state,
+    players,
+    sides: undefined,
+    decks: undefined,
+    deck: undefined,
+    activePlayer: 'ai',
+    winner: undefined,
+    siege: undefined,
+    sightings: { ai: [], player: [] },
+    rosters: state.rosters && { ...state.rosters, ai: state.rosters[side] ?? {}, player: (targetSide && state.rosters[targetSide]) || {} },
+    battleStats: state.battleStats && {
+      ai: state.battleStats[side], player: (targetSide && state.battleStats[targetSide]) || state.battleStats[side]
+    },
+    settings: state.settings && { ...state.settings, aiIncomeBonus: 0 },
+    hexGrid: state.hexGrid.map(hex => ({
+      ...hex,
+      // (only the castle to march on belongs to the enemy: the others are just in the way)
+      owner: hex.isBase && hex.owner !== side && !coordsMatch(hex.coordinates, target?.coordinates ?? { q: NaN, r: NaN })
+        ? undefined
+        : rename(hex.owner),
+      unit: hex.unit && unitsById.get(hex.unit.id)
+    }))
+  };
+};
+
+// Plan the turn of a side in a battle between more sides: on the board as that side sees it (its
+// fog), projected to the two sides the planner knows, then give the same orders on the real board
+const planSideTurn = (state: GameState, side: PlayerType, options: AIPlanOptions): GameState => {
+  if (!state.players[side] || state.players[side].eliminated) return state;
+  const view = getSideView(state, side, true);
+  const planned = planTurn(projectSides(view, side), options.doctrine ?? factionDoctrine(state, side), getHand(state, side), options.difficulty, options);
+  const playerId = state.players[side].id;
+  let result = state;
+  for (const move of planned.pendingMoves) result = addPendingMove(result, move.unitId, playerId, move.to, move.action);
+  for (const purchase of planned.pendingPurchases) result = addPendingPurchase(result, playerId, purchase.unitType, purchase.position);
   return result;
 };
 

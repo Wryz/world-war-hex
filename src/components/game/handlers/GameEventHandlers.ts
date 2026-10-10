@@ -3,6 +3,9 @@ import {
   GameState,
   Hex,
   HexCoordinates,
+  Move,
+  PlayerType,
+  Purchase,
   Unit,
   UnitType,
   UnitAction
@@ -30,6 +33,7 @@ import {
   getMovementRange
 } from '@/lib/game/gameState';
 import { getHexDistance } from '@/lib/game/hexUtils';
+import { isAiSide, isMultiSide } from '@/lib/game/sides';
 import { planAITurn } from '@/lib/ai/aiPlayer';
 import { trackEvent } from '@/lib/analytics';
 import { buildBattle } from '@/lib/campaign/battleSetup';
@@ -48,7 +52,7 @@ import {
 } from '../storage/GameStorage';
 
 // Why a selected unit can't move to a hex, in words the player can act on
-const describeInvalidMove = (state: GameState, unit: Unit, hex: Hex): string => {
+const describeInvalidMove = (state: GameState, unit: Unit, hex: Hex, viewer: PlayerType): string => {
   const name = getTroopName(unit.type);
   if (unit.hasMoved) return `${name} just arrived and can't move until next turn`;
   if (coordsEqual(unit.position, hex.coordinates)) return `${name} is already here`;
@@ -68,7 +72,8 @@ const describeInvalidMove = (state: GameState, unit: Unit, hex: Hex): string => 
     return `${name} can't stop on ${TERRAIN_EFFECTS[hex.terrain].name.toLowerCase()} - pick another hex`;
   }
   if (hex.unit) return 'An enemy holds that hex - move next to it to attack';
-  if (hex.isBase && hex.owner === 'player') return "Units can't stand on your own castle";
+  if (hex.isBase && hex.owner === viewer) return "Units can't stand on your own castle";
+  if (hex.isBase) return "Units can't stand on a castle - attack it from next to it";
   const isClaimed =
     state.pendingMoves.some(m => m.unitId !== unit.id && coordsEqual(m.to, hex.coordinates)) ||
     state.pendingPurchases.some(p => coordsEqual(p.position, hex.coordinates));
@@ -112,6 +117,31 @@ const createInitialGame = (battle: BattleConfig, resume: boolean) => {
   return { gameState, elapsedSeconds: saved.additionalData.elapsedSeconds ?? 0, isResumed: true };
 };
 
+// A side's orders for its turn, as sent between the players of an online battle
+export interface TurnOrders {
+  turn: number;
+  side: PlayerType;
+  moves: Move[];
+  purchases: Purchase[];
+}
+
+// How an online battle is driven (see lib/pvp/room): the host's game runs the battle - the AI's
+// sides included - and passes every state on to the others; a guest plans its own turns on its copy
+// and sends its orders to the host
+export interface BattleLink {
+  role: 'host' | 'guest';
+  // (host) each state the battle moves to
+  onState?: (state: GameState) => void;
+  // (host) sides played by someone elsewhere: their turns wait for their orders
+  isRemoteSide?: (side: PlayerType) => boolean;
+  // (guest) the viewer's orders, once their turn is over
+  sendOrders?: (orders: TurnOrders) => void;
+}
+
+// A remote side gets this long beyond the turn's time for its orders to arrive before its turn
+// ends without them
+const REMOTE_GRACE_SECONDS = 6;
+
 interface GameHandlerOptions {
   battle: BattleConfig;
   // Continue the saved battle instead of starting a new one (falls back to a new one if there is none)
@@ -120,11 +150,18 @@ interface GameHandlerOptions {
   isReady: boolean;
   // No turn timer (the first battle's tutorial: a new player takes their time)
   untimed?: boolean;
+  // A battle between more sides: the side the viewer plays, and the battle (built elsewhere)
+  viewer?: PlayerType;
+  initialState?: GameState;
+  // An online battle's link to the other players
+  link?: BattleLink;
 }
 
-export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: GameHandlerOptions) => {
-  // Created once: either the saved battle or a fresh one
-  const [initialGame] = useState(() => createInitialGame(battle, resume));
+export const useGameHandlers = ({ battle, resume, isReady, untimed = false, viewer = 'player', initialState, link }: GameHandlerOptions) => {
+  // Created once: either the saved battle or a fresh one (or the battle given)
+  const [initialGame] = useState(() => initialState
+    ? { gameState: initialState, elapsedSeconds: 0, isResumed: true }
+    : createInitialGame(battle, resume));
   const [gameState, setGameState] = useState<GameState>(initialGame.gameState);
   const [selectedHex, setSelectedHex] = useState<Hex | null>(null);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
@@ -153,10 +190,14 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
   // they stand when the turn ends, not one by one)
   const replayRef = useRef(createReplayLog(initialGame.gameState));
 
+  const linkRef = useRef(link);
+  linkRef.current = link;
   const commitState = useCallback((newState: GameState, record = true) => {
     stateRef.current = newState;
     setGameState(newState);
     if (record) recordFrame(replayRef.current, newState);
+    // (the host passes every step of the battle on - but not the orders it is still giving)
+    if (record && linkRef.current?.role === 'host') linkRef.current.onState?.(newState);
   }, []);
 
   // The player's orders this turn, so the last one can be taken back: the state before each
@@ -174,11 +215,26 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     setCanUndo(false);
   }, [gameState.turnNumber, gameState.activePlayer, gameState.currentPhase]);
 
-  const isAITurn = (gameState.activePlayer ?? 'player') === 'ai';
+  const activeSide = gameState.activePlayer ?? 'player';
+  // Another side's turn (the AI's, or someone else's online): the viewer waits
+  const isAITurn = activeSide !== viewer;
+  // The AI plays this turn (on the game that runs the battle: never a guest's)
+  const isAiPlaying = isAiSide(gameState, activeSide) && link?.role !== 'guest' && !gameState.players[activeSide]?.eliminated;
+  // Someone elsewhere plays this turn (the host waits for their orders)
+  const isRemoteTurn = link?.role === 'host' && !!link.isRemoteSide?.(activeSide);
+  const isGuest = link?.role === 'guest';
+  const multi = isMultiSide(gameState);
   const { currentPhase, turnNumber } = gameState;
   // Whether the player may act right now (read from the ref so it's correct even before a re-render)
+  const viewerRef = useRef(viewer);
+  viewerRef.current = viewer;
   const isPlayerPlanning = () =>
-    stateRef.current.currentPhase === 'planning' && (stateRef.current.activePlayer ?? 'player') === 'player';
+    stateRef.current.currentPhase === 'planning' && (stateRef.current.activePlayer ?? 'player') === viewerRef.current &&
+    !stateRef.current.players[viewerRef.current]?.eliminated && !ordersSentRef.current;
+  // (a guest has sent this turn's orders and waits for the host to carry them out)
+  const ordersSentRef = useRef<string | null>(null);
+  const turnKey = (state: GameState) => `${state.turnNumber}-${state.activePlayer}`;
+  if (ordersSentRef.current && ordersSentRef.current !== turnKey(gameState)) ordersSentRef.current = null;
 
   const clearSelection = useCallback(() => {
     setSelectedHex(null);
@@ -190,8 +246,8 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
 
   // A brand new battle replaces any older save
   useEffect(() => {
-    if (!initialGame.isResumed) clearSavedGame();
-  }, [initialGame]);
+    if (!initialGame.isResumed && !initialState) clearSavedGame();
+  }, [initialGame, initialState]);
 
   // Count time spent in the battle while the tab is visible
   useEffect(() => {
@@ -205,15 +261,17 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
   // Save the battle (anything after it starts and before it ends), with the planning time left on the clock
   const saveGame = useCallback((timeLeft = timerRef.current) => {
     const current = stateRef.current;
-    if (current.currentPhase === 'setup' || current.currentPhase === 'gameOver') return false;
+    // (a battle between more sides isn't saved: an online one lives with its players)
+    if (current.currentPhase === 'setup' || current.currentPhase === 'gameOver' || isMultiSide(current)) return false;
     return saveGameToLocalStorage(current, { timer: timeLeft, battle, elapsedSeconds: elapsedRef.current });
   }, [battle]);
 
   // Autosave at the start of each of the player's turns, and forget the save once the battle is over
   useEffect(() => {
+    if (multi) return;
     if (currentPhase === 'planning' && !isAITurn) saveGame(stateRef.current.planningTimeRemaining);
     if (currentPhase === 'gameOver') clearSavedGame();
-  }, [currentPhase, isAITurn, turnNumber, saveGame]);
+  }, [currentPhase, isAITurn, turnNumber, saveGame, multi]);
 
   // Clear selection whenever the phase or the active side changes
   useEffect(() => {
@@ -224,17 +282,30 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
   const executeAllMoves = useCallback(() => {
     const current = stateRef.current;
     // The turn may already have ended (e.g. the timer ran out just before Confirm was clicked)
-    if (current.currentPhase !== 'planning' || (current.activePlayer ?? 'player') !== 'player') return;
+    if (current.currentPhase !== 'planning' || (current.activePlayer ?? 'player') !== viewer || ordersSentRef.current) return;
 
     clearSelection();
+    // (a guest hands its orders to the host, which carries them out for everyone)
+    if (linkRef.current?.role === 'guest') {
+      const playerId = current.players[viewer]?.id;
+      ordersSentRef.current = turnKey(current);
+      linkRef.current.sendOrders?.({
+        turn: current.turnNumber,
+        side: viewer,
+        moves: current.pendingMoves.filter(move => move.playerId === playerId),
+        purchases: current.pendingPurchases.filter(purchase => purchase.playerId === playerId)
+      });
+      setGameState({ ...current });
+      return;
+    }
     recordFrame(replayRef.current, current);
     commitState(executeTurn(current));
-  }, [clearSelection, commitState]);
+  }, [clearSelection, commitState, viewer]);
 
   // Planning timer for the player's turn - when it runs out the turn ends automatically.
   // It doesn't start until the board is visible, and pauses while the tab is in the background.
   useEffect(() => {
-    if (!isReady || currentPhase !== 'planning' || isAITurn || untimed) return;
+    if (!isReady || currentPhase !== 'planning' || isAITurn || untimed || gameState.players[viewer]?.eliminated) return;
 
     let remaining = stateRef.current.planningTimeRemaining;
     setTimer(remaining);
@@ -251,11 +322,64 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     }, 1000);
 
     return () => clearInterval(timerInterval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, currentPhase, isAITurn, turnNumber, executeAllMoves, untimed]);
+
+  // Another side's turn online: the host waits for its orders, a little longer than the turn lasts
+  // (they arrive through applyRemoteOrders), then ends the turn without them
+  useEffect(() => {
+    if (!isReady || currentPhase !== 'planning' || !isRemoteTurn) return;
+    const key = turnKey(stateRef.current);
+    const timeout = setTimeout(() => {
+      const current = stateRef.current;
+      if (current.currentPhase !== 'planning' || turnKey(current) !== key) return;
+      commitState(executeTurn({ ...current, pendingMoves: [], pendingPurchases: [] }));
+    }, (stateRef.current.planningTimeRemaining + REMOTE_GRACE_SECONDS) * 1000);
+    return () => clearTimeout(timeout);
+  }, [isReady, currentPhase, isRemoteTurn, turnNumber, activeSide, commitState]);
+
+  // (host) A remote side's orders for its turn: given on the board as that side, then carried out
+  const applyRemoteOrders = useCallback((orders: TurnOrders) => {
+    const current = stateRef.current;
+    if (current.currentPhase !== 'planning' || current.activePlayer !== orders.side || current.turnNumber !== orders.turn) return;
+    if (!linkRef.current?.isRemoteSide?.(orders.side)) return;
+    const playerId = current.players[orders.side]?.id;
+    if (!playerId) return;
+    // Moves first (a recruit may deploy on a hex a troop is leaving), each order given again until no
+    // more of them take (one may only be valid once another has been given)
+    let planned: GameState = { ...current, pendingMoves: [], pendingPurchases: [] };
+    const give = (state: GameState, order: Move | Purchase): GameState => 'unitId' in order
+      ? addPendingMove(state, order.unitId, playerId, order.to, order.action)
+      : addPendingPurchase(state, playerId, order.unitType, order.position);
+    let waiting: (Move | Purchase)[] = [...orders.moves, ...orders.purchases];
+    while (waiting.length > 0) {
+      const left: (Move | Purchase)[] = [];
+      for (const order of waiting) {
+        const next = give(planned, order);
+        if (next === planned) left.push(order);
+        planned = next;
+      }
+      if (left.length === waiting.length) break;
+      waiting = left;
+    }
+    commitState(executeTurn(planned));
+  }, [commitState]);
+
+  // (guest) The battle as the host has it now
+  const receiveState = useCallback((next: GameState) => {
+    const current = stateRef.current;
+    // (still giving this turn's orders: the host's copy of the same moment would wipe them)
+    if (isPlayerPlanning() && turnKey(next) === turnKey(current) && next.currentPhase === current.currentPhase) return;
+    // Troops walk into their battles before they fight, as on the host's board
+    if ((next.currentPhase === 'combat' || next.currentPhase === 'execution') && current.currentPhase === 'planning') {
+      setBattleStartDelay(getArrivalTime(current, next));
+    }
+    commitState(next);
+  }, [commitState]);
 
   // AI turn: plan purchases and moves, then execute them
   useEffect(() => {
-    if (!isReady || currentPhase !== 'planning' || !isAITurn) return;
+    if (!isReady || currentPhase !== 'planning' || !isAiPlaying) return;
 
     let executionTimeout: ReturnType<typeof setTimeout> | undefined;
     const speed = getGameSpeed();
@@ -273,20 +397,21 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
       clearTimeout(planningTimeout);
       if (executionTimeout) clearTimeout(executionTimeout);
     };
-  }, [isReady, currentPhase, isAITurn, turnNumber, commitState]);
+  }, [isReady, currentPhase, isAiPlaying, turnNumber, activeSide, commitState]);
 
   // A turn without a fight ends once its troops have arrived and the board has shown its moves
+  // (a guest's board waits for the host to say so)
   useEffect(() => {
-    if (!isReady || currentPhase !== 'execution') return;
+    if (!isReady || currentPhase !== 'execution' || isGuest) return;
     const timeout = setTimeout(() => {
       commitState(endTurn(stateRef.current));
     }, Math.max((getBattleStartDelay() * 1000 + TURN_END_PAUSE_MS) / getGameSpeed(), timelineWait(stateRef.current)));
     return () => clearTimeout(timeout);
-  }, [isReady, currentPhase, turnNumber, commitState]);
+  }, [isReady, currentPhase, turnNumber, commitState, isGuest]);
 
   // All of the turn's battles play out together, then resolve at once
   useEffect(() => {
-    if (!isReady || currentPhase !== 'combat') return;
+    if (!isReady || currentPhase !== 'combat' || isGuest) return;
     if (!gameState.combats.some(c => !c.resolved) && !gameState.siege) return;
 
     // Troops walk to the fight first, then it plays out
@@ -295,13 +420,13 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     }, (getBattleStartDelay() * 1000 + BATTLE_DURATION_MS) / getGameSpeed());
 
     return () => clearTimeout(battleDelay);
-  }, [isReady, currentPhase, gameState.combats, gameState.siege, commitState]);
+  }, [isReady, currentPhase, gameState.combats, gameState.siege, commitState, isGuest]);
 
   // Fight the same battle again from the start
   const handleRestart = () => {
     clearSavedGame();
     elapsedRef.current = 0;
-    const fresh = buildBattle(battle, getProfile());
+    const fresh = initialState ?? buildBattle(battle, getProfile());
     replayRef.current = createReplayLog(fresh);
     commitState(fresh, false);
     clearSelection();
@@ -317,14 +442,14 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
       return;
     }
 
-    const stats = getRosterStats(current, 'player', unitType);
-    if (!stats || !getHand(current).includes(unitType)) return;
-    if (current.players.player.points < stats.cost) {
+    const stats = getRosterStats(current, viewer, unitType);
+    if (!stats || !getHand(current, viewer).includes(unitType)) return;
+    if (current.players[viewer].points < stats.cost) {
       showNotice(`Not enough gold - ${getTroopName(unitType)} costs ${stats.cost}`);
       return;
     }
 
-    const deploymentHexes = getDeploymentHexes(current, 'player');
+    const deploymentHexes = getDeploymentHexes(current, viewer);
     if (deploymentHexes.length === 0) {
       showNotice('No free hex to deploy on - move a unit away from your castle or take a camp');
       return;
@@ -343,7 +468,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     const current = stateRef.current;
     if (!isPlayerPlanning()) return false;
 
-    const newState = addPendingPurchase(current, current.players.player.id, unitType, hex.coordinates);
+    const newState = addPendingPurchase(current, current.players[viewer].id, unitType, hex.coordinates);
     if (newState === current) return false;
 
     commitOrder(newState);
@@ -355,7 +480,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
   const handleActionChoice = (action: UnitAction | null) => {
     const current = stateRef.current;
     if (!actionChoice || !isPlayerPlanning()) return;
-    commitOrder(addPendingMove(current, actionChoice.unitId, current.players.player.id, actionChoice.at, action ?? undefined));
+    commitOrder(addPendingMove(current, actionChoice.unitId, current.players[viewer].id, actionChoice.at, action ?? undefined));
     clearSelection();
   };
 
@@ -398,7 +523,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
       return;
     }
 
-    const playerId = current.players.player.id;
+    const playerId = current.players[viewer].id;
 
     // Playing a card: a highlighted hex deploys it; anything else puts the card back
     if (selectedUnitTypeForPurchase) {
@@ -415,7 +540,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     // Work the selected troop can do on this hex (demolish, set alight, build): done at once when it
     // is the only thing to do there, otherwise the player chooses between moving and the work
     if (selectedUnit && validMoves.some(c => coordsEqual(c, hex.coordinates))) {
-      const unit = current.players.player.units.find(u => u.id === selectedUnit.id) ?? selectedUnit;
+      const unit = current.players[viewer].units.find(u => u.id === selectedUnit.id) ?? selectedUnit;
       const actions = getActionTargets(current, unit).filter(target => coordsEqual(target.at, hex.coordinates)).map(target => target.action);
       if (actions.length > 0) {
         const withoutOrder = { ...current, pendingMoves: current.pendingMoves.filter(m => m.unitId !== unit.id) };
@@ -440,7 +565,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     }
 
     // Sending a troop onto the hex of one heading to this troop's hex: they would swap places
-    const occupantMove = hex.unit && hex.unit.owner === 'player' && hex.unit.id !== selectedUnit?.id
+    const occupantMove = hex.unit && hex.unit.owner === viewer && hex.unit.id !== selectedUnit?.id
       ? current.pendingMoves.find(move => move.unitId === hex.unit!.id)
       : undefined;
     if (selectedUnit && occupantMove && coordsEqual(occupantMove.to, selectedUnit.position)) {
@@ -450,8 +575,8 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
 
     // A unit is selected but this isn't somewhere it can go: explain why and keep it selected
     // so the player can pick another hex (clicking another of their units still switches to it)
-    if (selectedUnit && !(hex.unit && hex.unit.owner === 'player')) {
-      showNotice(describeInvalidMove(current, selectedUnit, hex));
+    if (selectedUnit && !(hex.unit && hex.unit.owner === viewer)) {
+      showNotice(describeInvalidMove(current, selectedUnit, hex, viewer));
       return;
     }
 
@@ -480,7 +605,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     }
 
     // Select one of the player's units and show where it can move
-    if (hex.unit && hex.unit.owner === 'player') {
+    if (hex.unit && hex.unit.owner === viewer) {
       toggleOwnUnit(current, hex.unit);
       return;
     }
@@ -508,7 +633,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     const current = stateRef.current;
     const unitHex = current.hexGrid.find(hex => hex.unit && hex.unit.id === unit.id);
     if (!unitHex) return;
-    const live = current.players.player.units.find(other => other.id === unit.id);
+    const live = current.players[viewer]?.units.find(other => other.id === unit.id);
     // (a troop already picked can be ordered onto a friend's hex - to work on it, or swap places:
     // that's the hex's to decide)
     const orderedOnto = !!selectedUnit && selectedUnit.id !== unit.id && validMoves.some(c => coordsEqual(c, unitHex.coordinates));
@@ -521,10 +646,22 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
   };
 
   // Give up the battle (on your own turn): it counts as lost
-  const handleResign = () => {
+  // (in a battle between more sides, only the viewer's side is out: a guest asks the host to do it)
+  const handleResign = (onGuestResign?: () => void) => {
     clearSelection();
-    commitState(resign(stateRef.current));
+    if (linkRef.current?.role === 'guest') {
+      onGuestResign?.();
+      return;
+    }
+    commitState(resign(stateRef.current, viewer));
   };
+
+  // (host) A side gives up (a guest who resigned or left for good)
+  const resignSide = useCallback((side: PlayerType) => {
+    const current = stateRef.current;
+    if (current.currentPhase === 'gameOver' || current.players[side]?.eliminated) return;
+    commitState(resign(current, side));
+  }, [commitState]);
 
   return {
     // State
@@ -534,6 +671,8 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     selectedUnitTypeForPurchase,
     validMoves,
     isAITurn,
+    isRemoteTurn,
+    ordersSent: !!ordersSentRef.current,
     timer,
     elapsedRef,
 
@@ -552,6 +691,10 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     notice,
     actionChoice,
     handleActionChoice,
+    // Online battles
+    applyRemoteOrders,
+    receiveState,
+    resignSide,
     // The frames of the battle so far (see replay/replay.ts)
     getReplayFrames: () => replayRef.current.frames,
   };

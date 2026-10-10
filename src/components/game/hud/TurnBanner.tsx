@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { GamePhase, PlayerType } from '@/types/game';
-import { SIDE_COLORS } from './styles';
+import { sideColor } from '../sideColors';
 import { AttackIcon } from '../icons';
 
 interface TurnBannerProps {
@@ -8,12 +8,17 @@ interface TurnBannerProps {
   activePlayer: PlayerType;
   turnNumber: number;
   maxRounds: number;
+  // The side the battle is seen from, and in a battle between more sides the name of the side whose
+  // turn it is (and whether it fights on yours)
+  viewer?: PlayerType;
+  activeName?: string;
+  activeIsAlly?: boolean;
 }
 
 const BANNER_DURATION = 1800;
 
 // Big announcement whenever the turn changes or a battle starts
-export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, turnNumber, maxRounds }) => {
+export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, turnNumber, maxRounds, viewer = 'player', activeName, activeIsAlly = false }) => {
   const [banner, setBanner] = useState<{ key: string; title: string; subtitle: string; color: string; isBattle?: boolean } | null>(null);
 
   useEffect(() => {
@@ -21,14 +26,15 @@ export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, tur
 
     if (phase === 'planning') {
       const round = turnNumber >= maxRounds ? 'Final round!' : `Round ${turnNumber} of ${maxRounds}`;
-      next = activePlayer === 'player'
-        ? { key: `p-${turnNumber}`, title: 'Your Turn', subtitle: round, color: SIDE_COLORS.player }
-        : { key: `a-${turnNumber}`, title: 'Enemy Turn', subtitle: round, color: SIDE_COLORS.ai };
+      next = activePlayer === viewer
+        ? { key: `p-${turnNumber}-${activePlayer}`, title: 'Your Turn', subtitle: round, color: sideColor(activePlayer) }
+        : { key: `a-${turnNumber}-${activePlayer}`, title: activeName ? `${activeName}'s Turn` : 'Enemy Turn', subtitle: round, color: sideColor(activePlayer) };
     } else if (phase === 'combat') {
       next = {
         key: `c-${turnNumber}-${activePlayer}`,
         title: 'Battle!',
-        subtitle: activePlayer === 'player' ? 'Your troops attack' : 'You are under attack',
+        subtitle: activePlayer === viewer ? 'Your troops attack'
+          : activeName ? `${activeName}${activeIsAlly ? ' (your ally)' : ''} attacks` : 'You are under attack',
         color: '#f59e0b',
         isBattle: true
       };
@@ -38,7 +44,7 @@ export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, tur
     setBanner(next);
     const timeout = setTimeout(() => setBanner(null), BANNER_DURATION);
     return () => clearTimeout(timeout);
-  }, [phase, activePlayer, turnNumber, maxRounds]);
+  }, [phase, activePlayer, turnNumber, maxRounds, viewer, activeName, activeIsAlly]);
 
   return (
     <div className="fixed inset-x-0 top-1/3 z-30 flex justify-center pointer-events-none" role="status" aria-live="polite">

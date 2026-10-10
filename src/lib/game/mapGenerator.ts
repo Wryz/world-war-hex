@@ -1,5 +1,5 @@
 import { GameSettings, Hex, HexCoordinates, TerrainType } from '@/types/game';
-import { getHexDistance, getNeighbors, getSpiral } from './hexUtils';
+import { canonicalHex, getHexDistance, getNeighbors, getSpiral, hexOrbit } from './hexUtils';
 
 // Procedural battlefield generation.
 // Terrain comes from smooth, multi-octave noise so it forms natural clusters (lakes, mountain
@@ -433,14 +433,16 @@ const connectRegions = (coordinates: HexCoordinates[], terrain: Map<string, Terr
 };
 
 // Spread special hexes (gold mines, springs) out across the middle of the map,
-// keeping them apart from each other and from any already chosen
+// keeping them apart from each other and from any already chosen. On a mirrored map (`symmetry`
+// equal parts) each one chosen comes with its copies in the other parts.
 const chooseFeatureHexes = (
   coordinates: HexCoordinates[],
   terrain: Map<string, TerrainType>,
   gridSize: number,
   count: number,
   random: () => number,
-  taken: HexCoordinates[] = []
+  taken: HexCoordinates[] = [],
+  symmetry = 1
 ): HexCoordinates[] => {
   const center = { q: 0, r: 0 };
   const candidates = shuffle(
@@ -448,20 +450,42 @@ const chooseFeatureHexes = (
       const distance = getHexDistance(c, center);
       const type = terrain.get(coordKey(c))!;
       return distance >= 2 && distance <= gridSize - 2 && isPassableTerrain(type) && !isHarmfulTerrain(type) &&
-        !taken.some(other => getHexDistance(other, c) < 2);
+        !taken.some(other => getHexDistance(other, c) < 2) &&
+        (symmetry === 1 || coordKey(canonicalHex(c, symmetry)) === coordKey(c));
     }),
     random
   );
 
   const chosen: HexCoordinates[] = [];
+  // (`count` is per part on a mirrored map: each pick brings its copies in the other parts with it)
+  let picks = 0;
   for (const minimumSpacing of [4, 3, 2]) {
     for (const c of candidates) {
-      if (chosen.length >= count) break;
-      if (chosen.some(other => getHexDistance(other, c) < minimumSpacing)) continue;
-      chosen.push(c);
+      if (picks >= count) break;
+      const orbit = symmetry === 1 ? [c] : hexOrbit(c, symmetry);
+      if (chosen.some(other => orbit.some(copy => getHexDistance(other, copy) < minimumSpacing))) continue;
+      // (a mirrored copy too close to its own original isn't worth the extra mine)
+      if (orbit.some((copy, i) => orbit.slice(i + 1).some(next => getHexDistance(copy, next) < 2))) continue;
+      chosen.push(...orbit);
+      picks++;
     }
   }
   return chosen;
+};
+
+// Make the terrain the same on every part of a mirrored map: each hex takes its orbit's lead hex's
+// ground - or, where `passable` is asked for, open ground wherever any of its orbit has it (so passes
+// carved through to join the map up stay open in every part)
+const mirrorTerrain = (coordinates: HexCoordinates[], terrain: Map<string, TerrainType>, symmetry: number, passable = false) => {
+  for (const c of coordinates) {
+    const orbit = hexOrbit(c, symmetry);
+    if (passable) {
+      const open = orbit.map(copy => terrain.get(coordKey(copy))!).find(isPassableTerrain);
+      if (open && !isPassableTerrain(terrain.get(coordKey(c))!)) terrain.set(coordKey(c), open);
+      continue;
+    }
+    terrain.set(coordKey(c), terrain.get(coordKey(canonicalHex(c, symmetry)))!);
+  }
 };
 
 // Create a hexagonal battlefield with the configured radius, using the named theme's terrain
@@ -476,13 +500,21 @@ export const createHexagonalGrid = (
   const randomTheme = MAP_THEMES[Math.floor(random() * MAP_THEMES.length)];
   const theme = ALL_THEMES.find(t => t.name === themeName) ?? randomTheme;
 
+  // (a mirrored map: the same ground turned through each of its equal parts)
+  const symmetry = settings.symmetry && [2, 3, 6].includes(settings.symmetry) ? settings.symmetry : 1;
   const terrain = assignTerrain(coordinates, theme, random);
+  if (symmetry > 1) mirrorTerrain(coordinates, terrain, symmetry);
   removeSpeckles(coordinates, terrain);
+  if (symmetry > 1) mirrorTerrain(coordinates, terrain, symmetry);
   connectRegions(coordinates, terrain);
+  if (symmetry > 1) mirrorTerrain(coordinates, terrain, symmetry, true);
 
-  const resourceCoordinates = chooseFeatureHexes(coordinates, terrain, settings.gridSize, settings.resourceHexCount, random);
+  // (on a mirrored map, the mines and springs are shared out between its parts)
+  const perPart = (count: number) => (symmetry > 1 ? Math.max(1, Math.round(count / symmetry)) : count);
+  const resourceCoordinates = chooseFeatureHexes(coordinates, terrain, settings.gridSize, perPart(settings.resourceHexCount), random, [], symmetry);
   const resources = new Set(resourceCoordinates.map(coordKey));
-  chooseFeatureHexes(coordinates, terrain, settings.gridSize, theme.springs, random, resourceCoordinates)
+  const mineValues = new Map<string, number>();
+  chooseFeatureHexes(coordinates, terrain, settings.gridSize, perPart(theme.springs), random, resourceCoordinates, symmetry)
     .forEach(c => terrain.set(coordKey(c), 'spring'));
 
   const hexGrid = coordinates.map(coordinates => {
@@ -496,7 +528,10 @@ export const createHexagonalGrid = (
     if (resources.has(key)) {
       hex.terrain = 'resource';
       hex.isResourceHex = true;
-      hex.resourceValue = 2 + Math.floor(random() * 3); // 2-4 gold per round
+      // 2-4 gold per round (the same for a mine's mirrored copies)
+      const lead = coordKey(symmetry > 1 ? canonicalHex(coordinates, symmetry) : coordinates);
+      if (!mineValues.has(lead)) mineValues.set(lead, 2 + Math.floor(random() * 3));
+      hex.resourceValue = mineValues.get(lead);
     }
 
     return hex;
