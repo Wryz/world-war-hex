@@ -66,6 +66,8 @@ export interface ArenaSpec {
   difficulty: Difficulty;
   turnSeconds: number;
   maxRounds: number;
+  // Everyone plans each round at the same time, rather than taking turns
+  simultaneous?: boolean;
 }
 
 // A small seeded generator, so everything picked for a battle comes from its seed
@@ -104,7 +106,8 @@ export const resolveWeather = (choice: WeatherChoice, seed: number): WeatherId |
   return options[Math.floor(seeded(seed ^ 0x5eed)() * options.length)];
 };
 
-// Build the battle: its map, every side's castle and troops, and the first side's turn begun
+// Build the battle: its map, every side's castle and troops, and the first side's turn begun (or,
+// when everyone plans at once, the first round's planning)
 export const buildArenaBattle = (spec: ArenaSpec): GameState => {
   const count = spec.sides.length;
   const symmetry = spec.mapStyle === 'mirrored' ? mirrorSymmetry(count) : 1;
@@ -120,13 +123,16 @@ export const buildArenaBattle = (spec: ArenaSpec): GameState => {
     fogOfWar: spec.fog,
     seed: spec.seed,
     weather: resolveWeather(spec.weather, spec.seed),
-    ...(symmetry > 1 ? { symmetry } : {})
+    ...(symmetry > 1 ? { symmetry } : {}),
+    ...(spec.simultaneous ? { simultaneous: true } : {})
   };
   const sides: SideSetup[] = spec.sides.map(side => ({ id: side.id, name: side.name, team: side.team, color: side.color, ai: side.ai }));
   const rosters = Object.fromEntries(spec.sides.map(side => [side.id, sideRoster(side, spec.fairLevel)]));
   // (the AI recruits from its whole roster; everyone else draws their hand from a shuffled deck)
   const decks: Record<PlayerType, UnitType[]> = Object.fromEntries(spec.sides.filter(side => !side.ai).map(side => [side.id, shuffled(side.deck, random)]));
-  return createBattle(settings, { sides, rosters, decks, battleSeed: Math.floor(random() * 2 ** 31) });
+  const battle = createBattle(settings, { sides, rosters, decks, battleSeed: Math.floor(random() * 2 ** 31) });
+  // (sides that plan together start by all planning the first round)
+  return spec.simultaneous ? { ...battle, roundPlanning: true, plans: {}, ready: [] } : battle;
 };
 
 // The cards an AI side brings to a battle: a rival kingdom's troops at a level (the fair level, or

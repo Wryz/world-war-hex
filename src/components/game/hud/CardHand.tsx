@@ -22,12 +22,14 @@ interface CardHandProps {
   // The side whose hand this is, and who the others are waiting on while it isn't their turn
   viewer?: PlayerType;
   waitingFor?: string;
+  // Said instead while waiting, when there is more to say than who is planning
+  waitingLine?: string;
 }
 
 // The player's hand at the bottom of the screen: the cards they brought into battle. Pick a card,
 // then a glowing hex to play it.
 export const CardHand: React.FC<CardHandProps> = ({
-  gameState, isAITurn, selectedUnitType, hint, onCardSelect, onEndTurn, canUndo = false, onUndo, viewer = 'player', waitingFor
+  gameState, isAITurn, selectedUnitType, hint, onCardSelect, onEndTurn, canUndo = false, onUndo, viewer = 'player', waitingFor, waitingLine
 }) => {
   const hand = getHand(gameState, viewer);
   const nextCard = getNextCard(gameState, viewer);
@@ -54,7 +56,7 @@ export const CardHand: React.FC<CardHandProps> = ({
       <div className="fixed bottom-[calc(1rem+var(--safe-b))] left-[var(--safe-l)] right-[var(--safe-r)] z-20 flex justify-center pointer-events-none">
         <div className={`${PANEL_CLASS} px-5 py-2.5 flex items-center gap-3 text-sm`}>
           <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-          <span className="font-semibold">{waitingFor ?? 'Enemy'} is planning…</span>
+          <span className="font-semibold">{waitingLine ?? `${waitingFor ?? 'Enemy'} is planning…`}</span>
         </div>
       </div>
     );

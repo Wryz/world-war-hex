@@ -260,11 +260,6 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPhase]);
 
-  const handleSave = () => {
-    const saved = saveGame();
-    setToast({ id: Date.now(), text: saved ? 'Game saved' : 'Could not save the game' });
-  };
-
   const exitPath = battle.mode === 'campaign' ? '/campaign' : '/';
 
   // Leave the battle; it is saved so it can be continued later
@@ -305,16 +300,6 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     [gameState.players]
   );
 
-  // The threat preview (T toggles it)
-  const [showThreats, setShowThreats] = useState(false);
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.key === 't' || event.key === 'T') && !(event.target instanceof HTMLInputElement)) setShowThreats(value => !value);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
-
   // Short instruction while the player is in the middle of an action
   const hint = selectedUnitTypeForPurchase
     ? `Tap a glowing hex to deploy ${getUnitTypeName(selectedUnitTypeForPurchase)} · Esc to cancel`
@@ -337,7 +322,6 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       {!replayFrames && <GameBoard
         gameState={viewState}
         unitIds={unitIds}
-        showThreats={showThreats && isPlayerPlanning}
         selectedHex={selectedHex ?? undefined}
         selectedUnit={selectedUnit}
         validMoves={validMoves}
@@ -352,12 +336,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         <>
           <TopBar
             gameState={viewState}
-            showThreats={showThreats}
-            onToggleThreats={() => setShowThreats(value => !value)}
             isAITurn={isAITurn}
             timer={timer}
             showTimer={isPlayerPlanning && !showTutorial}
-            onSave={isPlayerPlanning ? handleSave : undefined}
             isMuted={isMuted}
             onToggleMute={() => setMuted(!isMuted)}
             onQuit={handleQuit}

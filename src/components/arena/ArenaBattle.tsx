@@ -77,10 +77,10 @@ const ArenaBattleInner: React.FC<ArenaBattleProps & { isReady: boolean }> = ({
 }) => {
   const isMuted = useMuted();
   const {
-    gameState, selectedHex, selectedUnit, validMoves, selectedUnitTypeForPurchase, isAITurn, ordersSent, timer,
+    gameState, selectedHex, selectedUnit, validMoves, selectedUnitTypeForPurchase, isAITurn, ordersSent, timer, planningRound, waitingOn,
     handleHexClick, handleUnitSelect, handleUnitPurchase, handleEndTurn, handleUnitTypeSelect,
     handleCancelSelection, handleUndo, handleResign, canUndo, notice, actionChoice, handleActionChoice,
-    applyRemoteOrders, receiveState, resignSide, getReplayFrames
+    applyRemoteOrders, receiveState, resignSide, getBattleState, getReplayFrames
   } = useGameHandlers({ battle: { mode: 'quick', difficulty: 'medium' }, resume: false, isReady, viewer, initialState: state, link });
 
   // The board's pieces wear each side's colour
@@ -92,11 +92,11 @@ const ArenaBattleInner: React.FC<ArenaBattleProps & { isReady: boolean }> = ({
   }, []);
   useBattleMoments(gameState, isReady, viewer);
 
-  const stateRef = useRef(gameState);
-  stateRef.current = gameState;
+  const battleStateRef = useRef(getBattleState);
+  battleStateRef.current = getBattleState;
   useEffect(() => {
     if (!controlsRef) return;
-    controlsRef.current = { applyRemoteOrders, receiveState, resignSide, getState: () => stateRef.current };
+    controlsRef.current = { applyRemoteOrders, receiveState, resignSide, getState: () => battleStateRef.current() };
     return () => { controlsRef.current = null; };
   }, [controlsRef, applyRemoteOrders, receiveState, resignSide]);
 
@@ -111,8 +111,7 @@ const ArenaBattleInner: React.FC<ArenaBattleProps & { isReady: boolean }> = ({
   const onBoardUnitClick = useCallback((...args: Parameters<typeof handleUnitSelect>) => unitClickRef.current(...args), []);
   const onBoardUnitPurchase = useCallback((...args: Parameters<typeof handleUnitPurchase>) => purchaseRef.current(...args), []);
 
-  // Escape cancels, Ctrl/Cmd+Z takes back the last order, T shows the threats
-  const [showThreats, setShowThreats] = useState(false);
+  // Escape cancels, Ctrl/Cmd+Z takes back the last order
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.target instanceof HTMLInputElement) return;
@@ -121,7 +120,6 @@ const ArenaBattleInner: React.FC<ArenaBattleProps & { isReady: boolean }> = ({
         event.preventDefault();
         handleUndo();
       }
-      if (event.key === 't' || event.key === 'T') setShowThreats(value => !value);
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
@@ -141,7 +139,9 @@ const ArenaBattleInner: React.FC<ArenaBattleProps & { isReady: boolean }> = ({
   const active = gameState.activePlayer ?? viewer;
   const me = gameState.players[viewer];
   const out = !!me?.eliminated;
-  const isPlanning = currentPhase === 'planning' && !isAITurn && !out && !ordersSent;
+  // (when everyone plans at once, the turns after the round's planning only carry out what was planned)
+  const carryingOut = !!gameState.settings?.simultaneous && !planningRound;
+  const isPlanning = currentPhase === 'planning' && !isAITurn && !out && !ordersSent && !carryingOut;
   // What the viewer knows: the fog hides what their side can't see (lifted once they're out)
   const viewState = useMemo(() => (out ? gameState : getSideView(gameState, viewer)), [gameState, viewer, out]);
   // (online in the fog, a guest's copy leaves out what it can't see, but lists every troop there is)
@@ -169,6 +169,15 @@ const ArenaBattleInner: React.FC<ArenaBattleProps & { isReady: boolean }> = ({
       : null;
   const activeName = gameState.players[active]?.name;
   const waitingFor = ordersSent ? 'The host' : active === viewer ? undefined : activeName;
+  // Everyone plans the round at once: who it still waits on, once the viewer's orders are in (and
+  // while they are carried out, whose they are)
+  const names = (sides: PlayerType[]) => sides.map(side => gameState.players[side]?.name ?? side).join(', ');
+  const others = waitingOn.filter(side => side !== viewer);
+  const waitingLine = planningRound
+    ? others.length > 0 ? `Waiting for ${names(others)}…` : 'Everyone is ready…'
+    : gameState.settings?.simultaneous
+      ? active === viewer ? 'Your orders are carried out…' : `${activeName ?? 'Their'}'s orders are carried out…`
+      : undefined;
 
   return (
     <div className="relative h-full w-full">
@@ -179,7 +188,6 @@ const ArenaBattleInner: React.FC<ArenaBattleProps & { isReady: boolean }> = ({
           gameState={viewState}
           viewer={viewer}
           unitIds={unitIds}
-          showThreats={showThreats && isPlanning}
           selectedHex={selectedHex ?? undefined}
           selectedUnit={selectedUnit}
           validMoves={validMoves}
@@ -195,8 +203,6 @@ const ArenaBattleInner: React.FC<ArenaBattleProps & { isReady: boolean }> = ({
           <TopBar
             gameState={viewState}
             viewer={viewer}
-            showThreats={showThreats}
-            onToggleThreats={() => setShowThreats(value => !value)}
             isAITurn={isAITurn}
             timer={timer}
             showTimer={isPlanning}
@@ -220,6 +226,7 @@ const ArenaBattleInner: React.FC<ArenaBattleProps & { isReady: boolean }> = ({
           <TurnBanner
             phase={currentPhase} activePlayer={active} turnNumber={gameState.turnNumber} maxRounds={getMaxRounds(gameState)}
             viewer={viewer} activeName={activeName} activeIsAlly={areAllies(gameState, active, viewer)}
+            simultaneous={!!gameState.settings?.simultaneous} planningRound={planningRound}
           />
         </>
       )}
@@ -228,8 +235,9 @@ const ArenaBattleInner: React.FC<ArenaBattleProps & { isReady: boolean }> = ({
         <CardHand
           gameState={gameState}
           viewer={viewer}
-          isAITurn={isAITurn || ordersSent}
+          isAITurn={isAITurn || ordersSent || carryingOut}
           waitingFor={waitingFor}
+          waitingLine={waitingLine}
           selectedUnitType={selectedUnitTypeForPurchase}
           hint={hint}
           onCardSelect={handleUnitTypeSelect}

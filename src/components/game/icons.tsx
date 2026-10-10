@@ -203,7 +203,7 @@ export const ShieldIcon = icon(GiCheckedShield, '#4ade80');
 export const CampIcon = icon(GiCampingTent, '#facc15');
 export const LockIcon = icon(GiPadlock, '#94a3b8');
 export const CardsIcon = icon(GiPokerHand, '#93c5fd');
-// Threat preview toggle, and the fog of war
+// Tactics (the guide), and the fog of war
 export const ThreatIcon = icon(GiCrosshair, '#f87171');
 export const FogIcon = icon(GiFog, '#cbd5e1');
 // Formations: troops fighting together, and an enemy pinned in place

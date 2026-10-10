@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { GameState, PlayerType } from '@/types/game';
-import { BASE_MAX_HEALTH, getActivePlayer, getCastleMaxHealth, getIncome, getMaxRounds, getTimeScore, isFogOfWar } from '@/lib/game/gameState';
+import { BASE_MAX_HEALTH, getActivePlayer, getCastleMaxHealth, getIncome, getMaxRounds, getTimeScore } from '@/lib/game/gameState';
 import { getSides, isMultiSide } from '@/lib/game/sides';
 import { sideColor } from '../sideColors';
 import { sideLabel } from './sideLabels';
 import { WEATHER, activeWeather, stormForecast } from '@/lib/game/regionRules';
 import { PANEL_CLASS } from './styles';
-import { CrownIcon, FogIcon, GoldIcon, HomeIcon, ResignIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon, WeatherIcon } from '../icons';
+import { CrownIcon, GoldIcon, HomeIcon, ResignIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, WeatherIcon } from '../icons';
 import { setGameSpeed, useCastleShownDamage, useGameSpeed } from '../effects/effects';
 import { useShownCastleHealth } from '../effects/healthTimeline';
 
@@ -18,15 +18,11 @@ interface TopBarProps {
   isAITurn: boolean;
   timer: number;
   showTimer: boolean;
-  onSave?: () => void;
   isMuted: boolean;
   onToggleMute: () => void;
   onQuit: () => void;
   // Give up the battle (offered on your own turn)
   onResign?: () => void;
-  // The threat preview: hexes enemies can strike next turn
-  showThreats: boolean;
-  onToggleThreats: () => void;
   // The side the battle is seen from
   viewer?: PlayerType;
   // What resigning means (a defeat against the AI; leaving the battle when others play on)
@@ -58,7 +54,7 @@ const CastleHealth: React.FC<{ title: string; health: number; max: number; color
 
 // Compact status bar: whose turn it is, both castles' health, and the player's gold
 export const TopBar: React.FC<TopBarProps> = ({
-  gameState, isAITurn, timer, showTimer, onSave, isMuted, onToggleMute, onQuit, onResign, showThreats, onToggleThreats,
+  gameState, isAITurn, timer, showTimer, isMuted, onToggleMute, onQuit, onResign,
   viewer = 'player', resignNote = 'It counts as a defeat.'
 }) => {
   // Asking to make sure before giving up: on the turn it was asked on, while resigning is on offer
@@ -99,7 +95,10 @@ export const TopBar: React.FC<TopBarProps> = ({
           className="rounded-full px-2 py-0.5 text-xs font-bold text-white sm:px-2.5"
           style={{ background: sideColor(active), color: active === viewer || !multi ? undefined : '#0f172a' }}
         >
-          {multi ? (active === viewer ? 'Your turn' : `${sideLabel(gameState, active, viewer)}'s turn`) : isAITurn ? 'Enemy turn' : 'Your turn'}
+          {gameState.settings?.simultaneous
+            // (everyone plans the round at once, then each side's orders are carried out in turn)
+            ? gameState.roundPlanning ? 'Planning' : active === viewer ? 'Your orders' : `${sideLabel(gameState, active, viewer)}'s orders`
+            : multi ? (active === viewer ? 'Your turn' : `${sideLabel(gameState, active, viewer)}'s turn`) : isAITurn ? 'Enemy turn' : 'Your turn'}
         </span>
         {/* The weather: lit while a storm rages, with a word when it is about to change */}
         {gameState.settings?.weather && (() => {
@@ -178,20 +177,6 @@ export const TopBar: React.FC<TopBarProps> = ({
         </span>
         <span className="mx-0.5 hidden h-5 w-px bg-slate-700 sm:block" />
         <button
-          onClick={onToggleThreats}
-          title={showThreats ? 'Hide enemy threats (T)' : 'Show where enemies can strike next turn (T)'}
-          aria-label="Show enemy threats"
-          aria-pressed={showThreats}
-          className={`${ICON_BUTTON_CLASS} ${showThreats ? 'bg-rose-900/60 text-rose-200' : ''}`}
-        >
-          <ThreatIcon className="text-base" />
-        </button>
-        {isFogOfWar(gameState) && (
-          <span className="hidden text-slate-400 sm:inline" title="Fog of war: you only see enemy troops your own troops can see. Forests hide troops unless you're right next to them.">
-            <FogIcon className="text-base" />
-          </span>
-        )}
-        <button
           onClick={() => setGameSpeed(speed === 1 ? 2 : 1)}
           title={speed === 1 ? 'Speed up battles' : 'Normal speed'}
           aria-label={speed === 1 ? 'Speed up battles' : 'Normal speed'}
@@ -200,11 +185,6 @@ export const TopBar: React.FC<TopBarProps> = ({
         >
           <SpeedIcon className="text-base" />{speed}x
         </button>
-        {onSave && (
-          <button onClick={onSave} title="Save game" aria-label="Save game" className={`${ICON_BUTTON_CLASS} hidden sm:inline-flex`}>
-            <SaveIcon className="text-base" />
-          </button>
-        )}
         <button
           onClick={onToggleMute}
           title={isMuted ? 'Turn sound on' : 'Mute sound'}

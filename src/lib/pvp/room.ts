@@ -28,6 +28,9 @@ export interface RoomSettings {
   fog: boolean;
   turnSeconds: number;
   maxRounds: number;
+  // Everyone plans each round at the same time (their orders are then carried out one side after
+  // another), or the sides take turns
+  simultaneous: boolean;
   // Sides the AI plays, to make up the numbers, and how well
   bots: number;
   botDifficulty: Difficulty;
@@ -42,6 +45,7 @@ export const DEFAULT_ROOM_SETTINGS: RoomSettings = {
   fog: false,
   turnSeconds: DEFAULT_TURN_SECONDS,
   maxRounds: DEFAULT_MAX_ROUNDS,
+  simultaneous: true,
   bots: 0,
   botDifficulty: 'medium'
 };
@@ -275,7 +279,8 @@ export const buildRoomBattle = (members: RoomMember[], settings: RoomSettings, s
     fog: settings.fog,
     difficulty: settings.botDifficulty,
     turnSeconds: settings.turnSeconds,
-    maxRounds: settings.maxRounds
+    maxRounds: settings.maxRounds,
+    simultaneous: settings.simultaneous
   };
   return buildArenaBattle(spec);
 };
@@ -296,6 +301,10 @@ const interleaveTeams = (sides: ArenaSideSpec[]): ArenaSideSpec[] => {
 };
 
 // --- Sending the battle over the channel -------------------------------------------------------------
+
+// The battle as the host sends it on: when everyone plans at once, the orders handed in for the round
+// stay with the host (each side's are seen as they are carried out)
+export const withoutPlans = (state: GameState): GameState => (state.plans ? { ...state, plans: undefined } : state);
 
 // The battle as one side may know it, in the fog of war: the enemy troops it can't see are left out,
 // and so is anything else that would give them away (what its enemies have ordered, what other sides
@@ -436,8 +445,9 @@ export const openBattleChannel = (code: string, userId: string, handlers: Battle
       }
     });
   return {
-    sendState: async (state, recipients) => {
+    sendState: async (battle, recipients) => {
       seq++;
+      const state = withoutPlans(battle);
       // (without fog, or once the battle is over, everyone gets the same)
       if (!recipients || !isFogOfWar(state) || state.currentPhase === 'gameOver') {
         await channel.send({ type: 'broadcast', event: 'state', payload: { data: await packState(state), seq } });

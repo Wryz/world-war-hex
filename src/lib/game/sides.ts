@@ -57,21 +57,47 @@ export const getFriendlyUnits = (state: SidesOf, side: PlayerType): Unit[] =>
 export const isAiSide = (state: Pick<GameState, 'players' | 'sides'>, side: PlayerType): boolean =>
   state.sides ? !!state.players[side]?.ai : side === 'ai';
 
+// Whether the sides plan each round at the same time (see GameSettings.simultaneous)
+export const isSimultaneous = (state: Pick<GameState, 'settings'>): boolean => !!state.settings?.simultaneous;
+
+type TurnsOf = SidesOf & Pick<GameState, 'settings' | 'turnNumber'>;
+
+// The order the sides play in a round (knocked-out sides included). When they plan at the same time
+// their orders are carried out in this order, and the side that goes first moves down it each round.
+export const roundOrder = (state: TurnsOf, round = state.turnNumber): PlayerType[] => {
+  const sides = getSides(state);
+  if (!isSimultaneous(state)) return sides;
+  const shift = ((round - 1) % sides.length + sides.length) % sides.length;
+  return [...sides.slice(shift), ...sides.slice(0, shift)];
+};
+
 // The side whose turn comes after `side` (skipping sides that are out), and whether passing to it
 // starts a new round
-export const nextSide = (state: SidesOf, side: PlayerType): { side: PlayerType; newRound: boolean } => {
+export const nextSide = (state: TurnsOf, side: PlayerType): { side: PlayerType; newRound: boolean } => {
+  const alive = (candidate: PlayerType) => !state.players[candidate]?.eliminated;
+  if (isSimultaneous(state)) {
+    const order = roundOrder(state);
+    const later = order.slice(order.indexOf(side) + 1).find(alive);
+    return later
+      ? { side: later, newRound: false }
+      : { side: roundOrder(state, state.turnNumber + 1).find(alive) ?? side, newRound: true };
+  }
   const order = getSides(state);
   const start = order.indexOf(side);
   for (let step = 1; step <= order.length; step++) {
     const index = (start + step) % order.length;
     const candidate = order[index];
-    if (!state.players[candidate]?.eliminated) return { side: candidate, newRound: index <= start };
+    if (alive(candidate)) return { side: candidate, newRound: index <= start };
   }
   return { side, newRound: true };
 };
 
+// The side that plays first in this round
+export const firstInRound = (state: TurnsOf): PlayerType | undefined =>
+  roundOrder(state).find(side => !state.players[side]?.eliminated);
+
 // The last side to play in a round (a round ends after its turn)
-export const isLastInRound = (state: SidesOf, side: PlayerType): boolean => nextSide(state, side).newRound;
+export const isLastInRound = (state: TurnsOf, side: PlayerType): boolean => nextSide(state, side).newRound;
 
 // Whether only one team is left standing
 export const lastTeamStanding = (state: SidesOf): boolean =>

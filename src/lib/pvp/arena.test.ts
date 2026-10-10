@@ -2,7 +2,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { ArenaSpec, aiSideSpec, arenaGridSize, buildArenaBattle, mirrorSymmetry, sideId } from './arena';
-import { DEFAULT_SETTINGS, findBaseHex } from '../game/gameState';
+import type { GameState } from '@/types/game';
+import {
+  DEFAULT_SETTINGS, closeRoundPlanning, executeMoves, findBaseHex, getDeploymentHexes, getHand, giveOrders, resolveAllCombats, syncHexUnits
+} from '../game/gameState';
+import { roundOrder } from '../game/sides';
+import { planRoundOrders } from '../ai/aiPlayer';
+import { makeUnit } from '../game/testUtils';
 import { createHexagonalGrid } from '../game/mapGenerator';
 import { hexOrbit } from '../game/hexUtils';
 
@@ -65,4 +71,47 @@ test('fair mode fields every card at the same level', () => {
   for (const side of ['s1', 's2']) {
     assert.ok(Object.values(state.rosters![side]).every(stats => stats!.level === 5));
   }
+});
+
+// Play out the turn under way: its orders carried out, its battles fought and the turn passed on
+const playTurn = (state: GameState): GameState => {
+  let next = executeMoves(state);
+  if (next.currentPhase === 'combat') next = resolveAllCombats(next);
+  return next;
+};
+
+test('when everyone plans at once, the round opens with all sides planning, then their orders are carried out one side after another - the first moving down the order each round', () => {
+  let state = buildArenaBattle(spec(3, { simultaneous: true }));
+  assert.equal(state.roundPlanning, true);
+  for (const round of [1, 2, 3]) {
+    assert.equal(state.turnNumber, round);
+    assert.equal(state.roundPlanning, true, `round ${round} opens with everyone planning`);
+    // Every side plans on the same board
+    const plans = Object.fromEntries(state.sides!.map(side => [side, planRoundOrders(state, side)]));
+    state = closeRoundPlanning({ ...state, plans });
+    const order: string[] = [];
+    while (state.turnNumber === round && state.currentPhase === 'planning' && !state.roundPlanning) {
+      const side = state.activePlayer!;
+      order.push(side);
+      state = playTurn(giveOrders(state, side, state.plans![side], { adapt: true }));
+    }
+    assert.deepEqual(order, roundOrder(buildArenaBattle(spec(3, { simultaneous: true })), round), `round ${round}'s order`);
+  }
+  assert.deepEqual(roundOrder({ ...state, turnNumber: 2 }), ['s2', 's3', 's1']);
+});
+
+test('orders planned at the start of the round still go ahead on a board that has changed since', () => {
+  const state = closeRoundPlanning(buildArenaBattle(spec(2, { simultaneous: true })));
+  const side = state.activePlayer!;
+  // (a recruit planned on a hex that has been taken since deploys on the nearest free one instead)
+  const free = getDeploymentHexes(state, side);
+  const card = getHand(state, side)[0];
+  const blocked = free[0].coordinates;
+  const taken: GameState = { ...state, players: { ...state.players, [side]: { ...state.players[side], units: [...state.players[side].units, makeUnit(side, blocked)] } } };
+  syncHexUnits(taken);
+  const plan = { moves: [], purchases: [{ playerId: state.players[side].id, unitType: card, position: blocked }] };
+  assert.equal(giveOrders(taken, side, plan).pendingPurchases.length, 0, 'not as given');
+  const adapted = giveOrders(taken, side, plan, { adapt: true });
+  assert.equal(adapted.pendingPurchases.length, 1, 'deployed all the same');
+  assert.ok(!adapted.pendingPurchases.some(p => p.position.q === blocked.q && p.position.r === blocked.r));
 });

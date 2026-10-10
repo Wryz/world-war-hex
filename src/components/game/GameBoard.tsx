@@ -49,7 +49,6 @@ import {
 import { areAllies, getAllUnits, getEnemySides, getEnemyUnits, getFriendlyUnits, isMultiSide } from '@/lib/game/sides';
 import { ROMAN, unitSignature } from '@/lib/game/signatures';
 import { getHexDistance } from '@/lib/game/hexUtils';
-import { estimateDamage, getThreatLevels, getThreats } from '@/lib/game/threats';
 import { HEX_SIZE, axialToWorld, getHexHeight, getHexSurfaceHeight } from './utils/boardGeometry';
 import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
@@ -151,8 +150,6 @@ interface GameBoardProps {
   selectedUnitTypeForPurchase?: UnitType | null;
   // Every unit really on the board (the state shown may leave out enemies hidden in the fog)
   unitIds?: Set<string>;
-  // Tint the hexes enemies can strike next turn, and label damage for the selected troop
-  showThreats?: boolean;
   // The first battle's tutorial: where it points the camera, and what it marks on the board
   tutorial?: TutorialVisuals | null;
   // The side the board is seen from (yours): 'player' against the AI
@@ -1177,7 +1174,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   assetsLoaded,
   selectedUnitTypeForPurchase = null,
   unitIds,
-  showThreats = false,
   tutorial = null,
   viewer = 'player'
 }) => {
@@ -1256,7 +1252,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPhase, combats, hexByKey, turnNumber]);
 
-  // --- Fog and threats ------------------------------------------------------------------------
+  // --- Fog ------------------------------------------------------------------------
 
   // Hexes the player's troops can see (null without fog)
   const visibleKeys = useMemo(
@@ -1265,12 +1261,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [players, hexGrid]
   );
-  const threats = useMemo(
-    () => (showThreats ? getThreats(gameState, viewer) : null),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [showThreats, players, hexGrid]
-  );
-  const threatLevels = useMemo(() => (threats ? getThreatLevels(threats) : null), [threats]);
   // Enemy troops that slipped back into the fog, marked where they were last seen
   const lastSeen = useMemo(() => {
     const occupied = new Set(getAllUnits(gameState).map(unit => coordKey(unit.position)));
@@ -1280,17 +1270,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [players, hexByKey, gameState.sightings]);
-  // With a troop selected: the most damage it could take next turn on each hex it can move to
-  const damageLabels = useMemo(() => {
-    if (!threats || !selectedUnit || selectedUnit.owner !== viewer) return [];
-    return [selectedUnit.position, ...validMoves].flatMap(coordinates => {
-      const hex = hexByKey.get(coordKey(coordinates));
-      const damage = estimateDamage(gameState, selectedUnit, coordinates, threats.get(coordKey(coordinates)));
-      return hex && damage > 0 ? [{ key: coordKey(coordinates), hex, damage, lethal: damage >= selectedUnit.lifespan }] : [];
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [threats, selectedUnit, validMoves, hexByKey]);
-
   // --- Interaction -----------------------------------------------------------------------
 
   const handleHexClick = (hex: Hex) => {
@@ -1849,29 +1828,10 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             onHexHover={handleHexHover}
             onHexHoverEnd={handleHexHoverEnd}
             fogged={!!visibleKeys && !visibleKeys.has(key)}
-            threat={threatLevels?.get(key) ?? 0}
             decor={decor}
           />
         );
       })}
-
-      {/* Threat preview: the most damage the selected troop could take on each hex it can reach */}
-      {damageLabels.map(label => (
-        <Html
-          key={`threat-${label.key}`}
-          position={labelPosition(label.hex)}
-          center
-          zIndexRange={[4, 0]}
-          style={{ pointerEvents: 'none' }}
-        >
-          <span
-            className={`font-display whitespace-nowrap rounded-full px-1.5 py-0.5 text-xs shadow ${label.lethal ? 'bg-rose-700 text-white' : 'bg-slate-900/85 text-rose-300'}`}
-            title={label.lethal ? 'Enemies could destroy this troop here' : 'Most damage enemies could deal here next turn'}
-          >
-            {label.lethal ? '☠ ' : ''}-{label.damage}
-          </span>
-        </Html>
-      ))}
 
       {/* Callouts over each battle for the special effects at work in it */}
       {battleCallouts.map(({ key, hex, effects, playerAttacking }) => (

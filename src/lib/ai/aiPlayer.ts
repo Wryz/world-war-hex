@@ -9,7 +9,8 @@ import {
   Hex,
   HexCoordinates,
   TerrainType,
-  TroopStats
+  TroopStats,
+  SidePlan
 } from '@/types/game';
 import {
   getHexDistance,
@@ -387,6 +388,13 @@ const projectSides = (state: GameState, side: PlayerType): GameState => {
       unit: hex.unit && unitsById.get(hex.unit.id)
     }))
   };
+};
+
+// A side's orders for a round that every side plans at once: planned on the board as the round
+// starts, like everyone else's
+export const planRoundOrders = (state: GameState, side: PlayerType, options: AIPlanOptions = {}): SidePlan => {
+  const planned = planSideTurn({ ...state, activePlayer: side, pendingMoves: [], pendingPurchases: [] }, side, options);
+  return { moves: planned.pendingMoves, purchases: planned.pendingPurchases };
 };
 
 // Plan the turn of a side in a battle between more sides: on the board as that side sees it (its

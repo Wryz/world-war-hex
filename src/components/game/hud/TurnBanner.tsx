@@ -13,18 +13,34 @@ interface TurnBannerProps {
   viewer?: PlayerType;
   activeName?: string;
   activeIsAlly?: boolean;
+  // Everyone plans each round at once (and whether the round is being planned now, rather than the
+  // sides' orders carried out one after another)
+  simultaneous?: boolean;
+  planningRound?: boolean;
 }
 
 const BANNER_DURATION = 1800;
 
 // Big announcement whenever the turn changes or a battle starts
-export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, turnNumber, maxRounds, viewer = 'player', activeName, activeIsAlly = false }) => {
+export const TurnBanner: React.FC<TurnBannerProps> = ({
+  phase, activePlayer, turnNumber, maxRounds, viewer = 'player', activeName, activeIsAlly = false, simultaneous = false, planningRound = false
+}) => {
   const [banner, setBanner] = useState<{ key: string; title: string; subtitle: string; color: string; isBattle?: boolean } | null>(null);
 
   useEffect(() => {
     let next: typeof banner = null;
 
-    if (phase === 'planning') {
+    if (phase === 'planning' && simultaneous) {
+      const round = turnNumber >= maxRounds ? 'Final round!' : `Round ${turnNumber} of ${maxRounds}`;
+      next = planningRound
+        ? { key: `r-${turnNumber}`, title: 'Plan Your Moves', subtitle: `${round} · everyone plans at once`, color: sideColor(viewer) }
+        : {
+          key: `o-${turnNumber}-${activePlayer}`,
+          title: activePlayer === viewer ? 'Your Orders' : `${activeName ?? 'Enemy'}'s Orders`,
+          subtitle: round,
+          color: sideColor(activePlayer)
+        };
+    } else if (phase === 'planning') {
       const round = turnNumber >= maxRounds ? 'Final round!' : `Round ${turnNumber} of ${maxRounds}`;
       next = activePlayer === viewer
         ? { key: `p-${turnNumber}-${activePlayer}`, title: 'Your Turn', subtitle: round, color: sideColor(activePlayer) }
@@ -44,7 +60,7 @@ export const TurnBanner: React.FC<TurnBannerProps> = ({ phase, activePlayer, tur
     setBanner(next);
     const timeout = setTimeout(() => setBanner(null), BANNER_DURATION);
     return () => clearTimeout(timeout);
-  }, [phase, activePlayer, turnNumber, maxRounds, viewer, activeName, activeIsAlly]);
+  }, [phase, activePlayer, turnNumber, maxRounds, viewer, activeName, activeIsAlly, simultaneous, planningRound]);
 
   return (
     <div className="fixed inset-x-0 top-1/3 z-30 flex justify-center pointer-events-none" role="status" aria-live="polite">

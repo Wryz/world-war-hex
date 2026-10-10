@@ -281,6 +281,18 @@ export interface GameState {
   // the battlefield, seen or not, so the board can tell a troop that slipped into the fog from one
   // that fell
   knownUnitIds?: string[];
+  // A battle whose sides plan at the same time (settings.simultaneous): whether the round's planning
+  // is still open (everyone is giving orders), the orders handed in so far - kept on the game that
+  // runs the battle, never shown to the others - and the sides that have handed theirs in
+  roundPlanning?: boolean;
+  plans?: Record<PlayerType, SidePlan>;
+  ready?: PlayerType[];
+}
+
+// A side's orders for a round planned at the same time as the others'
+export interface SidePlan {
+  moves: Move[];
+  purchases: Purchase[];
 }
 
 export type HealthCause =
@@ -382,4 +394,8 @@ export interface GameSettings {
   // A mirrored map: the board looks the same turned through each of this many equal parts (2, 3 or
   // 6), so every side - or team - starts from the same ground
   symmetry?: number;
+  // Every side plans its turn at the same time (a battle between more sides): each round opens with
+  // everyone giving their orders on the same board, then the sides' orders are carried out one after
+  // another - the side that goes first moving down the order each round
+  simultaneous?: boolean;
 }

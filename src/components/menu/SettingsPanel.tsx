@@ -18,6 +18,7 @@ import { setMuted, setSfxVolume, useMuted, useSfxVolume } from '../game/utils/So
 import { setGameSpeed, useGameSpeed } from '../game/effects/effects';
 import { TERRAIN_ORDER, TERRAIN_SHORT_EFFECTS } from '../game/hud/terrainInfo';
 import { CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
+import { SaveFileControls } from './SaveFileControls';
 import {
   AttackIcon, FormationIcon, ShakenIcon, TraitIcon, WeatherIcon, CampIcon, CloseIcon, CrownIcon, FogIcon, GameplayIcon, GoldIcon, GuideIcon, MusicIcon,
   SettingsIcon, ShieldIcon, DownloadIcon, SkullIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, TerrainIcon, ThreatIcon, SignatureIcon, FellIcon, AbilityIcon
@@ -230,7 +231,8 @@ const GameplayTab: React.FC<{ onStartQuickBattle?: (difficulty: Difficulty) => v
           </span>
         </label>
       )}
-      <p className="text-xs text-slate-400">Your progress, save file and lifetime stats live in Stats &amp; Save on the main menu.</p>
+      <SaveFileControls title={<b className="block text-slate-100">Your save</b>} />
+      <p className="text-xs text-slate-400">Lifetime stats live in Stats &amp; Save on the main menu.</p>
     </div>
   );
 };

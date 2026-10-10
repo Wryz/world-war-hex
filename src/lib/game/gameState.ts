@@ -15,6 +15,7 @@ import {
   Move,
   UnitAction,
   Purchase,
+  SidePlan,
   Sighting,
   Combat,
   GameSettings,
@@ -65,7 +66,7 @@ import {
 } from './regionRules';
 import {
   areAllies, getAllUnits, getEnemySides, getEnemyUnits, getFriendlyUnits, getLivingSides, getSides, isLastInRound,
-  isMultiSide, lastTeamStanding, nextSide, sideName, sidePossessive, sideVerb, TWO_SIDES
+  firstInRound, isMultiSide, isSimultaneous, lastTeamStanding, nextSide, sideName, sidePossessive, sideVerb, TWO_SIDES
 } from './sides';
 
 // Default game settings: a small board and short turns so a battle takes a few minutes
@@ -1710,6 +1711,67 @@ export const cancelPendingMove = (state: GameState, unitId: string): GameState =
   return cancelPendingPurchase(settled, move.playerId, move.from);
 };
 
+// Give a side's orders on the board as it is now (it must be the side's turn), each order given
+// again until no more of them take: one may only be valid once another has been given (a recruit
+// deploying on a hex a troop is leaving). Moves come before recruits.
+//
+// With `adapt` the orders were planned on the board as it stood at the start of the round, and other
+// sides have played since: a troop whose hex can no longer be reached heads as near to it as it can
+// get, and a recruit whose hex is no longer free deploys on the nearest free one. Work that can't
+// be done any more, and troops that have fallen, are left out.
+export const giveOrders = (state: GameState, side: PlayerType, plan: SidePlan | undefined, { adapt = false } = {}): GameState => {
+  const playerId = state.players[side]?.id;
+  let planned: GameState = { ...state, pendingMoves: [], pendingPurchases: [] };
+  if (!playerId || !plan) return planned;
+  const give = (current: GameState, order: Move | Purchase): GameState => 'unitId' in order
+    ? addPendingMove(current, order.unitId, playerId, order.to, order.action)
+    : addPendingPurchase(current, playerId, order.unitType, order.position);
+  const giveAll = <T extends Move | Purchase>(orders: T[]): T[] => {
+    let waiting = orders;
+    while (waiting.length > 0) {
+      const left: T[] = [];
+      for (const order of waiting) {
+        const next = give(planned, order);
+        if (next === planned) left.push(order);
+        planned = next;
+      }
+      if (left.length === waiting.length) break;
+      waiting = left;
+    }
+    return waiting;
+  };
+  const left = giveAll<Move | Purchase>([...plan.moves, ...plan.purchases]);
+  if (!adapt || left.length === 0) return planned;
+
+  const nearest = (options: HexCoordinates[], goal: HexCoordinates, from: HexCoordinates) =>
+    [...options].sort((a, b) => getHexDistance(a, goal) - getHexDistance(b, goal) || getHexDistance(from, a) - getHexDistance(from, b))[0];
+  for (const move of left.filter((order): order is Move => 'unitId' in order)) {
+    const unit = planned.players[side].units.find(u => u.id === move.unitId);
+    if (!unit || move.action || isWorkOrder(planned, move) || planned.pendingMoves.some(m => m.unitId === unit.id)) continue;
+    const closer = getValidMoveTargets(planned, unit).filter(c => getHexDistance(c, move.to) < getHexDistance(unit.position, move.to));
+    const to = closer.length > 0 ? nearest(closer, move.to, unit.position) : undefined;
+    if (to) planned = addPendingMove(planned, unit.id, playerId, to);
+  }
+  for (const purchase of giveAll(left.filter((order): order is Purchase => !('unitId' in order)))) {
+    const free = getDeploymentHexes(planned, side).map(hex => hex.coordinates);
+    if (free.length > 0) planned = addPendingPurchase(planned, playerId, purchase.unitType, nearest(free, purchase.position, purchase.position));
+  }
+  return planned;
+};
+
+// Sides that plan together: the round's planning is over, and the turns in which their orders are
+// carried out begin with the first side's (each side's orders are given as its turn comes, with
+// giveOrders)
+export const closeRoundPlanning = (state: GameState): GameState => ({
+  ...state,
+  roundPlanning: false,
+  ready: [],
+  activePlayer: firstInRound(state) ?? getActivePlayer(state),
+  pendingMoves: [],
+  pendingPurchases: [],
+  planningTimeRemaining: getSettings(state).planningPhaseTime
+});
+
 // ---------------------------------------------------------------------------
 // Execution phase
 // ---------------------------------------------------------------------------
@@ -1726,7 +1788,8 @@ export const resign = (state: GameState, side: PlayerType = 'player'): GameState
     addLog(newState, side, `${sideName(newState, side)} gives up the battle.`);
     eliminate(newState, side);
     const settled = settleEliminations(newState, 'resigned');
-    if (settled.currentPhase === 'gameOver' || getActivePlayer(state) !== side) return settled;
+    // (while every side plans the round, nobody's turn is under way)
+    if (settled.currentPhase === 'gameOver' || getActivePlayer(state) !== side || state.roundPlanning) return settled;
     // (on its own turn: its orders are dropped and the next side's turn begins)
     return passTurn({ ...settled, pendingMoves: [], pendingPurchases: [], combats: [], siege: undefined, currentPhase: 'planning' }, side);
   }
@@ -2919,7 +2982,9 @@ const passTurn = (state: GameState, side: PlayerType): GameState => {
     activePlayer: next,
     currentPhase: 'planning',
     turnNumber: newRound ? state.turnNumber + 1 : state.turnNumber,
-    planningTimeRemaining: getSettings(state).planningPhaseTime
+    planningTimeRemaining: getSettings(state).planningPhaseTime,
+    // (sides that plan together all start planning the new round)
+    ...(isSimultaneous(state) && newRound ? { roundPlanning: true, plans: {}, ready: [] } : {})
   };
 };
 

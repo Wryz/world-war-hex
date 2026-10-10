@@ -6,6 +6,7 @@ import {
   Move,
   PlayerType,
   Purchase,
+  SidePlan,
   Unit,
   UnitType,
   UnitAction
@@ -16,6 +17,7 @@ import {
   cancelPendingMove,
   cancelPendingPurchase,
   chooseCastle,
+  closeRoundPlanning,
   coordsEqual,
   executeMoves,
   endTurn,
@@ -30,11 +32,12 @@ import {
   isImpassable,
   TERRAIN_EFFECTS,
   resolveAllCombats,
-  getMovementRange
+  getMovementRange,
+  giveOrders
 } from '@/lib/game/gameState';
 import { getHexDistance } from '@/lib/game/hexUtils';
-import { isAiSide, isMultiSide } from '@/lib/game/sides';
-import { planAITurn } from '@/lib/ai/aiPlayer';
+import { getLivingSides, isAiSide, isMultiSide, isSimultaneous } from '@/lib/game/sides';
+import { planAITurn, planRoundOrders } from '@/lib/ai/aiPlayer';
 import { trackEvent } from '@/lib/analytics';
 import { buildBattle } from '@/lib/campaign/battleSetup';
 import { getProfile } from '@/lib/meta/profile';
@@ -138,6 +141,32 @@ export interface BattleLink {
   sendOrders?: (orders: TurnOrders) => void;
 }
 
+// Sides that plan together (settings.simultaneous): whether every side is planning the round
+const isRoundPlanning = (state: GameState): boolean =>
+  isSimultaneous(state) && !!state.roundPlanning && state.currentPhase === 'planning';
+
+// The sides played by people that the round still waits on for their orders
+export const waitingOn = (state: GameState): PlayerType[] =>
+  getLivingSides(state).filter(side => !isAiSide(state, side) && !state.ready?.includes(side));
+
+// The viewer's copy of a round everyone plans at once: they give their orders on the board as the
+// round opened, as though it were their turn (the battle itself waits for everyone's orders). Their
+// orders so far stand if the round's board changes while they plan (someone gave up).
+const planningCopy = (state: GameState, previous: GameState, viewer: PlayerType): GameState => {
+  if (!state.players[viewer] || state.players[viewer].eliminated) return { ...state, plans: undefined };
+  const copy: GameState = { ...state, activePlayer: viewer, pendingMoves: [], pendingPurchases: [], plans: undefined };
+  const sameRound = isRoundPlanning(previous) && previous.turnNumber === state.turnNumber &&
+    previous.activePlayer === viewer && !!previous.players[viewer];
+  if (!sameRound) return copy;
+  return {
+    ...copy,
+    pendingMoves: previous.pendingMoves,
+    pendingPurchases: previous.pendingPurchases,
+    players: { ...copy.players, [viewer]: previous.players[viewer] },
+    ...(previous.decks?.[viewer] ? { decks: { ...copy.decks, [viewer]: previous.decks[viewer] } } : {})
+  };
+};
+
 // A remote side gets this long beyond the turn's time for its orders to arrive before its turn
 // ends without them
 const REMOTE_GRACE_SECONDS = 6;
@@ -162,7 +191,10 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
   const [initialGame] = useState(() => initialState
     ? { gameState: initialState, elapsedSeconds: 0, isResumed: true }
     : createInitialGame(battle, resume));
-  const [gameState, setGameState] = useState<GameState>(initialGame.gameState);
+  // (a round everyone plans at once is planned on the viewer's copy of it)
+  const [gameState, setGameState] = useState<GameState>(() => isRoundPlanning(initialGame.gameState)
+    ? planningCopy(initialGame.gameState, initialGame.gameState, viewer)
+    : initialGame.gameState);
   const [selectedHex, setSelectedHex] = useState<Hex | null>(null);
   const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
   const [selectedUnitTypeForPurchase, setSelectedUnitTypeForPurchase] = useState<UnitType | null>(null);
@@ -170,6 +202,9 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
   // A hex where the selected troop could either move or do some work: the player picks which
   const [actionChoice, setActionChoice] = useState<{ unitId: string; at: HexCoordinates; actions: UnitAction[]; canMove: boolean } | null>(null);
   const [timer, setTimer] = useState(initialGame.gameState.planningTimeRemaining);
+  // (the game that runs the battle, while every side plans the round) the battle as the round opened,
+  // with the orders handed in so far
+  const roundRef = useRef<GameState | null>(link?.role !== 'guest' && isRoundPlanning(initialGame.gameState) ? initialGame.gameState : null);
   // Short warning shown to the player, e.g. when they pick a hex a unit can't move to
   const [notice, setNotice] = useState<{ id: number; text: string } | null>(null);
   // Wall-clock seconds spent in this battle (for stats)
@@ -192,9 +227,18 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
 
   const linkRef = useRef(link);
   linkRef.current = link;
+  const viewerRef = useRef(viewer);
+  viewerRef.current = viewer;
   const commitState = useCallback((newState: GameState, record = true) => {
-    stateRef.current = newState;
-    setGameState(newState);
+    let shown = newState;
+    // A round every side plans at once: the battle waits for everyone's orders, and the viewer gives
+    // theirs on a copy of it
+    if (record && isRoundPlanning(newState)) {
+      if (linkRef.current?.role !== 'guest') roundRef.current = newState;
+      shown = planningCopy(newState, stateRef.current, viewerRef.current);
+    }
+    stateRef.current = shown;
+    setGameState(shown);
     if (record) recordFrame(replayRef.current, newState);
     // (the host passes every step of the battle on - but not the orders it is still giving)
     if (record && linkRef.current?.role === 'host') linkRef.current.onState?.(newState);
@@ -219,21 +263,27 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
   // Another side's turn (the AI's, or someone else's online): the viewer waits
   const isAITurn = activeSide !== viewer;
   // The AI plays this turn (on the game that runs the battle: never a guest's)
-  const isAiPlaying = isAiSide(gameState, activeSide) && link?.role !== 'guest' && !gameState.players[activeSide]?.eliminated;
+  // (when every side plans at once, the AI's orders are planned as the round opens: see closeRound)
+  const simultaneous = isSimultaneous(gameState);
+  const isAiPlaying = isAiSide(gameState, activeSide) && link?.role !== 'guest' && !gameState.players[activeSide]?.eliminated && !simultaneous;
   // Someone elsewhere plays this turn (the host waits for their orders)
-  const isRemoteTurn = link?.role === 'host' && !!link.isRemoteSide?.(activeSide);
+  const isRemoteTurn = link?.role === 'host' && !!link.isRemoteSide?.(activeSide) && !simultaneous;
+  // Every side is planning the round
+  const planningRound = isRoundPlanning(gameState);
   const isGuest = link?.role === 'guest';
   const multi = isMultiSide(gameState);
   const { currentPhase, turnNumber } = gameState;
   // Whether the player may act right now (read from the ref so it's correct even before a re-render)
-  const viewerRef = useRef(viewer);
-  viewerRef.current = viewer;
+  // (when every side plans at once, only while the round is being planned: the turns after it carry
+  // out what was planned)
   const isPlayerPlanning = () =>
     stateRef.current.currentPhase === 'planning' && (stateRef.current.activePlayer ?? 'player') === viewerRef.current &&
-    !stateRef.current.players[viewerRef.current]?.eliminated && !ordersSentRef.current;
-  // (a guest has sent this turn's orders and waits for the host to carry them out)
+    !stateRef.current.players[viewerRef.current]?.eliminated && !ordersSentRef.current &&
+    (!isSimultaneous(stateRef.current) || (!!stateRef.current.roundPlanning && !stateRef.current.ready?.includes(viewerRef.current)));
+  // (a guest has sent this turn's orders and waits for the host to carry them out; or, when every
+  // side plans at once, the viewer has handed in their orders for the round)
   const ordersSentRef = useRef<string | null>(null);
-  const turnKey = (state: GameState) => `${state.turnNumber}-${state.activePlayer}`;
+  const turnKey = (state: GameState) => isRoundPlanning(state) ? `${state.turnNumber}-round` : `${state.turnNumber}-${state.activePlayer}`;
   if (ordersSentRef.current && ordersSentRef.current !== turnKey(gameState)) ordersSentRef.current = null;
 
   const clearSelection = useCallback(() => {
@@ -283,29 +333,124 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
     const current = stateRef.current;
     // The turn may already have ended (e.g. the timer ran out just before Confirm was clicked)
     if (current.currentPhase !== 'planning' || (current.activePlayer ?? 'player') !== viewer || ordersSentRef.current) return;
+    if (isSimultaneous(current) && (!current.roundPlanning || current.ready?.includes(viewer))) return;
 
     clearSelection();
+    const playerId = current.players[viewer]?.id;
+    const orders: TurnOrders = {
+      turn: current.turnNumber,
+      side: viewer,
+      moves: current.pendingMoves.filter(move => move.playerId === playerId),
+      purchases: current.pendingPurchases.filter(purchase => purchase.playerId === playerId)
+    };
     // (a guest hands its orders to the host, which carries them out for everyone)
     if (linkRef.current?.role === 'guest') {
-      const playerId = current.players[viewer]?.id;
       ordersSentRef.current = turnKey(current);
-      linkRef.current.sendOrders?.({
-        turn: current.turnNumber,
-        side: viewer,
-        moves: current.pendingMoves.filter(move => move.playerId === playerId),
-        purchases: current.pendingPurchases.filter(purchase => purchase.playerId === playerId)
-      });
+      linkRef.current.sendOrders?.(orders);
       setGameState({ ...current });
+      return;
+    }
+    // (every side plans the round: the viewer's orders wait for everyone else's)
+    if (isRoundPlanning(current)) {
+      ordersSentRef.current = turnKey(current);
+      setGameState({ ...current });
+      handInPlanRef.current(orders);
       return;
     }
     recordFrame(replayRef.current, current);
     commitState(executeTurn(current));
   }, [clearSelection, commitState, viewer]);
 
+  // (the game that runs the battle) The round's planning is over - everyone has handed in their
+  // orders, or time is up: the AI's sides plan theirs on the board as the round opened, like everyone
+  // else, and the turns that carry them all out begin
+  const closeRound = useCallback(() => {
+    const round = roundRef.current;
+    if (!round || !isRoundPlanning(round)) return;
+    roundRef.current = null;
+    const plans: Record<PlayerType, SidePlan> = { ...round.plans };
+    // (the viewer's orders count as they stand if they never handed them in: their clock stops while
+    // the page is out of sight)
+    const own = stateRef.current;
+    const viewerSide = viewerRef.current;
+    if (!plans[viewerSide] && isRoundPlanning(own) && own.turnNumber === round.turnNumber && own.activePlayer === viewerSide && !own.players[viewerSide]?.eliminated) {
+      const playerId = own.players[viewerSide].id;
+      plans[viewerSide] = {
+        moves: own.pendingMoves.filter(move => move.playerId === playerId),
+        purchases: own.pendingPurchases.filter(purchase => purchase.playerId === playerId)
+      };
+    }
+    for (const side of getLivingSides(round)) {
+      if (isAiSide(round, side) && !plans[side]) plans[side] = planRoundOrders(round, side);
+    }
+    commitState(closeRoundPlanning({ ...round, plans }));
+  }, [commitState]);
+
+  // (the game that runs the battle) A side's orders for the round, handed in: everyone learns who is
+  // ready, and once nobody is left to wait on, the round is played out
+  const handInPlan = useCallback((orders: TurnOrders) => {
+    const round = roundRef.current;
+    if (!round || !isRoundPlanning(round) || round.turnNumber !== orders.turn) return;
+    if (!round.players[orders.side] || round.players[orders.side].eliminated || round.ready?.includes(orders.side)) return;
+    const next: GameState = {
+      ...round,
+      plans: { ...round.plans, [orders.side]: { moves: orders.moves, purchases: orders.purchases } },
+      ready: [...(round.ready ?? []), orders.side]
+    };
+    roundRef.current = next;
+    linkRef.current?.onState?.(next);
+    const shown = planningCopy(next, stateRef.current, viewerRef.current);
+    stateRef.current = shown;
+    setGameState(shown);
+    if (waitingOn(next).length === 0) closeRound();
+  }, [closeRound]);
+  const handInPlanRef = useRef(handInPlan);
+  handInPlanRef.current = handInPlan;
+
+  // (the game that runs the battle) As a round every side plans opens: with nobody to wait on (the
+  // viewer is out, and only the AI's sides are left) it is played out at once; online, the others get
+  // a little longer than the planning time for their orders to arrive, then it goes ahead without
+  // those still missing
+  useEffect(() => {
+    if (!isReady || !planningRound || isGuest) return;
+    const round = roundRef.current;
+    if (!round) return;
+    if (waitingOn(round).length === 0) {
+      const timeout = setTimeout(closeRound, AI_PLANNING_DELAY / getGameSpeed());
+      return () => clearTimeout(timeout);
+    }
+    if (!link) return;
+    const timeout = setTimeout(closeRound, (round.planningTimeRemaining + REMOTE_GRACE_SECONDS) * 1000);
+    return () => clearTimeout(timeout);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, planningRound, turnNumber, isGuest, closeRound]);
+
+  // (the game that runs the battle) The turns after a round every side planned: each side's orders,
+  // given on the board as it is by then, then carried out
+  useEffect(() => {
+    if (!isReady || !simultaneous || isGuest || currentPhase !== 'planning' || gameState.roundPlanning) return;
+    let executionTimeout: ReturnType<typeof setTimeout> | undefined;
+    const speed = getGameSpeed();
+    const planningTimeout = setTimeout(() => {
+      const current = stateRef.current;
+      const side = current.activePlayer ?? viewerRef.current;
+      commitState(giveOrders(current, side, current.plans?.[side], { adapt: true }));
+      executionTimeout = setTimeout(() => {
+        commitState(executeTurn(stateRef.current));
+      }, AI_EXECUTION_DELAY / speed);
+    }, Math.max(AI_PLANNING_DELAY / speed, timelineWait(stateRef.current)));
+    return () => {
+      clearTimeout(planningTimeout);
+      if (executionTimeout) clearTimeout(executionTimeout);
+    };
+  }, [isReady, simultaneous, isGuest, currentPhase, gameState.roundPlanning, turnNumber, activeSide, commitState]);
+
   // Planning timer for the player's turn - when it runs out the turn ends automatically.
   // It doesn't start until the board is visible, and pauses while the tab is in the background.
   useEffect(() => {
     if (!isReady || currentPhase !== 'planning' || isAITurn || untimed || gameState.players[viewer]?.eliminated) return;
+    // (when every side plans at once, the clock runs while the round is planned)
+    if (simultaneous && !gameState.roundPlanning) return;
 
     let remaining = stateRef.current.planningTimeRemaining;
     setTimer(remaining);
@@ -323,7 +468,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
 
     return () => clearInterval(timerInterval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, currentPhase, isAITurn, turnNumber, executeAllMoves, untimed]);
+  }, [isReady, currentPhase, isAITurn, turnNumber, executeAllMoves, untimed, gameState.roundPlanning]);
 
   // Another side's turn online: the host waits for its orders, a little longer than the turn lasts
   // (they arrive through applyRemoteOrders), then ends the turn without them
@@ -340,36 +485,31 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
 
   // (host) A remote side's orders for its turn: given on the board as that side, then carried out
   const applyRemoteOrders = useCallback((orders: TurnOrders) => {
+    // (when every side plans at once, they're the side's orders for the round)
+    if (isSimultaneous(stateRef.current)) {
+      if (linkRef.current?.isRemoteSide?.(orders.side)) handInPlan(orders);
+      return;
+    }
     const current = stateRef.current;
     if (current.currentPhase !== 'planning' || current.activePlayer !== orders.side || current.turnNumber !== orders.turn) return;
     if (!linkRef.current?.isRemoteSide?.(orders.side)) return;
-    const playerId = current.players[orders.side]?.id;
-    if (!playerId) return;
-    // Moves first (a recruit may deploy on a hex a troop is leaving), each order given again until no
-    // more of them take (one may only be valid once another has been given)
-    let planned: GameState = { ...current, pendingMoves: [], pendingPurchases: [] };
-    const give = (state: GameState, order: Move | Purchase): GameState => 'unitId' in order
-      ? addPendingMove(state, order.unitId, playerId, order.to, order.action)
-      : addPendingPurchase(state, playerId, order.unitType, order.position);
-    let waiting: (Move | Purchase)[] = [...orders.moves, ...orders.purchases];
-    while (waiting.length > 0) {
-      const left: (Move | Purchase)[] = [];
-      for (const order of waiting) {
-        const next = give(planned, order);
-        if (next === planned) left.push(order);
-        planned = next;
-      }
-      if (left.length === waiting.length) break;
-      waiting = left;
-    }
-    commitState(executeTurn(planned));
-  }, [commitState]);
+    if (!current.players[orders.side]) return;
+    commitState(executeTurn(giveOrders(current, orders.side, orders)));
+  }, [commitState, handInPlan]);
 
   // (guest) The battle as the host has it now
   const receiveState = useCallback((next: GameState) => {
     const current = stateRef.current;
+    // A round every side plans at once, still being planned: who has handed in their orders (or who
+    // gave up) - the viewer's own orders so far stand
+    if (isRoundPlanning(next) && isRoundPlanning(current) && next.turnNumber === current.turnNumber) {
+      const shown = planningCopy(next, current, viewerRef.current);
+      stateRef.current = shown;
+      setGameState(shown);
+      return;
+    }
     // (still giving this turn's orders: the host's copy of the same moment would wipe them)
-    if (isPlayerPlanning() && turnKey(next) === turnKey(current) && next.currentPhase === current.currentPhase) return;
+    if (!isSimultaneous(next) && isPlayerPlanning() && turnKey(next) === turnKey(current) && next.currentPhase === current.currentPhase) return;
     // Troops walk into their battles before they fight, as on the host's board
     if ((next.currentPhase === 'combat' || next.currentPhase === 'execution') && current.currentPhase === 'planning') {
       setBattleStartDelay(getArrivalTime(current, next));
@@ -653,15 +793,18 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
       onGuestResign?.();
       return;
     }
-    commitState(resign(stateRef.current, viewer));
+    resignSide(viewer);
   };
 
   // (host) A side gives up (a guest who resigned or left for good)
+  // (while every side plans the round, it leaves the round as it opened: and it may have been the
+  // last side the round was waiting on)
   const resignSide = useCallback((side: PlayerType) => {
-    const current = stateRef.current;
+    const current = roundRef.current ?? stateRef.current;
     if (current.currentPhase === 'gameOver' || current.players[side]?.eliminated) return;
     commitState(resign(current, side));
-  }, [commitState]);
+    if (roundRef.current && waitingOn(roundRef.current).length === 0) closeRound();
+  }, [commitState, closeRound]);
 
   return {
     // State
@@ -672,7 +815,11 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
     validMoves,
     isAITurn,
     isRemoteTurn,
-    ordersSent: !!ordersSentRef.current,
+    // (or, when everyone plans at once, the round has the viewer's orders - handed in before a reload)
+    ordersSent: !!ordersSentRef.current || (planningRound && !!gameState.ready?.includes(viewer)),
+    // Every side is planning the round, and the sides played by people it still waits on
+    planningRound,
+    waitingOn: planningRound ? waitingOn(gameState) : [],
     timer,
     elapsedRef,
 
@@ -695,6 +842,9 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
     applyRemoteOrders,
     receiveState,
     resignSide,
+    // The battle as it stands (while every side plans the round: as the round opened, with the orders
+    // handed in so far - not the viewer's copy)
+    getBattleState: () => roundRef.current ?? stateRef.current,
     // The frames of the battle so far (see replay/replay.ts)
     getReplayFrames: () => replayRef.current.frames,
   };

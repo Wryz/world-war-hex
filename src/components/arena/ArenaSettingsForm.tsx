@@ -60,8 +60,15 @@ export const ArenaSettingsForm: React.FC<{
           <option value="mirrored" disabled={!mirrorable}>Mirrored{mirrorable ? '' : ' (not for this many)'}</option>
         </select>
       </label>
+      <label className="block" title="All at once: everyone plans the round together, then the orders play out one side after another (who goes first changes each round)">
+        <span className={LABEL}>Turns</span>
+        <select className={SELECT} disabled={disabled} value={settings.simultaneous ? 'all' : 'one'} onChange={event => set('simultaneous', event.target.value === 'all')}>
+          <option value="all">All at once</option>
+          <option value="one">One at a time</option>
+        </select>
+      </label>
       <label className="block">
-        <span className={LABEL}>Turn time</span>
+        <span className={LABEL}>{settings.simultaneous ? 'Planning time' : 'Turn time'}</span>
         <select className={SELECT} disabled={disabled} value={settings.turnSeconds} onChange={event => set('turnSeconds', Number(event.target.value))}>
           {TURN_SECONDS_CHOICES.map(seconds => <option key={seconds} value={seconds}>{seconds} seconds</option>)}
         </select>

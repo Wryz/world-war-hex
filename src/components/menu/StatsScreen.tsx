@@ -1,18 +1,12 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { trackEvent } from '@/lib/analytics';
-import { isStoragePersisted } from '@/lib/offline';
+import React from 'react';
 import { TroopId, MOB_IDS } from '@/lib/game/troops';
 import { LEVEL_COUNT } from '@/lib/campaign/levels';
-import {
-  exportSave, highestCleared, parseSave, profilePower, replaceProfile, resetProfile, totalStars, useHasHydrated, useProfile
-} from '@/lib/meta/profile';
+import { highestCleared, profilePower, totalStars, useHasHydrated, useProfile } from '@/lib/meta/profile';
 import { useMusic } from '@/lib/audio/music';
-import { clearSavedGame, readRawSave, writeRawSave } from '../game/storage/GameStorage';
 import { TroopCard } from '../game/cards/TroopCard';
-import { MenuShell, CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
-import {
-  DownloadIcon, StatsIcon, TrashIcon, UploadIcon
-} from '../game/icons';
+import { MenuShell, CARD_CLASS } from './MenuShell';
+import { SaveFileControls } from './SaveFileControls';
+import { StatsIcon } from '../game/icons';
 
 const formatTime = (seconds: number) => {
   const hours = Math.floor(seconds / 3600);
@@ -31,13 +25,6 @@ const Stat: React.FC<{ label: string; value: React.ReactNode; accent?: string }>
 export const StatsScreen: React.FC = () => {
   const profile = useProfile();
   const hydrated = useHasHydrated();
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [message, setMessage] = useState<{ text: string; isError?: boolean } | null>(null);
-  // Read in the browser only, so the server render matches
-  const [savesProtected, setSavesProtected] = useState<boolean | null>(null);
-  useEffect(() => {
-    void isStoragePersisted().then(setSavesProtected);
-  }, []);
   useMusic('menu');
 
   const s = profile.stats;
@@ -45,38 +32,6 @@ export const StatsScreen: React.FC = () => {
   const favourites = (Object.entries(s.cardsPlayed) as [TroopId, number][]).sort((a, b) => b[1] - a[1]).slice(0, 4);
   const mostPlayed = favourites[0]?.[1] ?? 1;
   const discovered = MOB_IDS.filter(id => (profile.bestiary[id]?.seen ?? 0) > 0).length;
-
-  const handleExport = () => {
-    const blob = new Blob([exportSave(readRawSave())], { type: 'application/json' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `hex-hordes-save-${new Date().toISOString().slice(0, 10)}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    trackEvent('save_exported');
-    setMessage({ text: 'Save file downloaded. Keep it somewhere safe!' });
-  };
-
-  const handleImport = async (file: File) => {
-    const parsed = parseSave(await file.text());
-    if (!parsed) {
-      setMessage({ text: 'That file isn\'t a Hex Hordes save.', isError: true });
-      return;
-    }
-    if (!window.confirm('Load this save? Your current progress on this computer will be replaced.')) return;
-    replaceProfile(parsed.profile);
-    writeRawSave(parsed.battle);
-    trackEvent('save_imported');
-    setMessage({ text: 'Save loaded. Welcome back, commander!' });
-  };
-
-  const handleReset = () => {
-    if (!window.confirm('Erase all progress (coins, cards, stars and stats)? This cannot be undone.')) return;
-    resetProfile();
-    clearSavedGame();
-    setMessage({ text: 'Progress erased. A fresh campaign awaits.' });
-  };
 
   return (
     <MenuShell title="Stats" icon={<StatsIcon />} wide>
@@ -136,42 +91,7 @@ export const StatsScreen: React.FC = () => {
 
       {/* Saves */}
       <section className={`${CARD_CLASS} mt-4 p-4`}>
-        <h2 className="font-display text-2xl">Your save</h2>
-        <p className="mt-1 text-xs text-slate-400">
-          Progress saves in this browser. Download a save file to back it up or move it to another computer.
-        </p>
-        {savesProtected !== null && (
-          <p className={`mt-1 text-xs ${savesProtected ? 'text-emerald-300' : 'text-slate-400'}`}>
-            {savesProtected
-              ? 'Protected from browser clean-up.'
-              : 'Your browser may clear this if space runs low - keep a backup.'}
-          </p>
-        )}
-        <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={handleExport} className={`${SECONDARY_BUTTON} flex items-center gap-1.5 text-sm`}>
-            <DownloadIcon /> Download save
-          </button>
-          <button onClick={() => fileInputRef.current?.click()} className={`${SECONDARY_BUTTON} flex items-center gap-1.5 text-sm`}>
-            <UploadIcon /> Load save file
-          </button>
-          <button onClick={handleReset} className={`${SECONDARY_BUTTON} flex items-center gap-1.5 bg-red-900 text-sm hover:bg-red-800`}>
-            <TrashIcon /> Erase progress
-          </button>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={event => {
-              const file = event.target.files?.[0];
-              if (file) handleImport(file);
-              event.target.value = '';
-            }}
-          />
-        </div>
-        {message && (
-          <p className={`mt-3 text-sm font-semibold ${message.isError ? 'text-red-400' : 'text-emerald-300'}`} role="status">{message.text}</p>
-        )}
+        <SaveFileControls title={<h2 className="font-display text-2xl">Your save</h2>} />
       </section>
 
       {/* Credits */}

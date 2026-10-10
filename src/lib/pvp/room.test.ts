@@ -1,7 +1,7 @@
 // Online rooms: the battle a room's members fight, and armies from other devices made valid
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_ROOM_SETTINGS, RoomMember, buildRoomBattle, sanitizeArmy, sideViewOf } from './room';
+import { DEFAULT_ROOM_SETTINGS, RoomMember, buildRoomBattle, sanitizeArmy, sideViewOf, withoutPlans } from './room';
 import { getAllUnits } from '../game/sides';
 import { isUnitVisibleTo } from '../game/gameState';
 import { makeUnit, place } from '../game/testUtils';
@@ -63,4 +63,14 @@ test("in the fog a guest is sent only what their side can see, and nobody else's
   // (without fog, everyone sees the same)
   const clear = buildRoomBattle([member(0), member(1)], { ...DEFAULT_ROOM_SETTINGS, fog: false }, 3);
   assert.equal(sideViewOf(clear, 's1'), clear);
+});
+
+test('by default everyone plans each round at once, and the orders handed in never leave the host', () => {
+  const state = buildRoomBattle([member(0), member(1)], DEFAULT_ROOM_SETTINGS, 5);
+  assert.equal(state.settings!.simultaneous, true);
+  assert.equal(state.roundPlanning, true, 'the first round opens with everyone planning');
+  const handedIn = { ...state, plans: { s1: { moves: [], purchases: [] } } };
+  assert.equal(withoutPlans(handedIn).plans, undefined);
+  const turns = buildRoomBattle([member(0), member(1)], { ...DEFAULT_ROOM_SETTINGS, simultaneous: false }, 5);
+  assert.ok(!turns.roundPlanning && !turns.settings!.simultaneous, 'or the sides take turns');
 });

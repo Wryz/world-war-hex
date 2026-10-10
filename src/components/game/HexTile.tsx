@@ -89,8 +89,6 @@ interface HexTileProps {
   onHexHoverEnd: (hex: Hex) => void;
   // Out of your troops' sight in the fog of war: enemy troops here are hidden
   fogged?: boolean;
-  // How dangerous the hex is next turn (0 = safe, 1 = deadly), shown as a red wash
-  threat?: number;
   // The map's decor style, which recolours some ground
   decor?: MapDecor;
 }
@@ -109,7 +107,7 @@ const createHexShape = (size: number) => {
   return shape;
 };
 
-// Filled hexagon for washes laid over a tile (fog, threat)
+// Filled hexagon for washes laid over a tile (fog, scorched ground)
 const fillGeometry = (() => {
   const geometry = new THREE.ShapeGeometry(createHexShape(HEX_SIZE * TILE_SCALE));
   geometry.rotateX(-Math.PI / 2);
@@ -136,7 +134,6 @@ const HexTileComponent: React.FC<HexTileProps> = ({
   onHexHover,
   onHexHoverEnd,
   fogged = false,
-  threat = 0,
   decor
 }) => {
   const liftRef = useRef<THREE.Group>(null);
@@ -255,12 +252,6 @@ const HexTileComponent: React.FC<HexTileProps> = ({
         {fogged && (
           <mesh geometry={fillGeometry} position={[0, surfaceHeight + 0.012, 0]} renderOrder={1}>
             <meshBasicMaterial color="#1e293b" transparent opacity={0.32} depthWrite={false} />
-          </mesh>
-        )}
-        {/* Threat preview: hexes enemies can strike next turn */}
-        {threat > 0 && (
-          <mesh geometry={fillGeometry} position={[0, surfaceHeight + 0.016, 0]} renderOrder={1}>
-            <meshBasicMaterial color="#ef4444" transparent opacity={0.12 + 0.33 * Math.min(1, threat)} depthWrite={false} />
           </mesh>
         )}
 
