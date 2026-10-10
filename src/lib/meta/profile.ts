@@ -153,6 +153,9 @@ const toCount = (value: unknown) => (typeof value === 'number' && Number.isFinit
 const MAX_MATERIAL = 99_999;
 const ownKey = (record: object, key: string) => Object.prototype.hasOwnProperty.call(record, key);
 
+// A save from a newer version of the game than this one (it can't be read here, and mustn't be lost)
+export const isNewerProfile = (raw: unknown) => isRecord(raw) && typeof raw.version === 'number' && raw.version > PROFILE_VERSION;
+
 // Turn whatever was stored into a valid profile, dropping anything unknown
 export const sanitizeProfile = (raw: unknown): Profile | null => {
   if (!isRecord(raw) || typeof raw.version !== 'number' || raw.version > PROFILE_VERSION) return null;
@@ -330,7 +333,9 @@ export const getProfile = (): Profile => {
 // (`keepTimestamp` for a profile taken as it is from elsewhere - the cloud save - whose updatedAt says
 // when it was really last changed)
 const setProfile = (profile: Profile, keepTimestamp = false) => {
-  current = keepTimestamp ? profile : { ...profile, updatedAt: new Date().toISOString() };
+  // (a change always moves the time on, even on a clock behind the one that made the last copy)
+  const after = Date.parse(current?.updatedAt ?? '') + 1;
+  current = keepTimestamp ? profile : { ...profile, updatedAt: new Date(Math.max(Date.now(), Number.isNaN(after) ? 0 : after)).toISOString() };
   try {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(current));
   } catch (error) {

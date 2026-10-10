@@ -37,13 +37,14 @@ export default function PrivacyPage() {
             are deleted automatically after they have been inactive for a while.
           </li>
           <li>
-            <b>Cloud save:</b> a copy of your save is kept on our database so you can restore it after clearing your
-            browser. If you choose to link an email address so you can load your save on another device, we keep that
-            email address to sign you in and send you sign-in links. We don&apos;t send marketing email.
+            <b>Cloud save:</b> a copy of your save is kept on our database. If you choose to link an email address - so you
+            can restore your save after clearing your browser, or load it on another device - we keep that email address to
+            sign you in and send you sign-in links and codes. We don&apos;t send marketing email.
           </li>
         </ul>
         <p>
-          You can delete your cloud save at any time in <b>Stats &amp; Save</b>. To have your account and email address
+          You can delete your cloud save at any time in <b>Stats &amp; Save</b> (turn cloud save off on your other devices
+          first, or they will save it again). To have your account and email address
           removed entirely, write to <ContactLink />.
         </p>
       </LegalSection>

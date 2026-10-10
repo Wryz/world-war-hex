@@ -2,8 +2,9 @@
 -- browser and can be loaded on another device once an email address is linked to the account.
 --
 -- One row per account (anonymous or with an email). Players read and delete only their own row, and
--- write it through put_cloud_save, which keeps an older copy from overwriting a newer one and clears
--- away saves nobody has touched for two years (as the privacy policy says).
+-- write it through put_cloud_save, which only replaces the copy the device last saw (so two devices
+-- can't overwrite each other's progress unasked) and clears away saves nobody has touched for two
+-- years (as the privacy policy says).
 
 create table public.cloud_saves (
   user_id uuid primary key references auth.users (id) on delete cascade,
@@ -24,10 +25,12 @@ create policy "players delete their save" on public.cloud_saves for delete to au
 
 grant select, delete on public.cloud_saves to authenticated;
 
--- Store the signed-in player's save, unless the copy already there was changed later (another device
--- got there first) - or regardless, with `p_force`, when the player chose this device's progress over
--- the cloud's. Returns the save as it now stands, so the caller can tell whether it was kept.
-create function public.put_cloud_save(p_profile jsonb, p_saved_at timestamptz, p_force boolean default false) returns public.cloud_saves
+-- Store the signed-in player's save, but only over the copy it was based on: `p_base` is the
+-- saved_at of the cloud copy the device last agreed with (null for none). If the copy there has
+-- changed since - another device saved first - nothing is written, and the device compares the two
+-- (and asks the player when both have changed). Returns the save as it now stands, so the caller can
+-- tell whether its copy was kept.
+create function public.put_cloud_save(p_profile jsonb, p_saved_at timestamptz, p_base timestamptz) returns public.cloud_saves
 language plpgsql volatile security definer set search_path = ''
 as $$
 declare
@@ -37,23 +40,19 @@ begin
   if uid is null then
     raise exception 'Sign in first';
   end if;
-  if p_profile is null or jsonb_typeof(p_profile) <> 'object' then
+  if p_profile is null or jsonb_typeof(p_profile) <> 'object' or p_saved_at is null then
     raise exception 'Not a save';
-  end if;
-  -- (a clock far in the future would lock the save against every later change)
-  if p_saved_at > now() + interval '1 day' then
-    p_saved_at := now();
   end if;
   delete from public.cloud_saves where updated_at < now() - interval '2 years';
   insert into public.cloud_saves (user_id, profile, saved_at, updated_at)
     values (uid, p_profile, p_saved_at, now())
     on conflict (user_id) do update
       set profile = excluded.profile, saved_at = excluded.saved_at, updated_at = now()
-      where p_force or public.cloud_saves.saved_at <= excluded.saved_at;
+      where public.cloud_saves.saved_at is not distinct from p_base;
   select * into result from public.cloud_saves where user_id = uid;
   return result;
 end;
 $$;
 
-revoke execute on function public.put_cloud_save(jsonb, timestamptz, boolean) from public, anon;
-grant execute on function public.put_cloud_save(jsonb, timestamptz, boolean) to authenticated;
+revoke execute on function public.put_cloud_save(jsonb, timestamptz, timestamptz) from public, anon;
+grant execute on function public.put_cloud_save(jsonb, timestamptz, timestamptz) to authenticated;

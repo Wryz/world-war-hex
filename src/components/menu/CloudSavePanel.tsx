@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
-  deleteCloudSave, disableCloudSave, enableCloudSave, linkEmail, sendSignInEmail, signOutCloud, sync, useCloudSave, verifyEmailCode
+  deleteCloudSave, disableCloudSave, dismissCloudNotice, enableCloudSave, linkEmail, sendSignInEmail, signOutCloud, sync, useCloudSave,
+  verifyEmailCode
 } from '@/lib/cloudSave';
 import { SECONDARY_BUTTON } from './MenuShell';
 import { CloudIcon, MailIcon, ResumeIcon, TrashIcon } from '../game/icons';
@@ -94,7 +95,7 @@ export const CloudSavePanel: React.FC = () => {
   }[cloud.status];
 
   const remove = async () => {
-    if (!window.confirm('Delete your save from the cloud? The progress on this device stays.')) return;
+    if (!window.confirm('Delete your save from the cloud and stop saving there? The progress on this device stays. Turn cloud save off on your other devices first, or they will save it again.')) return;
     setBusy(true);
     await deleteCloudSave();
     setBusy(false);
@@ -102,12 +103,18 @@ export const CloudSavePanel: React.FC = () => {
 
   return (
     <div className="mt-4 rounded-xl bg-slate-800/70 p-3">
+      {cloud.notice && (
+        <p className="mb-3 flex items-start justify-between gap-2 rounded-lg bg-amber-500/15 px-3 py-2 text-xs font-semibold text-amber-200" role="status">
+          {cloud.notice}
+          <button onClick={dismissCloudNotice} className="shrink-0 text-amber-100 hover:underline">OK</button>
+        </p>
+      )}
       <div className="flex flex-wrap items-center gap-3">
         <span className="text-2xl"><CloudIcon /></span>
         <div className="min-w-0 flex-1">
           <b className="block text-slate-100">Cloud save</b>
           <span className="block text-xs">
-            {cloud.enabled ? status : <span className="text-slate-400">Keep a copy of your progress online, so clearing your browser can&apos;t lose it.</span>}
+            {cloud.enabled ? status : <span className="text-slate-400">Keep a copy of your progress online. Link an email too, to get it back after clearing your browser or play it on another device.</span>}
           </span>
         </div>
         {cloud.enabled ? (
@@ -143,7 +150,7 @@ export const CloudSavePanel: React.FC = () => {
               purpose="link"
               intro={cloud.pendingEmail
                 ? `Waiting for you to confirm ${cloud.pendingEmail} - open the link in the email, or type its code.`
-                : 'Play on another device: link an email address, then sign in with it there.'}
+                : 'Link an email address to get this save back if your browser is cleared, or to play it on another device (sign in with the email there).'}
               button="Link email"
               initialEmail={cloud.pendingEmail}
             />
