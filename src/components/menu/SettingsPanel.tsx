@@ -253,7 +253,8 @@ const GuideTab: React.FC = () => (
         any enemy that attacks within their reach - your castle or another troop - and it can&apos;t hit back. Bring its health down to 0 to win.
         If the last round ends first, it is decided on points: the gold value of the enemy troops you destroyed, half the gold you
         earned, and {TIME_SCORE_WEIGHTS.camps} for every camp you hold.
-        The same points, plus {SPEED_POINTS_PER_ROUND} for every round left when you win, earn your second and third stars.
+        The same points, plus {SPEED_POINTS_PER_ROUND} for every round left when you win, earn your second and third stars:
+        the stars in the top bar show what a win this round would earn, and light up as you score.
       </p>
     </GuideSection>
     <GuideSection title="Your turn" icon={<AttackIcon />}>

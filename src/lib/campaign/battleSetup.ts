@@ -5,7 +5,7 @@ import { BASE_CARD_IDS, Trees, applyTree, lineageOf } from '../game/lineages';
 import type { Profile } from '../meta/profile';
 import { MAX_DECK_SIZE } from '../meta/economy';
 import { suggestLoadout } from '../meta/loadout';
-import { LevelDef, enemyRosterStats, getLevel, levelEnemies } from './levels';
+import { LevelDef, castleHealthFor, enemyRosterStats, getLevel, levelEnemies } from './levels';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
@@ -114,7 +114,9 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
   const seed = config.seed ?? randomSeed();
   const rivals = rivalCards(rivalLevel, seed);
   const cards = battleDeck(profile, rivals);
-  const state = createBattle({ ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy', seed }, {
+  const state = createBattle({
+    ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy', seed, castleHealth: castleHealthFor(rivalLevel)
+  }, {
     rosters: {
       player: deckRoster(cards, profile.cards, profile.trees),
       ai: Object.fromEntries(rivals.map(id => [id, cardStats(id, rivalLevel)]))

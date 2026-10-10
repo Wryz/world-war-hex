@@ -1,6 +1,6 @@
 import type { GameSettings, Roster, TerrainType } from '@/types/game';
-import type { GuardSpec } from '../game/gameState';
-import { Faction, MOB_IDS, TROOPS, TroopId, cardPower, scaleTroop, statsPower } from '../game/troops';
+import { DEFAULT_SETTINGS, type GuardSpec } from '../game/gameState';
+import { Faction, MOB_IDS, TROOPS, TroopId, cardPower, levelMultiplier, scaleTroop, statsPower } from '../game/troops';
 import { baseOf } from '../game/lineages';
 import { expectedProgression, recommendedPower, baseLevelReward, treeCardPower } from '../meta/economy';
 import { LEVEL_TUNING } from './levelTuning';
@@ -175,10 +175,12 @@ const BOSS_STRENGTH = 0.42;
 const BOSS_HEALTH = 1.0;
 // ...adjusted per boss battle, as some bosses' abilities (flying, healing) count for more than others.
 // Bosses stay big: a boss level's own troops are eased to make up for it (LEVEL_TUNING, tuned with
-// the balance simulator's --troops-only --tune)
+// the balance simulator's --troops-only --tune). Retuned for the small field to keep each boss battle
+// about as hard as it was (between 30% and 75% of the model player's battles won), easing a boss
+// to no less than 0.6 of its earlier size and its level's troops for the rest.
 const BOSS_TUNING: Record<number, number> = {
-  10: 0.8, 20: 0.9, 30: 0.6, 40: 0.8, 50: 0.75, 60: 0.8, 70: 0.7, 80: 0.85, 90: 0.6, 100: 0.75,
-  110: 0.85, 120: 0.7, 130: 0.6, 140: 0.8, 150: 0.75
+  10: 0.48, 20: 1.22, 30: 0.58, 40: 0.48, 50: 0.91, 60: 1.6, 70: 0.66, 80: 0.58, 90: 0.53, 100: 0.5,
+  110: 0.51, 120: 0.79, 130: 0.74, 140: 0.48, 150: 0.45
 };
 const CHAMPION_STRENGTH = 0.55;
 // First level fought in the fog of war
@@ -226,6 +228,16 @@ const enemyRosterFor = (region: Region, index: number): TroopId[] => {
 // balance simulator)
 const weightAt = (levelId: number, early: number, late: number) =>
   early + (late - early) * Math.min(1, Math.max(0, (levelId - 20) / 100));
+// Castles stand as many blows late in the campaign as early on: their health grows with the level of
+// the cards fighting over them, as the troops' attack does
+export const castleHealthFor = (cardLevel: number): number =>
+  Math.round(DEFAULT_SETTINGS.castleHealth! * levelMultiplier(cardLevel));
+// (in a campaign level, the card levels the level expects)
+const castleHealthAt = (levelId: number): number => {
+  const { deck, levels } = expectedProgression(levelId);
+  return castleHealthFor(deck.reduce((sum, id) => sum + (levels[id] ?? 1), 0) / deck.length);
+};
+
 const expectedCardPower = (levelId: number) => {
   const { deck, levels, trees } = expectedProgression(levelId);
   const FORM_WEIGHT = weightAt(levelId, 1, 0.5);
@@ -263,10 +275,6 @@ export const getLevel = (levelId: number): LevelDef => {
     (LEVEL_TUNING[id - 1] ?? 1) * 100
   ) / 100;
   const enemyTier = Math.max(1, Math.round((enemyScale - 1) / 0.1) + 1);
-  // The first battle is fought on a small field of its own (tutorialField.ts), castles four hexes apart;
-  // every other battle on a field 9 hexes across
-  const gridSize = isTutorial ? 3 : 4;
-  const maxRounds = gridSize === 3 ? 12 : gridSize === 4 ? 14 : 16;
 
   const guards: GuardSpec[] = [];
   if (isBoss) {
@@ -281,15 +289,15 @@ export const getLevel = (levelId: number): LevelDef => {
     guards.push({ type: champion, stats: scaleTroop(TROOPS[champion], enemyScale * CHAMPION_STRENGTH, enemyTier), isChampion: true });
   }
 
+  // The first battle is fought on a hand-laid field of its own (tutorialField.ts), castles four hexes
+  // apart, with a lighter purse and castles; every other battle on the usual small field 7 hexes
+  // across (DEFAULT_SETTINGS), where the armies meet at once
   const settings: GameSettings = {
-    gridSize,
-    planningPhaseTime: 30,
+    ...DEFAULT_SETTINGS,
     aiDifficulty: isTutorial || id <= 6 ? 'easy' : id <= 35 ? 'medium' : 'hard',
-    resourceHexCount: gridSize === 3 ? 0 : gridSize === 4 ? 3 : 4,
-    castleHealth: gridSize === 3 ? 20 : gridSize === 4 ? 26 : 32,
-    startingGold: 30,
+    castleHealth: castleHealthAt(id),
+    ...(isTutorial ? { resourceHexCount: 0, castleHealth: 20, startingGold: 30 } : {}),
     aiIncomeBonus: isTutorial ? -2 : Math.floor((id - 1) / 25),
-    maxRounds,
     // The fog of war rolls in from the second region, once the basics are learned
     fogOfWar: id >= FOG_FROM_LEVEL,
     themeName: region.theme,
@@ -336,8 +344,8 @@ export const levelEnemies = (level: LevelDef): TroopId[] =>
 // camps held and a bonus for every round left (see getStarScore). The bars rise with the level's
 // recommended power; the balance simulator put a typical win near the second and a strong one
 // near the third.
-const TWO_STAR_SHARE = 0.35;
-const THREE_STAR_SHARE = 0.45;
+const TWO_STAR_SHARE = 0.37;
+const THREE_STAR_SHARE = 0.47;
 const roundTo5 = (value: number) => Math.round(value / 5) * 5;
 export const starThresholds = (level: LevelDef): [number, number] =>
   [roundTo5(level.recommendedPower * TWO_STAR_SHARE), roundTo5(level.recommendedPower * THREE_STAR_SHARE)];
