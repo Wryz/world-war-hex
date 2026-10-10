@@ -12,7 +12,9 @@ export const releaseSharedGpuResources = () => {
   releasePropLibraries();
 };
 
-// For a component holding a 3D Canvas: release the shared resources when it goes
-export const useReleaseGpuOnUnmount = () => {
-  useEffect(() => () => releaseSharedGpuResources(), []);
+// For a component holding a 3D Canvas: release the shared resources when it goes - and when its
+// canvas is remade (`canvasKey` changing, as it does with the graphics quality), which drops the old
+// renderer without unmounting the component
+export const useReleaseGpuOnUnmount = (canvasKey?: unknown) => {
+  useEffect(() => () => releaseSharedGpuResources(), [canvasKey]);
 };

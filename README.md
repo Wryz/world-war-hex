@@ -22,8 +22,10 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 - **Coins.** Battles pay coins - more for wins and stars, a little for a loss - which buy new cards (the shop gains cards as you advance) and upgrade cards up to level 10. Win level 100 and cards can train on to elite levels 11-15, so the last five regions still have upgrades to chase.
 - **Style.** Coins also buy cosmetics: seven card frames (Old Map, Frostbound, Emberforged, Obsidian, Royal Seal, a shimmering Prismatic foil...) and six castle styles (Desert Fort, Ice Citadel, Elven Spire, Shadow Keep, Golden Palace). They only change how your army looks, never how it fights.
 - **Troop buffs.** Every troop shows the buffs working on it under its health tag - cover, high ground, a healing spring, a gold mine, berserk fury, its formation and its faction's trait (and drawbacks like low ground, being pinned or shaken). Tap them to see each one's numbers.
-- **Settings.** The gear on the main menu opens sound (separate sliders for the menu, map, battle and boss music, the jingles and sound effects), gameplay options (text size, battle speed, vibration on phones that support it - castle hits, kills, a boss's strikes and the battle won or lost), quick battles (a one-off battle on a random map at easy, medium or hard) and the full guide to the rules.
+- **Settings.** The gear on the main menu opens sound (separate sliders for the menu, map, battle and boss music, the jingles and sound effects), gameplay options (text size, graphics - Auto, High or Low, where low turns off shadows, draws at the screen's own pixel size and thins out the weather, and Auto picks low on phones that report little memory or few cores (`src/lib/graphics.ts`) - battle speed, vibration on phones that support it - castle hits, kills, a boss's strikes and the battle won or lost), quick battles (a one-off battle on a random map at easy, medium or hard) and the full guide to the rules.
 - **Stats and saves.** Lifetime stats and your progress live in the browser; download a save file to back it up or move it to another computer. The browser is asked to keep the save safe from automatic clean-up.
+- **Cloud save.** Turned on in Stats & Save, it keeps a copy of your progress online (see **Cloud save** below), so clearing the browser can't lose it. Link an email address to the save, then sign in with it on another device (by the emailed link, or its code in the installed app) to play the same save there. When both copies have changed since they last agreed, the game asks which to keep.
+- **Daily challenge.** One quick battle a day on the main menu, on the same battlefield for everyone: the map, the region (its ground and weather) and the difficulty (easy on Mondays, hard at weekends) all come from the date, and the rival kingdom fields its troops at your own card level. A battle begun before midnight still pays if it's won after. The first win of the day pays as much as clearing your next campaign level, plus a tenth more for every day won in a row (up to a week); losing costs nothing, so try again. It unlocks once the first battle is won, the day turns over at midnight UTC, and sharing the result sends friends the same battle with your score to beat (`src/lib/campaign/daily.ts`).
 - **Offline.** After one visit online, the game keeps working without a connection: a service worker caches the pages and scripts once the first page has loaded, then the models, map art, card portraits and sounds once the game has been idle a while (and each music track once it has played), so a first visit on a slow connection isn't slowed down. The game can also be installed as an app (`src/app/manifest.ts`): it then opens full screen from the home screen or app list, and Settings offers an Install button where the browser allows it (or explains Share, then Add to Home Screen, on iPhone and iPad). On phones it runs edge to edge, around notches and camera cutouts, with its buttons and panels kept clear of them (the `--safe-*` insets in `globals.css`).
 - **Short battles.** The armies meet at once: a small map 7 hexes across with the castles about six hexes apart (still with its camps, gold mines and buildings, packed closer together), 45 gold to spend on the first turn, 30-second turns and a 12-round limit (decided on points when time runs out). Castles grow sturdier as the cards fighting over them level up, so a late battle lasts as long as an early one; all of a turn's battles are fought at once and a 2x speed button keeps a battle to a few minutes.
 - **Stars as you play.** In a campaign battle the stars in the top bar show what a win this round would earn - your points so far against the level's two- and three-star marks - and every point you score pops up beside them, with a callout when the next star comes into reach.
@@ -117,6 +119,10 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 - `campaign/levels.ts`: The 15 regions and 150 levels: enemy rosters and scaling, bosses, star goals and rewards
 - `campaign/battleSetup.ts`: Builds a battle from a campaign level (or a quick battle) and the player's deck
 - `campaign/challenges.ts`: Each level's optional challenge and its bonus
+- `campaign/daily.ts`: The daily challenge: the day's battle from the date, its reward and the streak
+- `cloudSave.ts`: Cloud save: syncing the profile with the `cloud_saves` table, choosing between two changed copies, and linking an email
+- `graphics.ts`: The graphics setting and what each quality changes in the 3D scenes
+- `legal.ts`: The contact address and date shown on the privacy policy and terms
 - `meta/economy.ts`: Rewards, card prices, upgrade costs and the progression model behind recommended power
 - `haptics.ts`: Vibration on phones, and its setting
 - `meta/profile.ts`: The player's saved progress, the shop, battle results, stats, and save export and import
@@ -132,7 +138,8 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 - `army`: Your cards, the card shop and upgrades (`components/menu/ArmyScreen`)
 - `bestiary`: The bestiary and its 3D model viewer (`components/menu/BestiaryScreen`, `TroopModelViewer`)
 - `stats`: Stats and save files (`components/menu/StatsScreen`); the main menu's settings and guide are in `components/menu/SettingsPanel`
-- `play`: A battle (`/play?level=7`, or `/play?mode=quick&difficulty=hard`)
+- `play`: A battle (`/play?level=7`, `/play?mode=quick&difficulty=hard`, or the daily challenge, `/play?mode=quick&daily=2026-10-10`)
+- `privacy`, `terms`: The privacy policy and terms of service (`components/menu/LegalPage`), linked from the main menu and Settings; `robots.ts` and `sitemap.ts` list the public pages for search engines
 - `pvp`: Battle Friends: the rooms page, a room's lobby (`/pvp?room=ABC234`) and its battle, and practice against the AI (`components/arena/`: `PvpScreen`, `ArenaSettingsForm`, `ArenaBattle` - the battle screen with the standings - and `OnlineBattle`)
 
 ### Battle (`src/components/game`)
@@ -195,6 +202,20 @@ Nothing loads unless `NEXT_PUBLIC_ADSENSE_CLIENT` (your `ca-pub-...` publisher I
 Rooms live in a [Supabase](https://supabase.com) project. Its tables, access rules and functions are in `supabase/migrations` (applied to the project when they reach `main`, through Supabase's GitHub integration). Players are anonymous Supabase users, made on their device the first time they go online. The project's URL and publishable key are in `src/lib/pvp/supabase.ts`; set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to use another project.
 
 The host's game runs the battle - the same rules engine as everywhere else, the AI's sides included - and sends every step of it, gzipped, to the others over the room's private Realtime channel (`room:<code>`, open only to the room's members). Everyone else plans their own turn on their copy and sends their orders to the host with a secret only the host can read, so nobody can give orders for someone else's side. A player who drops out has their turns end when the timer runs out; the host keeps the battle on their device, so reloading the page carries on. Saves can be edited, so a player's cards are only as honest as their device: fair mode makes that moot.
+
+## Cloud save
+
+Saves are kept in the same Supabase project as the online rooms, in the `cloud_saves` table (`supabase/migrations/20261010150000_cloud_saves.sql`): one row per account, readable and deletable only by its owner, and written through `put_cloud_save`. Every copy sent gets a random revision id, and the function only replaces the revision the device last agreed with, so two devices (or tabs) can't overwrite each other's progress unasked: when both changed, the player chooses. It also clears away saves untouched for two years. An emailed sign-in link only works in the browser that asked for it (`src/lib/emailLink.ts`), so nobody can send a link that signs a player into another account; on any other device the player types the code from the email. The account is the anonymous one the device already uses for rooms; linking an email turns it into a permanent account that can sign in elsewhere.
+
+Before email linking works for players, the Supabase project needs:
+
+- **Custom SMTP** (Authentication → Emails → SMTP settings). Supabase's own email service only sends to the project's team members, and only a few an hour.
+- **Redirect URLs** (Authentication → URL Configuration): the site URL, plus `https://hexhordes.com/stats` (and any preview domains) in the allow list, as the emailed links return to `/stats?cloud=...`.
+- **The code in the emails** (Authentication → Emails → Templates): add `{{ .Token }}` to the *Magic Link* and *Change Email Address* templates, so players of the installed app (where links open in the browser instead) can type the code.
+
+## Legal pages
+
+`/privacy` and `/terms` describe what the game stores and sends (saves on the device, online rooms and cloud saves in Supabase, PostHog and Google Analytics, AdSense) and the rules for playing. Players are asked to write to `admin@hexhordes.com` (`CONTACT_EMAIL` in `src/lib/legal.ts`); update `LEGAL_UPDATED` in `src/lib/legal.ts` whenever either page changes.
 
 ## Getting Started
 

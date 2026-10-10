@@ -2,13 +2,16 @@
   "name": "world-war-hex",
   "version": "0.1.0",
   "private": true,
+  "engines": {
+    "node": ">=21"
+  },
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "simulate": "tsx scripts/simulate-balance.ts",
-    "test": "tsx --test src/**/*.test.ts",
+    "test": "tsx --test \"src/**/*.test.ts\"",
     "postbuild": "node scripts/build-sw-manifest.mjs"
   },
   "dependencies": {

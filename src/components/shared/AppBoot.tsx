@@ -11,8 +11,11 @@ import { registerServiceWorker } from '@/lib/offline';
 import { isStandalone, listenForInstallPrompt } from '@/lib/install';
 import { applyUiSize } from '@/lib/uiSize';
 import { getProfile, highestCleared, profilePower } from '@/lib/meta/profile';
+import { initCloudSave } from '@/lib/cloudSave';
+import { CloudConflictDialog } from './CloudConflictDialog';
 
-// Starts the background services once the game has loaded in the browser
+// Starts the background services once the game has loaded in the browser (and shows the cloud save's
+// question, when it has one)
 export const AppBoot: React.FC = () => {
   // Each page of the game visited (for a page deciding whether "back" stays in the game)
   const pathname = usePathname();
@@ -24,6 +27,7 @@ export const AppBoot: React.FC = () => {
     registerServiceWorker();
     initAnalytics();
     initAds();
+    initCloudSave();
     const profile = getProfile();
     trackEvent('game_opened', {
       highest_cleared: highestCleared(profile),
@@ -36,5 +40,6 @@ export const AppBoot: React.FC = () => {
       installed: isStandalone()
     });
   }, []);
-  return null;
+  // (asks which save to keep when the cloud's and this device's have both changed)
+  return <CloudConflictDialog />;
 };

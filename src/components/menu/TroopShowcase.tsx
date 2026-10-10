@@ -9,6 +9,7 @@ import { getAnimationName, getUnitLook } from '../game/utils/UnitModelSystem';
 import { disposeUnitModel, findAnimationClip, instantiateUnitModel, MountRig, UnitModelInstance } from '../game/utils/unitModelCache';
 import { PropPack, usePropLibrary } from '../game/utils/kaykitProps';
 import { useReleaseGpuOnUnmount } from '../game/utils/releaseGpu';
+import { canvasQuality, useGraphicsQuality } from '@/lib/graphics';
 
 // A troop standing in its own corner of the realm, shown at the top of its skill tree: Swordsmen
 // in a barracks yard, Archers at a woodland range, Mages at a shrine... When it learns something
@@ -326,7 +327,8 @@ interface TroopShowcaseProps {
 }
 
 export const TroopShowcase: React.FC<TroopShowcaseProps> = ({ type, setting, moment, onEvolved, paused = false, className = '' }) => {
-  useReleaseGpuOnUnmount();
+  const quality = useGraphicsQuality();
+  useReleaseGpuOnUnmount(quality);
   const def = SETTINGS[setting];
   // The form on show: follows `type`, and mid-evolution switches to the new form at the burst's peak
   // (before the parent hears of it through onEvolved)
@@ -340,7 +342,7 @@ export const TroopShowcase: React.FC<TroopShowcaseProps> = ({ type, setting, mom
     <div className={`relative overflow-hidden ${className}`} style={{ background: `linear-gradient(${def.sky}, #ffffff00 120%)` }}>
       {/* (paused, it still draws whenever something in it changes - a model arriving - so its shaders
           and textures are ready before it's shown, rather than stalling its first moment) */}
-      <Canvas frameloop={paused ? 'demand' : 'always'} shadows dpr={[1, 2]} camera={{ position: [0, 2.3, 5.4], fov: 34 }} onCreated={({ camera }) => camera.lookAt(0, 0.75, 0)}>
+      <Canvas key={quality} {...canvasQuality(quality, [1, 2])} frameloop={paused ? 'demand' : 'always'} camera={{ position: [0, 2.3, 5.4], fov: 34 }} onCreated={({ camera }) => camera.lookAt(0, 0.75, 0)}>
         <ambientLight intensity={1.4} />
         <directionalLight position={[3, 6, 4]} intensity={2.2} castShadow shadow-mapSize={[1024, 1024]} />
         <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>

@@ -15,6 +15,7 @@ import {
   StarIcon, StatsIcon, StyleIcon, SettingsIcon
 } from '../icons';
 import { SettingsPanel, SettingsTab } from '../../menu/SettingsPanel';
+import { DailyChallengeCard } from '../../menu/DailyChallengeCard';
 import { BattleConfig, Difficulty } from '../storage/GameStorage';
 
 // The 3D island needs WebGL, so it only renders in the browser
@@ -186,6 +187,8 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
             </div>
           </div>
 
+          <DailyChallengeCard />
+
           {/* Everything else */}
           <div className="mt-5 grid max-w-2xl grid-cols-2 gap-3">
             <MenuTile href="/campaign" icon={<MapIcon />} title="World Map" detail={`${REGIONS.length} regions · ${LEVEL_COUNT} battles`} />
@@ -196,6 +199,11 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
             <MenuTile href="/style" icon={<StyleIcon />} title="Style" detail="Card frames, castle styles" />
             <MenuTile href="/stats" icon={<StatsIcon />} title="Stats & Save" detail="Records and save file" />
           </div>
+
+          <nav className="mt-5 flex max-w-2xl gap-4 text-sm font-semibold text-slate-700" aria-label="Legal">
+            <Link href="/privacy" className="underline-offset-2 hover:underline">Privacy</Link>
+            <Link href="/terms" className="underline-offset-2 hover:underline">Terms</Link>
+          </nav>
 
         </div>
       </main>

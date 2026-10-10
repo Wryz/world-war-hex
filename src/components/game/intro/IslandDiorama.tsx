@@ -15,6 +15,7 @@ import { UnitMesh } from '../UnitMesh';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
 import { PropPack, usePropLibrary } from '../utils/kaykitProps';
 import { useReleaseGpuOnUnmount } from '../utils/releaseGpu';
+import { canvasQuality, useGraphicsQuality } from '@/lib/graphics';
 
 // A small, slowly turning island made of the game's own pieces: themed terrain, both castles,
 // the two camps and a few troops squaring up. It reshapes into a new map theme every few seconds.
@@ -154,7 +155,8 @@ interface IslandDioramaProps {
 }
 
 const IslandDiorama: React.FC<IslandDioramaProps> = ({ onThemeChange, onReady, poster = false }) => {
-  useReleaseGpuOnUnmount();
+  const quality = useGraphicsQuality();
+  useReleaseGpuOnUnmount(quality);
   const [themeIndex, setThemeIndex] = useState(0);
   const [ready, setReady] = useState(false);
   const live = ready && !poster;
@@ -176,7 +178,7 @@ const IslandDiorama: React.FC<IslandDioramaProps> = ({ onThemeChange, onReady, p
   };
 
   return (
-    <Canvas shadows flat dpr={poster ? 1 : [1, 1.5]} gl={poster ? { preserveDrawingBuffer: true, alpha: true } : undefined} camera={{ position: [0, 15, 19], fov: CAMERA_FOV }}>
+    <Canvas key={quality} {...(poster ? { shadows: true, dpr: 1, gl: { preserveDrawingBuffer: true, alpha: true } } : canvasQuality(quality))} flat camera={{ position: [0, 15, 19], fov: CAMERA_FOV }}>
       <hemisphereLight args={['#ffffff', '#9ccfe8', 1.6]} />
       <directionalLight
         position={[8, 20, 12]}

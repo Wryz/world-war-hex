@@ -14,10 +14,11 @@ import { TroopCard } from '../cards/TroopCard';
 import { MATERIALS, MaterialId, RARITY_ORDER, haulSize } from '@/lib/game/materials';
 import { CHRONICLE } from '@/lib/game/lore';
 import { MaterialTile } from '../MaterialIcon';
-import { ChallengeTarget, Difficulty, challengePath } from '../storage/GameStorage';
+import { ChallengeTarget, Difficulty, challengePath, dailyPath } from '../storage/GameStorage';
+import { dailyRegion, todayKey } from '@/lib/campaign/daily';
 import { emitCoins } from '../effects/effects';
 import {
-  ArrowIcon, AttackIcon, CardsIcon, CoinIcon, FilledStarIcon, LaurelIcon, MapIcon, MedalIcon, PlayIcon, PowerIcon, ReplayIcon, ResumeIcon, ShareIcon,
+  ArrowIcon, AttackIcon, CalendarIcon, CardsIcon, FireIcon, CoinIcon, FilledStarIcon, LaurelIcon, MapIcon, MedalIcon, PlayIcon, PowerIcon, ReplayIcon, ResumeIcon, ShareIcon,
   SkullIcon, StarIcon
 } from '../icons';
 
@@ -47,7 +48,7 @@ interface ResultsScreenProps {
   // The level's optional challenge was met this battle
   challengeMet?: boolean;
   // A quick battle: what a friend needs to fight it too, and the friend's score if it was their challenge
-  skirmish?: { difficulty: Difficulty; seed: number; rivalLevel: number; target?: ChallengeTarget };
+  skirmish?: { difficulty: Difficulty; seed: number; rivalLevel: number; target?: ChallengeTarget; daily?: string };
   // Watch the battle again (when there's enough of it to watch)
   onWatchReplay?: () => void;
 }
@@ -163,10 +164,14 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
     // score to beat - where each side builds its castle, and what the rival recruits, play out afresh)
     const text = level
       ? `⚔️ Hex Hordes - Level ${level.id}: ${level.name}\n${won ? `Victory ${starText} in ${rounds} rounds` : `Defeated after ${rounds} rounds`} · ${stats.kills} foes slain\nCan you beat it?`
+      : skirmish?.daily
+        ? `⚔️ Hex Hordes daily challenge (${skirmish.daily}) - I ${won ? 'won' : 'lost'} with ${yourScore} points${record.dailyStreak && record.dailyStreak > 1 ? ` · ${record.dailyStreak}-day streak 🔥` : ''}. Same battlefield for everyone today: can you beat my score?`
       : skirmish
         ? `⚔️ Hex Hordes - I ${won ? 'won' : 'lost'} this ${skirmish.difficulty} skirmish with ${yourScore} points. Same battlefield, same rival: can you beat my score?`
         : `⚔️ Hex Hordes - Skirmish ${won ? 'won' : 'lost'} in ${rounds} rounds · ${stats.kills} foes slain`;
-    const url = skirmish
+    const url = skirmish?.daily
+      ? `${window.location.origin}${dailyPath(skirmish.daily, { score: yourScore, won })}`
+      : skirmish
       ? `${window.location.origin}${challengePath(skirmish.difficulty, skirmish.seed, skirmish.rivalLevel, { score: yourScore, won })}`
       : window.location.origin;
     try {
@@ -193,6 +198,11 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           {level && (
             <div className="text-xs font-bold uppercase tracking-widest text-slate-400">
               Level {level.id} · {level.name}
+            </div>
+          )}
+          {skirmish?.daily && (
+            <div className="text-xs font-bold uppercase tracking-widest text-slate-400">
+              Daily Challenge · {dailyRegion(skirmish.daily).name}
             </div>
           )}
           <h1
@@ -270,6 +280,23 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
             </div>
           );
         })()}
+
+        {/* The daily challenge: the streak it made, or why it paid nothing more */}
+        {skirmish?.daily && (
+          <div className={`mt-4 flex items-center gap-3 rounded-xl px-4 py-3 ${record.dailyStreak ? 'challenge-complete bg-orange-500/20 ring-2 ring-orange-400' : 'bg-slate-800'}`}>
+            <span className="text-3xl" aria-hidden>{record.dailyStreak ? <FireIcon /> : <CalendarIcon />}</span>
+            <div className="min-w-0 flex-1 text-sm">
+              <div className="text-xs font-bold uppercase tracking-widest text-slate-400">Daily challenge</div>
+              <div className="font-bold text-slate-100">
+                {record.dailyStreak
+                  ? record.dailyStreak > 1 ? `${record.dailyStreak} days in a row! Come back tomorrow to keep it going.` : 'Won! Win again tomorrow to start a streak.'
+                  : won
+                    ? (getProfile().daily.lastWon ?? '') >= skirmish.daily ? 'Already won - the reward is paid once a day.' : 'This day\'s reward has passed.'
+                    : skirmish.daily < todayKey() ? 'Lost - this was an earlier day\'s challenge; today\'s is on the main menu.' : 'Lost - it\'s the same battle all day, so try again.'}
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* The level's optional challenge */}
         {level && levelChallenge(level) && (() => {

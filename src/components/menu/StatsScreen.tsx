@@ -10,6 +10,8 @@ import { useMusic } from '@/lib/audio/music';
 import { clearSavedGame, readRawSave, writeRawSave } from '../game/storage/GameStorage';
 import { TroopCard } from '../game/cards/TroopCard';
 import { MenuShell, CARD_CLASS, SECONDARY_BUTTON } from './MenuShell';
+import { CloudSavePanel } from './CloudSavePanel';
+import { getCloudState } from '@/lib/cloudSave';
 import {
   DownloadIcon, StatsIcon, TrashIcon, UploadIcon
 } from '../game/icons';
@@ -72,7 +74,8 @@ export const StatsScreen: React.FC = () => {
   };
 
   const handleReset = () => {
-    if (!window.confirm('Erase all progress (coins, cards, stars and stats)? This cannot be undone.')) return;
+    const everywhere = getCloudState().enabled ? ' Cloud save is on, so your cloud save is erased too.' : '';
+    if (!window.confirm(`Erase all progress (coins, cards, stars and stats)?${everywhere} This cannot be undone.`)) return;
     resetProfile();
     clearSavedGame();
     setMessage({ text: 'Progress erased. A fresh campaign awaits.' });
@@ -110,6 +113,8 @@ export const StatsScreen: React.FC = () => {
               <Stat label="Coins earned" value={s.coinsEarned} accent="#fde047" />
               <Stat label="Coins spent" value={s.coinsSpent} />
               <Stat label="Time in battle" value={formatTime(s.playSeconds)} />
+              <Stat label="Daily challenges won" value={profile.daily.wins} accent="#fdba74" />
+              <Stat label="Best daily streak" value={profile.daily.bestStreak} accent="#fb923c" />
             </div>
           </section>
 
@@ -138,7 +143,7 @@ export const StatsScreen: React.FC = () => {
       <section className={`${CARD_CLASS} mt-4 p-4`}>
         <h2 className="font-display text-2xl">Your save</h2>
         <p className="mt-1 text-xs text-slate-400">
-          Progress saves in this browser. Download a save file to back it up or move it to another computer.
+          Progress saves in this browser. Turn on cloud save to keep it safe and play on other devices, or download a save file to back it up.
         </p>
         {savesProtected !== null && (
           <p className={`mt-1 text-xs ${savesProtected ? 'text-emerald-300' : 'text-slate-400'}`}>
@@ -172,6 +177,7 @@ export const StatsScreen: React.FC = () => {
         {message && (
           <p className={`mt-3 text-sm font-semibold ${message.isError ? 'text-red-400' : 'text-emerald-300'}`} role="status">{message.text}</p>
         )}
+        <CloudSavePanel />
       </section>
 
       {/* Credits */}

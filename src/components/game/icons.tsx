@@ -24,7 +24,7 @@ import {
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuCheck, LuSkipForward, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
   LuVolume2, LuVolumeX, LuHouse, LuStar, LuDownload, LuUpload, LuMusic, LuShare2, LuX, LuChevronLeft, LuTrash2, LuPlay,
-  LuSettings, LuBookOpen, LuGamepad2, LuPause, LuClapperboard
+  LuSettings, LuBookOpen, LuGamepad2, LuPause, LuClapperboard, LuCalendarDays, LuCloud, LuMail
 } from 'react-icons/lu';
 import { Ability, TerrainType, UnitAction, UnitType } from '@/types/game';
 import type { BossPowerId } from '@/lib/game/bosses';
@@ -261,6 +261,9 @@ export const PlayIcon = icon(LuPlay);
 export const PauseIcon = icon(LuPause);
 // Watching a battle again
 export const ReplayIcon = icon(LuClapperboard);
+export const CalendarIcon = icon(LuCalendarDays, '#fdba74');
+export const CloudIcon = icon(LuCloud, '#7dd3fc');
+export const MailIcon = icon(LuMail);
 
 // A card's signature ability
 export const SignatureIcon = icon(GiSparkles, '#f0abfc');

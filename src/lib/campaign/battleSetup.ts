@@ -6,6 +6,7 @@ import type { Profile } from '../meta/profile';
 import { MAX_DECK_SIZE } from '../meta/economy';
 import { suggestLoadout } from '../meta/loadout';
 import { LevelDef, castleHealthFor, enemyRosterStats, getLevel, levelEnemies } from './levels';
+import { dailyDifficulty, dailyRegion, dailySeed, todayKey } from './daily';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
@@ -19,7 +20,13 @@ export interface ChallengeTarget {
 // rival level are picked when it's built unless given (a challenge from a friend gives both).
 export type BattleConfig =
   | { mode: 'campaign'; levelId: number }
-  | { mode: 'quick'; difficulty: Difficulty; seed?: number; rivalLevel?: number; challenge?: ChallengeTarget };
+  | { mode: 'quick'; difficulty: Difficulty; seed?: number; rivalLevel?: number; challenge?: ChallengeTarget; daily?: string };
+
+// The daily challenge of a day (lib/campaign/daily): a quick battle whose map, region, weather and
+// difficulty all come from the date
+export const dailyBattle = (day: string, challenge?: ChallengeTarget): Extract<BattleConfig, { mode: 'quick' }> => ({
+  mode: 'quick', difficulty: dailyDifficulty(day), seed: dailySeed(day), daily: day, ...(challenge ? { challenge } : {})
+});
 
 const shuffle = <T,>(items: T[]): T[] => {
   const copy = [...items];
@@ -114,8 +121,11 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
   const seed = config.seed ?? randomSeed();
   const rivals = rivalCards(rivalLevel, seed);
   const cards = battleDeck(profile, rivals);
+  // (a daily challenge is fought in the day's region, in its weather)
+  const region = config.daily ? dailyRegion(config.daily) : undefined;
   const state = createBattle({
-    ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy', seed, castleHealth: castleHealthFor(rivalLevel)
+    ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy', seed, castleHealth: castleHealthFor(rivalLevel),
+    ...(region ? { themeName: region.theme, weather: region.weather } : {})
   }, {
     rosters: {
       player: deckRoster(cards, profile.cards, profile.trees),
@@ -125,7 +135,7 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
     chooseCastle: true,
     battleSeed: quickBattleSeed(seed)
   });
-  return { ...state, rivalLevel, ownCardLevel };
+  return { ...state, rivalLevel, ownCardLevel, ...(config.daily ? { dailyStartedOn: todayKey() } : {}) };
 };
 
 // Seeds are whole numbers that fit a link

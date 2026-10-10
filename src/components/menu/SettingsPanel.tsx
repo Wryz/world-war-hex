@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { RESPEC_COST } from '@/lib/game/lineages';
 import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
 import { ARMORED_SCREEN_REDUCTION, PIN_BONUS, SCREEN_REDUCTION, SHIELD_WALL_REDUCTION } from '@/lib/game/formations';
@@ -24,6 +25,7 @@ import {
 } from '../game/icons';
 import type { Difficulty } from '../game/storage/GameStorage';
 import { UI_SIZES, setUiSize, useUiSize } from '@/lib/uiSize';
+import { GRAPHICS_OPTIONS, setGraphicsSetting, useGraphicsQuality, useGraphicsSetting } from '@/lib/graphics';
 
 export type SettingsTab = 'sound' | 'gameplay' | 'guide';
 type Tab = SettingsTab;
@@ -160,6 +162,8 @@ const InstallApp: React.FC = () => {
 const GameplayTab: React.FC<{ onStartQuickBattle?: (difficulty: Difficulty) => void }> = ({ onStartQuickBattle }) => {
   const speed = useGameSpeed();
   const uiSize = useUiSize();
+  const graphics = useGraphicsSetting();
+  const quality = useGraphicsQuality();
   const vibration = useVibrationEnabled();
   // (iPhones can't vibrate from a web page; read in the browser only, so the server render matches)
   const [canVibrate, setCanVibrate] = useState(false);
@@ -183,6 +187,28 @@ const GameplayTab: React.FC<{ onStartQuickBattle?: (difficulty: Difficulty) => v
               aria-checked={uiSize === option.id}
               onClick={() => setUiSize(option.id)}
               className={`rounded-lg px-3 py-1.5 font-bold ${uiSize === option.id ? 'bg-amber-400 text-slate-900' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span>
+          <b className="block text-slate-100">Graphics</b>
+          <span className="text-xs text-slate-400">
+            Low turns off shadows and draws fewer pixels, for smoother battles and longer battery on older phones.
+            {graphics === 'auto' && ` Auto is using ${quality === 'low' ? 'low' : 'high'} on this device.`}
+          </span>
+        </span>
+        <div className="flex shrink-0 gap-1" role="radiogroup" aria-label="Graphics">
+          {GRAPHICS_OPTIONS.map(option => (
+            <button
+              key={option.id}
+              role="radio"
+              aria-checked={graphics === option.id}
+              onClick={() => setGraphicsSetting(option.id)}
+              className={`rounded-lg px-3 py-1.5 font-bold ${graphics === option.id ? 'bg-amber-400 text-slate-900' : 'bg-slate-700 text-slate-200 hover:bg-slate-600'}`}
             >
               {option.label}
             </button>
@@ -230,7 +256,11 @@ const GameplayTab: React.FC<{ onStartQuickBattle?: (difficulty: Difficulty) => v
           </span>
         </label>
       )}
-      <p className="text-xs text-slate-400">Your progress, save file and lifetime stats live in Stats &amp; Save on the main menu.</p>
+      <p className="text-xs text-slate-400">
+        Your progress, save file and lifetime stats live in Stats &amp; Save on the main menu. See the{' '}
+        <Link href="/privacy" className="text-sky-300 underline">Privacy Policy</Link> and{' '}
+        <Link href="/terms" className="text-sky-300 underline">Terms</Link>.
+      </p>
     </div>
   );
 };
