@@ -225,7 +225,7 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
         stars: Math.min(3, toCount(record.stars)),
         wins: toCount(record.wins),
         losses: toCount(record.losses),
-        bestRounds: record.bestRounds === undefined ? undefined : toCount(record.bestRounds),
+        bestRounds: toCount(record.bestRounds) || undefined,
         challenge: record.challenge === true || undefined
       };
     }
@@ -277,7 +277,7 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
 
   return {
     ...base,
-    coins: toCount(raw.coins) + retiredTacticRefund(raw.tactics) + mergeRefund,
+    coins: Math.min(MAX_COUNT, toCount(raw.coins) + retiredTacticRefund(raw.tactics) + mergeRefund),
     materials,
     materialsFound,
     cards,
@@ -354,8 +354,8 @@ export const eliteUnlocked = (profile: Profile) => highestCleared(profile) >= EL
 export const totalStars = (profile: Profile) =>
   Object.values(profile.levels).reduce((sum, record) => sum + record.stars, 0);
 
-// The power of the cards brought into battle - with any empty slots filled from the other cards owned,
-// as they are in battle
+// The power of the cards brought into battle - with any empty slots filled from the other cards owned
+// (as battle fills them, though battle also weighs the level's enemies)
 export const profilePower = (profile: Profile) => {
   const extra = profile.deck.length < MAX_DECK_SIZE
     ? suggestLoadout(profile.cards, []).filter(id => !profile.deck.some(card => lineageOf(card) === lineageOf(id)))
@@ -550,12 +550,15 @@ export const setDeck = (deck: TroopId[]): boolean => {
 const RETIRED_TACTIC_UNLOCK: Record<string, number> = {
   forcedMarch: 8, bulwark: 15, sabotage: 22, barricade: 22, smoke: 30, earthworks: 40, shadowstep: 50, callToArms: 60, sinkhole: 70
 };
+const RETIRED_STARTERS = ['rally', 'mend', 'pitTrap'];
 const RETIRED_TACTIC_MAX_LEVEL = 10;
 
 export const retiredTacticRefund = (tactics: unknown): number => {
   if (!isRecord(tactics)) return 0;
   let coins = 0;
   for (const [id, value] of Object.entries(tactics)) {
+    // (only the tactics there were: the three free starters and the ones bought)
+    if (!RETIRED_STARTERS.includes(id) && !ownKey(RETIRED_TACTIC_UNLOCK, id)) continue;
     const level = Math.min(RETIRED_TACTIC_MAX_LEVEL, Math.max(1, toCount(value)));
     const unlockAt = ownKey(RETIRED_TACTIC_UNLOCK, id) ? RETIRED_TACTIC_UNLOCK[id] : undefined;
     if (unlockAt !== undefined) coins += Math.round((100 + 4 * unlockAt) / 10) * 10;
@@ -655,6 +658,8 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
   const clearedBefore = highestCleared(profile);
   const previous = outcome.levelId ? profile.levels[outcome.levelId] : undefined;
   const previousStars = previous?.stars ?? 0;
+  // (a battle restored from a damaged save may carry nonsense: it never costs coins or records)
+  const rounds = Math.max(1, toCount(outcome.rounds));
 
   // (withdrawing from a battle earns nothing)
   const reward = outcome.reason === 'resigned'
@@ -680,8 +685,8 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
     if (outcome.won) {
       record.wins++;
       record.stars = Math.max(record.stars, outcome.stars);
-      isNewBest = record.bestRounds === undefined || outcome.rounds < record.bestRounds;
-      record.bestRounds = Math.min(record.bestRounds ?? Infinity, outcome.rounds);
+      isNewBest = record.bestRounds === undefined || rounds < record.bestRounds;
+      record.bestRounds = Math.min(record.bestRounds ?? Infinity, rounds);
       if (challengeCompleted) record.challenge = true;
     } else {
       record.losses++;
@@ -725,9 +730,9 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
     bossesDefeated: s.bossesDefeated + outcome.playerStats.bossesSlain,
     campsCaptured: s.campsCaptured + outcome.playerStats.campsCaptured,
     siegeDamage: s.siegeDamage + outcome.playerStats.siegeDamage,
-    roundsPlayed: s.roundsPlayed + outcome.rounds,
-    playSeconds: s.playSeconds + Math.round(outcome.durationSeconds),
-    fastestWinRounds: outcome.won ? Math.min(s.fastestWinRounds ?? Infinity, outcome.rounds) : s.fastestWinRounds,
+    roundsPlayed: s.roundsPlayed + rounds,
+    playSeconds: s.playSeconds + toCount(outcome.durationSeconds),
+    fastestWinRounds: outcome.won ? Math.min(s.fastestWinRounds ?? Infinity, rounds) : s.fastestWinRounds,
     currentStreak: streak,
     bestStreak: Math.max(s.bestStreak, streak),
     cardsPlayed

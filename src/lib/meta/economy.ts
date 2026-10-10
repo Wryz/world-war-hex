@@ -40,7 +40,8 @@ export const levelWinReward = (levelId: number, stars: number, previousStars: nu
 
 // `damageRatio` is the share of the enemy castle's health destroyed (0..1)
 export const levelLossReward = (levelId: number, damageRatio: number): BattleReward => {
-  const coins = Math.max(5, Math.round(baseLevelReward(levelId) * (LOSS_BASE + LOSS_PER_DAMAGE * damageRatio)));
+  const ratio = Number.isFinite(damageRatio) ? Math.min(1, Math.max(0, damageRatio)) : 0;
+  const coins = Math.max(5, Math.round(baseLevelReward(levelId) * (LOSS_BASE + LOSS_PER_DAMAGE * ratio)));
   return { coins, breakdown: [{ label: 'Spoils of battle', coins }] };
 };
 

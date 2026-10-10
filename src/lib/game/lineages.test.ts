@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { Ability, UnitType } from '@/types/game';
 import {
-  canStrike, getActionTargets, getCombatPreview, isUnitVisibleTo, getFormationMultiplier, getPointBlankMultiplier, getSightRange, getSituationalBonuses, getUnitAttackRange
+  ARMOR_REDUCTION, canStrike, getActionTargets, getCombatPreview, isUnitVisibleTo, getFormationMultiplier, getPointBlankMultiplier, getSightRange, getSituationalBonuses, getUnitAttackRange
 } from './gameState';
 import {
   ATTRIBUTES, ATTRIBUTE_PICKS, BASE_CARD_IDS, LINEAGES, LINEAGE_IDS, PLAYER_SKILLS, applyTree, canAfford, evolvesFrom, lineageCards,
@@ -210,4 +210,22 @@ test('the threat preview knows crossbow bolts go through armour', () => {
   const threat = [{ enemy: bolts, from: [bolts.position] }];
   const plain = { ...warden, abilities: [] };
   assert.equal(estimateDamage(state, warden, centre, threat as never), estimateDamage(state, plain, centre, threat as never));
+});
+
+test('the threat preview sees one fight: flanked together, armour soaking it once', () => {
+  const { state, centre } = makeBattle('ai');
+  const warden = troop('player', 'warden', centre, { abilities: ['armored'], lifespan: 100, maxLifespan: 100 });
+  const attackers = [at(centre, 1, 0), at(centre, -1, 0), at(centre, 0, 1)].map(position =>
+    troop('ai', 'infantry', position, { abilities: [], attackPower: 10, movementRange: 0 }));
+  place(state, warden, ...attackers);
+  const threats = attackers.map(enemy => ({ enemy, from: [enemy.position] }));
+  const plain = { ...warden, abilities: [] };
+  const alone = estimateDamage(state, plain, centre, threats.slice(0, 1) as never);
+  const together = estimateDamage(state, plain, centre, threats as never);
+  assert.ok(together > alone * 3, 'flanking adds to three attacking together');
+  assert.equal(estimateDamage(state, warden, centre, threats as never), together - ARMOR_REDUCTION);
+  // and the real fight comes to about the same
+  const after = playTurn(state);
+  const dealt = 100 - (find(after, warden)?.lifespan ?? 0);
+  assert.ok(Math.abs(dealt - (together - ARMOR_REDUCTION)) <= 2, `preview ${together - ARMOR_REDUCTION}, fight ${dealt}`);
 });

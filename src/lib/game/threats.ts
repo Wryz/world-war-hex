@@ -2,7 +2,8 @@ import type { GameState, HexCoordinates, PlayerType, Unit } from '@/types/game';
 import { getHeightAt, getHexHeightOf } from './hexHeight';
 import { getHexDistance, getHexesInRange, findHexByCoordinates } from './hexUtils';
 import {
-  getAttackRange, getStrikePowerOnTerrain, getValidMoveTargets, getVisibleEnemies, hasLineOfSight, ARMOR_REDUCTION
+  getAttackRange, getStrikePowerOnTerrain, getValidMoveTargets, getVisibleEnemies, hasLineOfSight, ARMOR_REDUCTION,
+  canBeFlanked, getFlankers, FLANK_BONUS
 } from './gameState';
 
 // The threat preview: which hexes the enemy troops a side can see could strike on their next turn,
@@ -46,7 +47,7 @@ export const getThreats = (state: GameState, side: PlayerType = 'player'): Map<s
 };
 
 // The most damage these threats could deal to a troop standing on a hex (if every enemy that can
-// reach it picked it as its target), after cover, height, counters and armour
+// reach it picked it as its target), after cover, height, counters, flanking and armour
 export const estimateDamage = (state: GameState, unit: Unit, at: HexCoordinates, threats: Threat[] | undefined): number => {
   if (!threats || threats.length === 0) return 0;
   const targetHex = findHexByCoordinates(state.hexGrid, at);
@@ -58,10 +59,12 @@ export const estimateDamage = (state: GameState, unit: Unit, at: HexCoordinates,
     return getStrikePowerOnTerrain(enemy, terrain, unit, targetTerrain, getHexDistance(position, at),
       heightOf(position) - heightOf(at, targetHex));
   })), 0);
-  const damage = Math.max(1, Math.round(total));
-  // (armour soaks some of each strike - unless a crossbow's bolts go through it)
+  // (all of them together fight one fight: flanking it, and its armour soaking some of it once -
+  // unless a crossbow's bolts go through it)
+  const flanking = canBeFlanked(state, unit, at) ? 1 + FLANK_BONUS * getFlankers(threats.length) : 1;
+  const damage = Math.max(1, Math.round(total * flanking));
   const pierced = threats.some(({ enemy }) => enemy.abilities.includes('heavyBolts'));
-  return unit.abilities.includes('armored') && !pierced ? Math.max(1, damage - ARMOR_REDUCTION * threats.length) : damage;
+  return unit.abilities.includes('armored') && !pierced ? Math.max(1, damage - ARMOR_REDUCTION) : damage;
 };
 
 // How dangerous each threatened hex is, from 0 to 1: the attack power that can reach it compared

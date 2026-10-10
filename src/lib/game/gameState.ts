@@ -2097,8 +2097,8 @@ export const getDamageTakenMultiplier = (state: GameState, unit: Unit, at?: HexC
 
 // Troops garrisoned in a house, or holding a bridge or gateway, can't be flanked: only one or two
 // sides of them can be got at
-const canBeFlanked = (state: GameState, target: Unit) => {
-  const hex = findHexByCoordinates(state.hexGrid, target.position);
+export const canBeFlanked = (state: GameState, target: Unit, at: HexCoordinates = target.position) => {
+  const hex = findHexByCoordinates(state.hexGrid, at);
   return !hex || !(['house', 'bridge', 'gate'] as TerrainType[]).includes(hex.terrain) && hex.feature !== 'logBridge';
 };
 
@@ -2320,7 +2320,8 @@ const detectIntercepts = (state: GameState, attackerSide: PlayerType, siege: Gam
       const before = damageOn.get(target.id) ?? 0;
       const others = assigned.get(target.id) ?? [];
       const pierced = piercesArmour([guard, ...others]);
-      const kills = applyArmor(target, Math.max(1, Math.round(before)), piercesArmour(others)) < target.lifespan &&
+      // (nothing on it yet leaves it whole, however little health it has)
+      const kills = (before > 0 ? applyArmor(target, Math.max(1, Math.round(before)), piercesArmour(others)) : 0) < target.lifespan &&
         applyArmor(target, Math.max(1, Math.round(before + strike)), pierced) >= target.lifespan;
       return { target, strike, kills };
     }).sort((a, b) => Number(b.kills) - Number(a.kills) || b.target.attackPower - a.target.attackPower || compareIds(a.target, b.target));
@@ -2565,7 +2566,8 @@ const finishTurn = (state: GameState): GameState => {
   // (venom taken during this very turn waits for the end of its next one)
   const shakenBefore = new Map(newState.players[activePlayer].units.map(unit => [unit.id, unit.shaken ?? 0]));
   for (const unit of [...newState.players[activePlayer].units]) {
-    if (!unit.poisoned) continue;
+    // (a minion that fled its fallen boss is gone, venom and all)
+    if (!unit.poisoned || !newState.players[activePlayer].units.some(other => other.id === unit.id)) continue;
     if (unit.poisonFresh) {
       unit.poisonFresh = undefined;
       continue;
