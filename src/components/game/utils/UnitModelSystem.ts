@@ -277,7 +277,8 @@ export const modelsFor = (types: TroopId[]): string[] => {
     const look = getUnitLook(type);
     if (look.kind !== 'humanoid') continue;
     urls.add(MODEL_URLS[look.model]);
-    if (look.mount) urls.add(HORSE_MODEL);
+    // (beasts are built from primitives; only horses have a model)
+    if (look.mount && !look.mount.beast) urls.add(HORSE_MODEL);
   }
   return [...urls];
 };

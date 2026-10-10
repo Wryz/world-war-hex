@@ -164,6 +164,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   // (the board only redraws its marks when they actually change)
   // (a mechanic being pointed out gets the same gold ring, kept in view)
   const mechanicHex = mechanic?.hex;
+  const [ruleTipOpen, setRuleTipOpen] = useState(false);
   const boardGuide: TutorialVisuals | null = tutorial.visuals ?? (mechanicHex
     ? { showcase: null, rings: [{ at: mechanicHex, tone: 'tap' }], path: null, target: null, keepInView: mechanicHex }
     : null);
@@ -422,12 +423,13 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       {currentPhase === 'combat' && <CombatResolver gameState={viewState} />}
 
       {/* First-time tips for the newer rules (not while the first battle's tutorial is running) */}
-      {!showTutorial && isReady && currentPhase !== 'gameOver' && <RuleTips gameState={gameState} />}
+      {!showTutorial && isReady && currentPhase !== 'gameOver' && <RuleTips gameState={gameState} onOpenChange={setRuleTipOpen} />}
       {showTutorial && isReady && currentPhase !== 'gameOver' && (
         <TutorialOverlay gameState={gameState} pointer={tutorial.pointer} introRunning={tutorial.introRunning} introCaption={tutorial.introCaption} onSkipIntro={tutorial.skipIntro} />
       )}
       {mechanic?.hex && <TutorialOverlay gameState={gameState} pointer={{ hex: mechanic.hex, caption: mechanic.caption }} introRunning={false} onSkipIntro={() => undefined} />}
-      {mechanic && !mechanic.hex && (
+      {/* (a caption without a hex waits while a rule tip is open: they share the top of the screen) */}
+      {mechanic && !mechanic.hex && !ruleTipOpen && (
         <div className="pointer-events-none fixed inset-x-0 top-[calc(5rem+var(--safe-t))] z-[45] flex justify-center px-4">
           <span className="animate-fadeIn max-w-md rounded-xl bg-slate-900/90 px-4 py-2 text-center text-sm font-bold leading-snug text-amber-100 shadow-lg ring-2 ring-amber-300/70">
             {mechanic.caption}

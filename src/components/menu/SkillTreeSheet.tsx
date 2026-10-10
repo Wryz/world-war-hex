@@ -2,12 +2,14 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { TROOPS, TroopId } from '@/lib/game/troops';
+import { TROOPS, TroopId, cardStats } from '@/lib/game/troops';
 import { MATERIALS, MaterialId } from '@/lib/game/materials';
 import {
   ATTRIBUTES, ATTRIBUTE_PICKS, AttributeId, LINEAGES, LineageId, MaterialCost, PLAYER_SKILLS, PlayerSkillId, RESPEC_COST,
-  canAfford, costEntries, evolvesFrom
+  applyTree, canAfford, costEntries, evolvesFrom
 } from '@/lib/game/lineages';
+import { MAX_DECK_SIZE } from '@/lib/meta/economy';
+import { disposeUnitModel, instantiateUnitModel } from '../game/utils/unitModelCache';
 import {
   deckFormOf, evolveBlock, evolveCard, highestCleared, learnAttribute, learnSkill, respecAttribute, respecSkill, toggleDeckCard,
   treeOf, useProfile
@@ -129,15 +131,19 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
   };
   const evolve = (id: TroopId) => {
     const form = def.forms.find(f => f.id === id)!;
-    // Evolve from the form it grows out of, so the burst turns that one into the new one
-    setViewing(evolvesFrom(id));
-    if (evolveCard(id)) {
-      playStinger('unlock');
-      celebrate(form.cost, { kind: 'evolve', key: Date.now(), to: id });
-    }
+    const from = evolvesFrom(id);
+    if (!evolveCard(id)) return;
+    playStinger('unlock');
+    // Show the form it grows out of, so the burst turns that one into the new one - and start
+    // fetching the new one's model while the materials fly in
+    setViewing(from);
+    instantiateUnitModel(id, 'player').then(disposeUnitModel).catch(() => {});
+    celebrate(form.cost, { kind: 'evolve', key: Date.now(), from, to: id });
   };
 
   const ownedForms = [def.base, ...def.forms.map(f => f.id)].filter(id => profile.cards[id] !== undefined);
+  // No room for this lineage among the battle cards (a lineage already there just swaps forms)
+  const deckFull = !deckForm && profile.deck.length >= MAX_DECK_SIZE;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 pl-[var(--safe-l)] pr-[var(--safe-r)] pt-[var(--safe-t)] backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
@@ -163,20 +169,6 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
             <div className="font-display text-xl leading-tight text-white">{TROOPS[viewing].name}</div>
             <div className="text-xs font-bold text-slate-300">{def.name} lineage · level {level}</div>
           </div>
-          {/* Forms to look at */}
-          {ownedForms.length > 1 && (
-            <div className="absolute bottom-2 right-3 flex gap-1">
-              {ownedForms.map(id => (
-                <button
-                  key={id}
-                  onClick={() => setViewing(id)}
-                  className={`rounded-lg px-2 py-1 text-xs font-bold ${id === viewing ? 'bg-amber-400 text-slate-900' : 'bg-slate-950/70 text-slate-200 hover:bg-slate-800'}`}
-                >
-                  {TROOPS[id].name}
-                </button>
-              ))}
-            </div>
-          )}
           {/* Materials flying in */}
           {flight && (
             <div key={flight.key} className="pointer-events-none absolute inset-0">
@@ -199,6 +191,21 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
             </div>
           )}
         </div>
+
+        {/* Forms to look at */}
+        {ownedForms.length > 1 && (
+          <div className="flex flex-wrap gap-1.5 px-4 pt-3 sm:px-5">
+            {ownedForms.map(id => (
+              <button
+                key={id}
+                onClick={() => setViewing(id)}
+                className={`rounded-lg px-2.5 py-1 text-xs font-bold ${id === viewing ? 'bg-amber-400 text-slate-900' : 'bg-slate-800 text-slate-200 hover:bg-slate-700'}`}
+              >
+                {TROOPS[id].name}
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="flex flex-col gap-5 p-4 sm:p-5">
           {/* Tier 1: attributes */}
@@ -311,7 +318,16 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
                 return (
                   <div key={form.id} className={`flex gap-3 rounded-xl p-3 ring-1 ${owned ? 'bg-amber-500/10 ring-amber-400/40' : 'bg-slate-800/70 ring-slate-600/50'} ${form.from ? 'ml-6' : ''}`}>
                     <div className="w-16 shrink-0">
-                      <TroopCard type={form.id} level={level} size="xs" fill locked={!owned} hideLevel={!owned} onClick={() => setViewing(form.id)} />
+                      <TroopCard
+                        type={form.id}
+                        level={level}
+                        stats={applyTree(cardStats(form.id, level), tree)}
+                        size="xs"
+                        fill
+                        locked={!owned}
+                        hideLevel={!owned}
+                        onClick={() => setViewing(form.id)}
+                      />
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-baseline gap-x-2">
@@ -322,10 +338,11 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
                       {owned ? (
                         <button
                           onClick={() => toggleDeckCard(form.id)}
-                          disabled={inDeck}
-                          className={`${BUTTON} mt-2 bg-sky-500 text-slate-900 shadow-[0_3px_0_#0369a1] hover:bg-sky-400 disabled:bg-emerald-700 disabled:text-white`}
+                          disabled={inDeck || deckFull}
+                          className={`${BUTTON} mt-2 bg-sky-500 text-slate-900 shadow-[0_3px_0_#0369a1] hover:bg-sky-400 ${inDeck ? 'disabled:bg-emerald-700 disabled:text-white' : ''}`}
+                          title={deckFull ? 'Your battle cards are full: leave one behind in the Army first' : undefined}
                         >
-                          {inDeck ? 'In battle' : 'Bring to battle'}
+                          {inDeck ? 'In battle' : deckFull ? 'Battle cards full' : 'Bring to battle'}
                         </button>
                       ) : block === 'level' ? (
                         <p className="mt-1 flex items-center gap-1 text-xs font-bold text-slate-400">

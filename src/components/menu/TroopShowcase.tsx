@@ -16,7 +16,7 @@ import { PropPack, usePropLibrary } from '../game/utils/kaykitProps';
 
 export type ShowcaseMoment =
   | { kind: 'learn'; key: number }
-  | { kind: 'evolve'; key: number; to: TroopId };
+  | { kind: 'evolve'; key: number; from: TroopId; to: TroopId };
 
 interface SceneProp {
   model: string;
@@ -133,7 +133,9 @@ const LEARN_SECONDS = 2.2;
 const BURST_PEAK = 0.9;
 const EVOLVE_SECONDS = 3.2;
 
-const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (type: TroopId) => void }> = ({ type, moment, onSwap }) => {
+// `onSwap` turns the form on show into the evolved one (unless the player has turned to another form
+// meanwhile, when it says no)
+const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (from: TroopId, to: TroopId) => boolean }> = ({ type, moment, onSwap }) => {
   const containerRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const clipsRef = useRef<THREE.AnimationClip[]>([]);
@@ -144,21 +146,37 @@ const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (t
   const burstRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.PointLight>(null);
   const momentRef = useRef<{ moment: ShowcaseMoment; time: number; swapped: boolean } | null>(null);
+  // The model on show, and whether the next one to load should step out cheering (it evolved)
+  const instanceRef = useRef<UnitModelInstance | null>(null);
+  const cheerRef = useRef(false);
   const [loaded, setLoaded] = useState(0);
 
-  // Load the troop's model
+  const removeModel = (container: THREE.Group | null) => {
+    const old = instanceRef.current;
+    if (!old) return;
+    disposeUnitModel(old, mixerRef.current);
+    container?.remove(old.scene);
+    instanceRef.current = null;
+    mixerRef.current = null;
+    rigRef.current = null;
+    mountRef.current = null;
+    actionRef.current = null;
+  };
+
+  // Load the troop's model; the one on show stays until its replacement is ready, so the scene is
+  // never empty while a new form downloads
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
     let cancelled = false;
-    let instance: UnitModelInstance | null = null;
     const look = getUnitLook(type);
     instantiateUnitModel(type, 'player').then(loadedInstance => {
       if (cancelled) {
         disposeUnitModel(loadedInstance);
         return;
       }
-      instance = loadedInstance;
+      removeModel(container);
+      instanceRef.current = loadedInstance;
       loadedInstance.scene.scale.setScalar(look.kind === 'humanoid' ? look.scale * 1.5 : 1.5);
       container.add(loadedInstance.scene);
       mixerRef.current = loadedInstance.rig ? null : new THREE.AnimationMixer(loadedInstance.scene);
@@ -169,18 +187,13 @@ const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (t
       actionRef.current = null;
       setLoaded(n => n + 1);
     }).catch(() => {});
-    return () => {
-      cancelled = true;
-      if (instance) {
-        disposeUnitModel(instance, mixerRef.current);
-        container.remove(instance.scene);
-      }
-      mixerRef.current = null;
-      rigRef.current = null;
-      mountRef.current = null;
-      actionRef.current = null;
-    };
+    return () => { cancelled = true; };
   }, [type]);
+  // (and the last one goes when the scene closes)
+  useEffect(() => {
+    const container = containerRef.current;
+    return () => removeModel(container);
+  }, []);
 
   const play = (clipName: string, once = false) => {
     const mixer = mixerRef.current;
@@ -203,13 +216,14 @@ const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (t
   useEffect(() => {
     if (loaded > 0) play(getAnimationName(type, 'idle'));
     rigRef.current?.setState('idle');
-    // A fresh model mid-evolution steps out cheering
-    const current = momentRef.current;
-    if (current?.swapped) {
+    // A form that has just evolved steps out cheering, however long its model took to arrive
+    if (loaded > 0 && cheerRef.current) {
+      cheerRef.current = false;
       play('Cheer', true);
       rigRef.current?.strike(0.8);
     }
-  }, [loaded, type]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loaded]);
 
   // Start a moment
   useEffect(() => {
@@ -267,7 +281,7 @@ const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (t
       (ring.material as THREE.MeshBasicMaterial).opacity = (1 - p) * 0.8;
       if (!current.swapped && t >= BURST_PEAK) {
         current.swapped = true;
-        onSwap(current.moment.to);
+        if (onSwap(current.moment.from, current.moment.to)) cheerRef.current = true;
       }
       if (p >= 1) momentRef.current = null;
     }
@@ -325,9 +339,11 @@ export const TroopShowcase: React.FC<TroopShowcaseProps> = ({ type, setting, mom
         <Troop
           type={shown}
           moment={moment}
-          onSwap={next => {
+          onSwap={(from, next) => {
+            if (shown !== from) return false;
             setShown(next);
             onEvolved?.(next);
+            return true;
           }}
         />
       </Canvas>

@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { ABILITIES, FACTIONS, MAX_CARD_LEVEL, TROOPS, TROOP_CLASSES, TroopId, cardPower, cardStats } from '@/lib/game/troops';
-import { CARD_UNLOCK_LEVEL, ELITE_UNLOCK_LEVEL, cardPrice, upgradeCost } from '@/lib/meta/economy';
+import { CARD_UNLOCK_LEVEL, ELITE_UNLOCK_LEVEL, MAX_DECK_SIZE, cardPrice, upgradeCost } from '@/lib/meta/economy';
 import { MonsterSkillIcon } from '../game/icons';
 import { eliteUnlocked, isCardAvailable, toggleDeckCard, treeOf, useProfile } from '@/lib/meta/profile';
 import { PLAYER_SKILLS, applyTree, baseOf, isBaseCard, lineageOf } from '@/lib/game/lineages';
@@ -55,6 +55,8 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, o
   const signature = getSignature(id);
   const rank = signatureRank(shownLevel);
   const inDeck = profile.deck.includes(id);
+  // No room for it among the battle cards (another form of its lineage there just swaps for it)
+  const deckFull = profile.deck.length >= MAX_DECK_SIZE && !profile.deck.some(card => lineageOf(card) === lineage);
   const cost = owned ? upgradeCost(id, shownLevel, eliteUnlocked(profile)) : null;
   const gains = cost !== null ? upgradeGains(id, shownLevel) : null;
   const nextRank = owned && rank < MAX_SIGNATURE_RANK ? rank + 1 : null;
@@ -79,7 +81,7 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, o
         <div className="flex flex-col gap-4 sm:flex-row">
           {/* The card, and what to do with it */}
           <div className="relative mx-auto flex w-36 shrink-0 flex-col items-center gap-2 pl-1.5 pt-1.5 sm:mx-0 sm:w-48">
-            <TroopCard type={id} level={shownLevel} size="lg" fill locked={!owned && !isCardAvailable(profile, id)} hideLevel={!owned} />
+            <TroopCard type={id} level={shownLevel} stats={stats} size="lg" fill locked={!owned && !isCardAvailable(profile, id)} hideLevel={!owned} />
             {flash && (
               <span className="moment-pop font-display pointer-events-none absolute top-1/3 text-2xl text-amber-300" style={{ WebkitTextStroke: '1.5px #0f172a', paintOrder: 'stroke fill' }}>
                 {flash}
@@ -105,9 +107,11 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, o
                 )}
                 <button
                   onClick={() => toggleDeckCard(id)}
+                  disabled={!inDeck && deckFull}
+                  title={!inDeck && deckFull ? 'Your battle cards are full: leave one behind first' : undefined}
                   className={`${BUTTON} ${inDeck ? 'bg-slate-700 text-slate-100 shadow-[0_4px_0_#1e293b] hover:bg-slate-600' : 'bg-sky-500 text-slate-900 shadow-[0_4px_0_#0369a1] hover:bg-sky-400'}`}
                 >
-                  {inDeck ? 'Leave behind' : 'Bring to battle'}
+                  {inDeck ? 'Leave behind' : deckFull ? 'Battle cards full' : 'Bring to battle'}
                 </button>
               </>
             ) : !isBaseCard(id) ? (

@@ -136,6 +136,11 @@ export const ArmyScreen: React.FC = () => {
       {/* Collection: one entry for each lineage */}
       <section className="mt-6">
         <h2 className="font-display mb-1 text-2xl text-slate-800">Your troops</h2>
+        {!treeSeen && (
+          <p className="mb-3 rounded-xl bg-slate-900 px-3 py-2 text-sm font-bold text-amber-100 shadow">
+            New: spend the materials you gather on your troops&apos; skill trees - and evolve them into new forms!
+          </p>
+        )}
         <p className="mb-6 text-sm font-semibold text-slate-700">Train a troop with coins. Its skill tree takes materials from the battlefield, and can evolve it into new forms.</p>
         <div className="grid grid-cols-2 gap-x-5 gap-y-8 sm:grid-cols-3 md:grid-cols-4">
           {lineages.map((lineage, index) => {
@@ -167,16 +172,24 @@ export const ArmyScreen: React.FC = () => {
                 {/* The forms it has evolved into: tap one to bring it */}
                 {forms.length > 1 && (
                   <div className="flex w-full flex-wrap justify-center gap-1">
-                    {forms.map(form => (
-                      <button
-                        key={form}
-                        onClick={() => toggleDeckCard(form)}
-                        className={`rounded-lg px-2 py-0.5 text-xs font-bold ${profile.deck.includes(form) ? 'bg-sky-500 text-slate-900' : 'bg-slate-800/80 text-slate-200 hover:bg-slate-700'}`}
-                        title={profile.deck.includes(form) ? 'In battle' : 'Bring this form to battle'}
-                      >
-                        {TROOPS[form].name}
-                      </button>
-                    ))}
+                    {forms.map(form => {
+                      const chosen = profile.deck.includes(form);
+                      return (
+                        <button
+                          key={form}
+                          onClick={() => {
+                            // (the form in battle stays there; leaving the troop behind is done from the battle cards)
+                            if (chosen) return;
+                            if (!toggleDeckCard(form)) announce(id, 'Battle cards full');
+                          }}
+                          aria-pressed={chosen}
+                          className={`rounded-lg px-2 py-0.5 text-xs font-bold ${chosen ? 'cursor-default bg-sky-500 text-slate-900' : 'bg-slate-800/80 text-slate-200 hover:bg-slate-700'}`}
+                          title={chosen ? 'In battle' : 'Bring this form to battle'}
+                        >
+                          {TROOPS[form].name}
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
                 {cost !== null ? (
@@ -208,11 +221,6 @@ export const ArmyScreen: React.FC = () => {
                     <span className="font-sans text-xs font-bold opacity-80">{tree.attributes.length}/{ATTRIBUTE_PICKS}{tree.skill ? ' · ✦' : ''}</span>
                     {treeReady(lineage) && <span className="absolute -right-1 -top-1 h-3 w-3 rounded-full bg-amber-400 ring-2 ring-slate-900" aria-label="Something to learn" />}
                   </button>
-                  {pointOut && (
-                    <div className="absolute left-1/2 top-full z-10 mt-2 w-56 -translate-x-1/2 rounded-xl bg-slate-900 px-3 py-2 text-center text-xs font-bold text-amber-100 shadow-lg">
-                      New: spend the materials you gather on skill trees - and evolve your troops into new forms!
-                    </div>
-                  )}
                 </div>
                 {devMode && <DevLevelControls level={level} max={MAX_CARD_LEVEL} onSet={next => devSetCardLevel(id, next)} />}
               </div>
