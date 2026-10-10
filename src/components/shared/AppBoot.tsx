@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { initAnalytics, trackEvent } from '@/lib/analytics';
 import { initAds } from '@/lib/ads';
 import { registerServiceWorker } from '@/lib/offline';
+import { isStandalone, listenForInstallPrompt } from '@/lib/install';
 import { applyUiSize } from '@/lib/uiSize';
 import { getProfile, highestCleared, profilePower } from '@/lib/meta/profile';
 
@@ -11,6 +12,7 @@ import { getProfile, highestCleared, profilePower } from '@/lib/meta/profile';
 export const AppBoot: React.FC = () => {
   useEffect(() => {
     applyUiSize();
+    listenForInstallPrompt();
     registerServiceWorker();
     initAnalytics();
     initAds();
@@ -20,7 +22,8 @@ export const AppBoot: React.FC = () => {
       power: profilePower(profile),
       battles: profile.stats.battles,
       cards_owned: Object.keys(profile.cards).length,
-      online: navigator.onLine
+      online: navigator.onLine,
+      installed: isStandalone()
     });
   }, []);
   return null;
