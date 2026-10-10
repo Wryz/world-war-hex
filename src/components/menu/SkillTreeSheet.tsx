@@ -324,7 +324,7 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
         role="dialog"
         aria-label={`${def.name} skill tree`}
         onClick={event => event.stopPropagation()}
-        className={`${CARD_CLASS} animate-fadeIn relative flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-b-none p-0 sm:rounded-b-2xl`}
+        className={`${CARD_CLASS} animate-fadeIn relative flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden [@media(max-height:500px)]:max-w-4xl rounded-b-none p-0 sm:rounded-b-2xl`}
       >
         {/* Header (everything under a scene playing is out of reach of the keyboard too) */}
         <div inert={!!scene} className="flex items-center gap-3 border-b border-slate-700/60 px-4 py-3">
@@ -335,125 +335,128 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
           <button onClick={onClose} className="rounded-full bg-slate-800 px-3 py-1 text-sm font-bold text-slate-300 hover:bg-slate-700" aria-label="Close">✕</button>
         </div>
 
-        <div inert={!!scene} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-          {/* The tree */}
-          <div ref={containerRef} className="relative grid grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-x-6 px-3 py-4 sm:gap-x-12 sm:px-6">
-            <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
-              {paths.map((path, i) => (
-                <path
-                  key={i}
-                  d={path.d}
-                  fill="none"
-                  stroke={path.lit ? '#fcd34d' : '#475569'}
-                  strokeWidth={path.lit ? 3 : 2}
-                  strokeDasharray={path.lit ? undefined : '5 5'}
-                  strokeLinecap="round"
-                />
-              ))}
-            </svg>
+        {/* (on a phone held sideways the details sit beside the tree, leaving it the height there is) */}
+        <div className="flex min-h-0 flex-1 flex-col [@media(max-height:500px)]:flex-row">
+          <div inert={!!scene} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+            {/* The tree */}
+            <div ref={containerRef} className="relative grid grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-x-6 px-3 py-4 sm:gap-x-12 sm:px-6">
+              <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
+                {paths.map((path, i) => (
+                  <path
+                    key={i}
+                    d={path.d}
+                    fill="none"
+                    stroke={path.lit ? '#fcd34d' : '#475569'}
+                    strokeWidth={path.lit ? 3 : 2}
+                    strokeDasharray={path.lit ? undefined : '5 5'}
+                    strokeLinecap="round"
+                  />
+                ))}
+              </svg>
 
-            {/* Left: the troop, and its attributes below it */}
-            <div className="relative flex flex-col items-center">
-              <button
-                type="button"
-                ref={el => nodeRef('root', el)}
-                onClick={() => setSelected({ kind: 'root' })}
-                className={`relative w-full max-w-[11rem] overflow-hidden rounded-2xl transition-transform hover:scale-[1.02] ${isSelected({ kind: 'root' }) ? 'outline outline-2 outline-offset-4 outline-sky-300' : ''}`}
-                style={{ background: `radial-gradient(ellipse at 50% 60%, ${rarity.frame}66, #0f172a 75%)`, boxShadow: `0 0 0 4px ${rarity.frame}` }}
-                aria-label={TROOPS[viewing].name}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={cardArtUrl(viewing)} alt="" className="aspect-[5/4] w-full object-cover" draggable={false} />
-                <span className="block bg-slate-950/85 px-2 py-1 text-center">
-                  <span className="font-display block truncate text-base leading-tight text-white">{TROOPS[viewing].name}</span>
-                  <span className="block text-[0.6875rem] font-bold" style={{ color: rarity.text }}>Level {level}</span>
-                </span>
-              </button>
+              {/* Left: the troop, and its attributes below it */}
+              <div className="relative flex flex-col items-center">
+                <button
+                  type="button"
+                  ref={el => nodeRef('root', el)}
+                  onClick={() => setSelected({ kind: 'root' })}
+                  className={`relative w-full max-w-[11rem] overflow-hidden rounded-2xl transition-transform hover:scale-[1.02] ${isSelected({ kind: 'root' }) ? 'outline outline-2 outline-offset-4 outline-sky-300' : ''}`}
+                  style={{ background: `radial-gradient(ellipse at 50% 60%, ${rarity.frame}66, #0f172a 75%)`, boxShadow: `0 0 0 4px ${rarity.frame}` }}
+                  aria-label={TROOPS[viewing].name}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={cardArtUrl(viewing)} alt="" className="aspect-[5/4] w-full object-cover" draggable={false} />
+                  <span className="block bg-slate-950/85 px-2 py-1 text-center">
+                    <span className="font-display block truncate text-base leading-tight text-white">{TROOPS[viewing].name}</span>
+                    <span className="block text-[0.6875rem] font-bold" style={{ color: rarity.text }}>Level {level}</span>
+                  </span>
+                </button>
 
-              <div className="mt-8 grid grid-cols-2 gap-x-2 gap-y-3">
-                {def.attributes.map(id => {
-                  const Icon = ATTRIBUTE_ICONS[id];
-                  return (
-                    <TreeNode
-                      key={id}
-                      id={`attribute:${id}`}
-                      state={attributeState(id)}
-                      selected={isSelected({ kind: 'attribute', id })}
-                      label={ATTRIBUTES[id].name}
-                      onSelect={() => setSelected({ kind: 'attribute', id })}
-                      nodeRef={nodeRef}
-                    >
-                      <Icon />
-                    </TreeNode>
-                  );
-                })}
-              </div>
-              <h3 className="mt-2 text-center text-xs font-bold uppercase tracking-wider text-slate-400">
-                Attributes · {tree.attributes.length}/{ATTRIBUTE_PICKS}
-              </h3>
-            </div>
-
-            {/* Right: its skills, then the forms it evolves into */}
-            <div className="relative flex flex-col">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Skill · pick 1</h3>
-              <div className="mt-2 flex gap-2">
-                {def.skills.map(id => {
-                  const Icon = PLAYER_SKILL_ICONS[id];
-                  return (
-                    <TreeNode
-                      key={id}
-                      id={`skill:${id}`}
-                      state={skillState(id)}
-                      selected={isSelected({ kind: 'skill', id })}
-                      label={PLAYER_SKILLS[id].skill.name}
-                      onSelect={() => setSelected({ kind: 'skill', id })}
-                      nodeRef={nodeRef}
-                    >
-                      <Icon />
-                    </TreeNode>
-                  );
-                })}
-              </div>
-
-              <h3 className="mt-6 text-xs font-bold uppercase tracking-wider text-slate-400">Evolutions</h3>
-              <div className="mt-2 flex flex-col gap-3">
-                {branches.map(chain => (
-                  <div key={chain[0].id} className="flex gap-2">
-                    {chain.map(form => (
+                <div className="mt-8 grid grid-cols-2 gap-x-2 gap-y-3">
+                  {def.attributes.map(id => {
+                    const Icon = ATTRIBUTE_ICONS[id];
+                    return (
                       <TreeNode
-                        key={form.id}
-                        id={`form:${form.id}`}
-                        state={formState(form.id)}
-                        selected={isSelected({ kind: 'form', id: form.id })}
-                        label={TROOPS[form.id].name}
-                        onSelect={() => setSelected({ kind: 'form', id: form.id })}
+                        key={id}
+                        id={`attribute:${id}`}
+                        state={attributeState(id)}
+                        selected={isSelected({ kind: 'attribute', id })}
+                        label={ATTRIBUTES[id].name}
+                        onSelect={() => setSelected({ kind: 'attribute', id })}
                         nodeRef={nodeRef}
                       >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={cardArtUrl(form.id)} alt="" className="h-full w-full scale-125 object-cover" draggable={false} />
+                        <Icon />
                       </TreeNode>
-                    ))}
-                  </div>
-                ))}
+                    );
+                  })}
+                </div>
+                <h3 className="mt-2 text-center text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Attributes · {tree.attributes.length}/{ATTRIBUTE_PICKS}
+                </h3>
+              </div>
+
+              {/* Right: its skills, then the forms it evolves into */}
+              <div className="relative flex flex-col">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Skill · pick 1</h3>
+                <div className="mt-2 flex gap-2">
+                  {def.skills.map(id => {
+                    const Icon = PLAYER_SKILL_ICONS[id];
+                    return (
+                      <TreeNode
+                        key={id}
+                        id={`skill:${id}`}
+                        state={skillState(id)}
+                        selected={isSelected({ kind: 'skill', id })}
+                        label={PLAYER_SKILLS[id].skill.name}
+                        onSelect={() => setSelected({ kind: 'skill', id })}
+                        nodeRef={nodeRef}
+                      >
+                        <Icon />
+                      </TreeNode>
+                    );
+                  })}
+                </div>
+
+                <h3 className="mt-6 text-xs font-bold uppercase tracking-wider text-slate-400">Evolutions</h3>
+                <div className="mt-2 flex flex-col gap-3">
+                  {branches.map(chain => (
+                    <div key={chain[0].id} className="flex gap-2">
+                      {chain.map(form => (
+                        <TreeNode
+                          key={form.id}
+                          id={`form:${form.id}`}
+                          state={formState(form.id)}
+                          selected={isSelected({ kind: 'form', id: form.id })}
+                          label={TROOPS[form.id].name}
+                          onSelect={() => setSelected({ kind: 'form', id: form.id })}
+                          nodeRef={nodeRef}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={cardArtUrl(form.id)} alt="" className="h-full w-full scale-125 object-cover" draggable={false} />
+                        </TreeNode>
+                      ))}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
 
-        {/* What the selected node does */}
-        <div inert={!!scene} className="border-t border-slate-700/60 bg-slate-950/60 px-4 py-3 pb-[calc(0.75rem+var(--safe-b))]">
-          <Details
-            selection={selected}
-            lineage={lineage}
-            viewing={viewing}
-            deckFull={deckFull}
-            cleared={cleared}
-            onLearn={learn}
-            onReplace={replace}
-            onSkill={learnTheSkill}
-            onEvolve={evolve}
-            onView={setViewing}
-          />
+          {/* What the selected node does */}
+          <div inert={!!scene} className="border-t border-slate-700/60 bg-slate-950/60 px-4 py-3 pb-[calc(0.75rem+var(--safe-b))] [@media(max-height:500px)]:w-72 [@media(max-height:500px)]:shrink-0 [@media(max-height:500px)]:overflow-y-auto [@media(max-height:500px)]:border-l [@media(max-height:500px)]:border-t-0">
+            <Details
+              selection={selected}
+              lineage={lineage}
+              viewing={viewing}
+              deckFull={deckFull}
+              cleared={cleared}
+              onLearn={learn}
+              onReplace={replace}
+              onSkill={learnTheSkill}
+              onEvolve={evolve}
+              onView={setViewing}
+            />
+          </div>
         </div>
 
         {/* The troop in its own setting, playing out what it just learnt (kept loaded, paused while hidden) */}

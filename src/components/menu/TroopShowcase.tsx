@@ -74,8 +74,8 @@ const SETTINGS: Record<LineageSetting, SettingDef> = {
     props: [
       { model: 'tree_dead_large', at: [-1.2, -1.4], scale: 1.1 },
       { model: 'tree_dead_medium', at: [1.3, -1.3] },
-      { model: 'chest_gold', at: [1.1, -0.3], turn: -0.6, scale: 1.3 },
-      { model: 'coin_stack_large', at: [1.5, 0.45], scale: 0.6 },
+      { model: 'chest_gold', at: [1.6, -0.9], turn: -0.6, scale: 0.75 },
+      { model: 'coin_stack_large', at: [1.7, 0.2], scale: 0.5 },
       { model: 'lantern_standing', at: [-1.3, 0.2] }
     ]
   },
