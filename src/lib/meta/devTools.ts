@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { LEVEL_COUNT } from '../campaign/levels';
 import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId } from '../game/troops';
 import { MAX_DECK_SIZE, STARTER_CARDS } from './economy';
+import { MATERIAL_IDS } from '../game/materials';
 import { Profile, getProfile, replaceProfile } from './profile';
 
 // Developer shortcuts for trying things out on a local copy of the game: every level open, coins on
@@ -75,6 +76,13 @@ export const devLockAllLevels = () => update(() => ({ levels: {} }));
 export const devOwnEverything = () => update(profile => ({
   cards: Object.fromEntries(PLAYER_CARD_IDS.map(id => [id, profile.cards[id] ?? 1]))
 }));
+
+// A satchel holding plenty of every material (every Chronicle page open), or an empty one
+export const devFillSatchel = () => update(profile => ({
+  materials: Object.fromEntries(MATERIAL_IDS.map(id => [id, (profile.materials[id] ?? 0) + 20])),
+  materialsFound: [...MATERIAL_IDS]
+}));
+export const devEmptySatchel = () => update(() => ({ materials: {}, materialsFound: [] }));
 
 // Set every owned card to one level
 export const devSetAllLevels = (level: number) => update(profile => ({

@@ -34,6 +34,9 @@ export const makeBattle = (activePlayer: PlayerType = 'ai', extra: Partial<GameS
     hex.isResourceHex = false;
     hex.isCamp = false;
     hex.unit = undefined;
+    hex.harvest = undefined;
+    hex.storySite = undefined;
+    hex.plundered = undefined;
   }
   state.players.player.units = [];
   state.players.ai.units = [];

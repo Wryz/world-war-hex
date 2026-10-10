@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { trackEvent } from '@/lib/analytics';
+import { haulSize } from '@/lib/game/materials';
 import { showBreakAd } from '@/lib/ads';
 import { requestPersistentStorage } from '@/lib/offline';
 import { useRouter } from 'next/navigation';
@@ -223,7 +224,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       enemyCastleDamage: 1 - castleHealthRatio(gameState, 'ai'),
       playerStats,
       durationSeconds: elapsedRef.current,
-      challengeMet: challengeMet(gameState)
+      challengeMet: challengeMet(gameState),
+      haul: gameState.haul
     });
     trackEvent('battle_ended', {
       mode: battle.mode,
@@ -237,7 +239,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       kills: playerStats.kills,
       lost: playerStats.lost,
       coins_earned: record.reward.coins,
-      challenge_completed: record.challengeCompleted
+      challenge_completed: record.challengeCompleted,
+      materials_gathered: haulSize(record.haul)
     });
     // Now there's progress worth keeping, ask the browser not to clear it
     void requestPersistentStorage();
@@ -443,6 +446,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
             level={level}
             stars={finished.stars}
             record={finished.record}
+            gathered={haulSize(gameState.haul)}
             rounds={gameState.turnNumber}
             stats={gameState.battleStats!.player}
             durationSeconds={elapsedRef.current}

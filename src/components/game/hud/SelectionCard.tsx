@@ -9,8 +9,9 @@ import {
 import { getUnitTypeName } from '../utils/UnitHelpers';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
 import { TERRAIN_SHORT_EFFECTS } from './terrainInfo';
-import { AbilityIcon, AttackIcon, BossPowerIcon, CampIcon, CrownIcon, FireIcon, FrozenIcon, MoveIcon, TerrainIcon, UnitIcon, FogIcon } from '../icons';
+import { AbilityIcon, AttackIcon, MonsterSkillIcon, SlowedIcon, VenomIcon, BossPowerIcon, CampIcon, CrownIcon, FireIcon, FrozenIcon, MoveIcon, TerrainIcon, UnitIcon, FogIcon } from '../icons';
 import { getBossPower, isBossEnraged } from '@/lib/game/bosses';
+import { getMobSkill } from '@/lib/game/mobSkills';
 import { useShownCastleHealth, useShownHealth } from '../effects/healthTimeline';
 
 interface SelectionCardProps {
@@ -103,12 +104,24 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
               {isBossEnraged({ ...unit, lifespan: shownHealth ?? unit.lifespan }) && <span className="ml-auto flex items-center gap-0.5 text-orange-300"><FireIcon /> Enraged</span>}
             </div>
           )}
+          {getMobSkill(unit) && (
+            <div className="mt-2 rounded-md bg-rose-950/50 px-2 py-1 text-rose-100" title="This monster's own skill">
+              <span className="flex items-center gap-1.5 font-bold"><MonsterSkillIcon /> {getMobSkill(unit)!.name}</span>
+              <span className="block text-[0.6875rem] leading-snug text-rose-200/80">{getMobSkill(unit)!.description}</span>
+            </div>
+          )}
+          {(unit.poisoned || unit.slowed) && (
+            <div className="mt-2 flex flex-wrap gap-2 rounded-md bg-lime-950/50 px-2 py-1 font-bold text-lime-100">
+              {unit.poisoned && <span className="flex items-center gap-1"><VenomIcon /> Poisoned: -{unit.poisoned} at its turn&apos;s end</span>}
+              {unit.slowed && <span className="flex items-center gap-1"><SlowedIcon /> Slowed: -1 movement</span>}
+            </div>
+          )}
           {unit.frozen && (
             <div className="mt-2 flex items-center gap-1.5 rounded-md bg-cyan-950/60 px-2 py-1 font-bold text-cyan-100"><FrozenIcon /> Frozen this turn</div>
           )}
           <div className="mt-2 flex gap-3 text-slate-200">
             <span title="Attack" className="flex items-center gap-1"><AttackIcon /> <b>{unit.attackPower}</b></span>
-            <span title={getMovementRange(gameState, unit) < unit.movementRange ? 'Movement (slowed by the blizzard)' : 'Movement'} className="flex items-center gap-1"><MoveIcon /> <b className={getMovementRange(gameState, unit) < unit.movementRange ? 'text-sky-300' : ''}>{getMovementRange(gameState, unit)}</b></span>
+            <span title={getMovementRange(gameState, unit) < unit.movementRange ? `Movement (slowed by ${unit.slowed ? 'a web or chill' : 'the blizzard'})` : 'Movement'} className="flex items-center gap-1"><MoveIcon /> <b className={getMovementRange(gameState, unit) < unit.movementRange ? 'text-sky-300' : ''}>{getMovementRange(gameState, unit)}</b></span>
             <span className="ml-auto text-slate-400" title={effect.description}>
               <TerrainIcon terrain={hex.terrain} /> {terrainBonuses.length > 0 ? terrainBonuses.join(' · ') : effect.name}
             </span>

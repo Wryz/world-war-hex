@@ -37,11 +37,14 @@ import {
 import {
   BARRACKS_HEALTH_BONUS, BLACKSMITH_ATTACK_BONUS, CATAPULT_CASTLE_DAMAGE, CATAPULT_DAMAGE, CATAPULT_RANGE, HAMLET_SIZE, HELD_TOWER_SIGHT,
   LUMBERMILL_FELL_REACH, StructureTerrain, TAVERN_INCOME, WATCHTOWER_COUNT, WATCHTOWER_SIGHT_BONUS, WORKSHOPS,
-  WORKSHOP_COUNT, isCapturable, WALL_ARM, WALL_CHANCE, BRIDGE_COUNT
+  WORKSHOP_COUNT, isCapturable, isStructure, WALL_ARM, WALL_CHANCE, BRIDGE_COUNT
 } from './structures';
 import { MAX_HEIGHT_OFFSET, getHexHeightOf, getTerrainHeight, shiftHeightOffset } from './hexHeight';
 import { cardStats, getClassCounter, getTroop, getTroopClass, scaleTroop } from './troops';
 import { aimStrike, getBossPower, isBossEnraged, powerCooldown } from './bosses';
+import { BUILDING_MATERIAL, MaterialId, SPOILS, addToHaul, landMaterials } from './materials';
+import { storySiteFor } from './lore';
+import { SLOW_MOVEMENT, getMobSkill, hasMobSkill, mobAuraShare, mobDefenceShare, mobStrikeShare } from './mobSkills';
 import { TUTORIAL_CAMPS, TUTORIAL_CASTLES, TUTORIAL_LEVEL_ID, TUTORIAL_TERRAIN } from './tutorialField';
 import {
   PIN_BONUS, SHIELD_WALL_REDUCTION, findScreen, inShieldWall, isPinned, screenReduction, strikesPinned
@@ -871,6 +874,7 @@ export const placeBases = (state: GameState, coordinates: HexCoordinates): GameS
   placeCamps(newState, playerHex.coordinates, aiHex.coordinates);
   // The first battle teaches the basics on a field without buildings
   if (newState.levelId !== 1) placeStructures(newState, playerHex.coordinates, aiHex.coordinates);
+  placeHarvest(newState, playerHex.coordinates, aiHex.coordinates);
 
   const startedState: GameState = {
     ...newState,
@@ -1151,7 +1155,7 @@ export const unitEnterCost = (unit: { abilities: Ability[]; type?: UnitType; isB
 // How far a unit can walk this turn: its movement, less what the weather takes (a blizzard slows a
 // troop to one hex at the least)
 export const getMovementRange = (state: GameState, unit: Unit): number =>
-  Math.max(1, unit.movementRange - weatherMovePenalty(state, unit));
+  Math.max(1, unit.movementRange - weatherMovePenalty(state, unit) - (unit.slowed ? SLOW_MOVEMENT : 0));
 
 // Cheapest-path search over the board. By default entering a hex costs its terrain's movement cost.
 // `canEnter` decides which hexes may be walked through at all.
@@ -1511,6 +1515,7 @@ const fellTree = (state: GameState, order: Move): void => {
   if (landing.terrain === 'water') updateHex(state, landing.coordinates, { feature: 'logBridge', fellFrom: tree.coordinates });
   else if (landing.terrain !== 'mountain') updateHex(state, landing.coordinates, { feature: 'log', fellFrom: tree.coordinates, fire: undefined });
   state.lastFell = { side, from: tree.coordinates, to: landing.coordinates, serial: (state.lastFell?.serial ?? 0) + 1 };
+  if (side === 'player') gather(state, 'heartwood', tree.coordinates);
 
   const crushed = victim && inflictDamage(state, victim, FELL_DAMAGE, side, 'fell', { from: order.to });
   addLog(state, side, `${unitLabel(unit)} felled a great tree` + (victim && crushed
@@ -1644,9 +1649,11 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
           ? `${unitLabel(unit)} seized ${side === 'player' ? 'the enemy' : 'your'} ${building}!`
           : `${unitLabel(unit)} took the ${building}.`);
         updateHex(newState, unit.position, { owner: side });
+        plunder(newState, hex, side);
         continue;
       }
       if (!hex?.isCamp || hex.owner === side) continue;
+      plunder(newState, hex, side);
       addLog(newState, side, hex.owner
         ? `${unitLabel(unit)} seized ${side === 'player' ? 'an enemy camp' : 'your camp'}!`
         : `${unitLabel(unit)} captured a camp. Recruits can now deploy there.`);
@@ -2069,6 +2076,15 @@ export const getFormationEffects = (
   const screen = screenReduction(findScreen(target, at, from, guards));
   if (screen > 0) effects.push({ label: 'Screened', share: -screen });
   if (inShieldWall(target, at, guards)) effects.push({ label: 'Shield wall', share: -SHIELD_WALL_REDUCTION });
+  // Monster skills: the striker's own, a friend's war-cry beside it, and the target's hide or guard
+  const moved = from === attacker.position ? attacker.movedHexes ?? 0 : getHexDistance(attacker.position, from);
+  const groundAt = (c: HexCoordinates) => findHexByCoordinates(state.hexGrid, c)?.terrain ?? 'plain';
+  const mobStrike = mobStrikeShare(attacker, target, from, at, moved, strikers, guards, groundAt);
+  if (mobStrike) effects.push(mobStrike);
+  const aura = mobAuraShare(attacker, from, strikers);
+  if (aura) effects.push(aura);
+  const defence = mobDefenceShare(target, at, getHexDistance(from, at), guards);
+  if (defence) effects.push({ label: defence.label, share: -defence.share });
   // Pack Hunters: beasts are harder for every other beast beside their prey
   if (hasTrait(attacker, 'pack')) {
     const pack = Math.min(MAX_PACK, strikers.filter(friend =>
@@ -2379,7 +2395,9 @@ export const advanceFires = (state: GameState, roundEnds: boolean, random: (salt
       fire: undefined, scorched: true,
       // A forest burns down to open ground, a house to a shell
       terrain: hex.terrain === 'forest' ? 'plain' : hex.terrain === 'house' ? 'ruins' : hex.terrain,
-      feature: hex.feature === 'logBridge' ? hex.feature : undefined
+      feature: hex.feature === 'logBridge' ? hex.feature : undefined,
+      // (and leaves charcoal to gather, where nothing else was)
+      harvest: hex.harvest ?? (hex.storySite ? undefined : 'charcoal')
     });
   }
   // (embers set by a troop during its turn glow through the other side's turn before they catch)
@@ -2460,7 +2478,9 @@ const finishTurn = (state: GameState): GameState => {
       const updated = {
         ...unit, lifespan, hasMoved: false, isEngagedInCombat: false, movedHexes: 0, frozen: undefined,
         revealed: side === activePlayer ? unit.revealed : false,
-        shaken: side === activePlayer && unit.shaken ? unit.shaken - 1 || undefined : unit.shaken
+        shaken: side === activePlayer && unit.shaken ? unit.shaken - 1 || undefined : unit.shaken,
+        // (and a slowed one shakes off the web)
+        slowed: side === activePlayer && unit.slowed ? unit.slowed - 1 || undefined : unit.slowed
       };
       if (lifespan <= 0) burned.push(updated);
       return updated;
@@ -2484,6 +2504,14 @@ const finishTurn = (state: GameState): GameState => {
       : `${unitLabel(unit)} perished on the ${TERRAIN_EFFECTS[terrainUnder(newState, unit)].name.toLowerCase()}.`);
   }
   scatterMinions(newState);
+  // Venom: this side's poisoned troops lose what the poison takes, and are rid of it
+  for (const unit of [...newState.players[activePlayer].units]) {
+    if (!unit.poisoned) continue;
+    const amount = unit.poisoned;
+    unit.poisoned = undefined;
+    const { destroyed } = inflictDamage(newState, unit, amount, getOpponent(activePlayer), 'venom');
+    addLog(newState, activePlayer, `${unitLabel(unit)} ${destroyed ? 'succumbs to' : 'suffers'} the venom${destroyed ? '' : ` (-${amount})`}.`);
+  }
   // Morale: the other side's badly hurt troops caught alone among this side's waver
   const opponent = getOpponent(activePlayer);
   for (const unit of newState.players[opponent].units) {
@@ -2500,6 +2528,7 @@ const finishTurn = (state: GameState): GameState => {
     addLog(newState, activePlayer, `${sideTroops} healers mend ${healedByMages} health.`);
   }
   bombard(newState, activePlayer);
+  if (activePlayer === 'player') gatherFromTheLand(newState);
   advanceFires(newState, activePlayer === 'ai');
   unleashBossPowers(newState, activePlayer);
   applyChallenges(newState, activePlayer);
@@ -3050,6 +3079,42 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
   return effects;
 };
 
+// What a monster's blow leaves behind on the troop it hurt (`victim` as it was before the fight)
+const applyBlowSkill = (state: GameState, hitter: Unit, victim: Unit): void => {
+  const skill = getMobSkill(hitter);
+  if (!skill) return;
+  const live = state.players[victim.owner].units.find(u => u.id === victim.id);
+  const own = state.players[hitter.owner].units.find(u => u.id === hitter.id);
+  // (an effect meant for the victim's next turn, landing on its own turn, lasts through one more)
+  const turns = getActivePlayer(state) === victim.owner ? 2 : 1;
+  switch (skill.kind) {
+    case 'venom':
+      if (live) live.poisoned = Math.max(live.poisoned ?? 0, skill.amount!);
+      break;
+    case 'slow':
+      if (live) live.slowed = Math.max(live.slowed ?? 0, turns);
+      break;
+    case 'curse':
+      if (live && !isFearless(live)) live.shaken = Math.max(live.shaken ?? 0, turns);
+      break;
+    case 'leech':
+      if (own && own.lifespan > 0 && own.lifespan < own.maxLifespan) {
+        const healed = Math.min(own.maxLifespan - own.lifespan, skill.amount!);
+        noteHealth(state, own, healed, 'drain');
+        own.lifespan += healed;
+      }
+      break;
+    case 'plunder': {
+      const taken = Math.min(skill.amount!, Math.max(0, state.players[victim.owner].points));
+      if (taken <= 0) break;
+      state.players[victim.owner].points -= taken;
+      earnGold(state, hitter.owner, taken);
+      addLog(state, hitter.owner, `${skill.name}! ${unitLabel(hitter)} steals ${taken} gold.`);
+      break;
+    }
+  }
+};
+
 export const resolveCombat = (state: GameState, combatIndex: number): GameState => {
   const combat = state.combats[combatIndex];
   if (state.currentPhase !== 'combat' || !combat || combat.resolved) return state;
@@ -3103,6 +3168,13 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
         !fighting.has(other.id) && hasTrait(other, 'swarm') && getHexDistance(other.position, entry.unit.position) === 1);
       for (const goblin of crowd) inflictDamage(newState, goblin, splash, getOpponent(goblin.owner), 'swarm');
       if (crowd.length > 0) addLog(newState, entry.unit.owner, `Packed together: ${crowd.length === 1 ? 'the goblin beside it takes' : `${crowd.length} goblins beside it take`} ${splash} too.`);
+    }
+    // Monster skills that work once a blow lands: venom, webs, curses, drained life, stolen gold
+    for (const entry of [...preview.attackers, ...preview.defenders]) {
+      if (entry.damageTaken <= 0) continue;
+      const isDefender = preview.defenders.includes(entry);
+      const hitters = isDefender ? preview.attackers.map(a => a.unit) : preview.defenders.slice(0, 1).map(d => d.unit);
+      for (const hitter of hitters) applyBlowSkill(newState, hitter, entry.unit);
     }
     syncHexUnits(newState);
 
@@ -3158,6 +3230,13 @@ export const resolveAllCombats = (state: GameState): GameState => {
 const removeUnit = (state: GameState, unit: Unit): void => {
   state.players[unit.owner].units = state.players[unit.owner].units.filter(u => u.id !== unit.id);
   if (unit.isBoss) scatterMinions(state);
+  // A sapper's powder keg or a golem's molten heart goes off as it falls
+  const burst = hasMobSkill(unit, 'deathburst');
+  if (burst) {
+    const caught = state.players[getOpponent(unit.owner)].units.filter(enemy => getHexDistance(enemy.position, unit.position) === 1);
+    if (caught.length > 0) addLog(state, unit.owner, `${burst.name}! ${unitLabel(unit)} bursts as it falls.`);
+    for (const enemy of caught) inflictDamage(state, enemy, burst.amount!, unit.owner, 'burst', { from: unit.position });
+  }
   // (falling on its own side's turn, the turn's end would count one off at once: it gets one more)
   if (unit.isBoss || unit.isChampion) {
     const turns = (unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE) + (getActivePlayer(state) === unit.owner ? 1 : 0);
@@ -3194,6 +3273,84 @@ const scatterMinions = (state: GameState): void => {
 };
 
 // Count a destroyed unit for the side that destroyed it (and against the side that lost it)
+// --- Materials (lib/game/materials) and story sites (lib/game/lore) ------------------------------
+
+// Something gathered by the player this battle, and where (for the board to show it)
+const MAX_GATHERED_SHOWN = 24;
+const gather = (state: GameState, material: MaterialId, at: HexCoordinates): void => {
+  state.haul = addToHaul(state.haul ?? {}, material);
+  const serial = (state.gathered?.[state.gathered.length - 1]?.serial ?? 0) + 1;
+  state.gathered = [...(state.gathered ?? []), { material, at, serial }].slice(-MAX_GATHERED_SHOWN);
+};
+
+// A building or camp taken for the first time this battle gives up its stores - to whoever takes
+// it first (the enemy can strip it before you get there)
+const plunder = (state: GameState, hex: Hex, side: PlayerType): void => {
+  if (hex.plundered) return;
+  updateHex(state, hex.coordinates, { plundered: true });
+  const stores = BUILDING_MATERIAL[hex.isCamp ? 'camp' : hex.terrain];
+  if (stores && side === 'player') gather(state, stores, hex.coordinates);
+};
+
+// At the end of each of the player's turns: each troop takes whatever glints on its hex, and one on
+// the story site recovers its relic
+const gatherFromTheLand = (state: GameState): void => {
+  const site = storySiteFor(state.mapName);
+  for (const unit of state.players.player.units) {
+    const hex = findHexByCoordinates(state.hexGrid, unit.position);
+    if (!hex) continue;
+    if (hex.harvest) {
+      gather(state, hex.harvest, hex.coordinates);
+      updateHex(state, hex.coordinates, { harvest: undefined });
+    }
+    if (hex.storySite && !hex.plundered && site) {
+      gather(state, site.relic, hex.coordinates);
+      updateHex(state, hex.coordinates, { plundered: true });
+      addLog(state, 'player', `${unitLabel(unit)} recovered a relic from ${site.name.replace(/^A |^The /, 'the ').toLowerCase()}.`);
+    }
+  }
+};
+
+// Something worth gathering on about this share of the ground that can be gathered from, and the
+// story site, set out once the castles stand. Springs and gold mines always have something.
+const HARVEST_SHARE = 0.2;
+const MIN_HARVEST = 5;
+const placeHarvest = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoordinates): void => {
+  let draws = 0;
+  const random = () => seededRandom((state.battleSeed ?? 0) + 4243 + 17 * draws++);
+  const theme = state.mapName;
+  const open = (hex: Hex) => !hex.isBase && !hex.isCamp && !isImpassable(hex) && !isStructure(hex.terrain) && !hex.feature &&
+    getHexDistance(hex.coordinates, playerBase) > 1 && getHexDistance(hex.coordinates, aiBase) > 1;
+
+  // The story site: somewhere neither side reaches first, away from the castles
+  const site = state.levelId !== 1 ? storySiteFor(theme) : undefined;
+  if (site) {
+    const fair = (hex: Hex, tolerance: number) =>
+      Math.abs(getHexDistance(hex.coordinates, playerBase) - getHexDistance(hex.coordinates, aiBase)) <= tolerance &&
+      Math.min(getHexDistance(hex.coordinates, playerBase), getHexDistance(hex.coordinates, aiBase)) >= 3;
+    for (const tolerance of [1, 2, 3]) {
+      const options = state.hexGrid.filter(hex => open(hex) && !hex.isResourceHex && hex.terrain !== 'spring' && fair(hex, tolerance));
+      if (options.length === 0) continue;
+      const chosen = options[Math.floor(random() * options.length)];
+      updateHex(state, chosen.coordinates, { storySite: true });
+      break;
+    }
+  }
+
+  for (const hex of state.hexGrid) {
+    if (hex.isResourceHex) updateHex(state, hex.coordinates, { harvest: 'gold_nugget' });
+    else if (hex.terrain === 'spring') updateHex(state, hex.coordinates, { harvest: 'spring_water' });
+  }
+  const candidates = state.hexGrid.filter(hex => open(hex) && !hex.storySite && !hex.isResourceHex &&
+    hex.terrain !== 'spring' && landMaterials(hex.terrain, theme).length > 0);
+  const count = Math.min(candidates.length, Math.max(MIN_HARVEST, Math.round(candidates.length * HARVEST_SHARE)));
+  const shuffled = candidates.map(hex => ({ hex, order: random() })).sort((a, b) => a.order - b.order).slice(0, count);
+  for (const { hex } of shuffled) {
+    const choices = landMaterials(hex.terrain, theme);
+    updateHex(state, hex.coordinates, { harvest: choices[Math.floor(random() * choices.length)] });
+  }
+};
+
 const creditKill = (state: GameState, unit: Unit, killer: PlayerType): void => {
   const killerStats = sideStats(state, killer);
   killerStats.kills++;
@@ -3204,6 +3361,9 @@ const creditKill = (state: GameState, unit: Unit, killer: PlayerType): void => {
     addLog(state, killer, `${getTroopName(unit.type)} has been slain!`);
   }
   sideStats(state, unit.owner).lost++;
+  // (each enemy troop leaves something of its kind behind)
+  const spoils = killer === 'player' ? SPOILS[unit.type] : undefined;
+  if (spoils) gather(state, spoils, unit.position);
 };
 
 // Notes a change to a troop's health outside a fight (or a castle's), for the board to show when its

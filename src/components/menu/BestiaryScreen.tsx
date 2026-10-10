@@ -6,7 +6,8 @@ import { useHasHydrated, useProfile } from '@/lib/meta/profile';
 import { useMusic } from '@/lib/audio/music';
 import { TroopCard } from '../game/cards/TroopCard';
 import { MenuShell, CARD_CLASS } from './MenuShell';
-import { AbilityIcon, BookIcon, CloseIcon, SkullIcon, TraitIcon } from '../game/icons';
+import { AbilityIcon, BookIcon, CloseIcon, MonsterSkillIcon, SkullIcon, TraitIcon } from '../game/icons';
+import { MOB_SKILLS } from '@/lib/game/mobSkills';
 import { getFactionTrait } from '@/lib/game/regionRules';
 import { CounterLine } from '../game/hud/SelectionCard';
 
@@ -50,6 +51,10 @@ const MobDetail: React.FC<{ id: TroopId; onClose: () => void }> = ({ id, onClose
               {troop.abilities.map(ability => (
                 <li key={ability} className="flex gap-1.5"><AbilityIcon ability={ability} className="mt-0.5" /><span><b>{ABILITIES[ability].name}:</b> {ABILITIES[ability].description}</span></li>
               ))}
+              {/* Its own skill */}
+              {MOB_SKILLS[id] && (
+                <li className="flex gap-1.5"><MonsterSkillIcon className="mt-0.5" /><span><b>{MOB_SKILLS[id]!.name}:</b> {MOB_SKILLS[id]!.description}</span></li>
+              )}
               {/* Its faction's trait (bosses have their powers instead) */}
               {!troop.isBoss && getFactionTrait(id) && (() => {
                 const trait = getFactionTrait(id)!;

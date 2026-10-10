@@ -1,6 +1,7 @@
 import type { TroopId } from '@/lib/game/troops';
 import type { BossPowerId } from '@/lib/game/bosses';
 import type { WeatherId } from '@/lib/game/regionRules';
+import type { Haul, MaterialId } from '@/lib/game/materials';
 
 export type TerrainType =
   | 'plain'
@@ -64,6 +65,14 @@ export interface Hex {
   fire?: { stage: 'smoulder' | 'burning'; turnsLeft: number };
   // Burnt out by a fire (the ground is blackened)
   scorched?: boolean;
+  // Something worth gathering here (see lib/game/materials): a troop of yours ending a turn on the
+  // hex takes it
+  harvest?: MaterialId;
+  // The battlefield's story site (see lib/game/lore): holding it at the end of a turn recovers its
+  // relic
+  storySite?: boolean;
+  // A building or camp that has already given up its stores this battle
+  plundered?: boolean;
 }
 
 export type HexFeature = 'greatTree' | 'log' | 'logBridge' | 'stakes';
@@ -106,6 +115,10 @@ export interface Unit {
   risen?: boolean;
   // Shaken (morale): its side's turns left until it steadies; it hits softer meanwhile
   shaken?: number;
+  // Poisoned (a monster's venom): health it loses at the end of its side's next turn
+  poisoned?: number;
+  // Slowed (a web, a chilling touch): its side's turn-ends left with one hex less movement
+  slowed?: number;
 }
 
 // Every troop - the player's cards and the campaign's monsters - is identified by its troop id
@@ -219,6 +232,10 @@ export interface GameState {
   lastBombard?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
   // The tree felled most recently, for the board to show it falling (serial counts fellings)
   lastFell?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
+  // What the player has gathered this battle (lib/game/materials), and the latest gatherings with
+  // where they happened, for the board to show (each with a serial counting gatherings)
+  haul?: Haul;
+  gathered?: { material: MaterialId; at: HexCoordinates; serial: number }[];
   // A boss's power used most recently, for the board to play it out: the boss, the hexes it struck
   // (or where its minions appeared) and a serial counting powers used
   lastBossPower?: { power: BossPowerId; from: HexCoordinates; hexes: HexCoordinates[]; serial: number };
@@ -232,7 +249,9 @@ export interface GameState {
 
 export type HealthCause =
   | 'strafe' | 'fell' | 'catapult' | 'boss' | 'swarm' | 'bloodlust'
-  | 'spring' | 'mage' | 'regenerate' | 'lava' | 'cursed' | 'fire';
+  | 'spring' | 'mage' | 'regenerate' | 'lava' | 'cursed' | 'fire'
+  // Monster skills: venom at a turn's end, a troop bursting as it falls, life drained in a fight
+  | 'venom' | 'burst' | 'drain';
 
 export interface HealthEvent {
   serial: number;
