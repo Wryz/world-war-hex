@@ -71,6 +71,7 @@ import { ALL_THEMES } from '@/lib/game/mapGenerator';
 import { isMaterialId } from '@/lib/game/materials';
 import { SKY_COLOR } from '@/components/menu/MenuShell';
 import { useReleaseGpuOnUnmount } from './utils/releaseGpu';
+import { canvasQuality, useGraphicsQuality } from '@/lib/graphics';
 
 // Identity of a unit's buffs, to keep its props stable while they don't change
 const buffKey = (buffs: UnitBuff[]) => buffs.map(buff => `${buff.id}:${buff.value}`).join('|');
@@ -160,16 +161,17 @@ interface GameBoardProps {
 }
 
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
+  const quality = useGraphicsQuality();
   // Use loading state from the parent provider
   const { isComplete: assetsLoaded } = useLoadingManager();
-  useReleaseGpuOnUnmount();
+  useReleaseGpuOnUnmount(quality);
 
 
   return (
     // Bright sky behind the floating battlefield
     <div className="w-full h-full" style={{ background: SKY_COLOR }}>
       {/* Flat (no tone mapping) keeps the low-poly colours bright and true; cap the pixel ratio for smoothness */}
-      <Canvas shadows flat dpr={[1, 1.5]}>
+      <Canvas key={quality} {...canvasQuality(quality)} flat>
         <Suspense fallback={null}>
 
           <BoardScene {...props} assetsLoaded={assetsLoaded} />

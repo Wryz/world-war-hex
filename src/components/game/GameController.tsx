@@ -14,6 +14,7 @@ import { ReplayFrame, canReplay } from './replay/replay';
 import { BossBar } from './hud/BossBar';
 import { WeatherVeil } from './WeatherEffects';
 import { challengeMet } from '@/lib/campaign/challenges';
+import { dailyRegion, todayKey } from '@/lib/campaign/daily';
 import { useMechanicGuide } from './shared/MechanicGuide';
 import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
@@ -118,10 +119,14 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     if (isFogOfWar(gameState)) {
       setTimeout(() => emitMoment({ title: 'Fog of War', subtitle: 'You only see what your troops can see', tone: 'purple', explain: true }), 1200);
     }
-    // A friend's challenge: their score is the one to beat (said once, as the battle begins)
-    if (battle.mode === 'quick' && battle.challenge && !(shouldContinueGame && gameState.turnNumber > 1)) {
-      const { score } = battle.challenge;
-      setTimeout(() => emitMoment({ title: 'Challenge!', subtitle: `Your friend scored ${score} points here - beat it`, tone: 'blue', explain: true }), isFogOfWar(gameState) ? 3600 : 1200);
+    // A friend's challenge: their score is the one to beat (said once, as the battle begins); the
+    // daily challenge is announced the same way
+    if (battle.mode === 'quick' && (battle.challenge || battle.daily) && !(shouldContinueGame && gameState.turnNumber > 1)) {
+      const subtitle = battle.challenge
+        ? `Your friend scored ${battle.challenge.score} points here - beat it`
+        : battle.daily! < todayKey() ? `${dailyRegion(battle.daily!).name} · an earlier day's challenge, for practice` : `${dailyRegion(battle.daily!).name} · the same battlefield for everyone today`;
+      const title = battle.daily ? 'Daily Challenge' : 'Challenge!';
+      setTimeout(() => emitMoment({ title, subtitle, tone: 'blue', explain: true }), isFogOfWar(gameState) ? 3600 : 1200);
     }
     if (shouldContinueGame && gameState.turnNumber > 1) return;
     const profile = getProfile();
@@ -133,7 +138,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       difficulty: battle.mode === 'quick' ? battle.difficulty : level?.settings.aiDifficulty,
       power: profilePower(profile),
       recommended_power: level?.recommendedPower,
-      deck: profile.deck
+      deck: profile.deck,
+      daily: battle.mode === 'quick' && !!battle.daily
     });
     // Runs once per battle
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -228,7 +234,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       challengeMet: challengeMet(gameState),
       haul: gameState.haul,
       // (against the player's cards as they were when the battle began: an upgrade since changes nothing)
-      rivalShare: gameState.rivalLevel !== undefined ? gameState.rivalLevel / (gameState.ownCardLevel ?? averageCardLevel(getProfile())) : undefined
+      rivalShare: gameState.rivalLevel !== undefined ? gameState.rivalLevel / (gameState.ownCardLevel ?? averageCardLevel(getProfile())) : undefined,
+      daily: battle.mode === 'quick' ? battle.daily : undefined,
+      dailyStartedOn: gameState.dailyStartedOn
     });
     trackEvent('battle_ended', {
       mode: battle.mode,
@@ -243,6 +251,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       lost: playerStats.lost,
       coins_earned: record.reward.coins,
       challenge_completed: record.challengeCompleted,
+      daily: battle.mode === 'quick' && !!battle.daily,
+      daily_streak: record.dailyStreak,
       materials_gathered: haulSize(gameState.haul),
       materials_kept: haulSize(record.haul)
     });
@@ -326,7 +336,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
   // A quick battle can be fought again by a friend: the same map and rival, with this score to beat
   const skirmish = battle.mode === 'quick' && gameState.settings?.seed !== undefined && gameState.rivalLevel !== undefined
-    ? { difficulty: battle.difficulty, seed: gameState.settings.seed, rivalLevel: gameState.rivalLevel, target: battle.challenge }
+    ? { difficulty: battle.difficulty, seed: gameState.settings.seed, rivalLevel: gameState.rivalLevel, target: battle.challenge, daily: battle.daily }
     : undefined;
 
   return (

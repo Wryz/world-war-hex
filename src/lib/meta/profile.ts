@@ -28,6 +28,7 @@ import {
   CARD_SKINS, CASTLE_STYLES, CardSkinId, CastleStyleId, DEFAULT_CARD_SKIN, DEFAULT_CASTLE_STYLE, isCardSkinId, isCastleStyleId
 } from './cosmetics';
 import { trackEvent } from '../analytics';
+import { DailyRecord, dailyReward, dailyRewardDue, emptyDaily, isDayKey, recordDailyWin, shiftDay, todayKey } from '../campaign/daily';
 
 // The player's saved progress: coins, cards, campaign stars, the bestiary and lifetime stats.
 // Kept in localStorage and exportable to a file.
@@ -103,6 +104,8 @@ export interface Profile {
   // (for the collection and the Chronicle, whatever has since been spent)
   materials: Haul;
   materialsFound: MaterialId[];
+  // The daily challenge: the last day won, and the streak of days won in a row
+  daily: DailyRecord;
   // Cards have been merged into lineages (an older save's refund is paid)
   lineagesMerged: true;
   createdAt: string;
@@ -131,6 +134,7 @@ export const createProfile = (): Profile => {
     cosmetics: { cardSkins: [DEFAULT_CARD_SKIN], castleStyles: [DEFAULT_CASTLE_STYLE], cardSkin: DEFAULT_CARD_SKIN, castleStyle: DEFAULT_CASTLE_STYLE },
     materials: {},
     materialsFound: [],
+    daily: emptyDaily(),
     lineagesMerged: true,
     createdAt: now,
     updatedAt: now
@@ -148,6 +152,9 @@ const toCount = (value: unknown) => (typeof value === 'number' && Number.isFinit
 // Materials are capped lower: more than any player could gather
 const MAX_MATERIAL = 99_999;
 const ownKey = (record: object, key: string) => Object.prototype.hasOwnProperty.call(record, key);
+
+// A save from a newer version of the game than this one (it can't be read here, and mustn't be lost)
+export const isNewerProfile = (raw: unknown) => isRecord(raw) && typeof raw.version === 'number' && raw.version > PROFILE_VERSION;
 
 // Turn whatever was stored into a valid profile, dropping anything unknown
 export const sanitizeProfile = (raw: unknown): Profile | null => {
@@ -275,9 +282,23 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
     ...(Object.keys(materials) as MaterialId[])
   ])];
 
+  const daily = emptyDaily();
+  if (isRecord(raw.daily)) {
+    // (a win dated a day or two ahead - another device's clock a little off - counts as today's rather than
+    // holding back rewards until then; one further ahead, from a clock moved forward, keeps holding them)
+    if (isDayKey(raw.daily.lastWon)) {
+      const today = todayKey();
+      daily.lastWon = raw.daily.lastWon > today && raw.daily.lastWon <= shiftDay(today, 2) ? today : raw.daily.lastWon;
+    }
+    daily.wins = toCount(raw.daily.wins);
+    daily.streak = daily.lastWon ? Math.min(daily.wins, Math.max(1, toCount(raw.daily.streak))) : 0;
+    daily.bestStreak = Math.min(daily.wins, Math.max(daily.streak, toCount(raw.daily.bestStreak)));
+  }
+
   return {
     ...base,
     coins: Math.min(MAX_COUNT, toCount(raw.coins) + retiredTacticRefund(raw.tactics) + mergeRefund),
+    daily,
     materials,
     materialsFound,
     cards,
@@ -313,8 +334,12 @@ export const getProfile = (): Profile => {
   return current;
 };
 
-const setProfile = (profile: Profile) => {
-  current = { ...profile, updatedAt: new Date().toISOString() };
+// (`keepTimestamp` for a profile taken as it is from elsewhere - the cloud save - whose updatedAt says
+// when it was really last changed)
+const setProfile = (profile: Profile, keepTimestamp = false) => {
+  // (a change always moves the time on, even on a clock behind the one that made the last copy)
+  const after = Date.parse(current?.updatedAt ?? '') + 1;
+  current = keepTimestamp ? profile : { ...profile, updatedAt: new Date(Math.max(Date.now(), Number.isNaN(after) ? 0 : after)).toISOString() };
   try {
     localStorage.setItem(PROFILE_KEY, JSON.stringify(current));
   } catch (error) {
@@ -326,6 +351,28 @@ const setProfile = (profile: Profile) => {
 const subscribe = (listener: () => void) => {
   listeners.add(listener);
   return () => listeners.delete(listener);
+};
+
+// Another tab (or the installed app beside a browser tab) saving progress: take its copy, so this tab
+// doesn't carry on from - and save over - an older one
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', event => {
+    if (event.key !== PROFILE_KEY || event.newValue === null) return;
+    try {
+      const profile = sanitizeProfile(JSON.parse(event.newValue));
+      if (!profile) return;
+      current = profile;
+      listeners.forEach(listener => listener());
+    } catch {
+      // Unreadable: keep this tab's copy
+    }
+  });
+}
+
+// Every change to the profile (the cloud save follows them)
+export const subscribeProfile = (listener: () => void) => {
+  listeners.add(listener);
+  return () => { listeners.delete(listener); };
 };
 
 // Server render (and the first client render) use a fresh profile, so hydration always matches
@@ -634,6 +681,10 @@ export interface BattleOutcome {
   haul?: Haul;
   // A quick battle's rival card level over the player's own (below 1, it pays less)
   rivalShare?: number;
+  // The daily challenge of this day (lib/campaign/daily), if that's what was fought, and the day the
+  // battle began
+  daily?: string;
+  dailyStartedOn?: string;
 }
 
 export interface BattleRecordResult {
@@ -651,6 +702,9 @@ export interface BattleRecordResult {
   // and the kinds found for the first time
   haul: Haul;
   firstFinds: MaterialId[];
+  // A daily challenge won for the first time today: its reward is in the reward, and the streak it
+  // makes
+  dailyStreak?: number;
 }
 
 export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
@@ -676,6 +730,17 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
     const bonus = challengeBonus(outcome.levelId!);
     reward.coins += bonus;
     reward.breakdown.push({ label: 'Challenge complete', coins: bonus });
+  }
+
+  // The daily challenge's reward, for the first win of the day
+  let daily = profile.daily;
+  let dailyStreak: number | undefined;
+  if (outcome.mode === 'quick' && outcome.daily && outcome.won && outcome.reason !== 'resigned' && dailyRewardDue(daily, outcome.daily, todayKey(), outcome.dailyStartedOn)) {
+    daily = recordDailyWin(daily, outcome.daily);
+    dailyStreak = daily.streak;
+    const bonus = dailyReward(clearedBefore, daily.streak);
+    reward.coins += bonus.coins;
+    reward.breakdown.push(...bonus.breakdown);
   }
 
   const levels = { ...profile.levels };
@@ -744,7 +809,7 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
   const firstFinds = (Object.keys(haul) as MaterialId[]).filter(id => !profile.materialsFound.includes(id));
 
   const next: Profile = {
-    ...profile, coins: profile.coins + reward.coins, levels, bestiary, stats,
+    ...profile, coins: profile.coins + reward.coins, levels, bestiary, stats, daily,
     materials, materialsFound: [...profile.materialsFound, ...firstFinds]
   };
   const clearedAfter = highestCleared(next);
@@ -757,7 +822,7 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
   });
 
   setProfile(next);
-  return { reward, previousStars, discovered, newCards, isNewBest, challengeCompleted, haul, firstFinds };
+  return { reward, previousStars, discovered, newCards, isNewBest, challengeCompleted, haul, firstFinds, dailyStreak };
 };
 
 // More of one kind than any battle could gather (a count beyond it comes from a tampered save)
@@ -821,5 +886,12 @@ export const parseSave = (text: string): { profile: Profile; battle: unknown } |
 };
 
 export const replaceProfile = (profile: Profile) => setProfile(profile);
+
+// Take the cloud's copy of the profile, as it was last changed
+export const adoptProfile = (profile: Profile) => setProfile(profile, true);
+
+// Whether a profile has any progress worth keeping (a new player's can be replaced without asking)
+export const hasProgress = (profile: Profile) =>
+  profile.stats.battles > 0 || profile.coins > 0 || Object.keys(profile.levels).length > 0;
 
 export const resetProfile = () => setProfile(createProfile());

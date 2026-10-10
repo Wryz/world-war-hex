@@ -3,6 +3,7 @@ import { DynaPuff, Fredoka } from "next/font/google";
 import "./globals.css";
 import { AppBoot } from "@/components/shared/AppBoot";
 import { DevPanel } from "@/components/shared/DevPanel";
+import { SITE_URL } from "@/lib/legal";
 
 // Playful display font for titles, buttons and big numbers
 const dynaPuff = DynaPuff({
@@ -19,7 +20,7 @@ const fredoka = Fredoka({
 const DESCRIPTION = "A fantasy strategy card game on a 3D hex battlefield: play your troops, read the land and topple the enemy castle.";
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://hexhordes.com"),
+  metadataBase: new URL(SITE_URL),
   title: "Hex Hordes",
   applicationName: "Hex Hordes",
   description: DESCRIPTION,

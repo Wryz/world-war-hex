@@ -260,6 +260,8 @@ export interface GameState {
   rivalLevel?: number;
   // ...and the player's own cards' average level when it began (a weaker rival pays less)
   ownCardLevel?: number;
+  // A daily challenge: the day (UTC) the battle began, so one begun before midnight still pays
+  dailyStartedOn?: string;
   // The catapult's most recent stone, for the board to show it flying (serial counts stones)
   lastBombard?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
   // The tree felled most recently, for the board to show it falling (serial counts fellings)
