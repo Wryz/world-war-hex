@@ -212,6 +212,9 @@ export interface GameState {
   pendingGuards?: { type: UnitType; stats: TroopStats; isBoss?: boolean; isChampion?: boolean }[];
   // Seeds the battle's chance events (fires flaring up around lava)
   battleSeed?: number;
+  // A quick battle: the card level of the rival kingdom's troops (with the map's seed in settings, all
+  // a friend needs to fight the same battle)
+  rivalLevel?: number;
   // The catapult's most recent stone, for the board to show it flying (serial counts stones)
   lastBombard?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
   // The tree felled most recently, for the board to show it falling (serial counts fellings)

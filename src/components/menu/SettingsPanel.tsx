@@ -12,6 +12,7 @@ import { FOG_FROM_LEVEL } from '@/lib/campaign/levels';
 import { MUSIC_CHANNELS, setChannelVolume, setMusicVolume, useMusicMix, useMusicVolume } from '@/lib/audio/music';
 import { isAnalyticsAvailable, isAnalyticsEnabled, setAnalyticsEnabled } from '@/lib/analytics';
 import { promptInstall, useInstallState } from '@/lib/install';
+import { isVibrationSupported, setVibrationEnabled, useVibrationEnabled } from '@/lib/haptics';
 import { setMuted, setSfxVolume, useMuted, useSfxVolume } from '../game/utils/SoundPlayer';
 import { setGameSpeed, useGameSpeed } from '../game/effects/effects';
 import { TERRAIN_ORDER, TERRAIN_SHORT_EFFECTS } from '../game/hud/terrainInfo';
@@ -158,6 +159,10 @@ const InstallApp: React.FC = () => {
 const GameplayTab: React.FC<{ onStartQuickBattle?: (difficulty: Difficulty) => void }> = ({ onStartQuickBattle }) => {
   const speed = useGameSpeed();
   const uiSize = useUiSize();
+  const vibration = useVibrationEnabled();
+  // (iPhones can't vibrate from a web page; read in the browser only, so the server render matches)
+  const [canVibrate, setCanVibrate] = useState(false);
+  useEffect(() => setCanVibrate(isVibrationSupported()), []);
   // Read in the browser only, so the server render matches
   const [analyticsOn, setAnalyticsOn] = useState(false);
   useEffect(() => setAnalyticsOn(isAnalyticsEnabled()), []);
@@ -192,6 +197,20 @@ const GameplayTab: React.FC<{ onStartQuickBattle?: (difficulty: Difficulty) => v
           <SpeedIcon /> {speed}x
         </button>
       </div>
+      {canVibrate && (
+        <label className="flex items-start gap-3">
+          <input
+            type="checkbox"
+            checked={vibration}
+            onChange={event => setVibrationEnabled(event.target.checked)}
+            className="mt-1 accent-amber-400"
+          />
+          <span>
+            <b className="block text-slate-100">Vibration</b>
+            <span className="text-xs text-slate-400">Feel castle hits, kills and a boss&apos;s strikes, and the battle won or lost.</span>
+          </span>
+        </label>
+      )}
       <InstallApp />
       {isAnalyticsAvailable() && (
         <label className="flex items-start gap-3">
@@ -403,9 +422,9 @@ export const SettingsPanel: React.FC<{
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 pl-[var(--safe-l)] pr-[var(--safe-r)] pt-[var(--safe-t)] backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
       <div
-        className={`${CARD_CLASS} animate-fadeIn flex max-h-[92vh] w-full max-w-2xl flex-col rounded-b-none sm:rounded-2xl`}
+        className={`${CARD_CLASS} animate-fadeIn flex max-h-[92vh] w-full max-w-2xl flex-col rounded-b-none pb-[var(--safe-b)] sm:rounded-2xl`}
         onClick={event => event.stopPropagation()}
         role="dialog"
         aria-label="Settings"

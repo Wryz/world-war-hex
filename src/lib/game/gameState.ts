@@ -378,6 +378,9 @@ export interface BattleSetup {
   guards?: GuardSpec[];
   // Let the player pick their castle's site before the first turn (otherwise it is placed for them)
   chooseCastle?: boolean;
+  // Seeds the battle's chance events (the great trees, fires around lava): random unless given, so
+  // the same battle can be fought again (a quick battle shared with a friend)
+  battleSeed?: number;
 }
 
 const emptySideStats = (): SideStats => ({
@@ -394,7 +397,7 @@ export const defaultRoster = (): Roster =>
 export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS, setup?: BattleSetup): GameState => {
   // Create the hexagonal grid with a themed terrain mix, and grow its great trees
   const { hexGrid, theme } = createHexagonalGrid(settings, settings.seed, settings.themeName);
-  const battleSeed = Math.floor(Math.random() * 2 ** 31);
+  const battleSeed = setup?.battleSeed ?? Math.floor(Math.random() * 2 ** 31);
   let draws = 0;
   const trees = new Set(pickGreatTrees(hexGrid, settings.gridSize, () => seededRandom(battleSeed + 7 * draws++)).map(coordKey));
   for (const hex of hexGrid) if (trees.has(coordKey(hex.coordinates))) hex.feature = 'greatTree';

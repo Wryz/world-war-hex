@@ -10,9 +10,11 @@ import { TROOPS } from '@/lib/game/troops';
 import { playStinger } from '@/lib/audio/music';
 import { SPEED_POINTS_PER_ROUND, StarScore, TIME_SCORE_WEIGHTS } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
+import { ChallengeTarget, Difficulty, challengePath } from '../storage/GameStorage';
 import { emitCoins } from '../effects/effects';
 import {
-  ArrowIcon, CardsIcon, CoinIcon, FilledStarIcon, LaurelIcon, MapIcon, MedalIcon, PlayIcon, PowerIcon, ResumeIcon, ShareIcon, SkullIcon, StarIcon
+  ArrowIcon, AttackIcon, CardsIcon, CoinIcon, FilledStarIcon, LaurelIcon, MapIcon, MedalIcon, PlayIcon, PowerIcon, ReplayIcon, ResumeIcon, ShareIcon,
+  SkullIcon, StarIcon
 } from '../icons';
 
 interface ResultsScreenProps {
@@ -36,6 +38,10 @@ interface ResultsScreenProps {
   points?: { you: StarScore; enemy: StarScore };
   // The level's optional challenge was met this battle
   challengeMet?: boolean;
+  // A quick battle: what a friend needs to fight it too, and the friend's score if it was their challenge
+  skirmish?: { difficulty: Difficulty; seed: number; rivalLevel: number; target?: ChallengeTarget };
+  // Watch the battle again (when there's enough of it to watch)
+  onWatchReplay?: () => void;
 }
 
 const formatDuration = (seconds: number) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds) % 60).padStart(2, '0')}`;
@@ -101,7 +107,8 @@ const StarProgress: React.FC<{ level: LevelDef; points: number; won: boolean }> 
 };
 
 export const ResultsScreen: React.FC<ResultsScreenProps> = ({
-  won, reason, level, stars, record, rounds, stats, durationSeconds, coinsTotal, power, onNext, onRetry, onMap, onArmy, points, challengeMet
+  won, reason, level, stars, record, rounds, stats, durationSeconds, coinsTotal, power, onNext, onRetry, onMap, onArmy, points, challengeMet,
+  skirmish, onWatchReplay
 }) => {
   const rewardDelay = won ? 600 + stars * STAR_DELAY : 600;
   const coins = useCountUp(record.reward.coins, 900, rewardDelay);
@@ -135,15 +142,22 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
     return () => timeouts.forEach(clearTimeout);
   }, [won, stars, record, rewardDelay]);
 
+  const yourScore = points?.you.total ?? 0;
   const share = async () => {
     const starText = '★'.repeat(stars) + '☆'.repeat(3 - stars);
+    // (a quick battle shares a challenge: a link to the same map and rival, with this score to beat)
     const text = level
       ? `⚔️ Hex Hordes - Level ${level.id}: ${level.name}\n${won ? `Victory ${starText} in ${rounds} rounds` : `Defeated after ${rounds} rounds`} · ${stats.kills} foes slain\nCan you beat it?`
-      : `⚔️ Hex Hordes - Skirmish ${won ? 'won' : 'lost'} in ${rounds} rounds · ${stats.kills} foes slain`;
+      : skirmish
+        ? `⚔️ Hex Hordes - I ${won ? 'won' : 'lost'} this ${skirmish.difficulty} skirmish with ${yourScore} points. Same battlefield, same enemy: can you beat my score?`
+        : `⚔️ Hex Hordes - Skirmish ${won ? 'won' : 'lost'} in ${rounds} rounds · ${stats.kills} foes slain`;
+    const url = skirmish
+      ? `${window.location.origin}${challengePath(skirmish.difficulty, skirmish.seed, skirmish.rivalLevel, { score: yourScore, won })}`
+      : window.location.origin;
     try {
-      if (navigator.share) await navigator.share({ title: 'Hex Hordes', text, url: window.location.origin });
+      if (navigator.share) await navigator.share({ title: 'Hex Hordes', text, url });
       else {
-        await navigator.clipboard.writeText(`${text}\n${window.location.origin}`);
+        await navigator.clipboard.writeText(`${text}\n${url}`);
         setCopied(true);
       }
     } catch {
@@ -157,7 +171,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
     : reason === 'timeout' ? 'Time ran out - the enemy wins on points.' : reason === 'resigned' ? 'You withdrew from the battle.' : 'Your castle has fallen.';
 
   return (
-    <div className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-950/65 px-3 py-6 backdrop-blur-[2px] sm:items-center">
+    <div className="absolute inset-0 z-40 flex items-start justify-center overflow-y-auto bg-slate-950/65 px-[calc(0.75rem+var(--safe-l))] pb-[calc(1.5rem+var(--safe-b))] pt-[calc(1.5rem+var(--safe-t))] backdrop-blur-[2px] sm:items-center">
       <div className="animate-fadeIn w-full max-w-xl rounded-2xl bg-slate-900/95 p-5 text-slate-100 shadow-2xl ring-1 ring-white/10 sm:p-6">
         {/* Header */}
         <div className="text-center">
@@ -219,6 +233,28 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
             </div>
           </div>
         )}
+
+        {/* A friend's challenge: their score against yours */}
+        {skirmish?.target && (() => {
+          const theirs = skirmish.target.score;
+          const verdict = yourScore > theirs ? 'You beat your friend!' : yourScore === theirs ? 'A dead heat!' : 'Your friend stays ahead';
+          return (
+            <div className={`mt-4 rounded-xl px-4 py-3 ${yourScore > theirs ? 'challenge-complete bg-sky-500/20 ring-2 ring-sky-400' : 'bg-slate-800'}`}>
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-slate-400"><AttackIcon /> Friend&apos;s challenge</div>
+              <div className="mt-1 grid grid-cols-2 gap-2 text-center">
+                <div>
+                  <div className="font-display text-3xl text-sky-300 tabular-nums">{yourScore}</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400">You · {won ? 'won' : 'lost'}</div>
+                </div>
+                <div>
+                  <div className="font-display text-3xl text-slate-200 tabular-nums">{theirs}</div>
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-400">Friend · {skirmish.target.won ? 'won' : 'lost'}</div>
+                </div>
+              </div>
+              <div className={`font-display mt-1 text-center text-lg ${yourScore > theirs ? 'text-sky-200' : 'text-slate-300'}`}>{verdict}</div>
+            </div>
+          );
+        })()}
 
         {/* The level's optional challenge */}
         {level && levelChallenge(level) && (() => {
@@ -323,7 +359,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
           <div className={`grid gap-2 ${won && onNext ? 'grid-cols-4' : 'grid-cols-3'}`}>
             {won && onNext && (
               <button onClick={onRetry} className="rounded-xl bg-slate-700 px-2 py-2 text-sm font-bold hover:bg-slate-600">
-                <span className="inline-flex items-center gap-1"><ResumeIcon /> Replay</span>
+                <span className="inline-flex items-center gap-1"><ResumeIcon /> Retry</span>
               </button>
             )}
             <button onClick={onArmy} className="rounded-xl bg-slate-700 px-2 py-2 text-sm font-bold hover:bg-slate-600">
@@ -332,10 +368,17 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
             <button onClick={onMap} className="rounded-xl bg-slate-700 px-2 py-2 text-sm font-bold hover:bg-slate-600">
               <span className="inline-flex items-center gap-1"><MapIcon /> {level ? 'Map' : 'Menu'}</span>
             </button>
-            <button onClick={share} className="rounded-xl bg-slate-700 px-2 py-2 text-sm font-bold hover:bg-slate-600">
-              <span className="inline-flex items-center gap-1"><ShareIcon /> {copied ? 'Copied!' : 'Share'}</span>
+            <button onClick={share} className="rounded-xl bg-slate-700 px-2 py-2 text-sm font-bold hover:bg-slate-600" title={skirmish ? 'Send a friend this battle to beat your score' : undefined}>
+              <span className="inline-flex items-center gap-1">
+                {skirmish ? <AttackIcon /> : <ShareIcon />} {copied ? 'Copied!' : skirmish ? 'Challenge' : 'Share'}
+              </span>
             </button>
           </div>
+          {onWatchReplay && (
+            <button onClick={onWatchReplay} className="rounded-xl bg-slate-800 px-2 py-2 text-sm font-bold text-slate-200 ring-1 ring-white/10 hover:bg-slate-700">
+              <span className="inline-flex items-center gap-1.5"><ReplayIcon /> Watch the replay</span>
+            </button>
+          )}
         </div>
       </div>
     </div>

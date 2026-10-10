@@ -79,7 +79,7 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({ gameState }) => 
   if (combats.length === 0 && siegeAttackers.length === 0) return null;
 
   return (
-    <div className={`${PANEL_CLASS} fixed right-3 bottom-3 z-30 hidden max-h-[50vh] w-80 max-w-[calc(100vw-1.5rem)] overflow-y-auto p-3 text-xs sm:block`}>
+    <div className={`${PANEL_CLASS} fixed right-[calc(0.75rem+var(--safe-r))] bottom-[calc(0.75rem+var(--safe-b))] z-30 hidden max-h-[50vh] w-80 max-w-[calc(100vw-1.5rem)] overflow-y-auto p-3 text-xs sm:block`}>
       <div className="mb-2 flex items-center justify-between">
         <span className="font-display flex items-center gap-1.5 text-base">
           <AttackIcon /> {combats.length === 0 ? 'Castle attack' : combats.length === 1 ? 'Battle' : `${combats.length} Battles`}

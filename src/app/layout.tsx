@@ -30,8 +30,10 @@ export const metadata: Metadata = {
 };
 
 // The browser bar and the installed game's title bar take the game's background colour
+// (and the game runs edge to edge: the --safe-* insets in globals.css keep the HUD clear of notches)
 export const viewport: Viewport = {
   themeColor: "#0f172a",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

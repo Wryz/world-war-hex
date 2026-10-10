@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { buzz } from '@/lib/haptics';
 
 // Shared state for the battle's "juice": game speed and slow motion, screen shake, flying coins,
 // big callouts and confetti. The 3D scene and the HUD overlay both read from here.
@@ -98,8 +99,10 @@ export const triggerSlowMotion = (scale: number, durationMs: number) => {
 let trauma = 0;
 const TRAUMA_DECAY = 1.6;
 
+// (phones that can vibrate feel it too)
 export const shakeScreen = (amount: number) => {
   trauma = Math.min(1, trauma + amount);
+  buzz(amount);
 };
 
 // Camera offset for this frame (world units)

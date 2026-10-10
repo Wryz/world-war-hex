@@ -26,7 +26,7 @@ export const BossBar: React.FC<{ gameState: GameState }> = ({ gameState }) => {
   const name = getTroopName(boss.type).split(/,| the /)[0];
 
   return (
-    <div className="pointer-events-none fixed inset-x-0 top-[3.6rem] z-20 flex justify-center px-3">
+    <div className="pointer-events-none fixed inset-x-0 top-[calc(3.6rem+var(--safe-t))] z-20 flex justify-center px-3">
       <div
         className={`${PANEL_CLASS} pointer-events-auto flex w-[min(22rem,62vw)] items-center gap-2 px-2.5 py-1.5 ${enraged ? 'ring-2 ring-red-500/80 shadow-[0_0_16px_#ef4444]' : ''}`}
         title={`${getTroopName(boss.type)}: ${Math.max(0, health)}/${boss.maxLifespan}${power ? ` · ${power.name}` : ''}${enraged ? ' · enraged' : ''}`}

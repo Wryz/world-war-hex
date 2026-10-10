@@ -249,7 +249,7 @@ export const TutorialOverlay: React.FC<{
   return (
     <>
       {introCaption && (
-        <div className="pointer-events-none fixed inset-x-0 top-24 z-[47] flex justify-center px-4">
+        <div className="pointer-events-none fixed inset-x-0 top-[calc(6rem+var(--safe-t))] z-[47] flex justify-center px-4">
           <span key={introCaption} className="animate-fadeIn font-display rounded-2xl bg-slate-900/85 px-5 py-2 text-center text-xl text-amber-200 shadow-xl ring-2 ring-amber-300/60 sm:text-2xl">
             {introCaption}
           </span>
