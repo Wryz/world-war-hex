@@ -82,7 +82,8 @@ export const wonToday = (record: DailyRecord, today = todayKey()) => record.last
 // Whether a win of `day`'s challenge pays: it hasn't been won yet, and it is today's - or yesterday's
 // for a battle begun yesterday, before midnight (`startedOn`), not one begun since
 export const dailyRewardDue = (record: DailyRecord, day: string, today = todayKey(), startedOn?: string) =>
-  (day === today || (day === shiftDay(today, -1) && startedOn === day)) && (!record.lastWon || record.lastWon < day);
+  (startedOn === day || (startedOn === undefined && day === today)) &&
+  (day === today || day === shiftDay(today, -1)) && (!record.lastWon || record.lastWon < day);
 
 // The record after winning `day`'s challenge
 export const recordDailyWin = (record: DailyRecord, day: string): DailyRecord => {

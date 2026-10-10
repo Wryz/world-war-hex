@@ -50,6 +50,8 @@ test('a daily challenge link round-trips, with or without a score to beat', () =
   assert.ok(sameBattle(plain, shared));
   assert.ok(!sameBattle(plain, dailyBattle('2026-10-11')));
   assert.ok(battlePath(plain).includes('daily=2026-10-10'));
+  // (a future day's battle isn't out yet: its link is an ordinary quick battle)
+  assert.equal(quickBattleFromParams(new URLSearchParams(`mode=quick&daily=${shiftDay(todayKey(), 1)}`)).daily, undefined);
   // (a link can't choose a weaker rival for the daily challenge)
   assert.equal(quickBattleFromParams(new URLSearchParams('mode=quick&daily=2026-10-10&rival=1')).rivalLevel, undefined);
   // (a date that isn't one is an ordinary quick battle)
@@ -68,6 +70,8 @@ test('the reward is paid once a day, and grows with the streak', () => {
   assert.equal(dailyRewardDue(record, '2026-10-11', '2026-10-12'), false);
   assert.equal(dailyRewardDue(record, '2026-10-11', '2026-10-13', '2026-10-11'), false);
   assert.equal(dailyRewardDue(record, '2026-10-12', '2026-10-11'), false, 'not ahead of the date');
+  // (tomorrow's challenge, begun today and won after midnight, doesn't pay)
+  assert.equal(dailyRewardDue(record, '2026-10-12', '2026-10-12', '2026-10-11'), false);
 
   record = recordDailyWin(record, '2026-10-11');
   assert.equal(record.streak, 2);
@@ -91,7 +95,9 @@ test('a save can\'t claim a daily streak it never made', () => {
   assert.ok(forged.daily.bestStreak <= 2);
   assert.deepEqual(sanitizeProfile({ version: 1 })!.daily, emptyDaily());
   // (a win dated ahead, from a clock set wrong, counts as today's rather than blocking rewards until then)
-  assert.equal(sanitizeProfile({ version: 1, daily: { lastWon: '2999-01-01', streak: 1, wins: 1 } })!.daily.lastWon, todayKey());
+  assert.equal(sanitizeProfile({ version: 1, daily: { lastWon: shiftDay(todayKey(), 1), streak: 1, wins: 1 } })!.daily.lastWon, todayKey());
+  // (but a clock moved far forward keeps holding rewards back)
+  assert.equal(sanitizeProfile({ version: 1, daily: { lastWon: '2999-01-01', streak: 1, wins: 1 } })!.daily.lastWon, '2999-01-01');
 });
 
 test('winning today\'s challenge pays its reward once and starts a streak; losing it pays only the skirmish', async () => {

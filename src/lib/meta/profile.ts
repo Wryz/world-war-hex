@@ -28,7 +28,7 @@ import {
   CARD_SKINS, CASTLE_STYLES, CardSkinId, CastleStyleId, DEFAULT_CARD_SKIN, DEFAULT_CASTLE_STYLE, isCardSkinId, isCastleStyleId
 } from './cosmetics';
 import { trackEvent } from '../analytics';
-import { DailyRecord, dailyReward, dailyRewardDue, emptyDaily, isDayKey, recordDailyWin, todayKey } from '../campaign/daily';
+import { DailyRecord, dailyReward, dailyRewardDue, emptyDaily, isDayKey, recordDailyWin, shiftDay, todayKey } from '../campaign/daily';
 
 // The player's saved progress: coins, cards, campaign stars, the bestiary and lifetime stats.
 // Kept in localStorage and exportable to a file.
@@ -284,8 +284,12 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
 
   const daily = emptyDaily();
   if (isRecord(raw.daily)) {
-    // (a win dated ahead - a clock set wrong - would hold back every reward until then: it counts as today)
-    if (isDayKey(raw.daily.lastWon)) daily.lastWon = raw.daily.lastWon > todayKey() ? todayKey() : raw.daily.lastWon;
+    // (a win dated a day or two ahead - another device's clock a little off - counts as today's rather than
+    // holding back rewards until then; one further ahead, from a clock moved forward, keeps holding them)
+    if (isDayKey(raw.daily.lastWon)) {
+      const today = todayKey();
+      daily.lastWon = raw.daily.lastWon > today && raw.daily.lastWon <= shiftDay(today, 2) ? today : raw.daily.lastWon;
+    }
     daily.wins = toCount(raw.daily.wins);
     daily.streak = daily.lastWon ? Math.min(daily.wins, Math.max(1, toCount(raw.daily.streak))) : 0;
     daily.bestStreak = Math.min(daily.wins, Math.max(daily.streak, toCount(raw.daily.bestStreak)));

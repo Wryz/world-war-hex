@@ -20,7 +20,8 @@ export default function PrivacyPage() {
         <p>
           Your progress (coins, cards, campaign stars, stats and settings) and any battle in progress are saved in your
           browser&apos;s storage. The game also stores its files on your device so it can be played offline. None of this
-          leaves your device unless you use one of the online features below. You can download a copy of your save, or
+          leaves your device unless you use one of the online features below - apart from the anonymous gameplay
+          statistics described further down (such as how far you have got and which cards you play). You can download a copy of your save, or
           erase it, in <b>Stats &amp; Save</b>.
         </p>
       </LegalSection>
@@ -85,9 +86,10 @@ export default function PrivacyPage() {
 
       <LegalSection title="Why we use it">
         <p>
-          We use this information to run the game and its online features (to provide the service you asked for), and to
-          understand and improve the game and fund it through ads (our legitimate interests, or your consent where that is
-          required). We don&apos;t sell your personal information.
+          We use this information to run the game and its online features (to provide the service you asked for). Gameplay
+          statistics are collected to understand and improve the game (our legitimate interest): they are on unless you
+          switch them off in Settings. Ads fund the game; where the law requires it, ads and their cookies wait for your
+          consent through Google&apos;s consent message. We don&apos;t sell your personal information.
         </p>
       </LegalSection>
 

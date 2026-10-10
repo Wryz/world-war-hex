@@ -1,7 +1,7 @@
 import { GameState } from '@/types/game';
 import type { BattleConfig, ChallengeTarget, Difficulty } from '@/lib/campaign/battleSetup';
 import { MAX_SEED, clampRivalLevel, dailyBattle } from '@/lib/campaign/battleSetup';
-import { isDayKey } from '@/lib/campaign/daily';
+import { isDayKey, todayKey } from '@/lib/campaign/daily';
 
 export type { BattleConfig, ChallengeTarget, Difficulty } from '@/lib/campaign/battleSetup';
 
@@ -60,7 +60,8 @@ export const dailyPath = (day: string, target?: ChallengeTarget) => battlePath(d
 export const quickBattleFromParams = (params: URLSearchParams): Extract<BattleConfig, { mode: 'quick' }> => {
   const day = params.get('daily');
   // (a daily challenge's rival always matches the player's own cards: a link can't choose a weaker one)
-  if (isDayKey(day)) {
+  // (and only up to today's: a future day's battle isn't out yet)
+  if (isDayKey(day) && day <= todayKey()) {
     const score = wholeNumber(params.get('score'), 0, 100000);
     return dailyBattle(day, score !== undefined ? { score, won: params.get('won') === '1' } : undefined);
   }

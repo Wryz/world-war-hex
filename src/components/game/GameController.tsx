@@ -14,7 +14,7 @@ import { ReplayFrame, canReplay } from './replay/replay';
 import { BossBar } from './hud/BossBar';
 import { WeatherVeil } from './WeatherEffects';
 import { challengeMet } from '@/lib/campaign/challenges';
-import { dailyRegion } from '@/lib/campaign/daily';
+import { dailyRegion, todayKey } from '@/lib/campaign/daily';
 import { useMechanicGuide } from './shared/MechanicGuide';
 import { BossIntro } from './shared/BossIntro';
 import { useGameHandlers } from './handlers/GameEventHandlers';
@@ -124,7 +124,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     if (battle.mode === 'quick' && (battle.challenge || battle.daily) && !(shouldContinueGame && gameState.turnNumber > 1)) {
       const subtitle = battle.challenge
         ? `Your friend scored ${battle.challenge.score} points here - beat it`
-        : `${dailyRegion(battle.daily!).name} · the same battlefield for everyone today`;
+        : battle.daily! < todayKey() ? `${dailyRegion(battle.daily!).name} · an earlier day's challenge, for practice` : `${dailyRegion(battle.daily!).name} · the same battlefield for everyone today`;
       const title = battle.daily ? 'Daily Challenge' : 'Challenge!';
       setTimeout(() => emitMoment({ title, subtitle, tone: 'blue', explain: true }), isFogOfWar(gameState) ? 3600 : 1200);
     }

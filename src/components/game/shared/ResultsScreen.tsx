@@ -15,7 +15,7 @@ import { MATERIALS, MaterialId, RARITY_ORDER, haulSize } from '@/lib/game/materi
 import { CHRONICLE } from '@/lib/game/lore';
 import { MaterialTile } from '../MaterialIcon';
 import { ChallengeTarget, Difficulty, challengePath, dailyPath } from '../storage/GameStorage';
-import { dailyRegion } from '@/lib/campaign/daily';
+import { dailyRegion, todayKey } from '@/lib/campaign/daily';
 import { emitCoins } from '../effects/effects';
 import {
   ArrowIcon, AttackIcon, CalendarIcon, CardsIcon, FireIcon, CoinIcon, FilledStarIcon, LaurelIcon, MapIcon, MedalIcon, PlayIcon, PowerIcon, ReplayIcon, ResumeIcon, ShareIcon,
@@ -292,7 +292,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                   ? record.dailyStreak > 1 ? `${record.dailyStreak} days in a row! Come back tomorrow to keep it going.` : 'Won! Win again tomorrow to start a streak.'
                   : won
                     ? (getProfile().daily.lastWon ?? '') >= skirmish.daily ? 'Already won - the reward is paid once a day.' : 'This day\'s reward has passed.'
-                    : 'Lost - it\'s the same battle all day, so try again.'}
+                    : skirmish.daily < todayKey() ? 'Lost - this was an earlier day\'s challenge; today\'s is on the main menu.' : 'Lost - it\'s the same battle all day, so try again.'}
               </div>
             </div>
           </div>
