@@ -28,7 +28,7 @@ import {
   CARD_SKINS, CASTLE_STYLES, CardSkinId, CastleStyleId, DEFAULT_CARD_SKIN, DEFAULT_CASTLE_STYLE, isCardSkinId, isCastleStyleId
 } from './cosmetics';
 import { trackEvent } from '../analytics';
-import { DailyRecord, dailyReward, dailyRewardDue, emptyDaily, isDayKey, recordDailyWin } from '../campaign/daily';
+import { DailyRecord, dailyReward, dailyRewardDue, emptyDaily, isDayKey, recordDailyWin, todayKey } from '../campaign/daily';
 
 // The player's saved progress: coins, cards, campaign stars, the bestiary and lifetime stats.
 // Kept in localStorage and exportable to a file.
@@ -281,7 +281,8 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
 
   const daily = emptyDaily();
   if (isRecord(raw.daily)) {
-    if (isDayKey(raw.daily.lastWon)) daily.lastWon = raw.daily.lastWon;
+    // (a win dated ahead - a clock set wrong - would hold back every reward until then: it counts as today)
+    if (isDayKey(raw.daily.lastWon)) daily.lastWon = raw.daily.lastWon > todayKey() ? todayKey() : raw.daily.lastWon;
     daily.wins = toCount(raw.daily.wins);
     daily.streak = daily.lastWon ? Math.min(daily.wins, Math.max(1, toCount(raw.daily.streak))) : 0;
     daily.bestStreak = Math.min(daily.wins, Math.max(daily.streak, toCount(raw.daily.bestStreak)));
@@ -655,8 +656,10 @@ export interface BattleOutcome {
   haul?: Haul;
   // A quick battle's rival card level over the player's own (below 1, it pays less)
   rivalShare?: number;
-  // The daily challenge of this day (lib/campaign/daily), if that's what was fought
+  // The daily challenge of this day (lib/campaign/daily), if that's what was fought, and the day the
+  // battle began
   daily?: string;
+  dailyStartedOn?: string;
 }
 
 export interface BattleRecordResult {
@@ -707,7 +710,7 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
   // The daily challenge's reward, for the first win of the day
   let daily = profile.daily;
   let dailyStreak: number | undefined;
-  if (outcome.mode === 'quick' && outcome.daily && outcome.won && outcome.reason !== 'resigned' && dailyRewardDue(daily, outcome.daily)) {
+  if (outcome.mode === 'quick' && outcome.daily && outcome.won && outcome.reason !== 'resigned' && dailyRewardDue(daily, outcome.daily, todayKey(), outcome.dailyStartedOn)) {
     daily = recordDailyWin(daily, outcome.daily);
     dailyStreak = daily.streak;
     const bonus = dailyReward(clearedBefore, daily.streak);

@@ -124,7 +124,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     if (battle.mode === 'quick' && (battle.challenge || battle.daily) && !(shouldContinueGame && gameState.turnNumber > 1)) {
       const subtitle = battle.challenge
         ? `Your friend scored ${battle.challenge.score} points here - beat it`
-        : `${dailyRegion(battle.daily!).name} · the same battle for everyone today`;
+        : `${dailyRegion(battle.daily!).name} · the same battlefield for everyone today`;
       const title = battle.daily ? 'Daily Challenge' : 'Challenge!';
       setTimeout(() => emitMoment({ title, subtitle, tone: 'blue', explain: true }), isFogOfWar(gameState) ? 3600 : 1200);
     }
@@ -235,7 +235,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       haul: gameState.haul,
       // (against the player's cards as they were when the battle began: an upgrade since changes nothing)
       rivalShare: gameState.rivalLevel !== undefined ? gameState.rivalLevel / (gameState.ownCardLevel ?? averageCardLevel(getProfile())) : undefined,
-      daily: battle.mode === 'quick' ? battle.daily : undefined
+      daily: battle.mode === 'quick' ? battle.daily : undefined,
+      dailyStartedOn: gameState.dailyStartedOn
     });
     trackEvent('battle_ended', {
       mode: battle.mode,

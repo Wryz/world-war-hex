@@ -26,7 +26,7 @@ const Turntable: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 // A troop's 3D model on a hex pedestal, for the bestiary; it can show off its attack
 export const TroopModelViewer: React.FC<{ type: TroopId; owner: PlayerType }> = ({ type, owner }) => {
   const quality = useGraphicsQuality();
-  useReleaseGpuOnUnmount();
+  useReleaseGpuOnUnmount(quality);
   const [attacking, setAttacking] = useState(false);
   const unit = useMemo<Unit>(() => {
     const stats = cardStats(type, 1);

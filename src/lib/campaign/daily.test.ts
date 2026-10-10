@@ -50,6 +50,8 @@ test('a daily challenge link round-trips, with or without a score to beat', () =
   assert.ok(sameBattle(plain, shared));
   assert.ok(!sameBattle(plain, dailyBattle('2026-10-11')));
   assert.ok(battlePath(plain).includes('daily=2026-10-10'));
+  // (a link can't choose a weaker rival for the daily challenge)
+  assert.equal(quickBattleFromParams(new URLSearchParams('mode=quick&daily=2026-10-10&rival=1')).rivalLevel, undefined);
   // (a date that isn't one is an ordinary quick battle)
   assert.equal(quickBattleFromParams(new URLSearchParams('mode=quick&daily=2026-13-01')).daily, undefined);
 });
@@ -60,9 +62,11 @@ test('the reward is paid once a day, and grows with the streak', () => {
   record = recordDailyWin(record, '2026-10-10');
   assert.equal(record.streak, 1);
   assert.equal(dailyRewardDue(record, '2026-10-10', '2026-10-10'), false, 'once a day');
-  // (a battle begun before midnight still pays the next morning; older days don't)
-  assert.ok(dailyRewardDue(record, '2026-10-11', '2026-10-12'));
-  assert.equal(dailyRewardDue(record, '2026-10-11', '2026-10-13'), false);
+  // (a battle begun before midnight still pays the next morning; one begun after doesn't, nor older days)
+  assert.ok(dailyRewardDue(record, '2026-10-11', '2026-10-12', '2026-10-11'));
+  assert.equal(dailyRewardDue(record, '2026-10-11', '2026-10-12', '2026-10-12'), false, 'yesterday\'s challenge, begun today');
+  assert.equal(dailyRewardDue(record, '2026-10-11', '2026-10-12'), false);
+  assert.equal(dailyRewardDue(record, '2026-10-11', '2026-10-13', '2026-10-11'), false);
   assert.equal(dailyRewardDue(record, '2026-10-12', '2026-10-11'), false, 'not ahead of the date');
 
   record = recordDailyWin(record, '2026-10-11');
@@ -86,6 +90,8 @@ test('a save can\'t claim a daily streak it never made', () => {
   assert.equal(forged.daily.streak, 0);
   assert.ok(forged.daily.bestStreak <= 2);
   assert.deepEqual(sanitizeProfile({ version: 1 })!.daily, emptyDaily());
+  // (a win dated ahead, from a clock set wrong, counts as today's rather than blocking rewards until then)
+  assert.equal(sanitizeProfile({ version: 1, daily: { lastWon: '2999-01-01', streak: 1, wins: 1 } })!.daily.lastWon, todayKey());
 });
 
 test('winning today\'s challenge pays its reward once and starts a streak; losing it pays only the skirmish', async () => {
@@ -95,7 +101,7 @@ test('winning today\'s challenge pays its reward once and starts a streak; losin
   const { recordBattle, getProfile } = await import('../meta/profile');
   const { makeBattle } = await import('../game/testUtils');
   const playerStats = makeBattle('player').state.battleStats!.player;
-  const outcome = { mode: 'quick' as const, stars: 0, rounds: 8, enemyCastleDamage: 1, playerStats, durationSeconds: 300, daily: todayKey() };
+  const outcome = { mode: 'quick' as const, stars: 0, rounds: 8, enemyCastleDamage: 1, playerStats, durationSeconds: 300, daily: todayKey(), dailyStartedOn: todayKey() };
 
   const lost = recordBattle({ ...outcome, won: false });
   assert.equal(lost.dailyStreak, undefined);
@@ -109,4 +115,13 @@ test('winning today\'s challenge pays its reward once and starts a streak; losin
   const again = recordBattle({ ...outcome, won: true });
   assert.equal(again.dailyStreak, undefined, 'paid once a day');
   assert.equal(getProfile().daily.wins, 1);
+
+  // (yesterday's challenge, begun today: no reward)
+  const late = recordBattle({ ...outcome, won: true, daily: shiftDay(todayKey(), -1), dailyStartedOn: todayKey() });
+  assert.equal(late.dailyStreak, undefined);
+});
+
+test('a daily battle remembers the day it began', () => {
+  assert.equal(buildBattle(dailyBattle('2026-10-10'), createProfile()).dailyStartedOn, todayKey());
+  assert.equal(buildBattle({ mode: 'quick', difficulty: 'easy' }, createProfile()).dailyStartedOn, undefined);
 });

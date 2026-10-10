@@ -59,13 +59,10 @@ export const dailyPath = (day: string, target?: ChallengeTarget) => battlePath(d
 // The quick battle a page's address asks for (a challenge link's map, rival and score included)
 export const quickBattleFromParams = (params: URLSearchParams): Extract<BattleConfig, { mode: 'quick' }> => {
   const day = params.get('daily');
+  // (a daily challenge's rival always matches the player's own cards: a link can't choose a weaker one)
   if (isDayKey(day)) {
     const score = wholeNumber(params.get('score'), 0, 100000);
-    const rival = wholeNumber(params.get('rival'), 1, 99);
-    return {
-      ...dailyBattle(day, score !== undefined ? { score, won: params.get('won') === '1' } : undefined),
-      ...(rival !== undefined ? { rivalLevel: clampRivalLevel(rival) } : {})
-    };
+    return dailyBattle(day, score !== undefined ? { score, won: params.get('won') === '1' } : undefined);
   }
   const requested = params.get('difficulty') as Difficulty | null;
   const difficulty = requested && DIFFICULTIES.includes(requested) ? requested : 'medium';

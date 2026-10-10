@@ -3,8 +3,9 @@ import { baseLevelReward, type BattleReward } from '../meta/economy';
 import { REGIONS, LEVEL_COUNT, type Region } from './levels';
 import type { Difficulty } from './battleSetup';
 
-// The daily challenge: one quick battle a day, the same for everyone - the same map, region, weather
-// and rival army (at each player's own card level, like any quick battle) - picked from the date.
+// The daily challenge: one quick battle a day on the same battlefield for everyone - the same map,
+// region, weather and difficulty, picked from the date - against a rival kingdom at each player's own
+// card level (like any quick battle, so it is fair at every stage; a link can't pick a weaker one).
 // Winning it the first time that day pays a reward that grows with the days won in a row.
 //
 // Days are UTC dates ('2026-10-10'), so every player gets the same battle at the same moment.
@@ -78,10 +79,10 @@ export const currentStreak = (record: DailyRecord, today = todayKey()) =>
 
 export const wonToday = (record: DailyRecord, today = todayKey()) => record.lastWon === today;
 
-// Whether a win of `day`'s challenge pays: it hasn't been won yet, and it is today's - or yesterday's,
-// for a battle begun before midnight
-export const dailyRewardDue = (record: DailyRecord, day: string, today = todayKey()) =>
-  (day === today || day === shiftDay(today, -1)) && (!record.lastWon || record.lastWon < day);
+// Whether a win of `day`'s challenge pays: it hasn't been won yet, and it is today's - or yesterday's
+// for a battle begun yesterday, before midnight (`startedOn`), not one begun since
+export const dailyRewardDue = (record: DailyRecord, day: string, today = todayKey(), startedOn?: string) =>
+  (day === today || (day === shiftDay(today, -1) && startedOn === day)) && (!record.lastWon || record.lastWon < day);
 
 // The record after winning `day`'s challenge
 export const recordDailyWin = (record: DailyRecord, day: string): DailyRecord => {

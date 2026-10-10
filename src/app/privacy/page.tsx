@@ -53,9 +53,10 @@ export default function PrivacyPage() {
           To see where players get stuck and which cards they pick, the game may send anonymous gameplay events (for
           example, &ldquo;level 12 lost after 9 rounds&rdquo;, or &ldquo;card upgraded&rdquo;) and page views to PostHog and/or Google
           Analytics. These services may set a cookie or local identifier to tell visits apart, and they receive your
-          IP address as part of any web request. We don&apos;t record your screen or your clicks, we don&apos;t send your name
-          or email address, Google signals and ad personalisation are switched off for Google Analytics, and PostHog
-          respects your browser&apos;s Do Not Track setting. You can switch these statistics off in <b>Settings → Gameplay</b>.
+          IP address as part of any web request. We don&apos;t record your screen and don&apos;t send your name or email address.
+          PostHog records only the game events above and respects your browser&apos;s Do Not Track setting; Google Analytics
+          may also note how far you scroll and links you follow out of the game, with Google signals and ad
+          personalisation switched off. You can switch these statistics off in <b>Settings → Gameplay</b>.
         </p>
       </LegalSection>
 

@@ -328,7 +328,7 @@ interface TroopShowcaseProps {
 
 export const TroopShowcase: React.FC<TroopShowcaseProps> = ({ type, setting, moment, onEvolved, paused = false, className = '' }) => {
   const quality = useGraphicsQuality();
-  useReleaseGpuOnUnmount();
+  useReleaseGpuOnUnmount(quality);
   const def = SETTINGS[setting];
   // The form on show: follows `type`, and mid-evolution switches to the new form at the burst's peak
   // (before the parent hears of it through onEvolved)

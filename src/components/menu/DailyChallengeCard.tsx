@@ -48,7 +48,7 @@ export const DailyChallengeCard: React.FC = () => {
           <div className="text-sm font-bold uppercase tracking-widest text-slate-300">Daily Challenge</div>
           <div className="font-display text-2xl leading-tight">{region.name}</div>
           <div className="text-sm text-slate-300">
-            {weather} · {DIFFICULTY_LABEL[dailyDifficulty(today)]} · the same battle for everyone today
+            {weather} · {DIFFICULTY_LABEL[dailyDifficulty(today)]} · the same battlefield for everyone today
           </div>
         </div>
         <div

@@ -164,7 +164,7 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
   const quality = useGraphicsQuality();
   // Use loading state from the parent provider
   const { isComplete: assetsLoaded } = useLoadingManager();
-  useReleaseGpuOnUnmount();
+  useReleaseGpuOnUnmount(quality);
 
 
   return (

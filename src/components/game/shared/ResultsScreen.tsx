@@ -15,7 +15,7 @@ import { MATERIALS, MaterialId, RARITY_ORDER, haulSize } from '@/lib/game/materi
 import { CHRONICLE } from '@/lib/game/lore';
 import { MaterialTile } from '../MaterialIcon';
 import { ChallengeTarget, Difficulty, challengePath, dailyPath } from '../storage/GameStorage';
-import { dailyRegion, wonToday } from '@/lib/campaign/daily';
+import { dailyRegion } from '@/lib/campaign/daily';
 import { emitCoins } from '../effects/effects';
 import {
   ArrowIcon, AttackIcon, CalendarIcon, CardsIcon, FireIcon, CoinIcon, FilledStarIcon, LaurelIcon, MapIcon, MedalIcon, PlayIcon, PowerIcon, ReplayIcon, ResumeIcon, ShareIcon,
@@ -165,7 +165,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
     const text = level
       ? `⚔️ Hex Hordes - Level ${level.id}: ${level.name}\n${won ? `Victory ${starText} in ${rounds} rounds` : `Defeated after ${rounds} rounds`} · ${stats.kills} foes slain\nCan you beat it?`
       : skirmish?.daily
-        ? `⚔️ Hex Hordes daily challenge (${skirmish.daily}) - I ${won ? 'won' : 'lost'} with ${yourScore} points${record.dailyStreak && record.dailyStreak > 1 ? ` · ${record.dailyStreak}-day streak 🔥` : ''}. Same battle for everyone today: can you beat my score?`
+        ? `⚔️ Hex Hordes daily challenge (${skirmish.daily}) - I ${won ? 'won' : 'lost'} with ${yourScore} points${record.dailyStreak && record.dailyStreak > 1 ? ` · ${record.dailyStreak}-day streak 🔥` : ''}. Same battlefield for everyone today: can you beat my score?`
       : skirmish
         ? `⚔️ Hex Hordes - I ${won ? 'won' : 'lost'} this ${skirmish.difficulty} skirmish with ${yourScore} points. Same battlefield, same rival: can you beat my score?`
         : `⚔️ Hex Hordes - Skirmish ${won ? 'won' : 'lost'} in ${rounds} rounds · ${stats.kills} foes slain`;
@@ -291,7 +291,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                 {record.dailyStreak
                   ? record.dailyStreak > 1 ? `${record.dailyStreak} days in a row! Come back tomorrow to keep it going.` : 'Won! Win again tomorrow to start a streak.'
                   : won
-                    ? wonToday(getProfile().daily) ? 'Already won today - the reward is paid once a day.' : 'This day\'s reward has passed.'
+                    ? (getProfile().daily.lastWon ?? '') >= skirmish.daily ? 'Already won - the reward is paid once a day.' : 'This day\'s reward has passed.'
                     : 'Lost - it\'s the same battle all day, so try again.'}
               </div>
             </div>

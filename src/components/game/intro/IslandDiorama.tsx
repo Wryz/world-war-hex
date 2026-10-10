@@ -155,7 +155,8 @@ interface IslandDioramaProps {
 }
 
 const IslandDiorama: React.FC<IslandDioramaProps> = ({ onThemeChange, onReady, poster = false }) => {
-  useReleaseGpuOnUnmount();
+  const quality = useGraphicsQuality();
+  useReleaseGpuOnUnmount(quality);
   const [themeIndex, setThemeIndex] = useState(0);
   const [ready, setReady] = useState(false);
   const live = ready && !poster;
@@ -170,7 +171,6 @@ const IslandDiorama: React.FC<IslandDioramaProps> = ({ onThemeChange, onReady, p
     if (live) onThemeChange?.(MAP_THEMES[themeIndex].name);
   }, [live, themeIndex, onThemeChange]);
 
-  const quality = useGraphicsQuality();
   const handleReady = () => {
     if (ready) return;
     setReady(true);

@@ -6,7 +6,7 @@ import type { Profile } from '../meta/profile';
 import { MAX_DECK_SIZE } from '../meta/economy';
 import { suggestLoadout } from '../meta/loadout';
 import { LevelDef, enemyRosterStats, getLevel, levelEnemies } from './levels';
-import { dailyDifficulty, dailyRegion, dailySeed } from './daily';
+import { dailyDifficulty, dailyRegion, dailySeed, todayKey } from './daily';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
@@ -135,7 +135,7 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
     chooseCastle: true,
     battleSeed: quickBattleSeed(seed)
   });
-  return { ...state, rivalLevel, ownCardLevel };
+  return { ...state, rivalLevel, ownCardLevel, ...(config.daily ? { dailyStartedOn: todayKey() } : {}) };
 };
 
 // Seeds are whole numbers that fit a link

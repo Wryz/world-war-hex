@@ -24,7 +24,7 @@ const Turntable: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 // Your castle in a style, slowly turning on its hex
 export const CastlePreview: React.FC<{ look: CastleStyle }> = ({ look }) => {
   const quality = useGraphicsQuality();
-  useReleaseGpuOnUnmount();
+  useReleaseGpuOnUnmount(quality);
   return (
   <div className="relative h-56 w-full overflow-hidden rounded-xl" style={{ background: SKY_COLOR }}>
     <Canvas key={quality} {...canvasQuality(quality)} flat camera={{ position: [0, 2.6, 3.4], fov: 40 }}>
