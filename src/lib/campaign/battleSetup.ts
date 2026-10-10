@@ -1,6 +1,7 @@
 import type { GameState, Roster } from '@/types/game';
 import { DEFAULT_SETTINGS, createBattle } from '../game/gameState';
-import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId, cardStats } from '../game/troops';
+import { MAX_CARD_LEVEL, TroopId, cardStats } from '../game/troops';
+import { BASE_CARD_IDS, Trees, applyTree, lineageOf } from '../game/lineages';
 import type { Profile } from '../meta/profile';
 import { MAX_DECK_SIZE } from '../meta/economy';
 import { suggestLoadout } from '../meta/loadout';
@@ -29,16 +30,21 @@ const shuffle = <T,>(items: T[]): T[] => {
   return copy;
 };
 
-// The player's deck as a roster, at the levels of their cards
-export const deckRoster = (deck: readonly TroopId[], cardLevels: Partial<Record<TroopId, number>>): Roster =>
-  Object.fromEntries(deck.map(id => [id, cardStats(id, cardLevels[id] ?? 1)]));
+// The player's deck as a roster, at the levels of their cards, with what each lineage has learnt on
+// its skill tree
+export const deckRoster = (deck: readonly TroopId[], cardLevels: Partial<Record<TroopId, number>>, trees: Trees = {}): Roster =>
+  Object.fromEntries(deck.map(id => {
+    const lineage = lineageOf(id);
+    return [id, applyTree(cardStats(id, cardLevels[id] ?? 1), lineage ? trees[lineage] : undefined)];
+  }));
 
 // The cards brought into a battle: the deck, with any slots it leaves empty (when more cards are
 // owned) filled with the best of the rest against the enemies - there's no screen before a battle
 // to pick them on
 export const battleDeck = (profile: Profile, enemies: TroopId[]): TroopId[] => {
   if (profile.deck.length >= MAX_DECK_SIZE) return profile.deck;
-  const extra = suggestLoadout(profile.cards, enemies).filter(id => !profile.deck.includes(id));
+  const extra = suggestLoadout(profile.cards, enemies)
+    .filter(id => !profile.deck.some(card => lineageOf(card) === lineageOf(id)));
   return [...profile.deck, ...extra].slice(0, MAX_DECK_SIZE);
 };
 export const levelDeck = (level: LevelDef, profile: Profile): TroopId[] => battleDeck(profile, levelEnemies(level));
@@ -46,13 +52,43 @@ export const levelDeck = (level: LevelDef, profile: Profile): TroopId[] => battl
 // The first battle teaches the basics, so the castle is placed for you
 const TUTORIAL_LEVEL = 1;
 
-// Quick battles are against a rival kingdom whose troops match the player's average card level
+// Quick battles are against a rival kingdom whose troops match the player's average card level. A
+// seasoned rival brings evolved forms in place of some of its base troops: which ones is picked from
+// the map's seed, so a challenge link always fields the same army.
 const QUICK_RIVAL_CARDS: TroopId[] = ['infantry', 'artillery', 'tank', 'rogue', 'helicopter', 'medic'];
+const RIVAL_FORMS: Partial<Record<TroopId, { level: number; forms: TroopId[] }[]>> = {
+  infantry: [{ level: 5, forms: ['shieldbearer', 'berserker'] }, { level: 9, forms: ['warden', 'warlord'] }],
+  artillery: [{ level: 6, forms: ['longbow', 'crossbow'] }],
+  tank: [{ level: 6, forms: ['halberdier'] }],
+  rogue: [{ level: 6, forms: ['wolf_rider', 'sapper'] }],
+  helicopter: [{ level: 9, forms: ['pegasus'] }],
+  medic: [{ level: 6, forms: ['cleric'] }, { level: 10, forms: ['archmage'] }]
+};
+
+// The rival's troops at a level, for a map seed (every troop it might field when no seed is given)
+export const rivalCards = (rivalLevel: number, seed?: number): TroopId[] => {
+  const cards: TroopId[] = [];
+  QUICK_RIVAL_CARDS.forEach((id, index) => {
+    const tiers = (RIVAL_FORMS[id] ?? []).filter(tier => tier.level <= rivalLevel);
+    const tier = tiers[tiers.length - 1];
+    if (!tier) {
+      cards.push(id);
+    } else if (seed === undefined) {
+      cards.push(id, ...tier.forms);
+    } else {
+      // About half the time it keeps the base troop
+      const roll = (Math.imul(seed ^ (index + 1) * 0x9e3779b1, 0x85ebca6b) >>> 0) % (tier.forms.length * 2);
+      cards.push(roll < tier.forms.length ? tier.forms[roll] : id);
+    }
+  });
+  return [...new Set(cards)];
+};
 
 
-// The level of the player's cards on average (a quick battle's rival fields its cards at it)
+// The level of the player's cards on average (a quick battle's rival fields its cards at it): every
+// form of a lineage shares its base card's level, so the base cards count
 export const averageCardLevel = (profile: Profile): number => {
-  const owned = PLAYER_CARD_IDS.filter(id => profile.cards[id] !== undefined);
+  const owned = BASE_CARD_IDS.filter(id => profile.cards[id] !== undefined);
   return Math.max(1, Math.round(owned.reduce((sum, id) => sum + (profile.cards[id] ?? 1), 0) / Math.max(1, owned.length)));
 };
 
@@ -62,7 +98,7 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
     const isTutorial = level.id === TUTORIAL_LEVEL;
     const cards = levelDeck(level, profile);
     return createBattle(level.settings, {
-      rosters: { player: deckRoster(cards, profile.cards), ai: enemyRosterStats(level) },
+      rosters: { player: deckRoster(cards, profile.cards, profile.trees), ai: enemyRosterStats(level) },
       deck: shuffle(cards),
       levelId: level.id,
       guards: level.guards,
@@ -73,11 +109,12 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
   const ownCardLevel = averageCardLevel(profile);
   const rivalLevel = clampRivalLevel(config.rivalLevel ?? ownCardLevel);
   const seed = config.seed ?? randomSeed();
-  const cards = battleDeck(profile, QUICK_RIVAL_CARDS);
+  const rivals = rivalCards(rivalLevel, seed);
+  const cards = battleDeck(profile, rivals);
   const state = createBattle({ ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy', seed }, {
     rosters: {
-      player: deckRoster(cards, profile.cards),
-      ai: Object.fromEntries(QUICK_RIVAL_CARDS.map(id => [id, cardStats(id, rivalLevel)]))
+      player: deckRoster(cards, profile.cards, profile.trees),
+      ai: Object.fromEntries(rivals.map(id => [id, cardStats(id, rivalLevel)]))
     },
     deck: shuffle(cards),
     chooseCastle: true,
@@ -95,6 +132,8 @@ const quickBattleSeed = (seed: number) => (Math.imul(seed, 2654435761) >>> 1) % 
 
 // Every troop type that can appear in a battle, so its models can be downloaded up front
 export const battleTroopTypes = (config: BattleConfig, profile: Profile): TroopId[] => {
-  const enemies = config.mode === 'campaign' ? levelEnemies(getLevel(config.levelId)) : QUICK_RIVAL_CARDS;
+  const enemies = config.mode === 'campaign'
+    ? levelEnemies(getLevel(config.levelId))
+    : rivalCards(clampRivalLevel(config.rivalLevel ?? averageCardLevel(profile)), config.seed);
   return [...new Set([...battleDeck(profile, enemies), ...enemies])];
 };

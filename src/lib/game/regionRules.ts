@@ -204,7 +204,7 @@ export const WAVER_HEALTH = 1 / 3;
 export const SURROUNDED_BY = 2;
 
 export const isFearless = (unit: Pick<Unit, 'type' | 'isBoss' | 'abilities'>) =>
-  !!unit.isBoss || unit.abilities.includes('undead') || factionOf(unit.type) === 'undead';
+  !!unit.isBoss || unit.abilities.includes('undead') || unit.abilities.includes('fearless') || factionOf(unit.type) === 'undead';
 
 export const isShaken = (unit: Pick<Unit, 'shaken'>) => (unit.shaken ?? 0) > 0;
 

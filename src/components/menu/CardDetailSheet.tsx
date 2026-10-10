@@ -1,7 +1,9 @@
 import React, { useEffect } from 'react';
 import { ABILITIES, FACTIONS, MAX_CARD_LEVEL, TROOPS, TROOP_CLASSES, TroopId, cardPower, cardStats } from '@/lib/game/troops';
 import { CARD_UNLOCK_LEVEL, ELITE_UNLOCK_LEVEL, cardPrice, upgradeCost } from '@/lib/meta/economy';
-import { eliteUnlocked, isCardAvailable, toggleDeckCard, useProfile } from '@/lib/meta/profile';
+import { MonsterSkillIcon } from '../game/icons';
+import { eliteUnlocked, isCardAvailable, toggleDeckCard, treeOf, useProfile } from '@/lib/meta/profile';
+import { PLAYER_SKILLS, applyTree, baseOf, isBaseCard, lineageOf } from '@/lib/game/lineages';
 import { MAX_SIGNATURE_RANK, ROMAN, SIGNATURE_UNLOCK_LEVEL, getSignature, signatureRank } from '@/lib/game/signatures';
 import { TroopCard, RARITY_STYLES } from '../game/cards/TroopCard';
 import { CounterLine } from '../game/hud/SelectionCard';
@@ -30,19 +32,25 @@ interface CardDetailSheetProps {
   onClose: () => void;
   onUpgrade: (id: TroopId) => void;
   onBuy: (id: TroopId) => void;
+  // Open the card's lineage's skill tree
+  onOpenTree?: () => void;
   // Shown over the card when it levels up or is bought
   flash?: string | null;
   // Dev tools, under the actions
   devControls?: React.ReactNode;
 }
 
-export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, onUpgrade, onBuy, flash, devControls }) => {
+export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, onUpgrade, onBuy, onOpenTree, flash, devControls }) => {
   const profile = useProfile();
   const troop = TROOPS[id];
   const level = profile.cards[id];
   const owned = level !== undefined;
   const shownLevel = level ?? 1;
-  const stats = cardStats(id, shownLevel);
+  const lineage = lineageOf(id);
+  const tree = lineage ? treeOf(profile, lineage) : undefined;
+  // With what its lineage has learnt on its skill tree
+  const stats = applyTree(cardStats(id, shownLevel), tree);
+  const skill = tree?.skill ? PLAYER_SKILLS[tree.skill].skill : undefined;
   const rarity = RARITY_STYLES[troop.rarity];
   const signature = getSignature(id);
   const rank = signatureRank(shownLevel);
@@ -102,6 +110,11 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, o
                   {inDeck ? 'Leave behind' : 'Bring to battle'}
                 </button>
               </>
+            ) : !isBaseCard(id) ? (
+              <span className="flex w-full flex-col items-center justify-center gap-1 rounded-xl bg-slate-800 px-2 py-2.5 text-center text-xs font-bold text-slate-300">
+                <span className="flex items-center gap-1"><LockIcon /> Evolves on its skill tree</span>
+                <span className="text-slate-400">from level {CARD_UNLOCK_LEVEL[id] ?? 0}</span>
+              </span>
             ) : isCardAvailable(profile, id) ? (
               <button onClick={() => onBuy(id)} disabled={profile.coins < cardPrice(id)} className={`${BUTTON} bg-amber-500 text-slate-900 shadow-[0_4px_0_#b45309] hover:bg-amber-400`}>
                 Buy <CoinIcon color={profile.coins < cardPrice(id) ? '#cbd5e1' : '#0f172a'} />{cardPrice(id)}
@@ -110,6 +123,11 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, o
               <span className="flex w-full items-center justify-center gap-1 rounded-xl bg-slate-800 px-2 py-2.5 text-sm font-bold text-slate-300">
                 <LockIcon /> Beat level {CARD_UNLOCK_LEVEL[id] ?? 0}
               </span>
+            )}
+            {onOpenTree && lineage && profile.cards[baseOf(id)] !== undefined && (
+              <button onClick={onOpenTree} className={`${BUTTON} bg-violet-600 text-white shadow-[0_4px_0_#4c1d95] hover:bg-violet-500`}>
+                Skill tree
+              </button>
             )}
             {devControls}
           </div>
@@ -139,6 +157,13 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, o
                   </li>
                 ))}
               </ul>
+            )}
+
+            {skill && (
+              <div className="mt-3 flex items-start gap-1.5 text-xs">
+                <MonsterSkillIcon className="mt-0.5 shrink-0" />
+                <span><b className="text-slate-100">{skill.name}</b> <span className="text-slate-400">{skill.description}</span></span>
+              </div>
             )}
 
             {/* Its signature ability, rank by rank */}

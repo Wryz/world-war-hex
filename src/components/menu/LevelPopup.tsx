@@ -22,7 +22,7 @@ const verdictFor = (ratio: number) =>
 export const LevelPopup: React.FC<{ level: LevelDef; onFight: () => void; onClose: () => void }> = ({ level, onFight, onClose }) => {
   const profile = useProfile();
   const ref = useRef<HTMLDivElement>(null);
-  const power = deckPower(levelDeck(level, profile), profile.cards);
+  const power = deckPower(levelDeck(level, profile), profile.cards, profile.trees);
   const verdict = verdictFor(power / level.recommendedPower);
   const record = profile.levels[level.id];
   const challenge = levelChallenge(level);

@@ -51,7 +51,7 @@ import {
 } from './formations';
 import {
   CHARGE_DISTANCE, EYE_OF_STORM_RADIUS, LONE_BLADE_RADIUS, SHOULDER_MAX_ALLIES, bloodlustHeal, braceBonus,
-  challengePulls, challengeRange, chargeBonus, eyeOfStormBonus, holySmiteBonus, isSmitable, loneBladeBonus,
+  challengePulls, challengeRange, chargeBonus, eyeOfStormBonus, warCryBonus, holySmiteBonus, isSmitable, loneBladeBonus,
   piercingShare, rankOf, fieldworksHeight, shoulderBonusPerAlly, steadyAimBonus, strafeDamage, undermineDepth, wardReduction
 } from './signatures';
 import {
@@ -327,6 +327,12 @@ export const HEALER_HEAL_AMOUNT = 4;
 export const REGENERATE_AMOUNT = 2;
 // Damage armored troops shrug off in every fight
 export const ARMOR_REDUCTION = 2;
+// How far troops with long weapons (reach) strike from
+export const REACH_RANGE = 2;
+// Extra sight for keen-eyed troops
+export const KEEN_SIGHT_BONUS = 1;
+// How far a master builder works from
+export const MASTER_BUILDER_REACH = 2;
 
 // Height: every 1.0 of height an attacker's hex stands above its target's (the number shown on each
 // hex, decimals and all) adds this much damage, and every 1.0 below takes it away. The bonus is
@@ -622,6 +628,7 @@ export const createUnit = (type: UnitType, owner: PlayerType, position: HexCoord
   cost: stats.cost,
   abilities: [...stats.abilities],
   level: stats.level,
+  skill: stats.skill,
   isBoss: isBoss || undefined,
   // Freshly deployed units can't move until their next turn
   hasMoved: true,
@@ -1341,7 +1348,11 @@ export const getActionTargets = (state: GameState, unit: Unit): ActionTarget[] =
   const occupied = new Set([...state.players.player.units, ...state.players.ai.units].map(u => coordKey(u.position)));
   const friendly = new Set(state.players[unit.owner].units.map(u => coordKey(u.position)));
   const targets: ActionTarget[] = [];
-  for (const c of getNeighbors(unit.position)) {
+  const reach = hasAbility(unit, 'masterBuilder') ? MASTER_BUILDER_REACH : 1;
+  const around = reach === 1
+    ? getNeighbors(unit.position)
+    : getHexesInRange(state.hexGrid, unit.position, reach).map(hex => hex.coordinates).filter(c => !coordsEqual(c, unit.position));
+  for (const c of around) {
     const hex = findHexByCoordinates(state.hexGrid, c);
     const key = coordKey(c);
     if (!hex || claimed.has(key) || hex.isBase) continue;
@@ -1371,7 +1382,7 @@ const carryOutWork = (state: GameState, order: Move): void => {
   const side = findPlayerById(state, order.playerId)?.type;
   const unit = side && state.players[side].units.find(u => u.id === order.unitId);
   const hex = findHexByCoordinates(state.hexGrid, order.to);
-  if (!side || !unit || unit.hasMoved || !hex || getHexDistance(unit.position, hex.coordinates) !== 1) return;
+  if (!side || !unit || unit.hasMoved || !hex || getHexDistance(unit.position, hex.coordinates) < 1) return;
   if (!getActionTargets({ ...state, pendingMoves: [] }, unit).some(t => t.action === order.action && coordsEqual(t.at, hex.coordinates))) return;
   unit.hasMoved = true;
   const what = hex.feature === 'stakes' ? 'stakes' : hex.feature === 'log' || hex.feature === 'logBridge' ? 'a fallen trunk' : `a ${TERRAIN_EFFECTS[hex.terrain].name.toLowerCase()}`;
@@ -1758,15 +1769,15 @@ const terrainUnder = (state: GameState, unit: Unit): TerrainType =>
 export const getElevation = (terrain: TerrainType) => TERRAIN_EFFECTS[terrain].elevation;
 
 // How far a unit can strike from the terrain it stands on: ranged units reach 2 hexes (3 with long
-// range), one more from high ground, one less in a sandstorm (pass the battle as `weather`); everyone
-// else 1
+// range), one more from high ground, one less in a sandstorm (pass the battle as `weather`); troops
+// with long weapons (reach) 2; everyone else 1
 export const getAttackRange = (
   unit: { abilities: Ability[]; type?: UnitType; isBoss?: boolean }, terrain: TerrainType = 'plain', weather?: Pick<GameState, 'settings' | 'turnNumber'>
 ): number =>
   hasAbility(unit, 'rangedAttack')
     ? Math.max(1, RANGED_ATTACK_RANGE + (hasAbility(unit, 'longRange') ? 1 : 0) + (getElevation(terrain) >= HIGH_GROUND_ELEVATION ? 1 : 0) -
       (weather && unit.type ? weatherReachPenalty(weather, { type: unit.type, isBoss: unit.isBoss }) : 0))
-    : 1;
+    : hasAbility(unit, 'reach') ? REACH_RANGE : 1;
 
 // A unit's reach where it stands right now
 export const getUnitAttackRange = (state: GameState, unit: Unit): number =>
@@ -1838,7 +1849,8 @@ export const getSightRange = (state: GameState, unit: Unit): number =>
   SIGHT_RANGE +
   (getTroopClass(unit.type) === 'skirmisher' || hasAbility(unit, 'flying') ? SCOUT_SIGHT_BONUS : 0) +
   (getElevation(terrainUnder(state, unit)) >= HIGH_GROUND_ELEVATION ? HIGH_GROUND_SIGHT_BONUS : 0) +
-  (terrainUnder(state, unit) === 'watchtower' ? WATCHTOWER_SIGHT_BONUS : 0);
+  (terrainUnder(state, unit) === 'watchtower' ? WATCHTOWER_SIGHT_BONUS : 0) +
+  (hasAbility(unit, 'keenEyed') ? KEEN_SIGHT_BONUS : 0);
 
 // Everything that keeps watch for a side: its troops, its castle and the camps it holds
 const lookoutsOf = (state: GameState, side: PlayerType): { position: HexCoordinates; range: number }[] => {
@@ -1970,9 +1982,13 @@ const getSmiteMultiplier = (attacker: Unit, target: Unit): number => {
   return rank > 0 && isSmitable(target.type) ? 1 + holySmiteBonus(rank) : 1;
 };
 
-// Ranged units fight poorly at arm's length
+// Ranged units fight poorly at arm's length (save crossbows, as deadly up close)
 export const getPointBlankMultiplier = (attacker: Unit, distance: number): number =>
-  hasAbility(attacker, 'rangedAttack') && distance <= 1 ? RANGED_POINT_BLANK_MULTIPLIER : 1;
+  hasAbility(attacker, 'rangedAttack') && !hasAbility(attacker, 'heavyBolts') && distance <= 1 ? RANGED_POINT_BLANK_MULTIPLIER : 1;
+
+// Heavy bolts punch through armour: they strike an armoured troop harder by what its armour soaks
+const getArmourPierce = (attacker: Unit, target: Unit): number =>
+  hasAbility(attacker, 'heavyBolts') && hasAbility(target, 'armored') ? ARMOR_REDUCTION : 0;
 
 // Damage one unit's attacks would deal to a particular target when the two stand on the given
 // terrain, before rounding: base power, height difference, counters, the target's cover and
@@ -1992,7 +2008,8 @@ export const getStrikePowerOnTerrain = (
   getCounterMultiplier(attacker.type, target.type) *
   getCoverMultiplier(attacker, targetTerrain) *
   getPointBlankMultiplier(attacker, distance) *
-  getSmiteMultiplier(attacker, target);
+  getSmiteMultiplier(attacker, target) +
+  getArmourPierce(attacker, target);
 
 // --- Signature abilities in a fight -----------------------------------------------------------
 
@@ -2034,6 +2051,9 @@ export const getSituationalBonuses = (
   if (rank > 0 && ownTurn && movedHexes >= CHARGE_DISTANCE) add('Charge', chargeBonus(rank));
   // A blacksmith its side holds
   if (getHeldBuildings(state, attacker.owner, 'blacksmith').length > 0) add('Blacksmith', BLACKSMITH_ATTACK_BONUS);
+  // A Warlord's war cry beside it
+  const warCry = Math.max(0, ...allies.filter(ally => getHexDistance(ally.position, at) === 1).map(ally => warCryBonus(rankOf(ally, 'warCry'))));
+  add('War Cry', warCry);
   rank = rankOf(attacker, 'eyeOfTheStorm');
   if (rank > 0 && !enemies.some(enemy => getHexDistance(enemy.position, at) <= EYE_OF_STORM_RADIUS)) add('Eye of the Storm', eyeOfStormBonus(rank));
   return bonuses;

@@ -1,7 +1,8 @@
 import type { GameSettings, Roster, TerrainType } from '@/types/game';
 import type { GuardSpec } from '../game/gameState';
 import { Faction, MOB_IDS, TROOPS, TroopId, cardPower, scaleTroop, statsPower } from '../game/troops';
-import { expectedProgression, recommendedPower, baseLevelReward } from '../meta/economy';
+import { baseOf } from '../game/lineages';
+import { expectedProgression, recommendedPower, baseLevelReward, treeCardPower } from '../meta/economy';
 import { LEVEL_TUNING } from './levelTuning';
 import { SWARM_COST, WeatherId, getFactionTrait } from '../game/regionRules';
 
@@ -220,9 +221,18 @@ const enemyRosterFor = (region: Region, index: number): TroopId[] => {
 };
 
 // Average power of the model player's cards when reaching a level
+// Evolved forms and skill trees count for part of the power they add: on paper they are worth more
+// than they turn out to be in battle (measured with the balance simulator)
+const FORM_WEIGHT = 0.6;
+const TREE_WEIGHT = 0.85;
 const expectedCardPower = (levelId: number) => {
-  const { deck, levels } = expectedProgression(levelId);
-  return deck.reduce((sum, id) => sum + cardPower(id, levels[id] ?? 1), 0) / Math.max(1, deck.length);
+  const { deck, levels, trees } = expectedProgression(levelId);
+  return deck.reduce((sum, id) => {
+    const level = levels[id] ?? 1;
+    const base = cardPower(baseOf(id), level);
+    const form = cardPower(id, level);
+    return sum + base + FORM_WEIGHT * (form - base) + TREE_WEIGHT * (treeCardPower(id, level, trees) - form);
+  }, 0) / Math.max(1, deck.length);
 };
 
 // Average power of a roster's troops at their base stats

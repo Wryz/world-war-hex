@@ -3,6 +3,7 @@ import { LEVEL_COUNT } from '../campaign/levels';
 import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId } from '../game/troops';
 import { MAX_DECK_SIZE, STARTER_CARDS } from './economy';
 import { MATERIAL_IDS } from '../game/materials';
+import { baseOf, withLineageLevel } from '../game/lineages';
 import { Profile, getProfile, replaceProfile } from './profile';
 
 // Developer shortcuts for trying things out on a local copy of the game: every level open, coins on
@@ -72,9 +73,10 @@ export const devLockAllLevels = () => update(() => ({ levels: {} }));
 
 // --- Cards ---------------------------------------------------------------------------------
 
-// Own every troop card (new ones join at level 1)
+// Own every troop card: every base card and every form it evolves into (new ones join at their
+// lineage's level, 1 for a new lineage)
 export const devOwnEverything = () => update(profile => ({
-  cards: Object.fromEntries(PLAYER_CARD_IDS.map(id => [id, profile.cards[id] ?? 1]))
+  cards: Object.fromEntries(PLAYER_CARD_IDS.map(id => [id, profile.cards[baseOf(id)] ?? profile.cards[id] ?? 1]))
 }));
 
 // A satchel holding plenty of every material (every Chronicle page open), or an empty one
@@ -90,11 +92,12 @@ export const devSetAllLevels = (level: number) => update(profile => ({
 }));
 
 export const devSetCardLevel = (id: TroopId, level: number) => update(profile => ({
-  cards: { ...profile.cards, [id]: Math.min(MAX_CARD_LEVEL, Math.max(1, level)) }
+  cards: withLineageLevel(profile.cards, id, Math.min(MAX_CARD_LEVEL, Math.max(1, level)))
 }));
 
-// Back to the four starter cards, all at level 1
+// Back to the four starter cards, all at level 1, with bare skill trees
 export const devResetCards = () => update(() => ({
   cards: Object.fromEntries(STARTER_CARDS.map(id => [id, 1])),
-  deck: STARTER_CARDS.slice(0, MAX_DECK_SIZE)
+  deck: STARTER_CARDS.slice(0, MAX_DECK_SIZE),
+  trees: {}
 }));

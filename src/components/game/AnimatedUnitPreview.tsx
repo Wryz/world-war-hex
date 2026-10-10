@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { UnitType } from '@/types/game';
 import { getUnitLook, getAnimationName } from './utils/UnitModelSystem';
-import { instantiateUnitModel, findAnimationClip, disposeUnitModel, UnitModelInstance } from './utils/unitModelCache';
+import { instantiateUnitModel, findAnimationClip, disposeUnitModel, MountRig, UnitModelInstance } from './utils/unitModelCache';
 import { FACTIONS, TROOPS } from '@/lib/game/troops';
 
 // How far a hovering (not yet placed) preview floats above the tile
@@ -40,7 +40,7 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
   const indicatorRef = useRef<THREE.Mesh>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   const rigRef = useRef<UnitModelInstance['rig'] | null>(null);
-  const mountMixerRef = useRef<THREE.AnimationMixer | null>(null);
+  const mountMixerRef = useRef<MountRig | null>(null);
   const clipsRef = useRef<THREE.AnimationClip[]>([]);
   const actionRef = useRef<THREE.AnimationAction | null>(null);
   const [modelLoaded, setModelLoaded] = useState(false);
@@ -67,8 +67,8 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
         container.add(scene);
         if (mount) {
           // The horse stands still in the barracks
-          mount.gallop.timeScale = 0;
-          mountMixerRef.current = mount.mixer;
+          mount.setWalking(false);
+          mountMixerRef.current = mount;
         }
 
         mixerRef.current = rig ? null : new THREE.AnimationMixer(scene);
@@ -83,7 +83,7 @@ export const AnimatedUnitPreview: React.FC<AnimatedUnitPreviewProps> = ({
       cancelled = true;
       if (loaded) disposeUnitModel(loaded, mixerRef.current);
       rigRef.current = null;
-      mountMixerRef.current?.stopAllAction();
+      mountMixerRef.current?.stop();
       mountMixerRef.current = null;
       mixerRef.current = null;
       actionRef.current = null;

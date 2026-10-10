@@ -1,6 +1,7 @@
 import type { HexCoordinates, TerrainType, Unit } from '@/types/game';
 import { TroopClass, TroopId, getTroopClass } from './troops';
 import { getHexDistance } from './hexUtils';
+import { PLAYER_SKILLS, PlayerSkillId, isPlayerSkillId } from './lineages';
 
 // Monster skills: every regular enemy troop has one trick of its own, on top of its faction's trait
 // (bosses have their powers instead). They are what makes a goblin sapper something to kill at
@@ -127,10 +128,11 @@ export const MOB_SKILLS: Partial<Record<TroopId, MobSkill>> = {
   dragon_knight: skill('Lance Charge', 'charge', { share: 0.5, distance: 2 }, s => `+${pct(s.share!)} attack after riding ${s.distance} or more hexes this turn.`)
 };
 
-export const getMobSkill = (unit: { type: TroopId; isBoss?: boolean }): MobSkill | undefined =>
-  unit.isBoss ? undefined : MOB_SKILLS[unit.type];
+// A troop's skill: a monster's own, or one a Kingdom card learnt on its skill tree (lineages.ts)
+export const getMobSkill = (unit: { type: TroopId; isBoss?: boolean; skill?: PlayerSkillId }): MobSkill | undefined =>
+  unit.isBoss ? undefined : unit.skill && isPlayerSkillId(unit.skill) ? PLAYER_SKILLS[unit.skill].skill : MOB_SKILLS[unit.type];
 
-export const hasMobSkill = (unit: { type: TroopId; isBoss?: boolean }, kind: MobSkillKind): MobSkill | undefined => {
+export const hasMobSkill = (unit: { type: TroopId; isBoss?: boolean; skill?: PlayerSkillId }, kind: MobSkillKind): MobSkill | undefined => {
   const found = getMobSkill(unit);
   return found?.kind === kind ? found : undefined;
 };

@@ -53,7 +53,7 @@ let peakArmy = 0;
 
 const playBattle = (levelId: number, strength = 1): GameState => {
   const level = getLevel(levelId);
-  const { deck, levels: cardLevels } = expectedProgression(levelId);
+  const { deck, levels: cardLevels, trees } = expectedProgression(levelId);
   const enemy = strength === 1 || bossOnly
     ? enemyRosterStats(level)
     : enemyRosterStats({ ...level, enemyScale: level.enemyScale * strength });
@@ -63,7 +63,7 @@ const playBattle = (levelId: number, strength = 1): GameState => {
   }));
   let state = createBattle({ ...level.settings, fogOfWar: level.settings.fogOfWar && !noFog, seed: Math.floor(Math.random() * 1e9) }, {
     rosters: {
-      player: deckRoster(deck, cardLevels),
+      player: deckRoster(deck, cardLevels, trees),
       ai: enemy
     },
     deck: shuffle(deck),

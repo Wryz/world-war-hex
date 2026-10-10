@@ -3,9 +3,14 @@ import { useSyncExternalStore } from 'react';
 import type { SideStats, WinReason } from '@/types/game';
 import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId, isTroopId } from '../game/troops';
 import {
+  ATTRIBUTES, ATTRIBUTE_PICKS, AttributeId, PLAYER_SKILLS, LINEAGES, LINEAGE_IDS, LineageId, LineageTree, PlayerSkillId, RESPEC_COST, Trees,
+  baseOf, canAfford, evolvesFrom, getForm, isBaseCard, isPlayerSkillId, lineageCards, lineageOf, spend, withLineageLevel
+} from '../game/lineages';
+import {
   BattleReward,
   CARD_UNLOCK_LEVEL,
   ELITE_UNLOCK_LEVEL,
+  SHOP_UNLOCK_LEVEL,
   MAX_DECK_SIZE,
   STARTER_CARDS,
   cardPrice,
@@ -79,9 +84,13 @@ export interface ProfileCosmetics {
 export interface Profile {
   version: number;
   coins: number;
-  // Owned cards and their levels
+  // Owned cards and their levels: the base cards bought in the shop and the forms they have evolved
+  // into (lineages.ts), every card of a lineage at its base card's level
   cards: Partial<Record<TroopId, number>>;
+  // The cards brought into battle: at most one form of each lineage
   deck: TroopId[];
+  // What each lineage has learnt on its skill tree
+  trees: Trees;
   levels: Record<number, LevelRecord>;
   bestiary: Partial<Record<TroopId, BestiaryEntry>>;
   stats: ProfileStats;
@@ -110,6 +119,7 @@ export const createProfile = (): Profile => {
     coins: 0,
     cards: Object.fromEntries(STARTER_CARDS.map(id => [id, 1])),
     deck: [...STARTER_CARDS],
+    trees: {},
     levels: {},
     bestiary: {},
     stats: emptyStats(),
@@ -143,11 +153,37 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
     }
   }
   for (const id of STARTER_CARDS) cards[id] ??= 1;
+  // Cards were once bought one by one; they are forms of the six base cards now. Owning a form means
+  // owning its base and every form it evolved from, and every card of a lineage shares one level:
+  // the highest any of them had reached.
+  for (const lineage of LINEAGE_IDS) {
+    const members = lineageCards(lineage).filter(id => cards[id] !== undefined);
+    if (members.length === 0) continue;
+    for (const id of members) {
+      for (let from = id; !isBaseCard(from); from = evolvesFrom(from)) cards[evolvesFrom(from)] ??= cards[id];
+    }
+    const level = Math.max(...lineageCards(lineage).map(id => cards[id] ?? 0));
+    for (const id of lineageCards(lineage)) if (cards[id] !== undefined) cards[id] = level;
+  }
 
-  const deck = (Array.isArray(raw.deck) ? raw.deck : [])
-    .filter((id): id is TroopId => typeof id === 'string' && isTroopId(id) && cards[id] !== undefined)
-    .filter((id, index, all) => all.indexOf(id) === index)
+  const deck = oneOfEachLineage((Array.isArray(raw.deck) ? raw.deck : [])
+    .filter((id): id is TroopId => typeof id === 'string' && isTroopId(id) && cards[id] !== undefined))
     .slice(0, MAX_DECK_SIZE);
+
+  const trees: Trees = {};
+  if (isRecord(raw.trees)) {
+    for (const lineage of LINEAGE_IDS) {
+      const tree = raw.trees[lineage];
+      if (!isRecord(tree) || cards[LINEAGES[lineage].base] === undefined) continue;
+      const allowed = LINEAGES[lineage].attributes as readonly string[];
+      const attributes = (Array.isArray(tree.attributes) ? tree.attributes : [])
+        .filter((id): id is AttributeId => typeof id === 'string' && allowed.includes(id))
+        .filter((id, index, all) => all.indexOf(id) === index)
+        .slice(0, ATTRIBUTE_PICKS);
+      const skill = isPlayerSkillId(tree.skill) && LINEAGES[lineage].skills.includes(tree.skill) && attributes.length > 0 ? tree.skill : undefined;
+      if (attributes.length > 0) trees[lineage] = skill ? { attributes, skill } : { attributes };
+    }
+  }
 
   const levels: Profile['levels'] = {};
   if (isRecord(raw.levels)) {
@@ -215,6 +251,7 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
     materialsFound,
     cards,
     deck: deck.length > 0 ? deck : [...STARTER_CARDS],
+    trees,
     levels,
     bestiary,
     stats,
@@ -286,12 +323,107 @@ export const eliteUnlocked = (profile: Profile) => highestCleared(profile) >= EL
 export const totalStars = (profile: Profile) =>
   Object.values(profile.levels).reduce((sum, record) => sum + record.stars, 0);
 
-export const profilePower = (profile: Profile) => deckPower(profile.deck, profile.cards);
+export const profilePower = (profile: Profile) => deckPower(profile.deck, profile.cards, profile.trees);
 
-// Whether a card can be bought in the shop yet
+// Whether a base card can be bought in the shop yet
 export const isCardAvailable = (profile: Profile, id: TroopId) => {
-  const unlockAt = CARD_UNLOCK_LEVEL[id];
-  return unlockAt !== undefined && highestCleared(profile) >= unlockAt;
+  const unlockAt = SHOP_UNLOCK_LEVEL[id];
+  return isBaseCard(id) && unlockAt !== undefined && highestCleared(profile) >= unlockAt;
+};
+
+// Keep the first card of each lineage (a deck holds one form of each)
+const oneOfEachLineage = (deck: TroopId[]): TroopId[] =>
+  deck.filter((id, index) => deck.findIndex(other => lineageOf(other) === lineageOf(id)) === index);
+
+// --- Evolutions --------------------------------------------------------------------------------
+
+export type EvolveBlock = 'owned' | 'noBase' | 'previous' | 'level' | 'materials';
+
+// Why a form can't be evolved into yet, or null if it can
+export const evolveBlock = (profile: Profile, id: TroopId): EvolveBlock | null => {
+  const form = getForm(id);
+  if (!form) return 'owned';
+  if (profile.cards[id] !== undefined) return 'owned';
+  if (profile.cards[baseOf(id)] === undefined) return 'noBase';
+  if (profile.cards[evolvesFrom(id)] === undefined) return 'previous';
+  if (highestCleared(profile) < form.unlockLevel) return 'level';
+  if (!canAfford(profile.materials, form.cost)) return 'materials';
+  return null;
+};
+
+// Evolve a lineage into a new form: it joins at the lineage's level and takes its lineage's place
+// in the deck
+export const evolveCard = (id: TroopId): boolean => {
+  const profile = getProfile();
+  const form = getForm(id);
+  if (!form || evolveBlock(profile, id) !== null) return false;
+  const level = profile.cards[baseOf(id)]!;
+  const lineage = lineageOf(id);
+  const slot = profile.deck.findIndex(card => lineageOf(card) === lineage);
+  const deck = slot >= 0
+    ? profile.deck.map((card, index) => (index === slot ? id : card))
+    : profile.deck.length < MAX_DECK_SIZE ? [...profile.deck, id] : profile.deck;
+  setProfile({ ...profile, cards: { ...profile.cards, [id]: level }, deck, materials: spend(profile.materials, form.cost) });
+  trackEvent('card_evolved', { card: id, level, highest_cleared: highestCleared(profile) });
+  return true;
+};
+
+// --- Skill trees -------------------------------------------------------------------------------
+
+export const treeOf = (profile: Profile, lineage: LineageId): LineageTree => profile.trees[lineage] ?? { attributes: [] };
+
+const setTree = (profile: Profile, lineage: LineageId, tree: LineageTree, changes: Partial<Profile> = {}) =>
+  setProfile({ ...profile, ...changes, trees: { ...profile.trees, [lineage]: tree } });
+
+// Learn one of a lineage's attributes (two of its four), paying its materials
+export const learnAttribute = (lineage: LineageId, id: AttributeId): boolean => {
+  const profile = getProfile();
+  const tree = treeOf(profile, lineage);
+  const attribute = ATTRIBUTES[id];
+  if (profile.cards[LINEAGES[lineage].base] === undefined || !LINEAGES[lineage].attributes.includes(id)) return false;
+  if (tree.attributes.includes(id) || tree.attributes.length >= ATTRIBUTE_PICKS || !canAfford(profile.materials, attribute.cost)) return false;
+  setTree(profile, lineage, { ...tree, attributes: [...tree.attributes, id] }, { materials: spend(profile.materials, attribute.cost) });
+  trackEvent('attribute_learnt', { lineage, attribute: id });
+  return true;
+};
+
+// Learn one of a lineage's two skills (once it has an attribute), paying its materials
+export const learnSkill = (lineage: LineageId, id: PlayerSkillId): boolean => {
+  const profile = getProfile();
+  const tree = treeOf(profile, lineage);
+  const skill = PLAYER_SKILLS[id];
+  if (profile.cards[LINEAGES[lineage].base] === undefined || !LINEAGES[lineage].skills.includes(id)) return false;
+  if (tree.skill || tree.attributes.length === 0 || !canAfford(profile.materials, skill.cost)) return false;
+  setTree(profile, lineage, { ...tree, skill: id }, { materials: spend(profile.materials, skill.cost) });
+  trackEvent('skill_learnt', { lineage, skill: id });
+  return true;
+};
+
+// Swap an attribute already learnt for another of the lineage's, for coins
+export const respecAttribute = (lineage: LineageId, from: AttributeId, to: AttributeId): boolean => {
+  const profile = getProfile();
+  const tree = treeOf(profile, lineage);
+  if (!tree.attributes.includes(from) || tree.attributes.includes(to) || !LINEAGES[lineage].attributes.includes(to)) return false;
+  if (profile.coins < RESPEC_COST) return false;
+  setTree(profile, lineage, { ...tree, attributes: tree.attributes.map(id => (id === from ? to : id)) }, {
+    coins: profile.coins - RESPEC_COST,
+    stats: { ...profile.stats, coinsSpent: profile.stats.coinsSpent + RESPEC_COST }
+  });
+  trackEvent('tree_respec', { lineage, from, to });
+  return true;
+};
+
+// Swap the skill learnt for the lineage's other one, for coins
+export const respecSkill = (lineage: LineageId, to: PlayerSkillId): boolean => {
+  const profile = getProfile();
+  const tree = treeOf(profile, lineage);
+  if (!tree.skill || tree.skill === to || !LINEAGES[lineage].skills.includes(to) || profile.coins < RESPEC_COST) return false;
+  setTree(profile, lineage, { ...tree, skill: to }, {
+    coins: profile.coins - RESPEC_COST,
+    stats: { ...profile.stats, coinsSpent: profile.stats.coinsSpent + RESPEC_COST }
+  });
+  trackEvent('tree_respec', { lineage, from: tree.skill, to });
+  return true;
 };
 
 // --- Shop and deck -------------------------------------------------------------------------
@@ -313,6 +445,7 @@ export const buyCard = (id: TroopId): boolean => {
   return true;
 };
 
+// Train a card up a level - and with it every form of its lineage
 export const upgradeCard = (id: TroopId): boolean => {
   const profile = getProfile();
   const level = profile.cards[id];
@@ -322,14 +455,15 @@ export const upgradeCard = (id: TroopId): boolean => {
   setProfile({
     ...profile,
     coins: profile.coins - cost,
-    cards: { ...profile.cards, [id]: level + 1 },
+    cards: withLineageLevel(profile.cards, id, level + 1),
     stats: { ...profile.stats, coinsSpent: profile.stats.coinsSpent + cost, upgradesBought: profile.stats.upgradesBought + 1 }
   });
   trackEvent('card_upgraded', { card: id, level: level + 1, cost });
   return true;
 };
 
-// Add a card to the deck, or take it out (a deck always keeps at least one card)
+// Add a card to the deck, or take it out (a deck always keeps at least one card). A form of a
+// lineage already in the deck takes its place there.
 export const toggleDeckCard = (id: TroopId): boolean => {
   const profile = getProfile();
   if (profile.cards[id] === undefined) return false;
@@ -338,15 +472,24 @@ export const toggleDeckCard = (id: TroopId): boolean => {
     setProfile({ ...profile, deck: profile.deck.filter(card => card !== id) });
     return true;
   }
+  const sibling = profile.deck.findIndex(card => lineageOf(card) === lineageOf(id));
+  if (sibling >= 0) {
+    setProfile({ ...profile, deck: profile.deck.map((card, index) => (index === sibling ? id : card)) });
+    return true;
+  }
   if (profile.deck.length >= MAX_DECK_SIZE) return false;
   setProfile({ ...profile, deck: [...profile.deck, id] });
   return true;
 };
 
-// Replace the battle loadout (owned cards only, at most MAX_DECK_SIZE, at least one)
+// The form of a lineage in the deck, if any
+export const deckFormOf = (profile: Profile, lineage: LineageId): TroopId | undefined =>
+  profile.deck.find(card => lineageOf(card) === lineage);
+
+// Replace the battle loadout (owned cards only, one of each lineage, at most MAX_DECK_SIZE, at least one)
 export const setDeck = (deck: TroopId[]): boolean => {
   const profile = getProfile();
-  const next = deck.filter((id, index) => profile.cards[id] !== undefined && deck.indexOf(id) === index).slice(0, MAX_DECK_SIZE);
+  const next = oneOfEachLineage(deck.filter((id, index) => profile.cards[id] !== undefined && deck.indexOf(id) === index)).slice(0, MAX_DECK_SIZE);
   if (next.length === 0) return false;
   setProfile({ ...profile, deck: next });
   return true;
