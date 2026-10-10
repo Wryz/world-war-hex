@@ -1,7 +1,8 @@
 import type { GameSettings, Roster, TerrainType } from '@/types/game';
 import type { GuardSpec } from '../game/gameState';
 import { Faction, MOB_IDS, TROOPS, TroopId, cardPower, scaleTroop, statsPower } from '../game/troops';
-import { expectedProgression, recommendedPower, baseLevelReward } from '../meta/economy';
+import { baseOf } from '../game/lineages';
+import { expectedProgression, recommendedPower, baseLevelReward, treeCardPower } from '../meta/economy';
 import { LEVEL_TUNING } from './levelTuning';
 import { SWARM_COST, WeatherId, getFactionTrait } from '../game/regionRules';
 
@@ -220,9 +221,21 @@ const enemyRosterFor = (region: Region, index: number): TroopId[] => {
 };
 
 // Average power of the model player's cards when reaching a level
+// Evolved forms and skill trees count for part of the power they add: on paper they are worth more
+// than they turn out to be in battle, the more so the stronger the forms get (measured with the
+// balance simulator)
+const weightAt = (levelId: number, early: number, late: number) =>
+  early + (late - early) * Math.min(1, Math.max(0, (levelId - 20) / 100));
 const expectedCardPower = (levelId: number) => {
-  const { deck, levels } = expectedProgression(levelId);
-  return deck.reduce((sum, id) => sum + cardPower(id, levels[id] ?? 1), 0) / Math.max(1, deck.length);
+  const { deck, levels, trees } = expectedProgression(levelId);
+  const FORM_WEIGHT = weightAt(levelId, 1, 0.5);
+  const TREE_WEIGHT = weightAt(levelId, 1, 0.8);
+  return deck.reduce((sum, id) => {
+    const level = levels[id] ?? 1;
+    const base = cardPower(baseOf(id), level);
+    const form = cardPower(id, level);
+    return sum + base + FORM_WEIGHT * (form - base) + TREE_WEIGHT * (treeCardPower(id, level, trees) - form);
+  }, 0) / Math.max(1, deck.length);
 };
 
 // Average power of a roster's troops at their base stats
@@ -250,8 +263,9 @@ export const getLevel = (levelId: number): LevelDef => {
     (LEVEL_TUNING[id - 1] ?? 1) * 100
   ) / 100;
   const enemyTier = Math.max(1, Math.round((enemyScale - 1) / 0.1) + 1);
-  // The first battle is fought on a small field of its own (tutorialField.ts), castles four hexes apart
-  const gridSize = isTutorial ? 3 : region.id < 2 ? 4 : 5;
+  // The first battle is fought on a small field of its own (tutorialField.ts), castles four hexes apart;
+  // every other battle on a field 9 hexes across
+  const gridSize = isTutorial ? 3 : 4;
   const maxRounds = gridSize === 3 ? 12 : gridSize === 4 ? 14 : 16;
 
   const guards: GuardSpec[] = [];

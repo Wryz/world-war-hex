@@ -12,14 +12,15 @@ import { ChronicleIcon, CloseIcon, SatchelIcon } from '../game/icons';
 // The player's inventory: every material gathered on the battlefield, and the Chronicle pages the
 // rarest of them have uncovered
 
-const CATEGORIES: { id: MaterialCategory; title: string; detail: string }[] = [
-  { id: 'land', title: 'From the land', detail: 'Lying on open ground: end a turn on it to gather it' },
-  { id: 'deed', title: 'From your deeds', detail: 'Felling trees, burning, mining and drawing water' },
-  { id: 'building', title: 'From buildings', detail: 'The stores of each building or camp you take first' },
-  { id: 'spoils', title: 'Spoils', detail: 'Left behind by the enemies you defeat' },
-  { id: 'trophy', title: 'Trophies', detail: 'Taken from each region\'s boss' },
-  { id: 'relic', title: 'Relics', detail: 'Dug up at each region\'s story site' }
-];
+// (what each kind is, but not where to look: that's for the player to find out)
+const CATEGORIES: { id: MaterialCategory; title: string }[] = [
+  { id: 'land', title: 'From the land' },
+  { id: 'deed', title: 'From your deeds' },
+  { id: 'building', title: 'From buildings' },
+  { id: 'spoils', title: 'Spoils' },
+  { id: 'trophy', title: 'Trophies' },
+  { id: 'relic', title: 'Relics' }
+]
 
 type Tab = 'materials' | 'chronicle';
 
@@ -48,7 +49,7 @@ const MaterialDetail: React.FC<{ id: MaterialId; count: number; found: boolean; 
         </div>
         {found && <p className="mt-3 text-sm italic leading-relaxed text-slate-300">{material.flavour}</p>}
         <div className="mt-3 rounded-lg bg-slate-800/80 px-3 py-2 text-sm">
-          <span className="font-bold text-slate-400">Found: </span>{material.source}
+          {found ? <><span className="font-bold text-slate-400">Found: </span>{material.source}</> : <span className="text-slate-400">Not found yet. It&apos;s out there somewhere.</span>}
         </div>
         {page && (
           <div className="mt-2 flex items-center gap-2 rounded-lg bg-amber-950/60 px-3 py-2 text-sm text-amber-100 ring-1 ring-amber-500/40">
@@ -65,8 +66,8 @@ const ChronicleView: React.FC<{ found: (id: MaterialId) => boolean; openId: stri
   return (
     <div>
       <p className="mb-3 text-sm text-slate-700">
-        <b>{unlocked}/{CHRONICLE.length}</b> pages recovered. Every region hides a story site, and every region&apos;s boss carries
-        something from the past: bring them home to piece together what happened to the realm.
+        <b>{unlocked}/{CHRONICLE.length}</b> pages recovered. Pieces of the realm&apos;s past lie scattered across the land: find
+        them and bring them home to learn what happened.
       </p>
       <ol className="flex flex-col gap-2">
         {CHRONICLE.map((page: ChroniclePage, index) => {
@@ -87,7 +88,6 @@ const ChronicleView: React.FC<{ found: (id: MaterialId) => boolean; openId: stri
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className={`font-display block text-lg leading-tight ${open ? 'text-amber-200' : 'text-slate-400'}`}>{open ? page.title : 'A lost page'}</span>
-                  {!open && <span className="block text-xs text-slate-400">{page.clue}</span>}
                   {expanded && <span className="mt-2 block font-serif text-[0.9375rem] leading-relaxed text-slate-200">{page.text}</span>}
                   {open && !expanded && <span className="block truncate text-xs text-slate-400">{page.text}</span>}
                 </span>
@@ -161,12 +161,12 @@ export const SatchelScreen: React.FC = () => {
                 <section key={category.id} className={`${CARD_CLASS} p-4`}>
                   <div className="mb-3 flex flex-wrap items-baseline justify-between gap-x-3">
                     <h2 className="font-display text-xl">{category.title}</h2>
-                    <span className="text-xs text-slate-400">{category.detail} · {ids.filter(found).length}/{ids.length}</span>
+                    <span className="text-xs text-slate-400">{ids.filter(found).length}/{ids.length}</span>
                   </div>
                   <div className="flex flex-wrap gap-3">
                     {ids.map(id => (
                       <button key={id} type="button" onClick={() => setSelected(id)} className="rounded-xl transition-transform hover:-translate-y-0.5" aria-label={found(id) ? MATERIALS[id].name : 'Undiscovered material'}>
-                        <MaterialTile id={id} count={materials[id]} dim={!found(id)} title={found(id) ? MATERIALS[id].name : `??? (${MATERIALS[id].source})`} />
+                        <MaterialTile id={id} count={materials[id]} dim={!found(id)} title={found(id) ? MATERIALS[id].name : '???'} />
                       </button>
                     ))}
                   </div>

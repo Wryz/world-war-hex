@@ -57,7 +57,7 @@ import { getCastleStyle } from '@/lib/meta/cosmetics';
 import { useProfile } from '@/lib/meta/profile';
 import { getBattleStartDelay, getDeathTime, getImpactTimes, getImpactTimesUntil } from './utils/battleTiming';
 import { getUnitTypeName } from './utils/UnitHelpers';
-import { emitCoins, projectToScreen, setProjector, takeShake, getTimeScale, getGameSpeed } from './effects/effects';
+import { emitCoins, emitMaterial, projectToScreen, setProjector, takeShake, getTimeScale, getGameSpeed } from './effects/effects';
 import { TERRAIN_SHORT_EFFECTS } from './hud/terrainInfo';
 import { ActionIcon, StakesIcon, CampIcon, EmbersIcon, FallenLogIcon, FellIcon, FireIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from './icons';
 import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
@@ -66,9 +66,7 @@ import type { UnitBuff } from './UnitMesh';
 import type { TutorialVisuals } from './shared/TutorialGuide';
 import { TutorialMarkers } from './shared/TutorialMarkers';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
-import { MATERIALS, MaterialId, isMaterialId } from '@/lib/game/materials';
-import { storySiteFor } from '@/lib/game/lore';
-import { MaterialIcon, RARITY_COLORS } from './MaterialIcon';
+import { isMaterialId } from '@/lib/game/materials';
 import { SKY_COLOR } from '@/components/menu/MenuShell';
 
 // Identity of a unit's buffs, to keep its props stable while they don't change
@@ -1140,11 +1138,9 @@ interface DamagePopup {
   bounty?: number;
   text: string;
   color: string;
-  // A material just gathered here
-  material?: MaterialId;
 }
 
-// How long after the turn's state lands a gathered material pops up (once the troop has walked there)
+// How long after the turn's state lands a gathered material flies off (once the troop has walked there)
 const GATHER_POPUP_DELAY = 1100;
 
 const BoardScene: React.FC<BoardSceneProps> = ({
@@ -1245,13 +1241,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [players, hexByKey, gameState.sightings]);
-  // Materials lying on the ground (and the region's story site) where the player can see them
-  const harvestMarkers = useMemo(
-    // (not under a fallen trunk, where no troop can get at it until the trunk is cleared)
-    () => hexGrid.filter(hex => ((hex.harvest && isMaterialId(hex.harvest)) || (hex.storySite && !hex.plundered)) && !hex.unit && hex.feature !== 'log' &&
-      (!visibleKeys || visibleKeys.has(coordKey(hex.coordinates)))),
-    [hexGrid, visibleKeys]
-  );
   // With a troop selected: the most damage it could take next turn on each hex it can move to
   const damageLabels = useMemo(() => {
     if (!threats || !selectedUnit || selectedUnit.owner !== 'player') return [];
@@ -1698,7 +1687,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     popupTimeoutsRef.current.add(timeout);
   }, [unitRenderData, players.player.id]);
 
-  // Materials gathered this turn rise from where they were found
+  // Materials gathered this turn fly from where they were found into the satchel
   const gatheredSeenRef = useRef<{ game: string; serial: number } | null>(null);
   useEffect(() => {
     const gathered = gameState.gathered ?? [];
@@ -1713,21 +1702,15 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     if (fresh.length === 0) return;
     const timeout = setTimeout(() => {
       popupTimeoutsRef.current.delete(timeout);
-      const created: DamagePopup[] = fresh.flatMap((entry, index) => {
+      let flown = 0;
+      for (const entry of fresh) {
         const hex = hexByKey.get(coordKey(entry.at));
-        if (!hex) return [];
-        const [x, y, z] = surfacePosition(hex);
-        return [{ id: ++popupIdRef.current, position: [x, y - 0.4 + index * 0.35, z] as [number, number, number], text: '', color: '#ffffff', material: entry.material }];
-      });
-      if (created.length === 0) return;
-      playBattleSound('bounty', 0.4);
-      setPopups(current => [...current, ...created]);
-      const ids = new Set(created.map(p => p.id));
-      const clear = setTimeout(() => {
-        popupTimeoutsRef.current.delete(clear);
-        setPopups(current => current.filter(p => !ids.has(p.id)));
-      }, 1900);
-      popupTimeoutsRef.current.add(clear);
+        const screen = hex && projectToScreen((([x, y, z]) => [x, y + 0.3, z] as [number, number, number])(surfacePosition(hex)));
+        if (!screen) continue;
+        emitMaterial(screen, entry.material, flown * 0.15);
+        flown++;
+      }
+      if (flown > 0) playBattleSound('bounty', 0.4);
     }, GATHER_POPUP_DELAY / getTimeScale());
     popupTimeoutsRef.current.add(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1876,33 +1859,6 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         </Html>
       ))}
 
-      {/* Materials to gather, and the region's story site */}
-      {harvestMarkers.map(hex => {
-        const [x, y, z] = surfacePosition(hex);
-        const site = hex.storySite && !hex.plundered;
-        const material = hex.harvest ? MATERIALS[hex.harvest] : null;
-        return (
-          <Html key={`harvest-${coordKey(hex.coordinates)}`} position={[x, y + 0.08, z + 0.32]} center zIndexRange={[2, 0]} style={{ pointerEvents: 'none' }}>
-            {site ? (
-              <span
-                className="font-display flex h-6 w-6 items-center justify-center rounded-full bg-amber-950/80 text-sm text-amber-200 shadow-lg ring-2 ring-amber-400 animate-pulse"
-                title={storySiteFor(gameState.mapName)?.name}
-              >
-                ?
-              </span>
-            ) : material && hex.harvest && (
-              <span
-                className="flex h-5 w-5 items-center justify-center rounded-full bg-slate-900/75 text-[0.8125rem] shadow"
-                style={{ boxShadow: `0 0 0 1.5px ${RARITY_COLORS[material.rarity].ring}, 0 0 8px ${RARITY_COLORS[material.rarity].glow}` }}
-                title={material.name}
-              >
-                <MaterialIcon id={hex.harvest} />
-              </span>
-            )}
-          </Html>
-        );
-      })}
-
       {/* Last-seen markers for enemies hidden in the fog */}
       {lastSeen.map(({ unit, turn, hex }) => (
         <Html key={`seen-${unit.id}`} position={labelPosition(hex)} center zIndexRange={[3, 0]} style={{ pointerEvents: 'none' }}>
@@ -2042,12 +1998,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
             className="animate-float-up flex items-center gap-1 text-2xl font-black select-none"
             style={{ color: popup.color, textShadow: '0 2px 4px rgba(0,0,0,0.8)' }}
           >
-            {popup.material ? (
-              <span className="flex items-center gap-1 rounded-full bg-slate-900/80 py-0.5 pl-1 pr-2 text-sm font-bold text-white shadow-lg">
-                <MaterialIcon id={popup.material} className="text-xl" />
-                <span style={{ color: RARITY_COLORS[MATERIALS[popup.material].rarity].text }}>+1 {MATERIALS[popup.material].name}</span>
-              </span>
-            ) : popup.bounty !== undefined ? (
+            {popup.bounty !== undefined ? (
               <>
                 <SkullIcon className="drop-shadow" />
                 <span className="text-lg text-amber-300">+{popup.bounty}</span>
@@ -2060,14 +2011,14 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
       {/* Hover info */}
       {assetsLoaded && hoveredHex && !isSetupPhase && (
-        <HoverTooltip hex={hoveredHex} mapName={gameState.mapName} fogged={!!visibleKeys && !visibleKeys.has(coordKey(hoveredHex.coordinates))} />
+        <HoverTooltip hex={hoveredHex} />
       )}
     </>
   );
 };
 
 // One-line description of the hovered hex: its terrain effect and what's standing on it
-const HoverTooltip: React.FC<{ hex: Hex; mapName?: string; fogged?: boolean }> = ({ hex, mapName, fogged }) => {
+const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
   const [x, y, z] = surfacePosition(hex);
   const effect = hex.isCamp
     ? hex.owner === 'player' ? 'your camp: recruits deploy here' : `${hex.owner ? 'enemy' : 'neutral'} camp: move onto it to capture`
@@ -2089,15 +2040,6 @@ const HoverTooltip: React.FC<{ hex: Hex; mapName?: string; fogged?: boolean }> =
               ? <><StakesIcon /> Stakes: cavalry can&apos;t cross, +1 movement for others</>
               : null;
 
-  // Something to pick up here, or a story to dig up (once the player's troops can see the hex)
-  const reachable = hex.feature !== 'log';
-  const site = hex.storySite && !fogged ? storySiteFor(mapName) : undefined;
-  const find = site
-    ? hex.plundered ? <span className="text-slate-400">{site.name} (searched)</span> : <span className="text-amber-200">{site.name}: {site.hint} <b>End a turn here to search it.</b></span>
-    : hex.harvest && !fogged && reachable && isMaterialId(hex.harvest)
-      ? <span style={{ color: RARITY_COLORS[MATERIALS[hex.harvest].rarity].text }}><MaterialIcon id={hex.harvest} /> {MATERIALS[hex.harvest].name}: <b>end a turn here to gather it.</b></span>
-      : null;
-
   return (
     <Html position={[x, y + 0.2, z]} zIndexRange={[9, 0]} style={{ pointerEvents: 'none' }}>
       <div className="ml-5 -mt-5 whitespace-nowrap rounded-md bg-slate-900/90 px-2 py-1 text-[0.6875rem] text-slate-100 shadow-lg select-none">
@@ -2116,7 +2058,6 @@ const HoverTooltip: React.FC<{ hex: Hex; mapName?: string; fogged?: boolean }> =
             · {getUnitTypeName(hex.unit.type)} <HealthIcon /> {hex.unit.lifespan}
           </span>
         )}
-        {find && <div className="mt-0.5 max-w-72 whitespace-normal">{find}</div>}
       </div>
     </Html>
   );

@@ -5,7 +5,7 @@ import assert from 'node:assert/strict';
 import type { GameState } from '@/types/game';
 import { createProfile } from '../meta/profile';
 import { cardStats } from '../game/troops';
-import { buildBattle } from './battleSetup';
+import { buildBattle, rivalCards } from './battleSetup';
 
 // What a friend has to see the same: the ground, everything standing on it, the castle sites offered
 // and the rival army's troops
@@ -46,4 +46,18 @@ test('a quick battle without a seed picks one, and keeps it so it can be shared'
 test('a rival level from a link is kept to the card levels there are', () => {
   assert.equal(buildBattle({ mode: 'quick', difficulty: 'easy', seed: 7, rivalLevel: 99 }, createProfile()).rivalLevel, 15);
   assert.equal(buildBattle({ mode: 'quick', difficulty: 'easy', seed: 7, rivalLevel: 0 }, createProfile()).rivalLevel, 1);
+});
+
+test('a seasoned rival kingdom brings evolved forms, the same ones for the same map', () => {
+  assert.deepEqual(rivalCards(1, 42), ['infantry', 'artillery', 'tank', 'rogue', 'helicopter', 'medic']);
+  const veteran = rivalCards(12, 42);
+  assert.equal(veteran.length, 6);
+  assert.deepEqual(rivalCards(12, 42), veteran);
+  const seen = new Set(Array.from({ length: 40 }, (_, seed) => rivalCards(12, seed)).flat());
+  for (const form of ['warden', 'warlord', 'crossbow', 'halberdier', 'wolf_rider', 'archmage', 'pegasus']) assert.ok(seen.has(form as never), form);
+  // Each troop is picked on its own: many different armies, not a handful
+  const armies = new Set(Array.from({ length: 400 }, (_, seed) => rivalCards(12, seed).join()));
+  assert.ok(armies.size >= 30, `${armies.size} armies`);
+  // Without a seed, every troop it might field (for loading their models)
+  for (const id of veteran) assert.ok(rivalCards(12).includes(id));
 });

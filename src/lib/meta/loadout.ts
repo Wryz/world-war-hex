@@ -1,5 +1,6 @@
 import { TroopId, cardStats, getClassCounter, getTroopClass, statsPower } from '../game/troops';
 import { MAX_DECK_SIZE } from './economy';
+import { lineageOf } from '../game/lineages';
 
 // Choosing which cards to bring into a battle
 
@@ -26,10 +27,11 @@ export const loadoutScore = (deck: readonly TroopId[], cards: Partial<Record<Tro
   }, 0);
 };
 
-// The best loadout against these enemies, trying every combination of the cards owned
+// The best loadout against these enemies, trying every combination of the cards owned (one form of
+// each lineage)
 export const suggestLoadout = (cards: Partial<Record<TroopId, number>>, enemies: TroopId[]): TroopId[] => {
   const owned = Object.keys(cards) as TroopId[];
-  const size = Math.min(MAX_DECK_SIZE, owned.length);
+  const size = Math.min(MAX_DECK_SIZE, new Set(owned.map(id => lineageOf(id) ?? id)).size);
   let best: TroopId[] = owned.slice(0, size);
   let bestScore = -Infinity;
   const pick = (start: number, chosen: TroopId[]) => {
@@ -41,7 +43,10 @@ export const suggestLoadout = (cards: Partial<Record<TroopId, number>>, enemies:
       }
       return;
     }
-    for (let i = start; i <= owned.length - (size - chosen.length); i++) pick(i + 1, [...chosen, owned[i]]);
+    for (let i = start; i < owned.length; i++) {
+      if (chosen.some(id => lineageOf(id) === lineageOf(owned[i]))) continue;
+      pick(i + 1, [...chosen, owned[i]]);
+    }
   };
   pick(0, []);
   return best;

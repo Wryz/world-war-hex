@@ -9,7 +9,7 @@ import { TroopId, getTroop } from './troops';
 
 export type SignatureId =
   | 'shoulderToShoulder' | 'steadyAim' | 'brace' | 'loneBlade' | 'charge' | 'ward' | 'challenge'
-  | 'bloodlust' | 'piercingShot' | 'holySmite' | 'undermine' | 'strafe' | 'eyeOfTheStorm' | 'fieldworks';
+  | 'bloodlust' | 'piercingShot' | 'holySmite' | 'undermine' | 'strafe' | 'eyeOfTheStorm' | 'fieldworks' | 'warCry';
 
 export interface SignatureDef {
   id: SignatureId;
@@ -73,6 +73,36 @@ export const strafeDamage = (rank: number) => rank + 1;
 // Archmage: extra spell damage with no enemy within EYE_OF_STORM_RADIUS hexes
 export const eyeOfStormBonus = (rank: number) => 0.08 * rank;
 export const EYE_OF_STORM_RADIUS = 2;
+// Warlord: extra attack for friendly troops beside it
+export const warCryBonus = (rank: number) => 0.04 * rank;
+
+const SHARED = {
+  steadyAim: {
+    id: 'steadyAim', name: 'Steady Aim', condition: "Hasn't moved",
+    describe: rank => `+${pct(steadyAimBonus(rank))} attack on any turn it hasn't moved.`,
+    short: rank => `+${pct(steadyAimBonus(rank))} attack`
+  },
+  brace: {
+    id: 'brace', name: 'Brace', condition: "On the enemy's turn",
+    describe: rank => `+${pct(braceBonus(rank))} attack when striking back on the enemy's turn.`,
+    short: rank => `+${pct(braceBonus(rank))} attack`
+  },
+  charge: {
+    id: 'charge', name: 'Charge', condition: `Moved ${CHARGE_DISTANCE}+ hexes`,
+    describe: rank => `+${pct(chargeBonus(rank))} attack on a turn it rides ${CHARGE_DISTANCE} or more hexes.`,
+    short: rank => `+${pct(chargeBonus(rank))} attack`
+  },
+  bloodlust: {
+    id: 'bloodlust', name: 'Bloodlust', condition: 'Destroys an enemy',
+    describe: rank => `Heals ${bloodlustHeal(rank)} health whenever it destroys an enemy.`,
+    short: rank => `+${bloodlustHeal(rank)} health per kill`
+  },
+  fieldworks: {
+    id: 'fieldworks', name: 'Fieldworks', condition: "Hasn't moved",
+    describe: rank => `At the end of a turn it didn't move, it digs in: the ground of its hex rises ${fieldworksHeight(rank).toFixed(2)} higher.`,
+    short: rank => `Raises its ground ${fieldworksHeight(rank).toFixed(2)}`
+  }
+} satisfies Partial<Record<SignatureId, SignatureDef>>;
 
 export const SIGNATURES: Partial<Record<TroopId, SignatureDef>> = {
   infantry: {
@@ -80,26 +110,14 @@ export const SIGNATURES: Partial<Record<TroopId, SignatureDef>> = {
     describe: rank => `+${pct(shoulderBonusPerAlly(rank))} attack for each friendly troop beside it (up to ${SHOULDER_MAX_ALLIES}).`,
     short: rank => `+${pct(shoulderBonusPerAlly(rank))} attack per ally`
   },
-  artillery: {
-    id: 'steadyAim', name: 'Steady Aim', condition: "Hasn't moved",
-    describe: rank => `+${pct(steadyAimBonus(rank))} attack on any turn it hasn't moved.`,
-    short: rank => `+${pct(steadyAimBonus(rank))} attack`
-  },
-  tank: {
-    id: 'brace', name: 'Brace', condition: "On the enemy's turn",
-    describe: rank => `+${pct(braceBonus(rank))} attack when striking back on the enemy's turn.`,
-    short: rank => `+${pct(braceBonus(rank))} attack`
-  },
+  artillery: SHARED.steadyAim,
+  tank: SHARED.brace,
   rogue: {
     id: 'loneBlade', name: 'Lone Blade', condition: 'Alone',
     describe: rank => `+${pct(loneBladeBonus(rank))} attack with no friendly troop within ${LONE_BLADE_RADIUS} hexes.`,
     short: rank => `+${pct(loneBladeBonus(rank))} attack`
   },
-  helicopter: {
-    id: 'charge', name: 'Charge', condition: `Moved ${CHARGE_DISTANCE}+ hexes`,
-    describe: rank => `+${pct(chargeBonus(rank))} attack on a turn it rides ${CHARGE_DISTANCE} or more hexes.`,
-    short: rank => `+${pct(chargeBonus(rank))} attack`
-  },
+  helicopter: SHARED.charge,
   medic: {
     id: 'ward', name: 'Ward', condition: 'Friends beside it',
     describe: rank => `Friendly troops next to it take ${pct(wardReduction(rank))} less damage.`,
@@ -113,11 +131,7 @@ export const SIGNATURES: Partial<Record<TroopId, SignatureDef>> = {
     },
     short: rank => `Pulls ${challengePulls(rank)} within ${challengeRange(rank)}`
   },
-  berserker: {
-    id: 'bloodlust', name: 'Bloodlust', condition: 'Destroys an enemy',
-    describe: rank => `Heals ${bloodlustHeal(rank)} health whenever it destroys an enemy.`,
-    short: rank => `+${bloodlustHeal(rank)} health per kill`
-  },
+  berserker: SHARED.bloodlust,
   longbow: {
     id: 'piercingShot', name: 'Piercing Shot', condition: 'Target in cover',
     describe: rank => piercingShare(rank) >= 1
@@ -135,11 +149,7 @@ export const SIGNATURES: Partial<Record<TroopId, SignatureDef>> = {
     describe: rank => `At the end of a turn it didn't move, the ground around it sinks ${undermineDepth(rank).toFixed(2)} lower.`,
     short: rank => `Sinks ground ${undermineDepth(rank).toFixed(2)}`
   },
-  engineer: {
-    id: 'fieldworks', name: 'Fieldworks', condition: "Hasn't moved",
-    describe: rank => `At the end of a turn it didn't move, it digs in: the ground of its hex rises ${fieldworksHeight(rank).toFixed(2)} higher.`,
-    short: rank => `Raises its ground ${fieldworksHeight(rank).toFixed(2)}`
-  },
+  engineer: SHARED.fieldworks,
   pegasus: {
     id: 'strafe', name: 'Strafe', condition: 'Flies past enemies',
     describe: rank => `Every enemy it flies past on its way takes ${strafeDamage(rank)} damage.`,
@@ -149,7 +159,18 @@ export const SIGNATURES: Partial<Record<TroopId, SignatureDef>> = {
     id: 'eyeOfTheStorm', name: 'Eye of the Storm', condition: 'No enemy within 2',
     describe: rank => `+${pct(eyeOfStormBonus(rank))} spell damage with no enemy within ${EYE_OF_STORM_RADIUS} hexes.`,
     short: rank => `+${pct(eyeOfStormBonus(rank))} spell damage`
-  }
+  },
+  warden: SHARED.brace,
+  warlord: {
+    id: 'warCry', name: 'War Cry', condition: 'Friends beside it',
+    describe: rank => `Friendly troops next to it strike ${pct(warCryBonus(rank))} harder.`,
+    short: rank => `Allies +${pct(warCryBonus(rank))} attack`
+  },
+  crossbow: SHARED.steadyAim,
+  halberdier: SHARED.brace,
+  wolf_rider: SHARED.charge,
+  siege_engineer: SHARED.fieldworks,
+  bear_warden: SHARED.bloodlust
 };
 
 export const getSignature = (type: TroopId): SignatureDef | undefined => SIGNATURES[type];

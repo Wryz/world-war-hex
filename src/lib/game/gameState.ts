@@ -51,7 +51,7 @@ import {
 } from './formations';
 import {
   CHARGE_DISTANCE, EYE_OF_STORM_RADIUS, LONE_BLADE_RADIUS, SHOULDER_MAX_ALLIES, bloodlustHeal, braceBonus,
-  challengePulls, challengeRange, chargeBonus, eyeOfStormBonus, holySmiteBonus, isSmitable, loneBladeBonus,
+  challengePulls, challengeRange, chargeBonus, eyeOfStormBonus, warCryBonus, holySmiteBonus, isSmitable, loneBladeBonus,
   piercingShare, rankOf, fieldworksHeight, shoulderBonusPerAlly, steadyAimBonus, strafeDamage, undermineDepth, wardReduction
 } from './signatures';
 import {
@@ -327,6 +327,12 @@ export const HEALER_HEAL_AMOUNT = 4;
 export const REGENERATE_AMOUNT = 2;
 // Damage armored troops shrug off in every fight
 export const ARMOR_REDUCTION = 2;
+// How far troops with long weapons (reach) strike from
+export const REACH_RANGE = 2;
+// Extra sight for keen-eyed troops
+export const KEEN_SIGHT_BONUS = 1;
+// How far a master builder works from
+export const MASTER_BUILDER_REACH = 2;
 
 // Height: every 1.0 of height an attacker's hex stands above its target's (the number shown on each
 // hex, decimals and all) adds this much damage, and every 1.0 below takes it away. The bonus is
@@ -622,6 +628,7 @@ export const createUnit = (type: UnitType, owner: PlayerType, position: HexCoord
   cost: stats.cost,
   abilities: [...stats.abilities],
   level: stats.level,
+  skill: stats.skill,
   isBoss: isBoss || undefined,
   // Freshly deployed units can't move until their next turn
   hasMoved: true,
@@ -1337,11 +1344,25 @@ const STAKE_GROUND: TerrainType[] = ['plain', 'desert', 'hills', 'snow'];
 // order has already claimed, and never pulling a bridge or gate down from under a troop.
 export const getActionTargets = (state: GameState, unit: Unit): ActionTarget[] => {
   if (unit.hasMoved) return [];
-  const claimed = new Set(state.pendingMoves.filter(m => m.unitId !== unit.id).map(m => coordKey(m.to)));
-  const occupied = new Set([...state.players.player.units, ...state.players.ai.units].map(u => coordKey(u.position)));
+  // (nor on a hex a recruit is about to be deployed to)
+  const claimed = new Set([
+    ...state.pendingMoves.filter(m => m.unitId !== unit.id).map(m => coordKey(m.to)),
+    ...state.pendingPurchases.map(p => coordKey(p.position))
+  ]);
+  // (only the troops its side can see: a master builder working two hexes away mustn't give away an
+  // enemy hiding in the fog - an order onto a hidden troop's hex comes to nothing when carried out)
+  const reach = hasAbility(unit, 'masterBuilder') ? MASTER_BUILDER_REACH : 1;
+  // (the next hex is always in sight, so troops working only there see every troop on it)
+  const occupied = new Set([
+    ...state.players[unit.owner].units,
+    ...state.players[getOpponent(unit.owner)].units.filter(enemy => reach === 1 || isUnitVisibleTo(state, unit.owner, enemy))
+  ].map(u => coordKey(u.position)));
   const friendly = new Set(state.players[unit.owner].units.map(u => coordKey(u.position)));
   const targets: ActionTarget[] = [];
-  for (const c of getNeighbors(unit.position)) {
+  const around = reach === 1
+    ? getNeighbors(unit.position)
+    : getHexesInRange(state.hexGrid, unit.position, reach).map(hex => hex.coordinates).filter(c => !coordsEqual(c, unit.position));
+  for (const c of around) {
     const hex = findHexByCoordinates(state.hexGrid, c);
     const key = coordKey(c);
     if (!hex || claimed.has(key) || hex.isBase) continue;
@@ -1371,8 +1392,16 @@ const carryOutWork = (state: GameState, order: Move): void => {
   const side = findPlayerById(state, order.playerId)?.type;
   const unit = side && state.players[side].units.find(u => u.id === order.unitId);
   const hex = findHexByCoordinates(state.hexGrid, order.to);
-  if (!side || !unit || unit.hasMoved || !hex || getHexDistance(unit.position, hex.coordinates) !== 1) return;
+  if (!side || !unit || unit.hasMoved || !hex || getHexDistance(unit.position, hex.coordinates) < 1) return;
   if (!getActionTargets({ ...state, pendingMoves: [] }, unit).some(t => t.action === order.action && coordsEqual(t.at, hex.coordinates))) return;
+  // Stakes can't go up, nor a wall, gate or bridge come down, under a troop the builder couldn't see
+  const hiddenOccupant = [...state.players.player.units, ...state.players.ai.units].some(u => coordsEqual(u.position, hex.coordinates));
+  const blockedByTroop = order.action === 'stakes' || (order.action === 'demolish' && !hex.feature?.match(/^(log|stakes)$/));
+  if (hiddenOccupant && blockedByTroop) {
+    unit.hasMoved = true;
+    addLog(state, side, `${unitLabel(unit)} found the way blocked and couldn't finish the work.`);
+    return;
+  }
   unit.hasMoved = true;
   const what = hex.feature === 'stakes' ? 'stakes' : hex.feature === 'log' || hex.feature === 'logBridge' ? 'a fallen trunk' : `a ${TERRAIN_EFFECTS[hex.terrain].name.toLowerCase()}`;
   switch (order.action) {
@@ -1758,15 +1787,15 @@ const terrainUnder = (state: GameState, unit: Unit): TerrainType =>
 export const getElevation = (terrain: TerrainType) => TERRAIN_EFFECTS[terrain].elevation;
 
 // How far a unit can strike from the terrain it stands on: ranged units reach 2 hexes (3 with long
-// range), one more from high ground, one less in a sandstorm (pass the battle as `weather`); everyone
-// else 1
+// range), one more from high ground, one less in a sandstorm (pass the battle as `weather`); troops
+// with long weapons (reach) 2; everyone else 1
 export const getAttackRange = (
   unit: { abilities: Ability[]; type?: UnitType; isBoss?: boolean }, terrain: TerrainType = 'plain', weather?: Pick<GameState, 'settings' | 'turnNumber'>
 ): number =>
   hasAbility(unit, 'rangedAttack')
     ? Math.max(1, RANGED_ATTACK_RANGE + (hasAbility(unit, 'longRange') ? 1 : 0) + (getElevation(terrain) >= HIGH_GROUND_ELEVATION ? 1 : 0) -
       (weather && unit.type ? weatherReachPenalty(weather, { type: unit.type, isBoss: unit.isBoss }) : 0))
-    : 1;
+    : hasAbility(unit, 'reach') ? REACH_RANGE : 1;
 
 // A unit's reach where it stands right now
 export const getUnitAttackRange = (state: GameState, unit: Unit): number =>
@@ -1838,7 +1867,8 @@ export const getSightRange = (state: GameState, unit: Unit): number =>
   SIGHT_RANGE +
   (getTroopClass(unit.type) === 'skirmisher' || hasAbility(unit, 'flying') ? SCOUT_SIGHT_BONUS : 0) +
   (getElevation(terrainUnder(state, unit)) >= HIGH_GROUND_ELEVATION ? HIGH_GROUND_SIGHT_BONUS : 0) +
-  (terrainUnder(state, unit) === 'watchtower' ? WATCHTOWER_SIGHT_BONUS : 0);
+  (terrainUnder(state, unit) === 'watchtower' ? WATCHTOWER_SIGHT_BONUS : 0) +
+  (hasAbility(unit, 'keenEyed') ? KEEN_SIGHT_BONUS : 0);
 
 // Everything that keeps watch for a side: its troops, its castle and the camps it holds
 const lookoutsOf = (state: GameState, side: PlayerType): { position: HexCoordinates; range: number }[] => {
@@ -1970,9 +2000,10 @@ const getSmiteMultiplier = (attacker: Unit, target: Unit): number => {
   return rank > 0 && isSmitable(target.type) ? 1 + holySmiteBonus(rank) : 1;
 };
 
-// Ranged units fight poorly at arm's length
+// Ranged units fight poorly at arm's length (save crossbows, as deadly up close)
 export const getPointBlankMultiplier = (attacker: Unit, distance: number): number =>
-  hasAbility(attacker, 'rangedAttack') && distance <= 1 ? RANGED_POINT_BLANK_MULTIPLIER : 1;
+  hasAbility(attacker, 'rangedAttack') && !hasAbility(attacker, 'heavyBolts') && distance <= 1 ? RANGED_POINT_BLANK_MULTIPLIER : 1;
+
 
 // Damage one unit's attacks would deal to a particular target when the two stand on the given
 // terrain, before rounding: base power, height difference, counters, the target's cover and
@@ -2034,6 +2065,9 @@ export const getSituationalBonuses = (
   if (rank > 0 && ownTurn && movedHexes >= CHARGE_DISTANCE) add('Charge', chargeBonus(rank));
   // A blacksmith its side holds
   if (getHeldBuildings(state, attacker.owner, 'blacksmith').length > 0) add('Blacksmith', BLACKSMITH_ATTACK_BONUS);
+  // A Warlord's war cry beside it
+  const warCry = Math.max(0, ...allies.filter(ally => getHexDistance(ally.position, at) === 1).map(ally => warCryBonus(rankOf(ally, 'warCry'))));
+  add('War Cry', warCry);
   rank = rankOf(attacker, 'eyeOfTheStorm');
   if (rank > 0 && !enemies.some(enemy => getHexDistance(enemy.position, at) <= EYE_OF_STORM_RADIUS)) add('Eye of the Storm', eyeOfStormBonus(rank));
   return bonuses;
@@ -2089,7 +2123,8 @@ export const getFormationEffects = (
   if (mobStrike) effects.push(mobStrike);
   const aura = mobAuraShare(attacker, from, strikers);
   if (aura) effects.push(aura);
-  const defence = mobDefenceShare(target, at, getHexDistance(from, at), guards);
+  // (a hide turns shots, not a halberd swung from 2 hexes)
+  const defence = mobDefenceShare(target, at, hasAbility(attacker, 'rangedAttack') ? getHexDistance(from, at) : 1, guards);
   if (defence) effects.push({ label: defence.label, share: -defence.share });
   // Pack Hunters: beasts are harder for every other beast beside their prey
   if (hasTrait(attacker, 'pack')) {
@@ -2137,8 +2172,11 @@ const distributeDamage = (shares: (number | null)[]): number[] => {
 };
 
 // Armour soaks 1 damage from every fight, but a blow that lands always does at least 1
-const applyArmor = (unit: Unit, damage: number) =>
-  damage > 0 && hasAbility(unit, 'armored') ? Math.max(1, damage - ARMOR_REDUCTION) : damage;
+const applyArmor = (unit: Unit, damage: number, pierced = false) =>
+  damage > 0 && hasAbility(unit, 'armored') && !pierced ? Math.max(1, damage - ARMOR_REDUCTION) : damage;
+
+// Heavy bolts go straight through armour: a fight a Crossbowman strikes in ignores the target's
+export const piercesArmour = (strikers: Unit[]) => strikers.some(unit => hasAbility(unit, 'heavyBolts'));
 
 const compareIds = (a: Unit, b: Unit) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
 
@@ -2163,18 +2201,21 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
   const targetOf = new Map<string, string>();
   // How many attackers already picked each enemy (joining them flanks it)
   const attackersOn = new Map<string, number>();
-  const dealt = (target: Unit, damage: number) => applyArmor(target, damage > 0 ? Math.max(1, Math.round(damage)) : 0);
+  // Enemies a Crossbowman already picked (their fight goes through armour)
+  const piercedTargets = new Set<string>();
+  const dealt = (target: Unit, damage: number, pierced = false) => applyArmor(target, damage > 0 ? Math.max(1, Math.round(damage)) : 0, pierced);
 
   for (const { unit, targets } of choices) {
     const options = targets.map(target => {
       const assigned = assignedDamage.get(target.id) ?? 0;
       const strike = getStrikePower(state, unit, target, (attackersOn.get(target.id) ?? 0) + 1);
-      const healthLeft = target.lifespan - dealt(target, assigned);
+      const pierced = piercesArmour([unit]) || piercedTargets.has(target.id);
+      const healthLeft = target.lifespan - dealt(target, assigned, pierced);
       return {
         target,
         strike,
         healthLeft,
-        kills: healthLeft > 0 && target.lifespan - dealt(target, assigned + strike) <= 0,
+        kills: healthLeft > 0 && target.lifespan - dealt(target, assigned + strike, pierced) <= 0,
         distance: getHexDistance(unit.position, target.position)
       };
     });
@@ -2198,6 +2239,7 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
     targetOf.set(unit.id, target.id);
     attackersOn.set(target.id, (attackersOn.get(target.id) ?? 0) + 1);
     assignedDamage.set(target.id, (assignedDamage.get(target.id) ?? 0) + strike);
+    if (piercesArmour([unit])) piercedTargets.add(target.id);
   }
 
   const combats: Combat[] = [];
@@ -2274,8 +2316,9 @@ const detectIntercepts = (state: GameState, attackerSide: PlayerType, siege: Gam
     const options = targets.map(target => {
       const strike = getStrikePower(state, guard, target, (assigned.get(target.id)?.length ?? 0) + 1);
       const before = damageOn.get(target.id) ?? 0;
-      const kills = applyArmor(target, Math.max(1, Math.round(before))) < target.lifespan &&
-        applyArmor(target, Math.max(1, Math.round(before + strike))) >= target.lifespan;
+      const pierced = piercesArmour([guard]);
+      const kills = applyArmor(target, Math.max(1, Math.round(before)), pierced) < target.lifespan &&
+        applyArmor(target, Math.max(1, Math.round(before + strike)), pierced) >= target.lifespan;
       return { target, strike, kills };
     }).sort((a, b) => Number(b.kills) - Number(a.kills) || b.target.attackPower - a.target.attackPower || compareIds(a.target, b.target));
     const { target, strike } = options[0];
@@ -2946,11 +2989,11 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     }
     return modifiers;
   };
-  const describeDefence = (unit: Unit): CombatEffect[] => {
+  const describeDefence = (unit: Unit, pierced: boolean): CombatEffect[] => {
     const cover = TERRAIN_EFFECTS[terrainUnder(state, unit)];
     const modifiers: CombatEffect[] = [];
     if (cover.damageTakenMultiplier < 1) modifiers.push(mod('Cover', 'good', `-${size(cover.damageTakenMultiplier)}%`, size(cover.damageTakenMultiplier)));
-    if (hasAbility(unit, 'armored')) modifiers.push(mod('Armored', 'good', `-${ARMOR_REDUCTION}`, 15));
+    if (hasAbility(unit, 'armored') && !pierced) modifiers.push(mod('Armored', 'good', `-${ARMOR_REDUCTION}`, 15));
     for (const protection of getProtections(state, unit)) {
       modifiers.push(mod(protection.label, 'good', `-${Math.round(protection.reduction * 100)}%`, Math.round(protection.reduction * 100)));
     }
@@ -2966,7 +3009,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     const isSneakAttack = (hasAbility(unit, 'stealth') && !defenderUnits.some(defender => hasAbility(defender, 'stealth')));
     const canBeHitBack = !combat.intercept && !isSneakAttack && defenderUnits.some(defender => canStrike(state, defender, unit));
     const modifiers = defenderUnits[0] ? describeStrike(unit, defenderUnits[0], attackerUnits.length) : [];
-    if (canBeHitBack) modifiers.push(...describeDefence(unit));
+    if (canBeHitBack) modifiers.push(...describeDefence(unit, piercesArmour(defenderUnits.slice(0, 1))));
     // Why it takes no damage, first
     if (combat.intercept) modifiers.unshift(mod('Target busy', 'good'));
     else if (isSneakAttack) modifiers.unshift(mod('Sneak attack', 'good'));
@@ -2977,7 +3020,7 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
 
   const defenders = defenderUnits.map(unit => {
     const terrain = terrainUnder(state, unit);
-    const modifiers = describeDefence(unit);
+    const modifiers = describeDefence(unit, piercesArmour(attackerUnits));
     // How this defender fares striking back at the first attacker it can reach
     const firstTarget = attackers.find(a => a.canBeHitBack)?.unit;
     if (firstTarget) modifiers.push(...describeStrike(unit, firstTarget));
@@ -2997,17 +3040,19 @@ export const getCombatPreview = (state: GameState, combat: Combat): CombatPrevie
     entry: { unit: Unit; terrain: TerrainType; power: number; modifiers: CombatEffect[] },
     rawDamage: number,
     canBeHitBack: boolean,
-    foes: Unit[]
+    foes: Unit[],
+    // (by the troops that strike it: all the attackers, or the defender striking back)
+    strikers: Unit[]
   ): CombatantPreview => {
-    const damageTaken = applyArmor(entry.unit, rawDamage);
+    const damageTaken = applyArmor(entry.unit, rawDamage, piercesArmour(strikers));
     const slain = damageTaken >= entry.unit.lifespan;
     const rises = slain && canRise(entry.unit) && !finishesUndead(foes);
     return { ...entry, canBeHitBack, damageTaken, destroyed: slain && !rises, rises: rises || undefined };
   };
 
   return {
-    attackers: attackers.map((a, index) => withDamage(a, attackerDamage[index], a.canBeHitBack, defenderUnits)),
-    defenders: defenders.map((d, index) => withDamage(d, defenderDamage[index], true, attackerUnits)),
+    attackers: attackers.map((a, index) => withDamage(a, attackerDamage[index], a.canBeHitBack, defenderUnits, defenderUnits.slice(0, 1))),
+    defenders: defenders.map((d, index) => withDamage(d, defenderDamage[index], true, attackerUnits, attackerUnits)),
     attackerPower: attackers.reduce((sum, a) => sum + a.power, 0),
     defenderPower: defenders.reduce((sum, d) => sum + d.power, 0)
   };
@@ -3087,7 +3132,7 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     const total = [...bonuses.values()].reduce((sum, value) => sum + value, 0);
     add(bonuses.size === 1 ? [...bonuses.keys()][0] : 'Bonuses', 'good', `+${total}%`, total);
   }
-  if (hasAbility(target, 'armored')) add('Armored', 'bad', `-${ARMOR_REDUCTION}`, 15);
+  if (hasAbility(target, 'armored') && !piercesArmour(attackers)) add('Armored', 'bad', `-${ARMOR_REDUCTION}`, 15);
   if (canRise(target) && !finishesUndead(attackers)) add('Undying', 'bad', undefined, 10);
   for (const protection of getProtections(state, target)) {
     add(protection.label, 'bad', `-${Math.round(protection.reduction * 100)}%`, Math.round(protection.reduction * 100));

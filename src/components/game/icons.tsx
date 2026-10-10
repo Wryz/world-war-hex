@@ -17,7 +17,8 @@ import {
   GiSparkles, GiAxeInStump, GiFire, GiBurningEmbers, GiLog, GiWatchtower, GiHouse, GiCatapult, GiAnvil, GiBarracksTent,
   GiBeerStein, GiWoodPile, GiPointing, GiTargeted, GiDemolish, GiTorch, GiHammerNails, GiStoneWall, GiGate, GiStoneBridge, GiSpikedFence,
   GiThreeFriends, GiUnlitBomb, GiSandstorm, GiStomp, GiTrumpet, GiMeteorImpact, GiFireBreath, GiDespair, GiPawPrint, GiSnowing,
-  GiSmokingVolcano, GiGoblinCamp, GiWingedShield, GiFlyingFlag
+  GiSmokingVolcano, GiGoblinCamp, GiWingedShield, GiFlyingFlag,
+  GiShieldBash, GiWarAxe, GiHalberd, GiHammerDrop, GiPolarBear, GiStrong, GiSpyglass, GiHeavyArrow, GiCompass
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuCheck, LuSkipForward, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
@@ -34,6 +35,8 @@ export const UNIT_ICONS: Record<UnitType, IconType> = {
   infantry: GiBroadsword, artillery: GiBowArrow, tank: GiPikeman, rogue: GiHoodedAssassin, helicopter: GiMountedKnight,
   medic: GiPointyHat, engineer: GiHammerNails, shieldbearer: GiShield, berserker: GiBattleAxe, longbow: GiBowman, cleric: GiPrayer,
   sapper: GiPowderBag, pegasus: GiPegasus, archmage: GiWizardFace,
+  warden: GiShieldBash, warlord: GiWarAxe, crossbow: GiCrossbow, halberdier: GiHalberd, wolf_rider: GiWolfHowl,
+  siege_engineer: GiHammerDrop, bear_warden: GiPolarBear,
   bandit_thug: GiBrute, bandit_archer: GiArcher, highwayman: GiBandit, bandit_raider: GiCavalry, bandit_king: GiBarbarian,
   goblin_scrapper: GiGoblinHead, goblin_slinger: GiStonePile, goblin_shaman: GiWizardStaff, goblin_sapper: GiBombingRun,
   goblin_warchief: GiTroll,
@@ -124,7 +127,12 @@ export const ABILITY_ICON_COMPONENTS: Record<Ability, IconType> = {
   magic: GiSpellBook,
   demolition: GiDemolish,
   firebrand: GiTorch,
-  engineering: GiHammerNails
+  engineering: GiHammerNails,
+  fearless: GiStrong,
+  keenEyed: GiSpyglass,
+  reach: GiHalberd,
+  heavyBolts: GiHeavyArrow,
+  masterBuilder: GiCompass
 };
 
 interface IconProps {

@@ -2,6 +2,7 @@ import type { TroopId } from '@/lib/game/troops';
 import type { BossPowerId } from '@/lib/game/bosses';
 import type { WeatherId } from '@/lib/game/regionRules';
 import type { Haul, MaterialId } from '@/lib/game/materials';
+import type { PlayerSkillId } from '@/lib/game/lineages';
 
 export type TerrainType =
   | 'plain'
@@ -121,6 +122,8 @@ export interface Unit {
   poisonFresh?: boolean;
   // Slowed (a web, a chilling touch): its side's turn-ends left with one hex less movement
   slowed?: number;
+  // A skill its card learnt on its skill tree (lib/game/lineages), working like a monster's skill
+  skill?: PlayerSkillId;
 }
 
 // Every troop - the player's cards and the campaign's monsters - is identified by its troop id
@@ -144,7 +147,12 @@ export type Ability =
   | 'magic'        // spells ignore line of sight and cover
   | 'demolition'   // tears down walls, gates, bridges, trunks and stakes next to it
   | 'firebrand'    // sets dry ground next to it alight
-  | 'engineering'; // builds bridges over water and stakes against cavalry next to it
+  | 'engineering'  // builds bridges over water and stakes against cavalry next to it
+  | 'fearless'     // never shaken: morale, curses and being surrounded don't touch it
+  | 'keenEyed'     // sees one hex further
+  | 'reach'        // a long weapon: strikes from 2 hexes away, hand to hand
+  | 'heavyBolts'   // a ranged troop that fights at arm's length as well as from afar, and pierces armour
+  | 'masterBuilder'; // does its work (building, tearing down) on hexes up to 2 away
 
 // The stats a side recruits a troop type with this battle (cards are levelled, monsters scaled)
 export interface TroopStats {
@@ -154,6 +162,8 @@ export interface TroopStats {
   movementRange: number;
   abilities: Ability[];
   level: number;
+  // A skill learnt on the troop's skill tree (lib/game/lineages)
+  skill?: PlayerSkillId;
 }
 
 export type Roster = Partial<Record<UnitType, TroopStats>>;

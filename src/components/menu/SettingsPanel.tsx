@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { RESPEC_COST } from '@/lib/game/lineages';
 import { FELL_DAMAGE, FIRE_DAMAGE } from '@/lib/game/battlefield';
 import { ARMORED_SCREEN_REDUCTION, PIN_BONUS, SCREEN_REDUCTION, SHIELD_WALL_REDUCTION } from '@/lib/game/formations';
 import {
@@ -382,6 +383,21 @@ const GuideTab: React.FC = () => (
           );
         })}
       </ul>
+    </GuideSection>
+    <GuideSection title="Materials, skill trees and evolutions" icon={<SignatureIcon />}>
+      <p>
+        Troops carry home what they find on the battlefield: what grows and lies on the land, the stores of buildings they take,
+        what the fallen leave behind, bosses&apos; trophies and the relics of old battles. Where each comes from is for you to find out.
+      </p>
+      <p>
+        Each of your six troops has a skill tree in the Army, paid for with those materials: pick two of its four attributes, then
+        one of two skills. Changing a choice you already paid for costs {RESPEC_COST} coins.
+      </p>
+      <p>
+        From certain campaign levels a tree can also evolve its troop into new forms - Swordsmen into Shieldbearers or Berserkers,
+        Archers into Longbowmen or Crossbowmen, and more. Every form shares its troop&apos;s level and tree, and you bring one form
+        of each troop into battle, switching between the ones you have whenever you like. Only the six base troops are sold in the shop.
+      </p>
     </GuideSection>
     <GuideSection title="Your castle" icon={<CrownIcon />}>
       <p>

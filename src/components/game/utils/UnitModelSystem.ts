@@ -37,8 +37,9 @@ export interface HumanoidLook {
   palette?: Palette;
   // Animation clip (by exact name) for each state
   animations: Record<AnimationState, string>;
-  // Rides a horse (Knights); the horse can be tinted and given wings
-  mount?: { tint?: string; wings?: boolean };
+  // Rides a horse (Knights), or a beast (Wolf Riders, Bear Wardens); the horse can be tinted and
+  // given wings
+  mount?: { tint?: string; wings?: boolean; beast?: { variant: 'wolf' | 'bear'; scale: number; colors: CreatureLook['colors'] } };
   // Carries a long pike (Pikemen)
   pike?: boolean;
   // Demonic extras
@@ -97,7 +98,7 @@ const ORC_SKIN = '#5f8f3c';
 
 const humanoid = (look: Omit<HumanoidLook, 'kind' | 'labelHeight'> & { labelHeight?: number }): HumanoidLook => ({
   kind: 'humanoid',
-  labelHeight: 1.5 * (look.scale / 0.44) + (look.mount ? 0.42 : 0),
+  labelHeight: 1.5 * (look.scale / 0.44) + (look.mount ? (look.mount.beast?.variant === 'bear' ? 0.6 : 0.42) : 0),
   ...look
 });
 
@@ -137,6 +138,37 @@ const LOOKS: Record<TroopId, UnitLook> = {
   archmage: humanoid({
     model: 'mage', scale: 0.47, weapons: ['2H_Staff', 'Spellbook_open'], animations: SPELL, projectile: 'magic',
     palette: { cloth: '#3b2a7a' }
+  }),
+  // Evolved forms: built from the same packs' parts no other troop carries
+  warden: humanoid({
+    model: 'knight', scale: 0.5, weapons: ['1H_Sword_Offhand', 'Rectangle_Shield'], animations: { ...STAB, idle: 'Blocking' },
+    palette: { metal: '#64748b', cloth: '#1e3a5f' }
+  }),
+  warlord: humanoid({
+    model: 'barbarian', scale: 0.52, weapons: ['2H_Axe'], animations: GREAT,
+    palette: { cloth: '#7f1d1d', leather: '#3f2a1a' }
+  }),
+  crossbow: humanoid({
+    model: 'ranger', scale: 0.45, weapons: ['2H_Crossbow'], hide: ['Rogue_Cape'], animations: CROSSBOW, projectile: 'arrow',
+    palette: { cloth: '#7c2d12', leather: '#3b2a1a', metal: '#4b5563' }
+  }),
+  halberdier: humanoid({
+    model: 'knight', scale: 0.46, weapons: [], pike: true, animations: STAB,
+    palette: { metal: '#cbd5e1', cloth: '#b45309' }
+  }),
+  wolf_rider: humanoid({
+    model: 'rogue', scale: 0.4, weapons: ['Knife', 'Knife_Offhand'], animations: { ...DUAL, walk: 'Idle' },
+    mount: { beast: { variant: 'wolf', scale: 1.5, colors: { primary: '#6b7280', secondary: '#d1d5db', accent: '#facc15' } } },
+    palette: { cloth: '#44403c' }
+  }),
+  siege_engineer: humanoid({
+    model: 'barbarian', scale: 0.47, weapons: ['2H_Axe'], animations: GREAT, hide: ['Barbarian_Hat'],
+    palette: { cloth: '#b45309', leather: '#5a3a1a' }
+  }),
+  bear_warden: humanoid({
+    model: 'barbarian', scale: 0.42, weapons: ['1H_Axe', 'Barbarian_Round_Shield'], animations: { ...CHOP, walk: 'Idle' },
+    mount: { beast: { variant: 'bear', scale: 1.25, colors: { primary: '#5b3a1e', secondary: '#8a5a32', accent: '#1f1308' } } },
+    palette: { cloth: '#9a3412', leather: '#4a2e1a' }
   }),
 
   // --- Bandits ---
@@ -245,7 +277,8 @@ export const modelsFor = (types: TroopId[]): string[] => {
     const look = getUnitLook(type);
     if (look.kind !== 'humanoid') continue;
     urls.add(MODEL_URLS[look.model]);
-    if (look.mount) urls.add(HORSE_MODEL);
+    // (beasts are built from primitives; only horses have a model)
+    if (look.mount && !look.mount.beast) urls.add(HORSE_MODEL);
   }
   return [...urls];
 };

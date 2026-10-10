@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import type { MaterialId } from '@/lib/game/materials';
 import { buzz } from '@/lib/haptics';
 
 // Shared state for the battle's "juice": game speed and slow motion, screen shake, flying coins,
@@ -152,8 +153,18 @@ export interface Moment {
   explain?: boolean;
 }
 
+// A material a troop just found, flying from where it lay into the satchel
+export interface MaterialFlight {
+  id: number;
+  from: { x: number; y: number };
+  material: MaterialId;
+  // Seconds before it sets off (several found at once go one after another)
+  delay: number;
+}
+
 export interface EffectsState {
   coins: CoinBurst[];
+  materials: MaterialFlight[];
   moments: Moment[];
   // Confetti bursts (each a burst id)
   confetti: number[];
@@ -161,12 +172,12 @@ export interface EffectsState {
   flash: number;
 }
 
-const effects = createSignal<EffectsState>({ coins: [], moments: [], confetti: [], flash: 0 });
+const effects = createSignal<EffectsState>({ coins: [], materials: [], moments: [], confetti: [], flash: 0 });
 let nextId = 1;
 
 const update = (patch: (state: EffectsState) => EffectsState) => effects.set(patch(effects.get()));
 
-const removeLater = (key: 'coins' | 'moments' | 'confetti', id: number, ms: number) => {
+const removeLater = (key: 'coins' | 'materials' | 'moments' | 'confetti', id: number, ms: number) => {
   setTimeout(() => update(state => ({
     ...state,
     [key]: (state[key] as { id?: number }[]).filter(item => (typeof item === 'number' ? item : item.id) !== id)
@@ -178,6 +189,15 @@ export const emitCoins = (from: { x: number; y: number }, count: number, target:
   const id = nextId++;
   update(state => ({ ...state, coins: [...state.coins, { id, from, count: Math.min(count, 14), target }] }));
   removeLater('coins', id, 1600);
+};
+
+// How long a material's flight and the satchel catching it take
+export const MATERIAL_FLIGHT_MS = 1700;
+
+export const emitMaterial = (from: { x: number; y: number }, material: MaterialId, delay = 0) => {
+  const id = nextId++;
+  update(state => ({ ...state, materials: [...state.materials, { id, from, material, delay }] }));
+  removeLater('materials', id, MATERIAL_FLIGHT_MS + delay * 1000);
 };
 
 export const emitMoment = (moment: Omit<Moment, 'id'>) => {
@@ -200,7 +220,7 @@ export const emitConfetti = () => {
 
 export const flashDamage = () => update(state => ({ ...state, flash: state.flash + 1 }));
 
-const emptyEffects: EffectsState = { coins: [], moments: [], confetti: [], flash: 0 };
+const emptyEffects: EffectsState = { coins: [], materials: [], moments: [], confetti: [], flash: 0 };
 export const useEffects = () => useSyncExternalStore(effects.subscribe, effects.get, () => emptyEffects);
 
 export const resetEffects = () => effects.set(emptyEffects);

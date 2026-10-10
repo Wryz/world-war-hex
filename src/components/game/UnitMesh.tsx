@@ -16,7 +16,7 @@ import { getTimeScale } from './effects/effects';
 import { MELEE_IMPACT_POINT, PROJECTILE_FLIGHT_TIME, RANGED_RELEASE_POINT, WALK_SPEED, strikeOffset } from './utils/battleTiming';
 import { playBattleSound, BattleSound } from './utils/battleSounds';
 import { DRAG_CLICK_TOLERANCE } from './HexTile';
-import { instantiateUnitModel, findAnimationClip, disposeUnitModel, UnitModelInstance } from './utils/unitModelCache';
+import { instantiateUnitModel, findAnimationClip, disposeUnitModel, MountRig, UnitModelInstance } from './utils/unitModelCache';
 import {
   ArrowIcon, AttackIcon, CrownIcon, PinnedIcon, GoldIcon, FireIcon, ShieldIcon, SignatureIcon, TerrainIcon, UnitIcon, WaitIcon, ShakenIcon,
   UndyingIcon, FuryIcon, PackIcon, VenomIcon, SlowedIcon
@@ -275,7 +275,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   const modelRef = useRef<THREE.Group>(null);
   const mixerRef = useRef<THREE.AnimationMixer | null>(null);
   // Horse under a mounted unit, galloping while the unit walks
-  const mountRef = useRef<{ mixer: THREE.AnimationMixer; gallop: THREE.AnimationAction } | null>(null);
+  const mountRef = useRef<MountRig | null>(null);
   const clipsRef = useRef<THREE.AnimationClip[]>([]);
   const actionRef = useRef<THREE.AnimationAction | null>(null);
   // Procedural monster rig, and wings that flap (demons, pegasi)
@@ -406,7 +406,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     return () => {
       cancelled = true;
       if (loaded) disposeUnitModel(loaded, mixerRef.current);
-      mountRef.current?.mixer.stopAllAction();
+      mountRef.current?.stop();
       mountRef.current = null;
       rigRef.current = null;
       wingsRef.current = null;
@@ -711,11 +711,11 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
     rigRef.current?.update(delta);
     wingsRef.current?.flap(walkRef.current ? 9 : 2.5, delta);
 
-    // The horse gallops while walking and stands still otherwise
+    // The horse gallops (the beast pads along) while walking and stands still otherwise
     const mount = mountRef.current;
     if (mount) {
-      mount.gallop.timeScale = walkRef.current ? 1.6 : 0;
-      mount.mixer.update(delta);
+      mount.setWalking(!!walkRef.current);
+      mount.update(delta);
     }
   });
 

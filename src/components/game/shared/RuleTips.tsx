@@ -64,8 +64,13 @@ const tipsFor = (state: GameState): TipId[] => {
   return tips;
 };
 
-export const RuleTips: React.FC<{ gameState: GameState }> = ({ gameState }) => {
+// `onOpenChange` hears when a tip opens and closes (other captions keep out of its way meanwhile)
+export const RuleTips: React.FC<{ gameState: GameState; onOpenChange?: (open: boolean) => void }> = ({ gameState, onOpenChange }) => {
   const [tip, setTip] = useState<TipId | null>(null);
+  useEffect(() => {
+    onOpenChange?.(tip !== null);
+    return () => onOpenChange?.(false);
+  }, [tip, onOpenChange]);
 
   useEffect(() => {
     if (tip) return;

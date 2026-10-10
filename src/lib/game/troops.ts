@@ -8,6 +8,8 @@ export const TROOP_IDS = [
   // Kingdom - the player's cards (the first six ids predate the card system and are kept for saves)
   'infantry', 'artillery', 'tank', 'rogue', 'helicopter', 'medic', 'engineer',
   'shieldbearer', 'berserker', 'longbow', 'cleric', 'sapper', 'pegasus', 'archmage',
+  // (evolved forms, unlocked on a lineage's skill tree - see lineages.ts)
+  'warden', 'warlord', 'crossbow', 'halberdier', 'wolf_rider', 'siege_engineer', 'bear_warden',
   // Bandits
   'bandit_thug', 'bandit_archer', 'highwayman', 'bandit_raider', 'bandit_king',
   // Goblins
@@ -158,6 +160,41 @@ export const TROOPS: Record<TroopId, TroopDef> = {
     id: 'archmage', name: 'Archmage', faction: 'kingdom', rarity: 'legendary', troopClass: 'magic', cost: 36, attack: 12, health: 14, move: 2,
     abilities: ['rangedAttack', 'longRange', 'healing', 'magic'], role: 'Long-range spells, heals allies', attackInterval: 1.4,
     lore: 'The greatest wizard of the realm, wielding storms from three hexes away.'
+  }),
+  warden: troop({
+    id: 'warden', name: 'Wardens', faction: 'kingdom', rarity: 'epic', troopClass: 'infantry', cost: 30, attack: 6, health: 26, move: 2,
+    abilities: ['armored', 'fearless'], role: 'Armored and fearless: holds any ground', attackInterval: 1.1,
+    lore: 'Shieldbearers who swore never to give a step. Behind a tower shield as tall as a door, they never have.'
+  }),
+  warlord: troop({
+    id: 'warlord', name: 'Warlord', faction: 'kingdom', rarity: 'legendary', troopClass: 'brute', cost: 34, attack: 13, health: 18, move: 3,
+    abilities: ['berserk', 'fearless'], role: 'Friends beside it hit harder', attackInterval: 0.8,
+    lore: 'A berserker who lived long enough to lead. Where the great axe swings, the whole line roars and follows.'
+  }),
+  crossbow: troop({
+    id: 'crossbow', name: 'Crossbowmen', faction: 'kingdom', rarity: 'epic', troopClass: 'ranged', cost: 28, attack: 12, health: 10, move: 2,
+    abilities: ['rangedAttack', 'heavyBolts'], role: 'Bolts pierce armour, even up close', attackInterval: 1.7,
+    lore: 'Slow to wind and slower to miss. A heavy bolt goes through a shield and the man behind it.'
+  }),
+  halberdier: troop({
+    id: 'halberdier', name: 'Halberdiers', faction: 'kingdom', rarity: 'epic', troopClass: 'spear', cost: 28, attack: 10, health: 18, move: 2,
+    abilities: ['reach'], role: 'Strikes from 2 hexes away', attackInterval: 1.3,
+    lore: 'Axe, spike and hook on an eight-foot pole: they cut down whatever comes within two strides.'
+  }),
+  wolf_rider: troop({
+    id: 'wolf_rider', name: 'Wolf Riders', faction: 'kingdom', rarity: 'epic', troopClass: 'skirmisher', cost: 28, attack: 9, health: 12, move: 5,
+    abilities: ['stealth', 'pathfinder'], role: 'Fast flanker on any ground', attackInterval: 0.6,
+    lore: 'Rogues who tamed the wolves of the Howling Hills. They are behind your lines before the howl has faded.'
+  }),
+  siege_engineer: troop({
+    id: 'siege_engineer', name: 'Siege Engineers', faction: 'kingdom', rarity: 'epic', troopClass: 'infantry', cost: 24, attack: 7, health: 16, move: 2,
+    abilities: ['engineering', 'demolition', 'masterBuilder'], role: 'Builds and breaks from 2 hexes', attackInterval: 1.0,
+    lore: 'Master builders with a hammer for every job: a bridge here, a hedge of stakes there, a gate knocked flat by lunch.'
+  }),
+  bear_warden: troop({
+    id: 'bear_warden', name: 'Bear Wardens', faction: 'kingdom', rarity: 'epic', troopClass: 'brute', cost: 30, attack: 9, health: 20, move: 3,
+    abilities: ['armored'], role: 'Armored bear rider for the front', attackInterval: 1.0,
+    lore: 'Engineers who went north to build and came back riding the bears that had come to watch.'
   }),
 
   // --- Bandits (Greenvale Meadows) ------------------------------------------------------
@@ -464,7 +501,12 @@ export const ABILITIES: Record<Ability, AbilityInfo> = {
   magic: { name: 'Spells', description: 'Spells arc over obstacles and ignore cover.', power: 0.6 },
   demolition: { name: 'Demolition', description: 'Instead of moving, tears down a wall, gate or bridge next to it, or clears a fallen trunk or stakes.', power: 0.6 },
   firebrand: { name: 'Firebrand', description: 'Instead of moving, sets dry ground next to it alight: it smoulders, then burns next turn.', power: 0.6 },
-  engineering: { name: 'Engineering', description: 'Instead of moving, builds a bridge over the water next to it, or plants stakes on open ground next to it that cavalry can\'t cross.', power: 0.8 }
+  engineering: { name: 'Engineering', description: 'Instead of moving, builds a bridge over the water next to it, or plants stakes on open ground next to it that cavalry can\'t cross.', power: 0.8 },
+  fearless: { name: 'Fearless', description: 'Never shaken: curses, a fallen champion and being surrounded don\'t weaken it.', power: 0.4 },
+  keenEyed: { name: 'Keen-eyed', description: 'Sees one hex further through the fog.', power: 0.3 },
+  reach: { name: 'Reach', description: 'Strikes from 2 hexes away with its long weapon, at full strength.', power: 1.2 },
+  heavyBolts: { name: 'Heavy bolts', description: 'Shoots at full strength at arm\'s length too, and its bolts go straight through armour.', power: 0.8 },
+  masterBuilder: { name: 'Master builder', description: 'Builds and tears down on hexes up to 2 away, not just next to it.', power: 0.4 }
 };
 
 // --- Counters ------------------------------------------------------------------------------

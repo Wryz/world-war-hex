@@ -6,6 +6,7 @@ import { getProfile, grantBonusCoins, type BattleRecordResult } from '@/lib/meta
 import { challengeBonus, levelChallenge } from '@/lib/campaign/challenges';
 import { adBonusCoins } from '@/lib/meta/economy';
 import { useRewardedAd } from '@/lib/ads';
+import { isBaseCard } from '@/lib/game/lineages';
 import { TROOPS } from '@/lib/game/troops';
 import { playStinger } from '@/lib/audio/music';
 import { SPEED_POINTS_PER_ROUND, StarScore, TIME_SCORE_WEIGHTS } from '@/lib/game/gameState';
@@ -381,7 +382,10 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
         )}
         {record.newCards.length > 0 && (
           <div className="mt-3 rounded-xl bg-purple-900/80 px-3 py-2 text-sm font-bold">
-            New card in the shop: {record.newCards.map(id => TROOPS[id].name).join(', ')}!
+            {record.newCards.some(isBaseCard) && <div>New card in the shop: {record.newCards.filter(isBaseCard).map(id => TROOPS[id].name).join(', ')}!</div>}
+            {record.newCards.some(id => !isBaseCard(id)) && (
+              <div>New evolution on the skill tree: {record.newCards.filter(id => !isBaseCard(id)).map(id => TROOPS[id].name).join(', ')}!</div>
+            )}
           </div>
         )}
         {!won && level && power < level.recommendedPower && (

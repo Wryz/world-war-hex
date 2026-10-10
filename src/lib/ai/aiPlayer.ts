@@ -324,7 +324,7 @@ export const planAITurn = (initial: GameState, options: AIPlanOptions = {}): Gam
   const planned = planTurn(mirrorSides(view), doctrine, getHand(state), options.difficulty, options);
   let result = state;
   for (const move of planned.pendingMoves) {
-    result = addPendingMove(result, move.unitId, state.players.player.id, move.to);
+    result = addPendingMove(result, move.unitId, state.players.player.id, move.to, move.action);
   }
   for (const purchase of planned.pendingPurchases) {
     result = addPendingPurchase(result, state.players.player.id, purchase.unitType, purchase.position);
@@ -564,7 +564,8 @@ const assessThreats = (state: GameState): ThreatAssessment => {
 const terrainAt = (planner: Planner, position: HexCoordinates): TerrainType =>
   planner.hexes.get(key(position))?.terrain ?? 'plain';
 
-const isRanged = (unit: Unit) => getAttackRange(unit) > 1;
+// Shooters (not troops with long weapons, who fight hand to hand from 2 hexes)
+const isRanged = (unit: Unit) => unit.abilities.includes('rangedAttack');
 
 // Whether `attacker` standing at `from` could strike a target standing at `at` (in the weather of
 // `round`'s state: this round's by default)

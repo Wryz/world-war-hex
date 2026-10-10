@@ -12,7 +12,7 @@ import { CARD_CLASS, PRIMARY_BUTTON, ResourceBadges, SKY_BACKGROUND } from '@/co
 import { TroopCard } from '../cards/TroopCard';
 import {
   AttackIcon, BookIcon, BossIcon, SatchelIcon, CardsIcon, MapIcon, ResumeIcon, SoundOffIcon, SoundOnIcon,
-  StarIcon, StatsIcon, StyleIcon, SettingsIcon, GuideIcon
+  StarIcon, StatsIcon, StyleIcon, SettingsIcon
 } from '../icons';
 import { SettingsPanel, SettingsTab } from '../../menu/SettingsPanel';
 import { BattleConfig, Difficulty } from '../storage/GameStorage';
@@ -194,17 +194,6 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
             <MenuTile href="/satchel" icon={<SatchelIcon />} title="Satchel" detail={`${hydrated ? profile.materialsFound.length : 0}/${MATERIAL_IDS.length} materials · Chronicle`} />
             <MenuTile href="/style" icon={<StyleIcon />} title="Style" detail="Card frames, castle styles" />
             <MenuTile href="/stats" icon={<StatsIcon />} title="Stats & Save" detail="Records and save file" />
-            <button
-              type="button"
-              onClick={() => setSettingsTab('guide')}
-              className={`${CARD_CLASS} group col-span-2 flex items-center gap-3 px-4 py-3.5 text-left transition-transform hover:-translate-y-1 sm:gap-4 sm:py-4`}
-            >
-              <span className="text-3xl transition-transform group-hover:scale-110 sm:text-4xl"><GuideIcon /></span>
-              <span className="min-w-0">
-                <span className="font-display block text-lg leading-tight sm:text-2xl">How to play</span>
-                <span className="block truncate text-xs text-slate-300 sm:text-sm">Rules, terrain, tactics</span>
-              </span>
-            </button>
           </div>
 
         </div>

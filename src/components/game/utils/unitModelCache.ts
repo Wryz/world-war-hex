@@ -31,13 +31,21 @@ const loadAnimationPack = () => loadGltf(ANIMATION_PACK_URL).then(gltf => gltf.a
 
 type Wings = ReturnType<typeof createWings>;
 
+export interface MountRig {
+  setWalking(walking: boolean): void;
+  update(delta: number): void;
+  stop(): void;
+}
+
 export interface UnitModelInstance {
   scene: THREE.Group;
   animations: THREE.AnimationClip[];
-  // The horse under a mounted unit gallops on its own mixer
-  mount?: { mixer: THREE.AnimationMixer; gallop: THREE.AnimationAction };
+  // The horse (or beast) under a mounted unit, walking while the unit does
+  mount?: MountRig;
   // Procedural monsters animate themselves
   rig?: CreatureRig;
+  // A beast a rider sits on (freed with the model)
+  beastRig?: CreatureRig;
   // Wings that flap (demons, pegasi)
   wings?: Wings;
 }
@@ -213,6 +221,9 @@ const mountedClipCache = new WeakMap<THREE.AnimationClip[], THREE.AnimationClip[
 // Rider height and the horse's size, in the rider's (character model) units
 const HORSE_SCALE = 0.0125;
 const SADDLE_HEIGHT = 0.62;
+// Where a rider sits on a beast's back, in world units at the beast's scale 1 (a little under the
+// top of its back, so the rider sits in the fur)
+const BEAST_SADDLE: Record<'wolf' | 'bear', number> = { wolf: 0.22, bear: 0.36 };
 
 const tintedHorseMaterials = new Map<string, THREE.Material>();
 
@@ -298,6 +309,30 @@ const instantiateHumanoid = async (look: HumanoidLook, owner: PlayerType): Promi
 
   if (!look.mount) return { scene, animations: pack, wings };
 
+  // Riders of beasts sit astride a procedural wolf or bear
+  const beast = look.mount.beast;
+  if (beast) {
+    let animations = mountedClipCache.get(pack);
+    if (!animations) {
+      animations = mountedClips(pack, 'Sit_Chair_Idle');
+      mountedClipCache.set(pack, animations);
+    }
+    const rig = createCreature(
+      { kind: 'creature', body: 'quadruped', variant: beast.variant, scale: beast.scale, colors: beast.colors, labelHeight: 0 },
+      TEAM_COLORS[owner]
+    );
+    // The creature comes sized in world units; the rider's scene is scaled by the rider's size
+    rig.object.scale.multiplyScalar(1 / look.scale);
+    scene.add(rig.object);
+    character.position.set(0, BEAST_SADDLE[beast.variant] * beast.scale / look.scale, beast.variant === 'bear' ? -0.15 : -0.25);
+    const mount: MountRig = {
+      setWalking: walking => rig.setState(walking ? 'walk' : 'idle'),
+      update: delta => rig.update(delta),
+      stop: () => rig.setState('idle')
+    };
+    return { scene, animations, mount, wings, beastRig: rig };
+  }
+
   // Riders sit in the saddle of a galloping horse
   let animations = mountedClipCache.get(pack);
   if (!animations) {
@@ -312,7 +347,12 @@ const instantiateHumanoid = async (look: HumanoidLook, owner: PlayerType): Promi
     scene.add(wings.object);
   }
   character.position.set(0, SADDLE_HEIGHT, -0.1);
-  return { scene, animations, mount: { mixer, gallop }, wings };
+  const mount: MountRig = {
+    setWalking: walking => { gallop.timeScale = walking ? 1.6 : 0; },
+    update: delta => mixer.update(delta),
+    stop: () => mixer.stopAllAction()
+  };
+  return { scene, animations, mount, wings };
 };
 
 // Create an independent, animatable copy of a unit's model in its side's colours
@@ -328,11 +368,12 @@ export const instantiateUnitModel = async (unitType: UnitType, owner: PlayerType
 
 // Free the GPU resources owned by one clone. Geometry and materials are shared with the
 // cached model, so only each clone's own skeleton (and its bone texture) is disposed.
-export const disposeUnitModel = (instance: Pick<UnitModelInstance, 'scene' | 'rig' | 'wings'>, mixer?: THREE.AnimationMixer | null) => {
+export const disposeUnitModel = (instance: Pick<UnitModelInstance, 'scene' | 'rig' | 'wings' | 'beastRig'>, mixer?: THREE.AnimationMixer | null) => {
   const { scene } = instance;
   mixer?.stopAllAction();
   mixer?.uncacheRoot(scene);
   instance.rig?.dispose();
+  instance.beastRig?.dispose();
   instance.wings?.dispose();
   scene.traverse(child => {
     // Horns carry their own clean-up
