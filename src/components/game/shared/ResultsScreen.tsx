@@ -10,6 +10,10 @@ import { TROOPS } from '@/lib/game/troops';
 import { playStinger } from '@/lib/audio/music';
 import { SPEED_POINTS_PER_ROUND, StarScore, TIME_SCORE_WEIGHTS } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
+import Link from 'next/link';
+import { MATERIALS, MaterialId, RARITY_ORDER, haulSize } from '@/lib/game/materials';
+import { CHRONICLE } from '@/lib/game/lore';
+import { MaterialTile } from '../MaterialIcon';
 import { emitCoins } from '../effects/effects';
 import {
   ArrowIcon, CardsIcon, CoinIcon, FilledStarIcon, LaurelIcon, MapIcon, MedalIcon, PlayIcon, PowerIcon, ResumeIcon, ShareIcon, SkullIcon, StarIcon
@@ -21,6 +25,8 @@ interface ResultsScreenProps {
   level?: LevelDef;
   stars: number;
   record: BattleRecordResult;
+  // Materials gathered in the battle (some are lost in a defeat)
+  gathered?: number;
   rounds: number;
   stats: SideStats;
   durationSeconds: number;
@@ -101,7 +107,7 @@ const StarProgress: React.FC<{ level: LevelDef; points: number; won: boolean }> 
 };
 
 export const ResultsScreen: React.FC<ResultsScreenProps> = ({
-  won, reason, level, stars, record, rounds, stats, durationSeconds, coinsTotal, power, onNext, onRetry, onMap, onArmy, points, challengeMet
+  won, reason, level, stars, record, gathered, rounds, stats, durationSeconds, coinsTotal, power, onNext, onRetry, onMap, onArmy, points, challengeMet
 }) => {
   const rewardDelay = won ? 600 + stars * STAR_DELAY : 600;
   const coins = useCountUp(record.reward.coins, 900, rewardDelay);
@@ -266,6 +272,49 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
             <PlayIcon /> Watch an ad for +{bonus} <CoinIcon />
           </button>
         )}
+
+        {/* Materials gathered on the battlefield */}
+        {(() => {
+          const kept = (Object.keys(record.haul) as MaterialId[])
+            .sort((a, b) => RARITY_ORDER.indexOf(MATERIALS[b].rarity) - RARITY_ORDER.indexOf(MATERIALS[a].rarity));
+          const pages = CHRONICLE.filter(page => page.unlockedBy && record.firstFinds.includes(page.unlockedBy));
+          if (kept.length === 0) {
+            return reason === 'resigned'
+              ? <div className="mt-3 rounded-xl bg-slate-800/70 px-3 py-2 text-sm text-slate-400">Materials gathered are left behind when you resign.</div>
+              : null;
+          }
+          return (
+            <div className="mt-3 rounded-xl bg-slate-800/70 px-3 py-2">
+              <div className="mb-2 flex items-baseline justify-between">
+                <span className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                  Gathered <span className="text-slate-200">{haulSize(record.haul)}</span>
+                  {gathered !== undefined && gathered > haulSize(record.haul) && ` · ${gathered - haulSize(record.haul)} lost in the retreat`}
+                </span>
+                <Link href="/satchel" className="text-xs font-bold text-sky-300 hover:text-sky-200">Satchel ›</Link>
+              </div>
+              <div className="flex flex-wrap gap-2.5">
+                {kept.map(id => (
+                  <span key={id} className="relative">
+                    <MaterialTile id={id} count={record.haul[id]} size="sm" title={`${MATERIALS[id].name}${record.firstFinds.includes(id) ? ' (new!)' : ''}`} />
+                    {record.firstFinds.includes(id) && (
+                      <span className="absolute -left-1.5 -top-1.5 rounded-full bg-emerald-500 px-1 text-[0.5625rem] font-black leading-3.5 text-slate-950">NEW</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+              {pages.map(page => (
+                <Link
+                  key={page.id}
+                  href={`/satchel?page=${page.id}`}
+                  className="mt-2 flex items-center gap-2 rounded-lg bg-amber-900/60 px-2.5 py-1.5 text-sm font-bold text-amber-100 ring-1 ring-amber-500/60 hover:bg-amber-900/80"
+                >
+                  {page.unlockedBy && <MaterialTile id={page.unlockedBy} size="sm" />}
+                  <span>New Chronicle page: <span className="text-amber-300">{page.title}</span></span>
+                </Link>
+              ))}
+            </div>
+          );
+        })()}
 
         {/* Battle stats */}
         <div className="mt-3 grid grid-cols-4 gap-2 text-center">

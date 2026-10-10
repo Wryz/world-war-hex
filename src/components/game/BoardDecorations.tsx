@@ -4,7 +4,8 @@ import { Hex, PlayerType, TerrainType } from '@/types/game';
 import { STRUCTURE_TERRAINS, isStructure } from '@/lib/game/structures';
 import type { MapDecor } from '@/lib/game/mapGenerator';
 import { axialToWorld, getHexSurfaceHeight } from './utils/boardGeometry';
-import { KAYKIT_HEX_SCALE, PropLibrary, PropPack, usePropLibrary } from './utils/kaykitProps';
+import { KAYKIT_HEX_SCALE, PropLibrary, PropPack, packOfModel, usePropLibrary } from './utils/kaykitProps';
+import { StoryProp, historyFor, storySiteFor } from '@/lib/game/lore';
 
 // Terrain props (trees, peaks, dunes, gold) drawn with one instanced mesh per part,
 // so the whole board's decorations cost a handful of draw calls
@@ -155,7 +156,8 @@ const buildMatrices = (hexes: Hex[], skip: ReadonlySet<TerrainType>): Record<Par
   };
 
   for (const hex of hexes) {
-    if (skip.has(hex.terrain)) continue;
+    // (a story site's hex is cleared for what happened there)
+    if (skip.has(hex.terrain) || hex.storySite) continue;
     const [cx, , cz] = axialToWorld(hex.coordinates);
     const y = getHexSurfaceHeight(hex);
 
@@ -337,7 +339,7 @@ const buildPropMatrices = (hexes: Hex[], decor?: MapDecor): Map<string, THREE.Ma
         add('fence_wood_straight', cx + Math.cos(angle) * 0.3, y, cz + Math.sin(angle) * 0.3, 0.75, -angle + Math.PI / 4);
       }
     }
-    if (!KAYKIT_TERRAIN.has(hex.terrain) || hex.isBase || hex.isCamp) continue;
+    if (!KAYKIT_TERRAIN.has(hex.terrain) || hex.isBase || hex.isCamp || hex.storySite) continue;
     const [cx, , cz] = axialToWorld(hex.coordinates);
     const y = getHexSurfaceHeight(hex);
     const spin = (salt: number) => seededRandom(hex, salt) * Math.PI * 2;
@@ -476,6 +478,51 @@ const buildPropMatrices = (hexes: Hex[], decor?: MapDecor): Map<string, THREE.Ma
   return result;
 };
 
+// --- The land's history ---------------------------------------------------------------------------
+
+// Open ground where the past shows through (a waystone, a fallen knight's shield, an abandoned camp)
+const HISTORY_GROUND: ReadonlySet<TerrainType> = new Set(['plain', 'desert', 'hills', 'snow']);
+const HISTORY_SHARE = 0.14;
+
+// The region's story site and the remnants of its history, as a list of transforms per model
+const buildHistoryMatrices = (hexes: Hex[], theme: string | undefined): Map<string, THREE.Matrix4[]> => {
+  const result = new Map<string, THREE.Matrix4[]>();
+  const quaternion = new THREE.Quaternion();
+  const up = new THREE.Vector3(0, 1, 0);
+  // A scene laid out around (ax, az), turned as a whole
+  const layout = (props: StoryProp[], ax: number, y: number, az: number, turn: number) => {
+    const cos = Math.cos(turn);
+    const sin = Math.sin(turn);
+    for (const prop of props) {
+      quaternion.setFromAxisAngle(up, (prop.turn ?? 0) + turn);
+      const position = new THREE.Vector3(ax + prop.x * cos + prop.z * sin, y + 0.006 + (prop.lift ?? 0), az - prop.x * sin + prop.z * cos);
+      const matrix = new THREE.Matrix4().compose(position, quaternion, new THREE.Vector3(prop.scale, prop.scale, prop.scale));
+      const list = result.get(prop.model);
+      if (list) list.push(matrix);
+      else result.set(prop.model, [matrix]);
+    }
+  };
+  const site = storySiteFor(theme);
+  const history = historyFor(theme);
+
+  for (const hex of hexes) {
+    if (hex.isBase || hex.isCamp) continue;
+    const [cx, , cz] = axialToWorld(hex.coordinates);
+    const y = getHexSurfaceHeight(hex);
+    if (hex.storySite && site) {
+      layout(site.props, cx, y, cz, 0);
+      continue;
+    }
+    if (!HISTORY_GROUND.has(hex.terrain) || seededRandom(hex, 41) >= HISTORY_SHARE) continue;
+    // Near the edge, clear of the tile's other scenery (which keeps to the other side) and of the
+    // troop standing in the middle
+    const angle = Math.PI / 2 - seededRandom(hex, 43) * 0.4;
+    const scene = history[Math.min(history.length - 1, Math.floor(seededRandom(hex, 42) * history.length))];
+    layout(scene, cx + Math.cos(angle) * 0.5, y, cz + Math.sin(angle) * 0.5, -angle + Math.PI / 2);
+  }
+  return result;
+};
+
 const InstancedProp: React.FC<{ library: PropLibrary; model: string; matrices: THREE.Matrix4[] }> = ({ library, model, matrices }) => {
   const ref = useRef<THREE.InstancedMesh>(null);
   const prop = library.get(model);
@@ -494,23 +541,28 @@ const InstancedProp: React.FC<{ library: PropLibrary; model: string; matrices: T
 
 const NO_SKIP: ReadonlySet<TerrainType> = new Set();
 
-const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[]; decor?: MapDecor }> = ({ hexGrid, decor }) => {
+const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[]; decor?: MapDecor; mapName?: string }> = ({ hexGrid, decor, mapName }) => {
+  // Decorations only depend on the terrain, not on units moving around
+  // (and on who holds each building, which shows in its colours)
+  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}${isStructure(h.terrain) ? h.owner ?? '' : ''}${h.feature === 'stakes' ? 's' : ''}${h.storySite ? '!' : ''}`).join('|');
+  const hexesRef = useRef(hexGrid);
+  hexesRef.current = hexGrid;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const history = useMemo(() => buildHistoryMatrices(hexesRef.current, mapName), [terrainSignature, mapName]);
+  const historyPacks = [...new Set([...history.keys()].map(packOfModel))].sort().join(',');
+
   // Only the packs this map's scenery uses download (Halloween bits for haunted ground, dungeon props
-  // for the Underkeep)
+  // for the Underkeep, whichever its history needs)
   const hasCursed = hexGrid.some(hex => hex.terrain === 'cursed');
   const hasBuildings = hexGrid.some(hex => isStructure(hex.terrain));
-  const packs = useMemo((): PropPack[] => [
+  const packs = useMemo((): PropPack[] => [...new Set<PropPack>([
     'medieval',
     ...(hasCursed || decor === 'haunted' ? ['halloween' as const] : []),
     ...(decor === 'dungeon' ? ['dungeon' as const] : []),
-    ...(hasBuildings ? ['buildings' as const] : [])
-  ], [hasCursed, decor, hasBuildings]);
+    ...(hasBuildings ? ['buildings' as const] : []),
+    ...(historyPacks ? historyPacks.split(',') as PropPack[] : [])
+  ])], [hasCursed, decor, hasBuildings, historyPacks]);
   const library = usePropLibrary(packs);
-  // Decorations only depend on the terrain, not on units moving around
-  // (and on who holds each building, which shows in its colours)
-  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}${isStructure(h.terrain) ? h.owner ?? '' : ''}${h.feature === 'stakes' ? 's' : ''}`).join('|');
-  const hexesRef = useRef(hexGrid);
-  hexesRef.current = hexGrid;
 
   // Rebuild only when the terrain signature changes (or the KayKit models arrive)
   const matrices = useMemo(
@@ -528,6 +580,9 @@ const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[]; decor?: MapDecor }> 
       ))}
       {library && props && [...props].map(([model, list]) => (
         <InstancedProp key={model} library={library} model={model} matrices={list} />
+      ))}
+      {library && [...history].map(([model, list]) => (
+        <InstancedProp key={`history-${model}`} library={library} model={model} matrices={list} />
       ))}
     </>
   );

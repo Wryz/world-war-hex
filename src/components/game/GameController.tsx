@@ -427,6 +427,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           level={level}
           stars={finished.stars}
           record={finished.record}
+          gathered={haulSize(gameState.haul)}
           rounds={gameState.turnNumber}
           stats={gameState.battleStats!.player}
           durationSeconds={elapsedRef.current}

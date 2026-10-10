@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation';
 import { MAX_CARD_LEVEL } from '@/lib/game/troops';
 import { resetProfile, useProfile } from '@/lib/meta/profile';
 import {
-  DEV_COINS, devLockAllLevels, devOwnEverything, devResetCards, devSetAllLevels, devSetCoins, devUnlockAllLevels,
+  DEV_COINS, devEmptySatchel, devFillSatchel, devLockAllLevels, devOwnEverything, devResetCards, devSetAllLevels, devSetCoins, devUnlockAllLevels,
   isInfiniteCoins, setInfiniteCoins, topUpCoins, useDevMode
 } from '@/lib/meta/devTools';
 
@@ -72,6 +72,12 @@ export const DevPanel: React.FC = () => {
           <div className="mb-3 flex flex-wrap gap-1.5">
             <button className={BUTTON} onClick={run('All levels open', devUnlockAllLevels)}>Unlock all levels</button>
             <button className={BUTTON} onClick={run('Campaign reset', devLockAllLevels)}>Lock all</button>
+          </div>
+
+          <div className="mb-1 text-[0.625rem] font-bold uppercase tracking-widest text-slate-400">Satchel</div>
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            <button className={BUTTON} onClick={run('Satchel filled', devFillSatchel)}>+20 of every material</button>
+            <button className={BUTTON} onClick={run('Satchel emptied', devEmptySatchel)}>Empty</button>
           </div>
 
           <div className="mb-1 text-[0.625rem] font-bold uppercase tracking-widest text-slate-400">Cards</div>

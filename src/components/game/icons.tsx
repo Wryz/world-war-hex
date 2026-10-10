@@ -11,7 +11,7 @@ import {
   GiWheat, GiPineTree, GiCactus, GiGoldMine, GiMountains, GiWaves, GiCrown, GiTwoCoins, GiCrossedSwords, GiHearts,
   GiFootprint, GiDeathSkull, GiSandsOfTime, GiCastle, GiCheckedShield, GiCampingTent, GiHills, GiSwamp, GiSnowflake1,
   GiFountain, GiLava, GiIceCube, GiBrokenWall, GiVillage, GiTombstone, GiCrownCoin, GiSwordsPower, GiPadlock, GiPokerHand,
-  GiTreasureMap, GiFastForwardButton, GiUpgrade, GiTrophy, GiPodium, GiOpenBook, GiTargetArrows, GiHeartPlus,
+  GiTreasureMap, GiFastForwardButton, GiUpgrade, GiTrophy, GiPodium, GiOpenBook, GiKnapsack, GiScrollQuill, GiTargetArrows, GiHeartPlus,
   GiAngelWings, GiRegeneration, GiChestArmor, GiSiegeRam, GiAngryEyes, GiRaiseSkeleton, GiWingfoot, GiFireRing,
   GiSkullCrossedBones, GiLaurelCrown, GiStarMedal, GiRoundStar, GiSpellBook, GiLinkedRings, GiPaintBrush, GiCrosshair, GiFog,
   GiSparkles, GiAxeInStump, GiFire, GiBurningEmbers, GiLog, GiWatchtower, GiHouse, GiCatapult, GiAnvil, GiBarracksTent,
@@ -212,6 +212,9 @@ export const UpgradeIcon = icon(GiUpgrade, '#4ade80');
 export const TrophyIcon = icon(GiTrophy, '#facc15');
 export const StatsIcon = icon(GiPodium, '#a5b4fc');
 export const BookIcon = icon(GiOpenBook, '#fca5a5');
+// The satchel of materials gathered in battle, and the Chronicle of the realm's history
+export const SatchelIcon = icon(GiKnapsack, '#d6a46b');
+export const ChronicleIcon = icon(GiScrollQuill, '#fcd34d');
 export const BossIcon = icon(GiSkullCrossedBones, '#f87171');
 export const LaurelIcon = icon(GiLaurelCrown, '#facc15');
 export const MedalIcon = icon(GiStarMedal, '#facc15');

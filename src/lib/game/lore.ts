@@ -30,8 +30,10 @@ export interface StorySite {
   hint: string;
   // How it is laid out on its hex: KayKit props by name, placed around the centre (x and z in hex
   // widths, a turn in radians)
-  props: { model: string; x: number; z: number; scale: number; turn?: number; lift?: number }[];
+  props: StoryProp[];
 }
+
+export interface StoryProp { model: string; x: number; z: number; scale: number; turn?: number; lift?: number }
 
 // One story site per campaign region, by map theme (the region's name)
 export const STORY_SITES: Record<string, StorySite> = {
@@ -173,6 +175,57 @@ export const STORY_SITES: Record<string, StorySite> = {
     ]
   }
 };
+
+// --- The land remembers ---------------------------------------------------------------------------
+
+// Small scenes scattered over open ground, so every region looks lived in and fought over: a
+// waystone by the road, a soldier's shield where he fell, a camp left in a hurry. Each is laid
+// out around a spot near the edge of its hex (x and z in hex widths), and none of them does anything.
+const WAYSTONE: StoryProp[] = [{ model: 'pillar', x: 0, z: 0, scale: 0.08, turn: 0.3 }, { model: 'rock_single_C', x: 0.14, z: 0.06, scale: 0.8, turn: 1 }];
+const FALLEN: StoryProp[] = [{ model: 'sword_shield_broken', x: 0, z: 0, scale: 0.13, turn: 0.6, lift: 0.04 }, { model: 'skull', x: 0.13, z: 0.05, scale: 0.08, turn: 2 }];
+const OLD_BONES: StoryProp[] = [{ model: 'bone_A', x: 0, z: 0, scale: 0.13, turn: 1.3 }, { model: 'skull', x: 0.1, z: -0.08, scale: 0.09, turn: 0.4 }];
+const BEAST: StoryProp[] = [{ model: 'ribcage', x: 0, z: 0, scale: 0.22, turn: 0.9 }];
+const CAMP: StoryProp[] = [{ model: 'sack', x: 0, z: 0, scale: 1.5, turn: 0.7 }, { model: 'crate_B_small', x: 0.14, z: 0.05, scale: 1.2, turn: 2.2 }];
+const SUPPLIES: StoryProp[] = [{ model: 'barrel', x: 0, z: 0, scale: 1.2 }, { model: 'sack', x: 0.13, z: -0.06, scale: 1.4, turn: 1.9 }];
+const RUINED_WALL: StoryProp[] = [{ model: 'wall_corner_A_outside', x: 0, z: 0, scale: 0.16, turn: 0.4 }, { model: 'rubble_half', x: 0.14, z: 0.08, scale: 0.07, turn: 1.5 }];
+const SAPLINGS: StoryProp[] = [{ model: 'trees_A_small', x: 0, z: 0, scale: 0.38, turn: 0.5 }];
+const THICKET: StoryProp[] = [{ model: 'trees_B_small', x: 0, z: 0, scale: 0.38, turn: 2.5 }];
+const TIMBER: StoryProp[] = [{ model: 'resource_lumber', x: 0, z: 0, scale: 0.28, turn: 0.8 }];
+const STONES: StoryProp[] = [{ model: 'rock_single_B', x: 0, z: 0, scale: 0.9, turn: 0.2 }, { model: 'rock_single_C', x: 0.13, z: 0.07, scale: 0.7, turn: 2 }];
+const LONE_GRAVE: StoryProp[] = [{ model: 'grave_B', x: 0, z: 0, scale: 0.09, turn: 0.3 }, { model: 'candle_triple', x: 0.12, z: 0.06, scale: 0.22 }];
+const MARKER: StoryProp[] = [{ model: 'gravemarker_B', x: 0, z: 0, scale: 0.12, turn: 0.2 }];
+const DEAD_TREE: StoryProp[] = [{ model: 'tree_dead_small', x: 0, z: 0, scale: 0.15, turn: 1.2 }];
+const OLD_FENCE: StoryProp[] = [{ model: 'fence', x: 0, z: 0, scale: 0.09, turn: 0.9 }];
+const PUMPKINS: StoryProp[] = [{ model: 'pumpkin_yellow', x: 0, z: 0, scale: 0.18, turn: 0.4 }, { model: 'pumpkin_yellow', x: 0.12, z: 0.06, scale: 0.13, turn: 2 }];
+const GOLDEN_PINE: StoryProp[] = [{ model: 'tree_pine_yellow_medium', x: 0, z: 0, scale: 0.15, turn: 0.6 }];
+const BANNER: StoryProp[] = [{ model: 'banner_patternA_red', x: 0, z: 0, scale: 0.11, turn: 0.5 }, { model: 'sword_shield_broken', x: 0.12, z: 0.08, scale: 0.12, turn: 1.4, lift: 0.04 }];
+const RACK: StoryProp[] = [{ model: 'weaponrack', x: 0, z: 0, scale: 1.1, turn: 0.4 }, { model: 'skull', x: 0.13, z: 0.07, scale: 0.08, turn: 1 }];
+const BROKEN_COLUMN: StoryProp[] = [{ model: 'column', x: 0, z: 0, scale: 0.3 }, { model: 'rubble_half', x: 0.13, z: 0.07, scale: 0.07, turn: 0.8 }];
+const CARVED_PILLAR: StoryProp[] = [{ model: 'pillar_decorated', x: 0, z: 0, scale: 0.09, turn: 1.1 }];
+const BARRIER: StoryProp[] = [{ model: 'barrier_column', x: 0, z: 0, scale: 0.07, turn: 0.6 }, { model: 'rubble_half', x: 0.12, z: 0.07, scale: 0.07, turn: 2.1 }];
+const VIGIL: StoryProp[] = [{ model: 'gravestone', x: 0, z: 0, scale: 0.12 }, { model: 'candle_triple', x: 0.12, z: 0.06, scale: 0.2 }];
+
+// What each region's ground remembers (any other map gets the countryside's)
+export const HISTORY: Record<string, StoryProp[][]> = {
+  'Greenvale Meadows': [WAYSTONE, SAPLINGS, CAMP, RUINED_WALL, OLD_FENCE],
+  'Goblin Woods': [FALLEN, THICKET, TIMBER, SUPPLIES, OLD_BONES],
+  'Howling Hills': [OLD_BONES, BEAST, WAYSTONE, STONES],
+  'Mirefen Marsh': [DEAD_TREE, LONE_GRAVE, OLD_FENCE, MARKER],
+  'Sunscorch Desert': [BROKEN_COLUMN, OLD_BONES, BEAST, CARVED_PILLAR],
+  'Frostpeak Pass': [FALLEN, BANNER, STONES, VIGIL],
+  'Gravemoor': [LONE_GRAVE, MARKER, DEAD_TREE, OLD_BONES],
+  'Ironfang Badlands': [RACK, FALLEN, OLD_BONES, SUPPLIES],
+  'Emberforge Wastes': [BARRIER, FALLEN, STONES, BROKEN_COLUMN],
+  'Dragonspire Peaks': [BEAST, FALLEN, VIGIL, OLD_BONES],
+  'The King\'s Road': [RUINED_WALL, SUPPLIES, BANNER, WAYSTONE, CAMP],
+  'Hallowmere': [PUMPKINS, GOLDEN_PINE, OLD_FENCE, LONE_GRAVE],
+  'The Underkeep': [CARVED_PILLAR, BARRIER, LONE_GRAVE, FALLEN],
+  'Rimeholt': [CARVED_PILLAR, OLD_BONES, STONES, FALLEN],
+  'The Last Bastion': [BANNER, RUINED_WALL, FALLEN, BROKEN_COLUMN, VIGIL]
+};
+const COUNTRYSIDE: StoryProp[][] = [SAPLINGS, THICKET, STONES, CAMP, TIMBER, RUINED_WALL];
+
+export const historyFor = (theme: string | undefined): StoryProp[][] => (theme ? HISTORY[theme] : undefined) ?? COUNTRYSIDE;
 
 export const storySiteFor = (theme: string | undefined): StorySite | undefined => (theme ? STORY_SITES[theme] : undefined);
 

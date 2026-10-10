@@ -4,13 +4,14 @@ import Link from 'next/link';
 import dynamic from 'next/dynamic';
 import { getLevel, LEVEL_COUNT, REGIONS } from '@/lib/campaign/levels';
 import { MOB_IDS, FACTIONS } from '@/lib/game/troops';
+import { MATERIAL_IDS } from '@/lib/game/materials';
 import { highestCleared, highestUnlocked, useHasHydrated, useProfile } from '@/lib/meta/profile';
 import { useMusic } from '@/lib/audio/music';
 import { setMuted, useMuted } from '../utils/SoundPlayer';
 import { CARD_CLASS, PRIMARY_BUTTON, ResourceBadges, SKY_BACKGROUND } from '@/components/menu/MenuShell';
 import { TroopCard } from '../cards/TroopCard';
 import {
-  AttackIcon, BookIcon, BossIcon, CardsIcon, MapIcon, ResumeIcon, SoundOffIcon, SoundOnIcon,
+  AttackIcon, BookIcon, BossIcon, SatchelIcon, CardsIcon, MapIcon, ResumeIcon, SoundOffIcon, SoundOnIcon,
   StarIcon, StatsIcon, StyleIcon, SettingsIcon, GuideIcon
 } from '../icons';
 import { SettingsPanel, SettingsTab } from '../../menu/SettingsPanel';
@@ -190,12 +191,13 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
             <MenuTile href="/campaign" icon={<MapIcon />} title="World Map" detail={`${REGIONS.length} regions · ${LEVEL_COUNT} battles`} />
             <MenuTile href="/army" icon={<CardsIcon />} title="Army" detail="Build your deck, upgrade cards" />
             <MenuTile href="/bestiary" icon={<BookIcon />} title="Bestiary" detail={`${hydrated ? discovered : 0}/${MOB_IDS.length} monsters discovered`} />
+            <MenuTile href="/satchel" icon={<SatchelIcon />} title="Satchel" detail={`${hydrated ? profile.materialsFound.length : 0}/${MATERIAL_IDS.length} materials · Chronicle`} />
             <MenuTile href="/style" icon={<StyleIcon />} title="Style" detail="Card frames, castle styles" />
             <MenuTile href="/stats" icon={<StatsIcon />} title="Stats & Save" detail="Records and save file" />
             <button
               type="button"
               onClick={() => setSettingsTab('guide')}
-              className={`${CARD_CLASS} group flex items-center gap-3 px-4 py-3.5 text-left transition-transform hover:-translate-y-1 sm:gap-4 sm:py-4`}
+              className={`${CARD_CLASS} group col-span-2 flex items-center gap-3 px-4 py-3.5 text-left transition-transform hover:-translate-y-1 sm:gap-4 sm:py-4`}
             >
               <span className="text-3xl transition-transform group-hover:scale-110 sm:text-4xl"><GuideIcon /></span>
               <span className="min-w-0">

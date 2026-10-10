@@ -22,6 +22,18 @@ const PACK_URLS: Record<PropPack, string> = {
 };
 const MEDIEVAL_ONLY: PropPack[] = ['medieval'];
 
+// The pack each of the optional packs' models is in (anything else is in the medieval pack)
+const PACK_MODELS: Partial<Record<PropPack, string[]>> = {
+  halloween: ['gravestone', 'grave_A', 'grave_B', 'gravemarker_A', 'gravemarker_B', 'crypt', 'tree_dead_small', 'tree_dead_medium',
+    'tree_dead_large', 'tree_pine_orange_medium', 'tree_pine_yellow_medium', 'pumpkin_orange', 'pumpkin_orange_jackolantern',
+    'pumpkin_yellow', 'fence', 'fence_broken', 'lantern_standing', 'skull', 'bone_A', 'ribcage', 'shrine_candles', 'coffin', 'post_skull'],
+  dungeon: ['pillar', 'pillar_decorated', 'column', 'rubble_large', 'rubble_half', 'torch_lit', 'chest_gold', 'coin_stack_large',
+    'sword_shield_broken', 'banner_patternA_red', 'barrier_column', 'candle_triple'],
+  buildings: ['building_bridge_B', 'tree_single_A_cut', 'resource_lumber']
+};
+export const packOfModel = (model: string): PropPack =>
+  (Object.keys(PACK_MODELS) as PropPack[]).find(pack => PACK_MODELS[pack]!.includes(model)) ?? 'medieval';
+
 // KayKit's hexes are 2 units across their flat sides; ours are √3
 export const KAYKIT_HEX_SCALE = Math.sqrt(3) / 2;
 // How much brighter than the textures the models are drawn (the board's own colours are bright)
