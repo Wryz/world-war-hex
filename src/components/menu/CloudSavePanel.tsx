@@ -91,7 +91,8 @@ export const CloudSavePanel: React.FC = () => {
     synced: <span className="text-emerald-300">Saved to the cloud {timeAgo(cloud.syncedAt, now)}</span>,
     offline: <span className="text-amber-300">Offline - it will save when you&apos;re back online</span>,
     error: <span className="text-red-400">Couldn&apos;t reach the cloud{cloud.error ? ` (${cloud.error})` : ''} - trying again soon</span>,
-    conflict: <span className="text-amber-300">Choose which save to keep</span>
+    conflict: <span className="text-amber-300">Choose which save to keep</span>,
+    blocked: <span className="text-amber-300">Your cloud save is from a newer version of the game - reload the page to update, then it will sync</span>
   }[cloud.status];
 
   const remove = async () => {
@@ -142,7 +143,14 @@ export const CloudSavePanel: React.FC = () => {
               <span className="min-w-0 flex-1 text-xs text-slate-300">
                 Linked to <b className="text-slate-100">{cloud.email}</b>. Sign in with it on another device to play this save there.
               </span>
-              <button onClick={() => { void signOutCloud(); }} className={`${SECONDARY_BUTTON} text-sm`}>Sign out</button>
+              <button
+                onClick={() => {
+                  if (window.confirm('Sign out on this device? Your progress stays here, but stops saving to the cloud. Leave any Battle Friends room first.')) void signOutCloud();
+                }}
+                className={`${SECONDARY_BUTTON} text-sm`}
+              >
+                Sign out
+              </button>
             </div>
           ) : (
             <EmailForm
@@ -166,7 +174,7 @@ export const CloudSavePanel: React.FC = () => {
           {showSignIn ? (
             <EmailForm
               purpose="signin"
-              intro="Load a save from another device: enter the email address linked to it, and we'll send a sign-in link and code."
+              intro="Load a save from another device: enter the email address linked to it, and we'll send a sign-in link and code. (Leave any Battle Friends room first.)"
               button="Send sign-in link"
               onDone={() => setShowSignIn(false)}
             />

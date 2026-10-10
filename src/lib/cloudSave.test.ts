@@ -4,36 +4,28 @@ import assert from 'node:assert/strict';
 import { syncAction } from './cloudSave';
 import { createProfile, hasProgress } from './meta/profile';
 
-const copies = (localAt: number, cloudAt: number, synced: number | null, localHasProgress = true, cloudHasProgress = true) =>
-  syncAction({ localAt, cloudAt, synced, localHasProgress, cloudHasProgress });
+const copies = (firstSync: boolean, localChanged: boolean, cloudChanged: boolean, localHasProgress = true, cloudHasProgress = true) =>
+  syncAction({ firstSync, localChanged, cloudChanged, localHasProgress, cloudHasProgress });
 
 test('the copy that changed since the last sync wins on its own', () => {
-  assert.equal(copies(100, 100, 100), 'inSync');
-  assert.equal(copies(200, 100, 100), 'send', 'played on this device');
-  assert.equal(copies(100, 200, 100), 'adopt', 'played on another device');
+  assert.equal(copies(false, false, false), 'inSync');
+  assert.equal(copies(false, true, false), 'send', 'played on this device');
+  assert.equal(copies(false, false, true), 'adopt', 'played on another device (or tab)');
 });
 
 test('both changed since they last agreed: the player chooses', () => {
-  assert.equal(copies(200, 300, 100), 'ask');
-  assert.equal(copies(300, 200, 100), 'ask');
+  assert.equal(copies(false, true, true), 'ask');
   // (a device that never synced with this account - a new device signing in - asks too)
-  assert.equal(copies(200, 300, null), 'ask');
+  assert.equal(copies(true, true, true), 'ask');
 });
 
-test('an empty save gives way to one with progress', () => {
-  assert.equal(copies(500, 300, null, false, true), 'adopt', 'a new device takes the cloud save');
-  assert.equal(copies(200, 300, null, true, false), 'send', 'an empty cloud save is replaced even when dated later');
-  assert.equal(copies(300, 200, null, true, false), 'send');
+test('an empty save gives way to one with progress - unless it was erased on purpose', () => {
+  assert.equal(copies(true, true, true, false, true), 'adopt', 'a new device takes the cloud save');
+  assert.equal(copies(true, true, true, true, false), 'send', 'an empty cloud save is replaced');
+  // (progress erased on a synced device, its send interrupted: the erasing is sent, not undone)
+  assert.equal(copies(false, true, false, false, true), 'send');
   assert.ok(!hasProgress(createProfile()));
   assert.ok(hasProgress({ ...createProfile(), coins: 5 }));
-});
-
-test('a device clock set wrong can\'t hide a change', () => {
-  // (this device's clock is behind: its change is dated before the copy it last agreed on)
-  assert.equal(copies(90, 100, 100), 'send');
-  // (another device's clock is behind: its newer copy is dated earlier)
-  assert.equal(copies(100, 50, 100), 'adopt');
-  assert.equal(copies(90, 50, 100), 'ask');
 });
 
 test('a change to the profile always moves its time on', async () => {

@@ -1,4 +1,5 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { emailLinkExpected } from '../emailLink';
 
 // The game's Supabase project (online rooms). The publishable key is meant to be public: what anyone
 // can do with it is decided by the database's own rules (supabase/migrations). Both can be overridden
@@ -8,10 +9,23 @@ const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY ?? 'sb_pub
 
 let client: SupabaseClient | null = null;
 
-// The one client the browser uses (its session is kept in localStorage)
+// A request that hangs (a network switched mid-call) gives up after this long rather than holding up
+// every save after it
+const REQUEST_TIMEOUT_MS = 20_000;
+const fetchWithTimeout: typeof fetch = (input, init) =>
+  fetch(input, init?.signal || typeof AbortSignal.timeout !== 'function' ? init : { ...init, signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+
+// The one client the browser uses (its session is kept in localStorage). A session in the address -
+// a cloud save's sign-in link - is only taken when this browser asked for one (lib/emailLink).
 export const getSupabase = (): SupabaseClient => {
   client ??= createClient(SUPABASE_URL, SUPABASE_KEY, {
-    auth: { persistSession: true, autoRefreshToken: true, storageKey: 'hexhordes-auth' }
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      storageKey: 'hexhordes-auth',
+      detectSessionInUrl: (_url, params) => Boolean(params.access_token) && emailLinkExpected()
+    },
+    global: { fetch: fetchWithTimeout }
   });
   return client;
 };

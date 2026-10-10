@@ -204,7 +204,7 @@ The host's game runs the battle - the same rules engine as everywhere else, the 
 
 ## Cloud save
 
-Saves are kept in the same Supabase project as the online rooms, in the `cloud_saves` table (`supabase/migrations/20261010150000_cloud_saves.sql`): one row per account, readable and deletable only by its owner, and written through `put_cloud_save`, which won't let an older copy replace a newer one (unless the player chose it) and clears away saves untouched for two years. The account is the anonymous one the device already uses for rooms; linking an email turns it into a permanent account that can sign in elsewhere.
+Saves are kept in the same Supabase project as the online rooms, in the `cloud_saves` table (`supabase/migrations/20261010150000_cloud_saves.sql`): one row per account, readable and deletable only by its owner, and written through `put_cloud_save`. Every copy sent gets a random revision id, and the function only replaces the revision the device last agreed with, so two devices (or tabs) can't overwrite each other's progress unasked: when both changed, the player chooses. It also clears away saves untouched for two years. An emailed sign-in link only works in the browser that asked for it (`src/lib/emailLink.ts`), so nobody can send a link that signs a player into another account; on any other device the player types the code from the email. The account is the anonymous one the device already uses for rooms; linking an email turns it into a permanent account that can sign in elsewhere.
 
 Before email linking works for players, the Supabase project needs:
 

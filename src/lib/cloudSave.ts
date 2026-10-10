@@ -1,25 +1,28 @@
 import { useSyncExternalStore } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import {
-  Profile, adoptProfile, getProfile, hasProgress, highestCleared, isNewerProfile, replaceProfile, sanitizeProfile, subscribeProfile, totalStars
+  Profile, adoptProfile, getProfile, hasProgress, highestCleared, isNewerProfile, sanitizeProfile, subscribeProfile, totalStars
 } from './meta/profile';
 import { trackEvent } from './analytics';
+import { emailLinkExpected, forgetEmailLink, noteEmailLinkAsked } from './emailLink';
 
 // Cloud save: a copy of the player's progress in the game's Supabase project (the cloud_saves table,
 // supabase/migrations), kept up to date as it changes. The account is the anonymous one online rooms
 // use (lib/pvp/supabase); linking an email address to it lets the same save be loaded on another
 // device, by a sign-in link or code sent to that address.
 //
-// Each device remembers the copy (its saved_at) it last agreed with the cloud on, and the server only
-// takes a save made over that copy (put_cloud_save). When both have changed since - two devices played
-// apart, or a device with progress of its own signs in - the player picks which to keep
-// (CloudConflictDialog); when only one has, it wins on its own. Changes are told apart by the saved
-// time differing, not by which is later, so a device clock set wrong can't hide one.
+// Every copy sent to the cloud gets a revision id of its own (random, made by the device). Each device
+// remembers the revision it last agreed with the cloud on, and the profile's updatedAt at that moment;
+// the server only takes a save made over that revision (put_cloud_save). When both have changed
+// since - two devices (or tabs) played apart, or a device with progress of its own signs in - the
+// player picks which to keep (CloudConflictDialog); when only one has, it wins on its own. Nothing
+// depends on which clock is ahead.
 //
 // It is off until the player turns it on (Stats & Save), or opens a sign-in link sent to their email.
 
 const ENABLED_KEY = 'wwhCloudSave';
-// The account and the save's time this device last agreed with the cloud on
+// The account, revision and profile time this device last agreed with the cloud on (and a save on its
+// way, in case its answer is lost)
 const SYNCED_KEY = 'wwhCloudSynced';
 // Changes are gathered for a few seconds before they are sent
 const PUSH_DELAY_MS = 4000;
@@ -28,7 +31,8 @@ const RETRY_DELAY_MS = 60_000;
 // Coming back to the game after this long checks the cloud for another device's progress
 const REFRESH_AFTER_MS = 30_000;
 
-export type CloudStatus = 'off' | 'syncing' | 'synced' | 'offline' | 'error' | 'conflict';
+// ('blocked': the cloud's save is from a newer version of the game, and is left alone)
+export type CloudStatus = 'off' | 'syncing' | 'synced' | 'offline' | 'error' | 'conflict' | 'blocked';
 
 // What a save holds, to choose between two
 export interface SaveSummary {
@@ -48,9 +52,9 @@ export interface CloudState {
   // The email address linked to the account, and one waiting for its link to be opened
   email?: string;
   pendingEmail?: string;
-  // Both copies changed since they last agreed: the cloud's (its updatedAt is the cloud copy's
-  // saved_at), waiting for the player to choose
-  conflict?: { cloud: Profile; device: SaveSummary; remote: SaveSummary };
+  // Both copies changed since they last agreed: the cloud's and its revision, waiting for the player
+  // to choose
+  conflict?: { cloud: Profile; rev: string; device: SaveSummary; remote: SaveSummary };
   // Something to tell the player that isn't a sync's state (an email link that didn't work)
   notice?: string;
 }
@@ -58,6 +62,17 @@ export interface CloudState {
 interface CloudRow {
   profile: unknown;
   saved_at: string;
+  rev: string;
+}
+
+// What this device last agreed with the cloud on: the revision there, and its own profile's updatedAt
+// then (a change since makes it differ)
+interface SyncMark {
+  user: string;
+  rev: string;
+  at: string;
+  // A save sent whose answer hasn't come back (if it did arrive, the cloud holds this revision)
+  pending?: { rev: string; at: string };
 }
 
 // --- State ------------------------------------------------------------------------------------
@@ -95,21 +110,32 @@ const writeFlag = (key: string, value: string | null) => {
   }
 };
 
-// The saved_at of the cloud copy this device last agreed with, for the account (none for another
-// account)
-const readSynced = (userId: string): string | null => {
+// (kept in memory too, for a browser that won't store it)
+let memoryMark: SyncMark | null = null;
+
+const readMark = (userId: string): SyncMark | null => {
+  let mark = memoryMark;
   try {
-    const stored = JSON.parse(readFlag(SYNCED_KEY) ?? 'null') as { user?: string; at?: string } | null;
-    return stored?.user === userId && typeof stored.at === 'string' && !Number.isNaN(Date.parse(stored.at)) ? stored.at : null;
+    const stored = readFlag(SYNCED_KEY);
+    if (stored !== null) mark = JSON.parse(stored) as SyncMark;
   } catch {
-    return null;
+    // Unreadable: the copy in memory
   }
+  return mark && mark.user === userId && typeof mark.rev === 'string' && typeof mark.at === 'string' ? mark : null;
 };
-const sameTime = (a: string | null | undefined, b: string | null | undefined) => !!a && !!b && Date.parse(a) === Date.parse(b);
-const markSynced = (userId: string, savedAt: string) => {
-  writeFlag(SYNCED_KEY, JSON.stringify({ user: userId, at: savedAt }));
+const writeMark = (mark: SyncMark | null) => {
+  memoryMark = mark;
+  writeFlag(SYNCED_KEY, mark ? JSON.stringify(mark) : null);
+};
+const markSynced = (userId: string, rev: string, at: string) => {
+  writeMark({ user: userId, rev, at });
   update({ status: 'synced', syncedAt: new Date().toISOString(), error: undefined, conflict: undefined });
 };
+
+const newRevision = () =>
+  typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
 
 export const summarise = (profile: Profile): SaveSummary => ({
   cleared: highestCleared(profile),
@@ -157,69 +183,78 @@ const scheduleRetry = () => {
   retryTimer = setTimeout(() => { retryTimer = null; void sync(); }, RETRY_DELAY_MS);
 };
 
-// Send this device's save over the cloud copy `base` (the saved_at it was made from; null for none).
-// If the cloud copy has moved on since, nothing is written and the two are compared instead.
+// Send this device's save over the cloud revision `base` (the one it last agreed with; null for none).
+// If the cloud holds another revision by now, nothing is written and the two are compared instead.
 const push = async (userId: string, base: string | null): Promise<void> => {
   const profile = getProfile();
+  const rev = newRevision();
+  const mark = readMark(userId);
+  // (noted first: if the answer is lost, the next sync still knows this revision is this device's own)
+  writeMark(mark ? { ...mark, pending: { rev, at: profile.updatedAt } } : { user: userId, rev: '', at: '', pending: { rev, at: profile.updatedAt } });
   const { data, error } = await (await client()).rpc('put_cloud_save', {
-    p_profile: profile, p_saved_at: profile.updatedAt, p_base: base
+    p_profile: profile, p_saved_at: profile.updatedAt, p_rev: rev, p_base: base
   });
   if (error) throw error;
   const row = data as CloudRow;
-  if (sameTime(row.saved_at, profile.updatedAt)) return markSynced(userId, row.saved_at);
+  if (row.rev === rev) return markSynced(userId, rev, profile.updatedAt);
   return reconcile(userId, row);
 };
 
-// What to do about two copies of the save, from when each was last changed and the cloud copy this
-// device last agreed with (null: never, as this account): nothing, take the cloud's, send this
-// device's, or ask the player
+// What to do about the two copies: nothing, take the cloud's, send this device's, or ask the player
 export type SyncAction = 'inSync' | 'adopt' | 'send' | 'ask';
 export const syncAction = (copies: {
-  localAt: number;
-  cloudAt: number;
-  synced: number | null;
+  // Never agreed with the cloud on anything, as this account
+  firstSync: boolean;
+  localChanged: boolean;
+  cloudChanged: boolean;
   localHasProgress: boolean;
   cloudHasProgress: boolean;
 }): SyncAction => {
-  const { localAt, cloudAt, synced, localHasProgress, cloudHasProgress } = copies;
-  if (cloudAt === localAt) return 'inSync';
-  const localChanged = synced === null || localAt !== synced;
-  const cloudChanged = synced === null || cloudAt !== synced;
-  // (a new player's empty save, or one unchanged since the cloud's moved on, gives way)
-  if (!localHasProgress || (!localChanged && cloudChanged)) return 'adopt';
+  const { firstSync, localChanged, cloudChanged, localHasProgress, cloudHasProgress } = copies;
+  if (!firstSync && !localChanged && !cloudChanged) return 'inSync';
+  // (a new device's empty save, or one unchanged since the cloud's moved on, gives way; an empty save
+  // that was synced before has been erased on purpose, and is sent)
+  if ((firstSync && !localHasProgress) || (!localChanged && cloudChanged)) return 'adopt';
   if (!cloudHasProgress || !cloudChanged) return 'send';
   return 'ask';
 };
 
 // Compare this device's save with the cloud's and bring them together
 const reconcile = async (userId: string, row: CloudRow | null): Promise<void> => {
+  let mark = readMark(userId);
   if (!row) return push(userId, null);
+  // (a save whose answer was lost did arrive: it's the copy this device agreed with)
+  if (mark?.pending && row.rev === mark.pending.rev) {
+    mark = { user: userId, rev: row.rev, at: mark.pending.at };
+    writeMark(mark);
+  }
   const local = getProfile();
   const cloud = sanitizeProfile(row.profile);
   if (!cloud) {
     // A save from a newer version of the game is left alone until this one updates; anything else
     // unreadable is replaced
     if (isNewerProfile(row.profile)) {
-      update({ status: 'error', error: 'your cloud save is from a newer version of the game - reload the page to update' });
+      update({ status: 'blocked', error: undefined });
       return;
     }
-    return push(userId, row.saved_at);
+    return push(userId, row.rev);
   }
-  const synced = readSynced(userId);
+  const firstSync = !mark || mark.rev === '';
   const action = syncAction({
-    localAt: Date.parse(local.updatedAt),
-    cloudAt: Date.parse(row.saved_at),
-    synced: synced === null ? null : Date.parse(synced),
+    firstSync,
+    localChanged: firstSync || local.updatedAt !== mark!.at,
+    cloudChanged: firstSync || row.rev !== mark!.rev,
     localHasProgress: hasProgress(local),
     cloudHasProgress: hasProgress(cloud)
   });
-  if (action === 'inSync') return markSynced(userId, row.saved_at);
+  if (action === 'inSync') return markSynced(userId, row.rev, local.updatedAt);
   if (action === 'adopt') {
-    adoptProfile({ ...cloud, updatedAt: row.saved_at });
-    return markSynced(userId, row.saved_at);
+    const adopted = { ...cloud, updatedAt: row.saved_at };
+    adoptProfile(adopted);
+    return markSynced(userId, row.rev, getProfile().updatedAt);
   }
-  if (action === 'send') return push(userId, row.saved_at);
-  update({ status: 'conflict', conflict: { cloud: { ...cloud, updatedAt: row.saved_at }, device: summarise(local), remote: summarise(cloud) } });
+  if (action === 'send') return push(userId, row.rev);
+  update({ status: 'conflict', conflict: { cloud: { ...cloud, updatedAt: row.saved_at }, rev: row.rev, device: summarise(local), remote: summarise(cloud) } });
 };
 
 // Fetch the cloud's save and bring this device and it together (one sync at a time)
@@ -232,7 +267,7 @@ export const sync = (): Promise<void> => {
       const userId = await signedInUser();
       await refreshEmail();
       const { data, error } = await (await client())
-        .from('cloud_saves').select('profile, saved_at').eq('user_id', userId).maybeSingle();
+        .from('cloud_saves').select('profile, saved_at, rev').eq('user_id', userId).maybeSingle();
       if (error) throw error;
       await reconcile(userId, data as CloudRow | null);
     } catch (error) {
@@ -242,11 +277,13 @@ export const sync = (): Promise<void> => {
   return running;
 };
 
-// Wait for a sync or a send under way (before switching accounts or deleting the save)
+// Send what's waiting and wait for any sync or send under way (before switching accounts or deleting
+// the save)
 const settle = async () => {
   if (pushTimer) {
     clearTimeout(pushTimer);
     pushTimer = null;
+    void sendChanges();
   }
   while (running) await running;
 };
@@ -269,13 +306,22 @@ const sendChanges = (): Promise<void> => {
     update({ status: 'syncing' });
     try {
       const userId = await signedInUser();
-      const synced = readSynced(userId);
-      // (a change that is only the cloud's own copy arriving needs no sending back)
-      if (sameTime(getProfile().updatedAt, synced)) {
+      const mark = readMark(userId);
+      // (a change that is only the cloud's own copy arriving - or another tab's, already sent - needs
+      // no sending)
+      if (mark && mark.rev && getProfile().updatedAt === mark.at) {
         update({ status: 'synced' });
         return;
       }
-      await push(userId, synced);
+      // (never synced as this account: compared with the cloud's first)
+      if (!mark || !mark.rev) {
+        const { data, error } = await (await client())
+          .from('cloud_saves').select('profile, saved_at, rev').eq('user_id', userId).maybeSingle();
+        if (error) throw error;
+        await reconcile(userId, data as CloudRow | null);
+        return;
+      }
+      await push(userId, mark.rev);
     } catch (error) {
       fail(error);
     }
@@ -336,7 +382,7 @@ export const deleteCloudSave = async (): Promise<boolean> => {
     const userId = await signedInUser();
     const { error } = await (await client()).from('cloud_saves').delete().eq('user_id', userId);
     if (error) throw error;
-    writeFlag(SYNCED_KEY, null);
+    writeMark(null);
     return true;
   } catch (error) {
     update({ notice: `Couldn't delete the cloud save (${describe(error)}).` });
@@ -355,13 +401,12 @@ export const resolveConflict = async (keep: 'cloud' | 'device') => {
     const userId = await signedInUser();
     if (keep === 'cloud') {
       adoptProfile(conflict.cloud);
-      markSynced(userId, conflict.cloud.updatedAt);
+      markSynced(userId, conflict.rev, getProfile().updatedAt);
     } else {
-      // (marked as changed now, so other devices take it as the newer copy)
-      replaceProfile(getProfile());
       if (pushTimer) clearTimeout(pushTimer);
       pushTimer = null;
-      await push(userId, conflict.cloud.updatedAt);
+      // (over the cloud copy the player saw: if another device has saved since, they're asked again)
+      await push(userId, conflict.rev);
     }
   } catch (error) {
     fail(error);
@@ -390,6 +435,7 @@ export const linkEmail = async (email: string): Promise<string | null> => {
   if (!EMAIL.test(address)) return 'Enter an email address.';
   try {
     await signedInUser();
+    noteEmailLinkAsked();
     const { error } = await (await client()).auth.updateUser({ email: address }, { emailRedirectTo: returnAddress('linked') });
     if (error) return friendlyAuthError(error);
     update({ pendingEmail: address });
@@ -406,6 +452,7 @@ export const sendSignInEmail = async (email: string): Promise<string | null> => 
   const address = email.trim();
   if (!EMAIL.test(address)) return 'Enter an email address.';
   try {
+    noteEmailLinkAsked();
     const { error } = await (await client()).auth.signInWithOtp({
       email: address,
       options: { shouldCreateUser: false, emailRedirectTo: returnAddress('signin') }
@@ -429,6 +476,7 @@ export const verifyEmailCode = async (email: string, code: string, purpose: 'lin
     const { error } = await (await client()).auth.verifyOtp({ email: email.trim(), token, type: purpose === 'link' ? 'email_change' : 'email' });
     if (error) return friendlyAuthError(error);
     trackEvent(purpose === 'link' ? 'cloud_email_linked' : 'cloud_signed_in');
+    forgetEmailLink();
     update({ pendingEmail: undefined });
     await enableCloudSave();
     return null;
@@ -442,7 +490,7 @@ export const verifyEmailCode = async (email: string, code: string, purpose: 'lin
 export const signOutCloud = async () => {
   await settle();
   disableCloudSave();
-  writeFlag(SYNCED_KEY, null);
+  writeMark(null);
   try {
     await (await client()).auth.signOut({ scope: 'local' });
   } catch {
@@ -466,15 +514,20 @@ export const initCloudSave = () => {
   const params = new URLSearchParams(window.location.search);
   const link = new URLSearchParams(window.location.hash.slice(1));
   const linkError = params.has('cloud') ? link.get('error_description') ?? link.get('error') : null;
-  // (only a link that really carries a session turns the cloud save on)
-  const fromEmail = params.has('cloud') && link.has('access_token') ? params.get('cloud') : null;
+  // (only a link that really carries a session, opened on the browser that asked for it, turns the
+  // cloud save on - the client ignores any other)
+  const carriesSession = params.has('cloud') && link.has('access_token');
+  const fromEmail = carriesSession && emailLinkExpected() ? params.get('cloud') : null;
   if (params.has('cloud')) {
     params.delete('cloud');
     const query = params.toString();
-    const hash = linkError ? '' : window.location.hash;
+    const hash = linkError || (carriesSession && !fromEmail) ? '' : window.location.hash;
     window.history.replaceState(null, '', `${window.location.pathname}${query ? `?${query}` : ''}${hash}`);
   }
   if (linkError) update({ notice: friendlyAuthError({ message: linkError }) });
+  else if (carriesSession && !fromEmail) {
+    update({ notice: 'That sign-in link was opened on a different device or browser from the one it was sent from. Type the code from the email there instead.' });
+  }
   const enabled = readFlag(ENABLED_KEY) === 'on';
   if (!enabled && !fromEmail) return;
   void (async () => {
@@ -485,6 +538,7 @@ export const initCloudSave = () => {
       if (event === 'SIGNED_IN' || event === 'USER_UPDATED' || event === 'TOKEN_REFRESHED') showAccount(session?.user);
     });
     if (fromEmail) {
+      forgetEmailLink();
       trackEvent(fromEmail === 'linked' ? 'cloud_email_linked' : 'cloud_signed_in');
       await enableCloudSave();
       return;

@@ -353,6 +353,22 @@ const subscribe = (listener: () => void) => {
   return () => listeners.delete(listener);
 };
 
+// Another tab (or the installed app beside a browser tab) saving progress: take its copy, so this tab
+// doesn't carry on from - and save over - an older one
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', event => {
+    if (event.key !== PROFILE_KEY || event.newValue === null) return;
+    try {
+      const profile = sanitizeProfile(JSON.parse(event.newValue));
+      if (!profile) return;
+      current = profile;
+      listeners.forEach(listener => listener());
+    } catch {
+      // Unreadable: keep this tab's copy
+    }
+  });
+}
+
 // Every change to the profile (the cloud save follows them)
 export const subscribeProfile = (listener: () => void) => {
   listeners.add(listener);
