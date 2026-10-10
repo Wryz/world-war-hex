@@ -126,3 +126,14 @@ test('a sapper bursts when lava finishes it at its turn\'s end', () => {
   assert.ok(health(after, neighbour) <= 20 - MOB_SKILLS.goblin_sapper!.amount!);
   assert.equal(health(after, bystander), 20, 'out of the blast');
 });
+
+test('a troop that keeps fighting a venomous monster still takes its dose each round', () => {
+  const { state, centre } = makeBattle('ai');
+  const toad = troop('ai', 'toxic_toad', centre, { abilities: ['rangedAttack'], lifespan: 400, maxLifespan: 400, attackPower: 1 });
+  const prey = troop('player', 'infantry', at(centre, 1, 0), { lifespan: 400, maxLifespan: 400, attackPower: 1 });
+  place(state, toad, prey);
+  let current = state;
+  for (let turn = 0; turn < 8; turn++) current = playTurn(current);
+  // (8 turns: the blows trade 1 each way, and the venom lands every round from the second)
+  assert.ok(health(current, prey) <= 400 - 8 - MOB_SKILLS.toxic_toad!.amount! * 3, `prey at ${health(current, prey)}`);
+});

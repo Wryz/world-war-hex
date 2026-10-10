@@ -23,7 +23,7 @@ export const healthEventDelay = (event: HealthEvent): number => {
     case 'strafe': return 0.7;
     case 'swarm': case 'bloodlust': case 'drain': return 0.25;
     // (just after the blow that slew the troop bursting)
-    case 'burst': return (event.after ? healthEventDelay({ ...event, cause: event.after }) : 0) + 0.25;
+    case 'burst': return (event.after ? healthEventDelay({ ...event, cause: event.after, after: undefined }) : 0) + 0.25;
     // The end of a turn, in order: springs, mages, then the ground
     case 'spring': return 0.35;
     case 'mage': return 0.65;

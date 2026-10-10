@@ -1653,7 +1653,8 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
         continue;
       }
       // (a cottage or a village is never held, but whoever gets there first takes its stores)
-      if (hex && (hex.terrain === 'house' || hex.terrain === 'village') && !hex.plundered) plunder(newState, hex, side);
+      // (a story site keeps its relic for the end of the turn, whatever ground it lies on)
+      if (hex && (hex.terrain === 'house' || hex.terrain === 'village') && !hex.plundered && !hex.storySite) plunder(newState, hex, side);
       if (!hex?.isCamp || hex.owner === side) continue;
       plunder(newState, hex, side);
       addLog(newState, side, hex.owner
@@ -3098,8 +3099,9 @@ const applyBlowSkill = (state: GameState, hitter: Unit, victim: Unit, hitterFell
   switch (skill.kind) {
     case 'venom':
       if (live) {
+        // (only fresh venom waits: a troop already poisoned still takes its dose when it's due)
+        if (turns === 2 && !live.poisoned) live.poisonFresh = true;
         live.poisoned = Math.max(live.poisoned ?? 0, skill.amount!);
-        if (turns === 2) live.poisonFresh = true;
       }
       break;
     case 'slow':

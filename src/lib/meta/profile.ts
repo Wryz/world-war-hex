@@ -562,24 +562,36 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
   return { reward, previousStars, discovered, newCards, isNewBest, challengeCompleted, haul, firstFinds };
 };
 
+// More of one kind than any battle could gather (a count beyond it comes from a tampered save)
+const MAX_HAUL_OF_A_KIND = 999;
+
 // What of a battle's haul comes home: all of it from a win, nothing from a battle given up, and from
 // a defeat every relic and trophy plus the better half of the rest (rounded up)
 export const keptHaul = (outcome: Pick<BattleOutcome, 'won' | 'reason' | 'haul'>): Haul => {
   if (outcome.reason === 'resigned') return {};
-  // (only real materials, in whole numbers: a battle can come from a save file)
+  // (only real materials, in whole numbers and no more than a battle could hold: it can come from a
+  // save file)
   const haul = Object.entries(outcome.haul ?? {})
-    .filter((entry): entry is [MaterialId, number] => isMaterialId(entry[0]) && Number.isFinite(entry[1]) && entry[1] > 0)
-    .map(([id, count]) => [id, Math.floor(count)] as const);
-  if (outcome.won) return Object.fromEntries(haul.filter(([, count]) => count > 0));
+    .filter((entry): entry is [MaterialId, number] => isMaterialId(entry[0]) && Number.isFinite(entry[1]))
+    .map(([id, count]) => [id, Math.min(MAX_HAUL_OF_A_KIND, Math.floor(count))] as const)
+    .filter(([, count]) => count >= 1);
+  if (outcome.won) return Object.fromEntries(haul);
   const kept: Haul = {};
-  const rest: MaterialId[] = [];
+  const rest: [MaterialId, number][] = [];
   for (const [id, count] of haul) {
     const { category } = MATERIALS[id];
     if (category === 'relic' || category === 'trophy') kept[id] = count;
-    else for (let i = 0; i < count; i++) rest.push(id);
+    else rest.push([id, count]);
   }
-  rest.sort((a, b) => RARITY_ORDER.indexOf(MATERIALS[b].rarity) - RARITY_ORDER.indexOf(MATERIALS[a].rarity));
-  for (const id of rest.slice(0, Math.ceil(rest.length / 2))) kept[id] = (kept[id] ?? 0) + 1;
+  // The rarest first, until half of them (rounded up) are kept
+  rest.sort((a, b) => RARITY_ORDER.indexOf(MATERIALS[b[0]].rarity) - RARITY_ORDER.indexOf(MATERIALS[a[0]].rarity));
+  let room = Math.ceil(rest.reduce((sum, [, count]) => sum + count, 0) / 2);
+  for (const [id, count] of rest) {
+    const taken = Math.min(count, room);
+    if (taken <= 0) break;
+    kept[id] = taken;
+    room -= taken;
+  }
   return kept;
 };
 
