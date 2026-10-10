@@ -34,7 +34,9 @@ export type TerrainType =
   | 'gate'
   | 'bridge';
 
-export type PlayerType = 'player' | 'ai';
+// A side in the battle. The campaign and quick battles are fought between 'player' and 'ai'; a battle
+// between more sides (lib/game/sides) gives each of them an id of its own, like 's1'..'s8'
+export type PlayerType = string;
 
 export interface HexCoordinates {
   q: number; // Axial coordinates
@@ -176,6 +178,17 @@ export interface Player {
   baseHealth?: number; // Current health of player's base
   maxBaseHealth?: number; // Maximum health of player's base
   units: Unit[];
+  // In a battle between more sides: the name shown for the side, its team (sides on the same team are
+  // allies; without one every side fights alone), its colour (an index into the side colours), whether
+  // the AI plays it, and whether it is out of the battle (its castle fell, or it gave up)
+  name?: string;
+  team?: number;
+  color?: number;
+  ai?: boolean;
+  eliminated?: boolean;
+  // The round it was knocked out in, and how many sides were out before it (for the standings)
+  eliminatedOnTurn?: number;
+  eliminatedOrder?: number;
 }
 
 // Running tally of what each side has done in this battle, for callouts and rewards
@@ -224,8 +237,13 @@ export interface GameState {
   rosters?: Record<PlayerType, Roster>;
   // The player's cards in draw order: the first few are the hand
   deck?: UnitType[];
-  // Troops attacking the enemy castle this turn (they strike it when the turn ends)
-  siege?: { side: PlayerType; attackerIds: string[] };
+  // A battle between more sides (lib/game/sides): the sides in turn order (without it the battle is
+  // fought between 'player' and 'ai'), and each side's cards in draw order
+  sides?: PlayerType[];
+  decks?: Record<PlayerType, UnitType[]>;
+  // Troops attacking an enemy castle this turn (they strike it when the turn ends), and - in a battle
+  // between more sides - the side whose castle each one attacks (otherwise it is always the opponent's)
+  siege?: { side: PlayerType; attackerIds: string[]; targets?: Record<string, PlayerType> };
   // In the fog of war: the enemy troops each side has seen, as last seen, and the round it saw them
   sightings?: Record<PlayerType, Sighting[]>;
   battleStats?: Record<PlayerType, SideStats>;
