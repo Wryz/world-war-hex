@@ -1,6 +1,6 @@
 import type { GameState, Roster } from '@/types/game';
 import { DEFAULT_SETTINGS, createBattle } from '../game/gameState';
-import { PLAYER_CARD_IDS, TroopId, cardStats } from '../game/troops';
+import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId, cardStats } from '../game/troops';
 import type { Profile } from '../meta/profile';
 import { MAX_DECK_SIZE } from '../meta/economy';
 import { suggestLoadout } from '../meta/loadout';
@@ -8,10 +8,17 @@ import { LevelDef, enemyRosterStats, getLevel, levelEnemies } from './levels';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
 
-// Which battle is being fought: a campaign level, or a quick skirmish
+// A friend's result on a quick battle they shared (see challengePath), to beat
+export interface ChallengeTarget {
+  score: number;
+  won: boolean;
+}
+
+// Which battle is being fought: a campaign level, or a quick skirmish. A quick battle's map seed and
+// rival level are picked when it's built unless given (a challenge from a friend gives both).
 export type BattleConfig =
   | { mode: 'campaign'; levelId: number }
-  | { mode: 'quick'; difficulty: Difficulty };
+  | { mode: 'quick'; difficulty: Difficulty; seed?: number; rivalLevel?: number; challenge?: ChallengeTarget };
 
 const shuffle = <T,>(items: T[]): T[] => {
   const copy = [...items];
@@ -58,16 +65,27 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
 
   const owned = PLAYER_CARD_IDS.filter(id => profile.cards[id] !== undefined);
   const averageLevel = Math.max(1, Math.round(owned.reduce((sum, id) => sum + (profile.cards[id] ?? 1), 0) / Math.max(1, owned.length)));
+  const rivalLevel = clampRivalLevel(config.rivalLevel ?? averageLevel);
+  const seed = config.seed ?? randomSeed();
   const cards = battleDeck(profile, QUICK_RIVAL_CARDS);
-  return createBattle({ ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy' }, {
+  const state = createBattle({ ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy', seed }, {
     rosters: {
       player: deckRoster(cards, profile.cards),
-      ai: Object.fromEntries(QUICK_RIVAL_CARDS.map(id => [id, cardStats(id, averageLevel)]))
+      ai: Object.fromEntries(QUICK_RIVAL_CARDS.map(id => [id, cardStats(id, rivalLevel)]))
     },
     deck: shuffle(cards),
-    chooseCastle: true
+    chooseCastle: true,
+    battleSeed: quickBattleSeed(seed)
   });
+  return { ...state, rivalLevel };
 };
+
+// Seeds are whole numbers that fit a link
+export const MAX_SEED = 2 ** 31 - 1;
+const randomSeed = () => Math.floor(Math.random() * MAX_SEED);
+export const clampRivalLevel = (level: number) => Math.min(MAX_CARD_LEVEL, Math.max(1, Math.round(level)));
+// (the great trees and fires come from a seed of their own, made from the map's)
+const quickBattleSeed = (seed: number) => (Math.imul(seed, 2654435761) >>> 1) % MAX_SEED;
 
 // Every troop type that can appear in a battle, so its models can be downloaded up front
 export const battleTroopTypes = (config: BattleConfig, profile: Profile): TroopId[] => {

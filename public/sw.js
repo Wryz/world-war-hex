@@ -24,6 +24,12 @@ const ASSETS = [
   '/music/manifest.json',
   '/logo.png',
   '/favicon.ico',
+  '/manifest.webmanifest',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/icon-maskable-192.png',
+  '/icons/icon-maskable-512.png',
+  '/icons/apple-touch-icon.png',
   ...self.__PRECACHE.files
 ];
 

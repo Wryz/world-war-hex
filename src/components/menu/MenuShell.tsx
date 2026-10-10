@@ -54,7 +54,7 @@ interface MenuShellProps {
 // Layout shared by the menu screens: sky background, a header with a back button, and the resources
 export const MenuShell: React.FC<MenuShellProps> = ({ title, icon, backHref = '/', children, actions, wide = false }) => (
   <div className="min-h-screen w-full overflow-x-hidden" style={{ background: SKY_BACKGROUND }}>
-    <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-sky-200/95 px-3 pb-4 pt-3 backdrop-blur-[2px] sm:px-6">
+    <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-sky-200/95 pb-4 pl-[calc(0.75rem+var(--safe-l))] pr-[calc(0.75rem+var(--safe-r))] pt-[calc(0.75rem+var(--safe-t))] backdrop-blur-[2px] sm:pl-[calc(1.5rem+var(--safe-l))] sm:pr-[calc(1.5rem+var(--safe-r))]">
       <Link
         href={backHref}
         className={`${SECONDARY_BUTTON} flex items-center gap-1 px-3 py-2 text-base`}
@@ -73,6 +73,6 @@ export const MenuShell: React.FC<MenuShellProps> = ({ title, icon, backHref = '/
         <ResourceBadges />
       </div>
     </header>
-    <main className={`mx-auto px-3 pb-16 sm:px-6 ${wide ? 'max-w-6xl' : 'max-w-4xl'}`}>{children}</main>
+    <main className={`mx-auto pb-[calc(4rem+var(--safe-b))] pl-[calc(0.75rem+var(--safe-l))] pr-[calc(0.75rem+var(--safe-r))] sm:pl-[calc(1.5rem+var(--safe-l))] sm:pr-[calc(1.5rem+var(--safe-r))] ${wide ? 'max-w-6xl' : 'max-w-4xl'}`}>{children}</main>
   </div>
 );

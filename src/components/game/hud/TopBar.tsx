@@ -78,7 +78,7 @@ export const TopBar: React.FC<TopBarProps> = ({
   ].filter(Boolean).join(', ');
 
   return (
-    <div className="fixed top-3 inset-x-3 z-30 flex items-start justify-between gap-3 pointer-events-none">
+    <div className="fixed top-[calc(0.75rem+var(--safe-t))] left-[calc(0.75rem+var(--safe-l))] right-[calc(0.75rem+var(--safe-r))] z-30 flex items-start justify-between gap-3 pointer-events-none">
       {/* Turn */}
       <div className={`${PANEL_CLASS} pointer-events-auto flex items-center gap-1.5 whitespace-nowrap px-2 py-1.5 text-sm sm:gap-2 sm:px-3`}>
         <span className={`font-display ${isFinalRound ? 'text-red-400 animate-pulse' : 'text-slate-300'}`} title={`The battle ends after round ${maxRounds}`}>
@@ -128,8 +128,9 @@ export const TopBar: React.FC<TopBarProps> = ({
         })()}
       </div>
 
-      {/* Castles */}
-      <div className={`${PANEL_CLASS} pointer-events-auto hidden md:flex items-center gap-3 px-3 py-2`}>
+      {/* Castles (from the width it fits at: below that, a landscape phone or small tablet, the
+          castles' own health tags on the board show it, and the buttons on the right stay on screen) */}
+      <div className={`${PANEL_CLASS} pointer-events-auto hidden lg:flex items-center gap-3 px-3 py-2`}>
         <CastleHealth
           title="Your castle"
           health={yourCastle}

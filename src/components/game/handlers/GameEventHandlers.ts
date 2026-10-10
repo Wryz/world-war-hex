@@ -38,6 +38,7 @@ import { playBattleSound } from '../utils/battleSounds';
 import { getGameSpeed } from '../effects/effects';
 import { pendingHealthWait } from '../effects/healthTimeline';
 import { BATTLE_DURATION_MS, getArrivalTime, getBattleStartDelay, setBattleStartDelay } from '../utils/battleTiming';
+import { createReplayLog, recordFrame } from '../replay/replay';
 import {
   BattleConfig,
   loadGameFromLocalStorage,
@@ -148,9 +149,14 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
   const timerRef = useRef(timer);
   timerRef.current = timer;
 
-  const commitState = useCallback((newState: GameState) => {
+  // The battle as the board showed it, to watch again once it's over (the player's orders are kept as
+  // they stand when the turn ends, not one by one)
+  const replayRef = useRef(createReplayLog(initialGame.gameState));
+
+  const commitState = useCallback((newState: GameState, record = true) => {
     stateRef.current = newState;
     setGameState(newState);
+    if (record) recordFrame(replayRef.current, newState);
   }, []);
 
   // The player's orders this turn, so the last one can be taken back: the state before each
@@ -160,7 +166,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     if (newState === stateRef.current) return;
     orderHistoryRef.current.push(stateRef.current);
     setCanUndo(true);
-    commitState(newState);
+    commitState(newState, false);
   }, [commitState]);
   // A new turn (or a new battle) starts with nothing to undo
   useEffect(() => {
@@ -221,6 +227,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     if (current.currentPhase !== 'planning' || (current.activePlayer ?? 'player') !== 'player') return;
 
     clearSelection();
+    recordFrame(replayRef.current, current);
     commitState(executeTurn(current));
   }, [clearSelection, commitState]);
 
@@ -294,7 +301,9 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
   const handleRestart = () => {
     clearSavedGame();
     elapsedRef.current = 0;
-    commitState(buildBattle(battle, getProfile()));
+    const fresh = buildBattle(battle, getProfile());
+    replayRef.current = createReplayLog(fresh);
+    commitState(fresh, false);
     clearSelection();
   };
 
@@ -489,7 +498,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     if (!previous) return;
     clearSelection();
     // Keep the clock running from where it is now
-    commitState({ ...previous, planningTimeRemaining: stateRef.current.planningTimeRemaining });
+    commitState({ ...previous, planningTimeRemaining: stateRef.current.planningTimeRemaining }, false);
   }, [clearSelection, commitState]);
 
   // Handle unit selection by clicking a unit on the board. A tap on one of your own troops always
@@ -543,5 +552,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false }: Ga
     notice,
     actionChoice,
     handleActionChoice,
+    // The frames of the battle so far (see replay/replay.ts)
+    getReplayFrames: () => replayRef.current.frames,
   };
 };

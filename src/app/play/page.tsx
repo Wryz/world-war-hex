@@ -1,22 +1,18 @@
 'use client';
 
 import { GameController } from '@/components/game/GameController';
-import { BattleConfig, Difficulty, battlePath, sameBattle } from '@/components/game/storage/GameStorage';
+import { BattleConfig, battlePath, quickBattleFromParams, sameBattle } from '@/components/game/storage/GameStorage';
 import { LEVEL_COUNT } from '@/lib/campaign/levels';
 import { isLevelUnlocked, getProfile } from '@/lib/meta/profile';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, Suspense } from 'react';
 
-const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
-
 const LoadingFallback = () => <div className="h-screen w-screen bg-slate-900" />;
 
-// The battle a URL asks for: /play?level=7 or /play?mode=quick&difficulty=hard
+// The battle a URL asks for: /play?level=7 or /play?mode=quick&difficulty=hard (a friend's challenge
+// adds &seed=, &rival=, &score= and &won=)
 const battleFromParams = (params: URLSearchParams): BattleConfig | null => {
-  if (params.get('mode') === 'quick') {
-    const requested = params.get('difficulty') as Difficulty | null;
-    return { mode: 'quick', difficulty: requested && DIFFICULTIES.includes(requested) ? requested : 'medium' };
-  }
+  if (params.get('mode') === 'quick') return quickBattleFromParams(params);
   const level = Math.round(Number(params.get('level')));
   return level >= 1 && level <= LEVEL_COUNT ? { mode: 'campaign', levelId: level } : null;
 };

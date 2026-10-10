@@ -48,7 +48,7 @@ export const CardHand: React.FC<CardHandProps> = ({
 
   if (isAITurn) {
     return (
-      <div className="fixed bottom-4 inset-x-0 z-20 flex justify-center pointer-events-none">
+      <div className="fixed bottom-[calc(1rem+var(--safe-b))] left-[var(--safe-l)] right-[var(--safe-r)] z-20 flex justify-center pointer-events-none">
         <div className={`${PANEL_CLASS} px-5 py-2.5 flex items-center gap-3 text-sm`}>
           <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
           <span className="font-semibold">Enemy is planning…</span>
@@ -58,7 +58,7 @@ export const CardHand: React.FC<CardHandProps> = ({
   }
 
   return (
-    <div className="fixed bottom-2 inset-x-2 z-20 flex flex-col items-center gap-2 pointer-events-none" data-tutorial="hand">
+    <div className="fixed bottom-[calc(0.5rem+var(--safe-b))] left-[calc(0.5rem+var(--safe-l))] right-[calc(0.5rem+var(--safe-r))] z-20 flex flex-col items-center gap-2 pointer-events-none" data-tutorial="hand">
       {hint && (
         <div className="rounded-full bg-slate-900/85 px-4 py-1.5 text-center text-xs font-semibold text-slate-100 shadow">
           {hint}

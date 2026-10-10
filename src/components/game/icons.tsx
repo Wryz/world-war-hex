@@ -22,7 +22,7 @@ import {
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuCheck, LuSkipForward, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
   LuVolume2, LuVolumeX, LuHouse, LuStar, LuDownload, LuUpload, LuMusic, LuShare2, LuX, LuChevronLeft, LuTrash2, LuPlay,
-  LuSettings, LuBookOpen, LuGamepad2
+  LuSettings, LuBookOpen, LuGamepad2, LuPause, LuClapperboard
 } from 'react-icons/lu';
 import { Ability, TerrainType, UnitAction, UnitType } from '@/types/game';
 import type { BossPowerId } from '@/lib/game/bosses';
@@ -248,6 +248,9 @@ export const ShareIcon = icon(LuShare2);
 export const CloseIcon = icon(LuX);
 export const TrashIcon = icon(LuTrash2);
 export const PlayIcon = icon(LuPlay);
+export const PauseIcon = icon(LuPause);
+// Watching a battle again
+export const ReplayIcon = icon(LuClapperboard);
 
 // A card's signature ability
 export const SignatureIcon = icon(GiSparkles, '#f0abfc');
