@@ -33,7 +33,7 @@ import {
   rotateHex,
   DIRECTIONS
 } from './hexUtils';
-import { ALL_THEMES, createHexagonalGrid, isSmallField, mineValue } from './mapGenerator';
+import { createHexagonalGrid } from './mapGenerator';
 import {
   BURN_TURNS, FELL_DAMAGE, FIRE_DAMAGE, LAVA_FLARE_CHANCE, MAX_FIRES, SPREAD_CHANCE, featureMoveCost, featureSightHeight,
   fellLandingHex, isBlockedByFeature, isFlammable, pickGreatTrees
@@ -68,17 +68,17 @@ import {
   isMultiSide, lastTeamStanding, nextSide, sideName, sidePossessive, sideVerb, TWO_SIDES
 } from './sides';
 
-// Default game settings: a small board, a full treasury and short turns, so the armies meet at
-// once and a battle takes a few minutes
+// Default game settings: a small board, a full treasury and short turns, so the armies meet early
+// and a battle takes a few minutes
 export const DEFAULT_SETTINGS: GameSettings = {
-  gridSize: 3, // Hexes from the centre to the edge: 7 hexes across, 37 in total
+  gridSize: 4, // Hexes from the centre to the edge: 9 hexes across, 61 in total
   planningPhaseTime: 30,
   aiDifficulty: 'medium',
   resourceHexCount: 3,
   castleHealth: 26,
   startingGold: 45,
   aiIncomeBonus: 0,
-  maxRounds: 12
+  maxRounds: 14
 };
 
 // Default castle health (each battle's settings may change it)
@@ -782,44 +782,6 @@ const placeCamps = (state: GameState, castles: HexCoordinates[], symmetry = 1): 
   for (const camp of best) setUpCamp(state, camp);
 };
 
-// A small field's gold mines and healing springs go down once its castles stand (a larger map brings
-// its own - see createHexagonalGrid): the mines before the buildings, the springs wherever is left
-// after them. Each goes where neither side has the longer march, off the edge and never beside a
-// castle, apart from the others and the camps if there is room.
-const MIN_FEATURE_CASTLE_DISTANCE = 2;
-const placeSmallFieldFeatures = (state: GameState, castles: HexCoordinates[], kind: 'mines' | 'springs'): void => {
-  const { gridSize, resourceHexCount } = getSettings(state);
-  if (!isSmallField(gridSize)) return;
-  const center = { q: 0, r: 0 };
-  let draws = 0;
-  const random = () => seededRandom((state.battleSeed ?? 0) + (kind === 'mines' ? 5303 : 6247) + 11 * draws++);
-  const taken = state.hexGrid.filter(hex => hex.isCamp || hex.isResourceHex || hex.terrain === 'spring').map(hex => hex.coordinates);
-  const count = kind === 'mines' ? resourceHexCount : ALL_THEMES.find(theme => theme.name === state.mapName)?.springs ?? 0;
-  for (let placed = 0; placed < count; placed++) {
-    // (apart from the others if there is room, side by side if there isn't - and a spring, which
-    // heals both sides' troops alike, a little off the middle if need be)
-    for (const [spacing, tolerance] of [[2, 0], [2, 1], [1, 0], [1, 1], [2, 2], [1, 2], ...(kind === 'springs' ? [[1, 3], [1, 4]] : [])]) {
-      const options = state.hexGrid.filter(hex => {
-        const { gap, nearest } = castleMarches(hex.coordinates, castles);
-        const effect = TERRAIN_EFFECTS[hex.terrain];
-        return gap <= tolerance && nearest >= MIN_FEATURE_CASTLE_DISTANCE && getHexDistance(hex.coordinates, center) < gridSize &&
-          !hex.isBase && !hex.isCamp && !hex.isResourceHex && !hex.feature && !isImpassable(hex) && !isStructure(hex.terrain) &&
-          !effect.damagePerTurn && !effect.healPerTurn && taken.every(other => getHexDistance(other, hex.coordinates) >= spacing);
-      });
-      if (options.length === 0) continue;
-      // (as far from the others as it can be)
-      const best = options
-        .map(hex => ({ hex, score: Math.min(9, ...taken.map(other => getHexDistance(other, hex.coordinates))) + random() }))
-        .sort((a, b) => b.score - a.score)[0].hex;
-      updateHex(state, best.coordinates, kind === 'mines'
-        ? { terrain: 'resource', isResourceHex: true, resourceValue: mineValue(random) }
-        : { terrain: 'spring' });
-      taken.push(best.coordinates);
-      break;
-    }
-  }
-};
-
 // The camp hex becomes open ground with room around it to deploy recruits
 const setUpCamp = (state: GameState, camp: Hex): void => {
   updateHex(state, camp.coordinates, { isCamp: true, terrain: 'plain', owner: undefined });
@@ -892,12 +854,9 @@ const placeCampsBetween = (state: GameState, castles: HexCoordinates[], candidat
 // Buildings go up where neither side has the longer march to them (see lib/game/structures): a
 // catapult tower near the middle, two workshops (a lumber mill only where great trees grow), a
 // watchtower on each flank (on hills where there are some), then a hamlet of houses wherever is left. Each needs open
-// ground around it and room from the castles, camps and other buildings (on a small field, buildings may
-// stand side by side and a hex nearer the castles).
+// ground around it and room from the castles, camps and other buildings.
 const STRUCTURE_SPACING = 2;
 const MIN_STRUCTURE_CASTLE_DISTANCE = 3;
-const SMALL_FIELD_STRUCTURE_SPACING = 1;
-const SMALL_FIELD_STRUCTURE_CASTLE_DISTANCE = 2;
 const BUILDABLE: TerrainType[] = ['plain', 'forest', 'hills', 'desert', 'swamp', 'snow', 'ruins', 'village'];
 
 const placeStructures = (state: GameState, castles: HexCoordinates[]): void => {
@@ -906,16 +865,13 @@ const placeStructures = (state: GameState, castles: HexCoordinates[]): void => {
   let draws = 0;
   const random = () => seededRandom((state.battleSeed ?? 0) + 7717 + 13 * draws++);
   const taken = state.hexGrid.filter(hex => hex.isCamp).map(hex => hex.coordinates);
-  const small = isSmallField(gridSize);
-  const structureSpacing = small ? SMALL_FIELD_STRUCTURE_SPACING : STRUCTURE_SPACING;
-  const castleDistance = small ? SMALL_FIELD_STRUCTURE_CASTLE_DISTANCE : MIN_STRUCTURE_CASTLE_DISTANCE;
   const canBuild = (hex: Hex) => !hex.isBase && !hex.isCamp && !hex.isResourceHex && !hex.feature && BUILDABLE.includes(hex.terrain);
   const isFair = (hex: Hex, tolerance: number) => {
     const { gap, nearest } = castleMarches(hex.coordinates, castles);
-    return gap <= tolerance && nearest >= castleDistance &&
+    return gap <= tolerance && nearest >= MIN_STRUCTURE_CASTLE_DISTANCE &&
       getHexDistance(hex.coordinates, center) < gridSize;
   };
-  const build = (terrain: StructureTerrain, tolerance: number, preference: (hex: Hex) => number = () => 0, spacing = structureSpacing): Hex | null => {
+  const build = (terrain: StructureTerrain, tolerance: number, preference: (hex: Hex) => number = () => 0, spacing = STRUCTURE_SPACING): Hex | null => {
     for (const allowed of [tolerance, tolerance + 1, tolerance + 2]) {
       const options = state.hexGrid.filter(hex => canBuild(hex) && isFair(hex, allowed) &&
         taken.every(other => getHexDistance(other, hex.coordinates) >= spacing));
@@ -1001,7 +957,7 @@ const placeStructures = (state: GameState, castles: HexCoordinates[]): void => {
       if (houses >= HAMLET_SIZE) break;
       const hex = findHexByCoordinates(state.hexGrid, c);
       if (!hex || !canBuild(hex) || taken.some(other => coordsEqual(other, c) || (getHexDistance(other, c) < 2 && !coordsEqual(other, heart.coordinates)))) continue;
-      if (castleMarches(c, castles).nearest < castleDistance) continue;
+      if (castleMarches(c, castles).nearest < MIN_STRUCTURE_CASTLE_DISTANCE) continue;
       updateHex(state, c, { terrain: 'house', feature: undefined });
       taken.push(c);
       houses++;
@@ -1051,10 +1007,8 @@ export const placeBases = (state: GameState, coordinates: HexCoordinates): GameS
   }
   const castles = [playerHex.coordinates, aiHex.coordinates];
   placeCamps(newState, castles);
-  placeSmallFieldFeatures(newState, castles, 'mines');
   // The first battle teaches the basics on a field without buildings
   if (newState.levelId !== 1) placeStructures(newState, castles);
-  placeSmallFieldFeatures(newState, castles, 'springs');
   placeHarvest(newState, castles);
 
   const startedState: GameState = {
@@ -1165,9 +1119,7 @@ export const placeAllCastles = (state: GameState): GameState => {
   const { newState, castles } = seated;
   // (castles in the order they stand around the map)
   placeCamps(newState, castles, symmetry);
-  placeSmallFieldFeatures(newState, castles, 'mines');
   placeStructures(newState, castles);
-  placeSmallFieldFeatures(newState, castles, 'springs');
   const started: GameState = {
     ...newState,
     currentPhase: 'planning',

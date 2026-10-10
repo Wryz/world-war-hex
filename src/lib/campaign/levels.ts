@@ -289,14 +289,14 @@ export const getLevel = (levelId: number): LevelDef => {
     guards.push({ type: champion, stats: scaleTroop(TROOPS[champion], enemyScale * CHAMPION_STRENGTH, enemyTier), isChampion: true });
   }
 
-  // The first battle is fought on a hand-laid field of its own (tutorialField.ts), castles four hexes
-  // apart, with a lighter purse and castles; every other battle on the usual small field 7 hexes
-  // across (DEFAULT_SETTINGS), where the armies meet at once
+  // The first battle is fought on a hand-laid field of its own (tutorialField.ts) 7 hexes across,
+  // castles four hexes apart, with a lighter purse and castles; every other battle on the usual field
+  // 9 hexes across (DEFAULT_SETTINGS)
   const settings: GameSettings = {
     ...DEFAULT_SETTINGS,
     aiDifficulty: isTutorial || id <= 6 ? 'easy' : id <= 35 ? 'medium' : 'hard',
     castleHealth: castleHealthAt(id),
-    ...(isTutorial ? { resourceHexCount: 0, castleHealth: 20, startingGold: 30 } : {}),
+    ...(isTutorial ? { gridSize: 3, maxRounds: 12, resourceHexCount: 0, castleHealth: 20, startingGold: 30 } : {}),
     aiIncomeBonus: isTutorial ? -2 : Math.floor((id - 1) / 25),
     // The fog of war rolls in from the second region, once the basics are learned
     fogOfWar: id >= FOG_FROM_LEVEL,

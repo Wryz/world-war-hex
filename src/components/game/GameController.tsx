@@ -424,7 +424,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           <div className="max-w-md rounded-2xl bg-slate-900/90 px-5 py-3 text-center text-slate-100 shadow-xl ring-1 ring-emerald-300/50">
             <div className="font-display text-xl text-emerald-300">Choose your castle&apos;s site</div>
             <p className="mt-1 text-sm text-slate-300">
-              Tap one of the glowing hexes on your edge of the map. Look for high ground and cover nearby - the enemy builds across the map from you, and the camps, gold mines and buildings go up between you, as near to one side as the other.
+              Tap one of the glowing hexes on your edge of the map. Look for high ground, cover and gold mines nearby - the enemy builds across the map from you.
             </p>
           </div>
         </div>
