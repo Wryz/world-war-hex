@@ -59,12 +59,12 @@ export const CardDetailSheet: React.FC<CardDetailSheetProps> = ({ id, onClose, o
   }, [onClose]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 p-0 backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 pl-[var(--safe-l)] pr-[var(--safe-r)] pt-[var(--safe-t)] backdrop-blur-[2px] sm:items-center sm:p-4" onClick={onClose}>
       <div
         role="dialog"
         aria-label={troop.name}
         onClick={event => event.stopPropagation()}
-        className={`${CARD_CLASS} animate-fadeIn relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-4 sm:rounded-b-2xl sm:p-5`}
+        className={`${CARD_CLASS} animate-fadeIn relative max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-b-none p-4 pb-[calc(1rem+var(--safe-b))] sm:rounded-b-2xl sm:p-5`}
       >
         <button onClick={onClose} className="absolute right-3 top-3 rounded-full bg-slate-800 px-3 py-1 text-sm font-bold text-slate-300 hover:bg-slate-700" aria-label="Close">✕</button>
 

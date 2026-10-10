@@ -22,6 +22,7 @@ export type AnalyticsEvent =
   | 'cosmetic_bought'
   | 'save_exported'
   | 'save_imported'
+  | 'app_installed'
   | 'castle_chosen'
   | 'ad_reward_offered'
   | 'ad_reward_watched'

@@ -8,6 +8,8 @@ import { CombatResolver } from './combat/CombatResolver';
 import { ResultsScreen } from './shared/ResultsScreen';
 import { TUTORIAL_BATTLE, TutorialOverlay, TutorialVisuals, useTutorial } from './shared/TutorialGuide';
 import { RuleTips } from './shared/RuleTips';
+import { BattleReplay } from './replay/BattleReplay';
+import { ReplayFrame, canReplay } from './replay/replay';
 import { BossBar } from './hud/BossBar';
 import { WeatherVeil } from './WeatherEffects';
 import { challengeMet } from '@/lib/campaign/challenges';
@@ -95,7 +97,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     canUndo,
     notice,
     actionChoice,
-    handleActionChoice
+    handleActionChoice,
+    getReplayFrames
   } = useGameHandlers({ battle, resume: shouldContinueGame, isReady, untimed: showTutorial });
 
   // Each region of the campaign can have battle (and boss) music of its own, by its enemy faction
@@ -113,6 +116,11 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     startedRef.current = true;
     if (isFogOfWar(gameState)) {
       setTimeout(() => emitMoment({ title: 'Fog of War', subtitle: 'You only see what your troops can see', tone: 'purple', explain: true }), 1200);
+    }
+    // A friend's challenge: their score is the one to beat
+    if (battle.mode === 'quick' && battle.challenge) {
+      const { score } = battle.challenge;
+      setTimeout(() => emitMoment({ title: 'Challenge!', subtitle: `Your friend scored ${score} points here - beat it`, tone: 'blue', explain: true }), isFogOfWar(gameState) ? 3600 : 1200);
     }
     if (shouldContinueGame && gameState.turnNumber > 1) return;
     const profile = getProfile();
@@ -141,6 +149,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   const [finished, setFinished] = useState<FinishedBattle | null>(null);
   const [showResults, setShowResults] = useState(false);
   const [showBossIntro, setShowBossIntro] = useState(() => !!level?.isBoss && gameState.turnNumber <= 1);
+  // Watching the battle again from the results screen
+  const [replayFrames, setReplayFrames] = useState<ReplayFrame[] | null>(null);
 
   // The first battle shows what to do (see TutorialGuide); it counts as done once the battle is over
   const tutorial = useTutorial({
@@ -260,6 +270,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
   };
 
   const handleRetry = () => {
+    setReplayFrames(null);
     setFinished(null);
     // (the tutorial battle is the tutorial again)
     setShowTutorial(battle.mode === 'campaign' && battle.levelId === TUTORIAL_BATTLE);
@@ -306,10 +317,17 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         : "This unit can't move this turn"
       : null;
 
+  // A quick battle can be fought again by a friend: the same map and rival, with this score to beat
+  const skirmish = battle.mode === 'quick' && gameState.settings?.seed !== undefined && gameState.rivalLevel !== undefined
+    ? { difficulty: battle.difficulty, seed: gameState.settings.seed, rivalLevel: gameState.rivalLevel, target: battle.challenge }
+    : undefined;
+
   return (
     <div className="relative w-full h-full">
-      <WeatherVeil gameState={gameState} />
-      <GameBoard
+      {/* (watching the battle again swaps in a board of its own; the results stay as they were, hidden) */}
+      {replayFrames && <BattleReplay frames={replayFrames} onClose={() => { resetEffects(); setReplayFrames(null); }} />}
+      {!replayFrames && <WeatherVeil gameState={gameState} />}
+      {!replayFrames && <GameBoard
         gameState={viewState}
         unitIds={unitIds}
         showThreats={showThreats && isPlayerPlanning}
@@ -321,7 +339,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
         onUnitClick={onBoardUnitClick}
         onUnitPurchase={onBoardUnitPurchase}
         tutorial={tutorialVisuals}
-      />
+      />}
 
       {(currentPhase === 'planning' || currentPhase === 'combat' || currentPhase === 'execution') && (
         <>
@@ -340,11 +358,11 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
           />
           <BossBar gameState={gameState} />
           {/* (on a phone it sits just above the hand, clear of the boss bar and tips at the top) */}
-          <div className="fixed bottom-[10.75rem] left-2 z-20 pointer-events-none sm:bottom-auto sm:left-3 sm:top-16">
+          <div className="fixed bottom-[calc(10.75rem+var(--safe-b))] left-[calc(0.5rem+var(--safe-l))] z-20 pointer-events-none sm:bottom-auto sm:left-[calc(0.75rem+var(--safe-l))] sm:top-[calc(4rem+var(--safe-t))]">
             <SelectionCard gameState={viewState} selectedHex={selectedHex} selectedUnit={selectedUnit} />
           </div>
           {/* Capped above the battle card and the hand so panels never run under them */}
-          <div className="fixed right-3 top-16 z-20 hidden max-h-[calc(100vh-17rem)] w-64 flex-col gap-2 overflow-y-auto pointer-events-none sm:flex">
+          <div className="fixed right-[calc(0.75rem+var(--safe-r))] top-[calc(4rem+var(--safe-t))] z-20 hidden max-h-[calc(100vh-17rem-var(--safe-t)-var(--safe-b))] w-64 flex-col gap-2 overflow-y-auto pointer-events-none sm:flex">
             <EventFeed log={gameState.log ?? []} />
           </div>
           <TurnBanner phase={currentPhase} activePlayer={activePlayer} turnNumber={gameState.turnNumber} maxRounds={getMaxRounds(gameState)} />
@@ -366,7 +384,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
       {/* Move onto the hex, or work on it? */}
       {actionChoice && isPlayerPlanning && (
-        <div className="fixed inset-x-0 bottom-48 z-40 flex justify-center px-3">
+        <div className="fixed inset-x-0 bottom-[calc(12rem+var(--safe-b))] z-40 flex justify-center px-3">
           <div className="animate-fadeIn flex flex-wrap items-center justify-center gap-2 rounded-2xl bg-slate-900/95 p-2 shadow-2xl ring-1 ring-white/10" role="group" aria-label="Choose an order">
             {actionChoice.canMove && (
               <button onClick={() => handleActionChoice(null)} data-tutorial="move-here" className="font-display flex items-center gap-1.5 rounded-xl bg-slate-100 px-3 py-2 text-sm text-slate-900 hover:bg-white">
@@ -385,7 +403,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
 
       {/* Before the first turn: choose the castle's site */}
       {currentPhase === 'setup' && isReady && gameState.castleChoices && (
-        <div className="fixed inset-x-3 top-4 z-20 flex justify-center pointer-events-none">
+        <div className="fixed inset-x-3 top-[calc(1rem+var(--safe-t))] z-20 flex justify-center pointer-events-none">
           <div className="max-w-md rounded-2xl bg-slate-900/90 px-5 py-3 text-center text-slate-100 shadow-xl ring-1 ring-emerald-300/50">
             <div className="font-display text-xl text-emerald-300">Choose your castle&apos;s site</div>
             <p className="mt-1 text-sm text-slate-300">
@@ -404,7 +422,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       )}
       {mechanic?.hex && <TutorialOverlay gameState={gameState} pointer={{ hex: mechanic.hex, caption: mechanic.caption }} introRunning={false} onSkipIntro={() => undefined} />}
       {mechanic && !mechanic.hex && (
-        <div className="pointer-events-none fixed inset-x-0 top-20 z-[45] flex justify-center px-4">
+        <div className="pointer-events-none fixed inset-x-0 top-[calc(5rem+var(--safe-t))] z-[45] flex justify-center px-4">
           <span className="animate-fadeIn max-w-md rounded-xl bg-slate-900/90 px-4 py-2 text-center text-sm font-bold leading-snug text-amber-100 shadow-lg ring-2 ring-amber-300/70">
             {mechanic.caption}
           </span>
@@ -418,28 +436,32 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       <EffectsLayer />
 
       {finished && showResults && (
-        <ResultsScreen
-          won={finished.won}
-          reason={gameState.winReason}
-          level={level}
-          stars={finished.stars}
-          record={finished.record}
-          rounds={gameState.turnNumber}
-          stats={gameState.battleStats!.player}
-          durationSeconds={elapsedRef.current}
-          coinsTotal={getProfile().coins}
-          power={profilePower(getProfile())}
-          onNext={nextLevel ? leaveResults(`/play?level=${nextLevel}`) : undefined}
-          onRetry={handleRetry}
-          onMap={leaveResults(exitPath)}
-          onArmy={leaveResults('/army')}
-          points={{ you: getStarScore(gameState, 'player'), enemy: getStarScore(gameState, 'ai') }}
-          challengeMet={challengeMet(gameState)}
-        />
+        <div className={replayFrames ? 'hidden' : 'contents'}>
+          <ResultsScreen
+            won={finished.won}
+            reason={gameState.winReason}
+            level={level}
+            stars={finished.stars}
+            record={finished.record}
+            rounds={gameState.turnNumber}
+            stats={gameState.battleStats!.player}
+            durationSeconds={elapsedRef.current}
+            coinsTotal={getProfile().coins}
+            power={profilePower(getProfile())}
+            onNext={nextLevel ? leaveResults(`/play?level=${nextLevel}`) : undefined}
+            onRetry={handleRetry}
+            onMap={leaveResults(exitPath)}
+            onArmy={leaveResults('/army')}
+            points={{ you: getStarScore(gameState, 'player'), enemy: getStarScore(gameState, 'ai') }}
+            challengeMet={challengeMet(gameState)}
+            skirmish={skirmish}
+            onWatchReplay={canReplay(getReplayFrames()) ? () => { resetEffects(); setReplayFrames([...getReplayFrames()]); } : undefined}
+          />
+        </div>
       )}
 
       {toast && (
-        <div className="fixed top-20 inset-x-0 z-40 flex justify-center pointer-events-none" role="status" aria-live="polite">
+        <div className="fixed top-[calc(5rem+var(--safe-t))] inset-x-0 z-40 flex justify-center pointer-events-none" role="status" aria-live="polite">
           <div
             key={toast.id}
             className={`animate-fadeIn flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold shadow-lg ${

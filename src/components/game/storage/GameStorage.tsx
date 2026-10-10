@@ -1,7 +1,8 @@
 import { GameState } from '@/types/game';
-import type { BattleConfig } from '@/lib/campaign/battleSetup';
+import type { BattleConfig, ChallengeTarget, Difficulty } from '@/lib/campaign/battleSetup';
+import { MAX_SEED, clampRivalLevel } from '@/lib/campaign/battleSetup';
 
-export type { BattleConfig, Difficulty } from '@/lib/campaign/battleSetup';
+export type { BattleConfig, ChallengeTarget, Difficulty } from '@/lib/campaign/battleSetup';
 
 const SAVE_KEY = 'hexStrategyGameSave';
 // Bump when the saved state's shape changes so old saves are ignored instead of breaking the game
@@ -21,13 +22,54 @@ interface SaveFile {
   timestamp: string;
 }
 
+// A quick battle's address: its difficulty, and when fixed its map, rival and a friend's score to beat
+const quickQuery = (battle: Extract<BattleConfig, { mode: 'quick' }>) => {
+  const params = new URLSearchParams({ mode: 'quick', difficulty: battle.difficulty });
+  if (battle.seed !== undefined) params.set('seed', String(battle.seed));
+  if (battle.rivalLevel !== undefined) params.set('rival', String(battle.rivalLevel));
+  if (battle.challenge) {
+    params.set('score', String(battle.challenge.score));
+    params.set('won', battle.challenge.won ? '1' : '0');
+  }
+  return params.toString();
+};
+
 // Address of a battle's page; `resume` continues the saved battle
 export const battlePath = (battle: BattleConfig, resume = false) =>
-  (battle.mode === 'campaign' ? `/play?level=${battle.levelId}` : `/play?mode=quick&difficulty=${battle.difficulty}`) +
+  (battle.mode === 'campaign' ? `/play?level=${battle.levelId}` : `/play?${quickQuery(battle)}`) +
   (resume ? '&resume=1' : '');
 
+// The link that challenges a friend to the quick battle just fought: same map, same rival, and the
+// points to beat
+export const challengePath = (difficulty: Difficulty, seed: number, rivalLevel: number, target: ChallengeTarget) =>
+  battlePath({ mode: 'quick', difficulty, seed, rivalLevel, challenge: target });
+
+const DIFFICULTIES: Difficulty[] = ['easy', 'medium', 'hard'];
+const wholeNumber = (value: string | null, min: number, max: number) => {
+  if (value === null || !/^\d{1,10}$/.test(value)) return undefined;
+  const number = Number(value);
+  return number >= min && number <= max ? number : undefined;
+};
+
+// The quick battle a page's address asks for (a challenge link's map, rival and score included)
+export const quickBattleFromParams = (params: URLSearchParams): Extract<BattleConfig, { mode: 'quick' }> => {
+  const requested = params.get('difficulty') as Difficulty | null;
+  const difficulty = requested && DIFFICULTIES.includes(requested) ? requested : 'medium';
+  const seed = wholeNumber(params.get('seed'), 0, MAX_SEED);
+  const rival = wholeNumber(params.get('rival'), 1, 99);
+  const score = wholeNumber(params.get('score'), 0, 100000);
+  return {
+    mode: 'quick',
+    difficulty,
+    ...(seed !== undefined ? { seed } : {}),
+    ...(rival !== undefined ? { rivalLevel: clampRivalLevel(rival) } : {}),
+    // (a score only means something on a known map)
+    ...(score !== undefined && seed !== undefined ? { challenge: { score, won: params.get('won') === '1' } } : {})
+  };
+};
+
 const battleKey = (battle: BattleConfig) =>
-  battle.mode === 'campaign' ? `level-${battle.levelId}` : `quick-${battle.difficulty}`;
+  battle.mode === 'campaign' ? `level-${battle.levelId}` : `quick-${battle.difficulty}${battle.seed !== undefined ? `-${battle.seed}` : ''}`;
 
 export const sameBattle = (a: BattleConfig, b: BattleConfig) =>
   battleKey(a) === battleKey(b);

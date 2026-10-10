@@ -3,6 +3,12 @@
 :root {
   --background: #0f172a;
   --foreground: #f1f5f9;
+  /* The game fills the whole screen (viewport-fit=cover), notches and rounded corners included: the
+     3D board runs edge to edge, and buttons and panels keep these insets clear */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-r: env(safe-area-inset-right, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --safe-l: env(safe-area-inset-left, 0px);
 }
 
 @theme inline {

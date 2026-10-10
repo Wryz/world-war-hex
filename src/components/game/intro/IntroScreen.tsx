@@ -93,7 +93,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
           <IslandDiorama onThemeChange={setThemeName} onReady={() => setIslandReady(true)} />
         </div>
         {themeName && (
-          <div className="pointer-events-none absolute bottom-4 right-4 lg:bottom-8 lg:right-8">
+          <div className="pointer-events-none absolute bottom-[calc(1rem+var(--safe-b))] right-[calc(1rem+var(--safe-r))] lg:bottom-8 lg:right-8">
             <div key={themeName} className={`${CARD_CLASS} animate-fadeIn px-5 py-2.5 text-right`}>
               <div className="text-xs font-bold uppercase tracking-widest text-slate-300">{LEVEL_COUNT} battles across</div>
               <div className="font-display text-2xl text-amber-300">{themeName}</div>
@@ -103,7 +103,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
       </div>
 
       {/* Resources and sound */}
-      <div className="absolute right-3 top-3 z-20 flex items-center gap-2 sm:right-6">
+      <div className="absolute right-[calc(0.75rem+var(--safe-r))] top-[calc(0.75rem+var(--safe-t))] z-20 flex items-center gap-2 sm:right-[calc(1.5rem+var(--safe-r))]">
         <ResourceBadges />
         <button
           onClick={() => setMuted(!isMuted)}
@@ -124,7 +124,7 @@ const IntroScreen: React.FC<IntroScreenProps> = ({ onStartQuickBattle, savedBatt
       </div>
       {settingsTab && <SettingsPanel initialTab={settingsTab} onClose={() => setSettingsTab(null)} onStartQuickBattle={onStartQuickBattle} />}
 
-      <main className="relative z-10 order-1 flex flex-col justify-center px-4 pt-16 pb-4 sm:px-8 lg:min-h-screen lg:max-w-[46rem] lg:px-14 lg:py-10 pointer-events-none">
+      <main className="relative z-10 order-1 flex flex-col justify-center pb-4 pl-[calc(1rem+var(--safe-l))] pr-[calc(1rem+var(--safe-r))] pt-[calc(4rem+var(--safe-t))] sm:pl-[calc(2rem+var(--safe-l))] sm:pr-[calc(2rem+var(--safe-r))] lg:min-h-screen lg:max-w-[46rem] lg:pl-[calc(3.5rem+var(--safe-l))] lg:pr-14 lg:py-10 pointer-events-none">
         <div className="pointer-events-auto">
           {/* Wordmark */}
           <div className="flex items-center gap-4">

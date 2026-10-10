@@ -7,6 +7,7 @@ import { playStinger, setMusicIntensity } from '@/lib/audio/music';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
 import { pendingHealthWait } from './healthTimeline';
 import { playBattleSound } from '../utils/battleSounds';
+import { DEFEAT_PATTERN, VICTORY_PATTERN, buzzPattern } from '@/lib/haptics';
 import {
   emitCoins, emitConfetti, emitMoment, flashDamage, projectToScreen, shakeScreen, triggerSlowMotion
 } from './effects';
@@ -221,6 +222,8 @@ const announce = (
     }
     if (won) emitConfetti();
     playStinger(won ? 'victory' : 'defeat');
+    // (after the castle's own thud, if it fell)
+    setTimeout(() => buzzPattern(won ? VICTORY_PATTERN : DEFEAT_PATTERN), gameState.winReason === 'destroyed' ? 700 : 0);
     emitMoment(won
       ? { title: 'Victory!', subtitle: gameState.winReason === 'timeout' ? 'You win on points' : 'The enemy castle falls!', tone: 'gold', big: true }
       : { title: 'Defeat', subtitle: gameState.winReason === 'timeout' ? 'Time ran out' : gameState.winReason === 'resigned' ? 'You withdrew' : 'Your castle has fallen', tone: 'red', big: true });

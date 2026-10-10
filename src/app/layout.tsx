@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { DynaPuff, Fredoka } from "next/font/google";
 import "./globals.css";
 import { AppBoot } from "@/components/shared/AppBoot";
@@ -25,7 +25,15 @@ export const metadata: Metadata = {
   description: DESCRIPTION,
   openGraph: { title: "Hex Hordes", description: DESCRIPTION, siteName: "Hex Hordes", url: "/", images: ["/logo.png"], type: "website" },
   twitter: { card: "summary", title: "Hex Hordes", description: DESCRIPTION, images: ["/logo.png"] },
-  appleWebApp: { title: "Hex Hordes" },
+  appleWebApp: { title: "Hex Hordes", capable: true, statusBarStyle: "black" },
+  icons: { apple: "/icons/apple-touch-icon.png" },
+};
+
+// The browser bar and the installed game's title bar take the game's background colour
+// (and the game runs edge to edge: the --safe-* insets in globals.css keep the HUD clear of notches)
+export const viewport: Viewport = {
+  themeColor: "#0f172a",
+  viewportFit: "cover",
 };
 
 export default function RootLayout({

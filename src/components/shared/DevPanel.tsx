@@ -41,7 +41,7 @@ export const DevPanel: React.FC = () => {
   };
 
   return (
-    <div className="fixed bottom-20 left-3 z-[60] flex flex-col items-start gap-2">
+    <div className="fixed bottom-[calc(5rem+var(--safe-b))] left-[calc(0.75rem+var(--safe-l))] z-[60] flex flex-col items-start gap-2">
       {open && (
         <div className="w-72 rounded-xl bg-slate-900/95 p-3 text-slate-100 shadow-2xl ring-1 ring-fuchsia-400/60">
           <div className="mb-2 flex items-center justify-between">
