@@ -4,7 +4,7 @@ import { ABILITIES, TROOP_CLASSES, getTroopClass, strongAgainst, weakAgainst } f
 import {
   BASE_MAX_HEALTH, HIGH_GROUND_ELEVATION, TERRAIN_BONUS_ATTACK_MULTIPLIER, TERRAIN_EFFECTS,
   getSightRange, isFogOfWar,
-  getCastleMaxHealth, getMovementRange
+  getActivePlayer, getCastleMaxHealth, getMovementRange
 } from '@/lib/game/gameState';
 import { getUnitTypeName } from '../utils/UnitHelpers';
 import { PANEL_CLASS, SIDE_COLORS } from './styles';
@@ -12,6 +12,7 @@ import { TERRAIN_SHORT_EFFECTS } from './terrainInfo';
 import { AbilityIcon, AttackIcon, MonsterSkillIcon, SlowedIcon, VenomIcon, BossPowerIcon, CampIcon, CrownIcon, FireIcon, FrozenIcon, MoveIcon, TerrainIcon, UnitIcon, FogIcon } from '../icons';
 import { getBossPower, isBossEnraged } from '@/lib/game/bosses';
 import { getMobSkill } from '@/lib/game/mobSkills';
+import { weatherMovePenalty } from '@/lib/game/regionRules';
 import { useShownCastleHealth, useShownHealth } from '../effects/healthTimeline';
 
 interface SelectionCardProps {
@@ -112,7 +113,11 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
           )}
           {(unit.poisoned || unit.slowed) && (
             <div className="mt-2 flex flex-wrap gap-2 rounded-md bg-lime-950/50 px-2 py-1 font-bold text-lime-100">
-              {unit.poisoned && <span className="flex items-center gap-1"><VenomIcon /> Poisoned: -{unit.poisoned} at its turn&apos;s end</span>}
+              {unit.poisoned && (
+                <span className="flex items-center gap-1">
+                  <VenomIcon /> Poisoned: -{unit.poisoned} at the end of {getActivePlayer(gameState) === unit.owner && !unit.poisonFresh ? 'this' : 'its next'} turn
+                </span>
+              )}
               {unit.slowed && <span className="flex items-center gap-1"><SlowedIcon /> Slowed: -1 movement</span>}
             </div>
           )}
@@ -121,7 +126,8 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
           )}
           <div className="mt-2 flex gap-3 text-slate-200">
             <span title="Attack" className="flex items-center gap-1"><AttackIcon /> <b>{unit.attackPower}</b></span>
-            <span title={getMovementRange(gameState, unit) < unit.movementRange ? `Movement (slowed by ${unit.slowed ? 'a web or chill' : 'the blizzard'})` : 'Movement'} className="flex items-center gap-1"><MoveIcon /> <b className={getMovementRange(gameState, unit) < unit.movementRange ? 'text-sky-300' : ''}>{getMovementRange(gameState, unit)}</b></span>
+            <span title={getMovementRange(gameState, unit) < unit.movementRange
+              ? `Movement (slowed by ${[unit.slowed ? 'a web or chill' : '', weatherMovePenalty(gameState, unit) > 0 ? 'the blizzard' : ''].filter(Boolean).join(' and ')})` : 'Movement'} className="flex items-center gap-1"><MoveIcon /> <b className={getMovementRange(gameState, unit) < unit.movementRange ? 'text-sky-300' : ''}>{getMovementRange(gameState, unit)}</b></span>
             <span className="ml-auto text-slate-400" title={effect.description}>
               <TerrainIcon terrain={hex.terrain} /> {terrainBonuses.length > 0 ? terrainBonuses.join(' · ') : effect.name}
             </span>

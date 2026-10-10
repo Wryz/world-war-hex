@@ -169,3 +169,13 @@ test('a turn can stop after its moves, and end later: a spring heals then', () =
   const heal = ended.healthEvents!.find(e => e.cause === 'spring');
   assert.ok(heal && heal.amount > 0);
 });
+
+test('a tree felled onto a story site breaks up against it, leaving the way to its relic open', () => {
+  const { state, tree, axe, enemy, landing } = treeScene();
+  state.players.ai.units = state.players.ai.units.filter(unit => unit.id !== enemy.id);
+  hexAt(state, landing).unit = undefined;
+  updateHex(state, landing, { storySite: true });
+  const after = executeMoves(addPendingMove(state, axe.id, state.players.player.id, tree));
+  assert.equal(hexAt(after, landing).feature, undefined);
+  assert.equal(isImpassable(hexAt(after, landing)), false);
+});

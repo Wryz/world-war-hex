@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { GameState, HexCoordinates } from '@/types/game';
 import { DEFAULT_SETTINGS, addPendingMove, chooseCastle, createBattle, defaultRoster, executeMoves, updateHex } from './gameState';
-import { MATERIALS, MATERIAL_IDS, SPOILS, landMaterials } from './materials';
+import { MATERIALS, MATERIAL_IDS, SPOILS, isMaterialId, landMaterials } from './materials';
 import { CHRONICLE, STORY_SITES } from './lore';
 import { REGIONS } from '../campaign/levels';
 import { TROOPS, MOB_IDS } from './troops';
@@ -80,9 +80,33 @@ test('a fallen enemy leaves its spoils, a boss its trophy', () => {
   assert.equal(after.haul?.bandit_signet, 1);
 });
 
-test('a win brings the whole haul home, a defeat half of each (a single relic is kept), resigning nothing', () => {
+test('a win brings the whole haul home, a defeat every relic and trophy and the better half of the rest, resigning nothing', () => {
   const haul = { timber: 5, crown_shard: 1 };
   assert.deepEqual(keptHaul({ won: true, haul }), haul);
   assert.deepEqual(keptHaul({ won: false, reason: 'destroyed', haul }), { timber: 3, crown_shard: 1 });
   assert.deepEqual(keptHaul({ won: false, reason: 'resigned', haul }), {});
+  // (one of each of many kinds: half of them, the rarest first)
+  const kept = keptHaul({ won: false, reason: 'destroyed', haul: { timber: 1, granite: 1, wild_herbs: 1, steel_ingot: 1, glowcap: 1, bandit_signet: 1 } });
+  assert.equal(kept.bandit_signet, 1);
+  assert.equal(Object.values(kept).reduce((sum, n) => sum + (n ?? 0), 0), 1 + 3);
+  assert.equal(kept.steel_ingot, 1, 'an uncommon find over the commons');
+});
+
+test('cottages and villages give up their stores to the first troop there', () => {
+  const { state, centre } = makeBattle('player');
+  updateHex(state, at(centre, 1, 0), { terrain: 'house' });
+  updateHex(state, at(centre, -1, 0), { terrain: 'village' });
+  place(state, makeUnit('player', centre), makeUnit('player', at(centre, -1, 1)));
+  let next = addPendingMove(state, state.players.player.units[0].id, state.players.player.id, at(centre, 1, 0));
+  next = addPendingMove(next, state.players.player.units[1].id, state.players.player.id, at(centre, -1, 0));
+  const after = executeMoves(next);
+  assert.equal(after.haul?.roof_thatch, 1);
+  assert.equal(after.haul?.clay_bricks, 1);
+});
+
+test('only real material ids count (not names every object has)', () => {
+  assert.ok(isMaterialId('timber'));
+  assert.ok(!isMaterialId('constructor'));
+  assert.ok(!isMaterialId('toString'));
+  assert.deepEqual(keptHaul({ won: true, haul: { constructor: 3, timber: 2 } as never }), { timber: 2 });
 });

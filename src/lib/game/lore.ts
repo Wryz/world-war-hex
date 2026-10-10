@@ -42,7 +42,7 @@ export const STORY_SITES: Record<string, StorySite> = {
     hint: 'Half-buried by the old road, a stone carved with a hexagon. Something is written on it.',
     props: [
       { model: 'pillar_decorated', x: 0.05, z: -0.1, scale: 0.11, turn: 0.4 },
-      { model: 'rubble_half', x: -0.25, z: 0.15, scale: 0.1, turn: 1.2 },
+      { model: 'rubble_half', x: -0.25, z: 0.15, scale: 0.1 },
       { model: 'rock_single_B', x: 0.28, z: 0.2, scale: 1, turn: 2 }
     ]
   },
@@ -114,7 +114,7 @@ export const STORY_SITES: Record<string, StorySite> = {
     hint: 'The cold ruin of a great forge, its anvil-stone split. A torch still burns in its wall.',
     props: [
       { model: 'barrier_column', x: 0, z: -0.15, scale: 0.09, turn: 0.2 },
-      { model: 'rubble_half', x: -0.22, z: 0.22, scale: 0.1, turn: 2.2 },
+      { model: 'rubble_half', x: -0.22, z: 0.22, scale: 0.1 },
       { model: 'torch_lit', x: 0.3, z: 0.12, scale: 0.5, lift: 0.2 }
     ]
   },
@@ -190,7 +190,6 @@ const SUPPLIES: StoryProp[] = [{ model: 'barrel', x: 0, z: 0, scale: 1.2 }, { mo
 const RUINED_WALL: StoryProp[] = [{ model: 'wall_corner_A_outside', x: 0, z: 0, scale: 0.16, turn: 0.4 }, { model: 'rubble_half', x: 0.14, z: 0.08, scale: 0.07, turn: 1.5 }];
 const SAPLINGS: StoryProp[] = [{ model: 'trees_A_small', x: 0, z: 0, scale: 0.38, turn: 0.5 }];
 const THICKET: StoryProp[] = [{ model: 'trees_B_small', x: 0, z: 0, scale: 0.38, turn: 2.5 }];
-const TIMBER: StoryProp[] = [{ model: 'resource_lumber', x: 0, z: 0, scale: 0.28, turn: 0.8 }];
 const STONES: StoryProp[] = [{ model: 'rock_single_B', x: 0, z: 0, scale: 0.9, turn: 0.2 }, { model: 'rock_single_C', x: 0.13, z: 0.07, scale: 0.7, turn: 2 }];
 const LONE_GRAVE: StoryProp[] = [{ model: 'grave_B', x: 0, z: 0, scale: 0.09, turn: 0.3 }, { model: 'candle_triple', x: 0.12, z: 0.06, scale: 0.22 }];
 const MARKER: StoryProp[] = [{ model: 'gravemarker_B', x: 0, z: 0, scale: 0.12, turn: 0.2 }];
@@ -208,7 +207,7 @@ const VIGIL: StoryProp[] = [{ model: 'gravestone', x: 0, z: 0, scale: 0.12 }, { 
 // What each region's ground remembers (any other map gets the countryside's)
 export const HISTORY: Record<string, StoryProp[][]> = {
   'Greenvale Meadows': [WAYSTONE, SAPLINGS, CAMP, RUINED_WALL, OLD_FENCE],
-  'Goblin Woods': [FALLEN, THICKET, TIMBER, SUPPLIES, OLD_BONES],
+  'Goblin Woods': [FALLEN, THICKET, SUPPLIES, OLD_BONES],
   'Howling Hills': [OLD_BONES, BEAST, WAYSTONE, STONES],
   'Mirefen Marsh': [DEAD_TREE, LONE_GRAVE, OLD_FENCE, MARKER],
   'Sunscorch Desert': [BROKEN_COLUMN, OLD_BONES, BEAST, CARVED_PILLAR],
@@ -223,7 +222,7 @@ export const HISTORY: Record<string, StoryProp[][]> = {
   'Rimeholt': [CARVED_PILLAR, OLD_BONES, STONES, FALLEN],
   'The Last Bastion': [BANNER, RUINED_WALL, FALLEN, BROKEN_COLUMN, VIGIL]
 };
-const COUNTRYSIDE: StoryProp[][] = [SAPLINGS, THICKET, STONES, CAMP, TIMBER, RUINED_WALL];
+const COUNTRYSIDE: StoryProp[][] = [SAPLINGS, THICKET, STONES, CAMP, RUINED_WALL];
 
 export const historyFor = (theme: string | undefined): StoryProp[][] => (theme ? HISTORY[theme] : undefined) ?? COUNTRYSIDE;
 

@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { cameFromAnotherPage } from '@/lib/navigation';
 import { MATERIALS, MATERIAL_IDS, MaterialCategory, MaterialId, haulSize } from '@/lib/game/materials';
 import { CHRONICLE, ChroniclePage, pageUnlocked } from '@/lib/game/lore';
 import { useHasHydrated, useProfile } from '@/lib/meta/profile';
@@ -26,9 +28,9 @@ const MaterialDetail: React.FC<{ id: MaterialId; count: number; found: boolean; 
   const rarity = RARITY_COLORS[material.rarity];
   const page = CHRONICLE.find(entry => entry.unlockedBy === id);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 backdrop-blur-[2px] sm:items-center" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 pl-[var(--safe-l)] pr-[var(--safe-r)] pt-[var(--safe-t)] backdrop-blur-[2px] sm:items-center" onClick={onClose}>
       <div
-        className={`${CARD_CLASS} animate-fadeIn relative w-full max-w-md rounded-b-none p-5 sm:rounded-2xl`}
+        className={`${CARD_CLASS} animate-fadeIn relative w-full max-w-md rounded-b-none p-5 pb-[calc(1.25rem+var(--safe-b))] sm:rounded-2xl`}
         onClick={event => event.stopPropagation()}
         role="dialog"
         aria-label={found ? material.name : 'Undiscovered material'}
@@ -99,6 +101,7 @@ const ChronicleView: React.FC<{ found: (id: MaterialId) => boolean; openId: stri
 };
 
 export const SatchelScreen: React.FC = () => {
+  const router = useRouter();
   const profile = useProfile();
   const hydrated = useHasHydrated();
   useMusic('menu');
@@ -106,9 +109,13 @@ export const SatchelScreen: React.FC = () => {
   const [selected, setSelected] = useState<MaterialId | null>(null);
   const [openPage, setOpenPage] = useState<string | null>('prologue');
 
+  // Opened from a battle's results
+  const [fromBattle, setFromBattle] = useState(false);
   // A link to a page of the Chronicle (from the results screen) opens it
   useEffect(() => {
-    const page = new URLSearchParams(window.location.search).get('page');
+    const params = new URLSearchParams(window.location.search);
+    setFromBattle(params.get('from') === 'battle');
+    const page = params.get('page');
     if (page && CHRONICLE.some(entry => entry.id === page)) {
       setTab('chronicle');
       setOpenPage(page);
@@ -120,7 +127,13 @@ export const SatchelScreen: React.FC = () => {
   const found = (id: MaterialId) => foundSet.has(id);
 
   return (
-    <MenuShell title="Satchel" icon={<SatchelIcon />}>
+    // (back where the player came from - from a battle's results, the campaign map, as that battle is
+    // over - or home if they came straight here)
+    <MenuShell
+      title="Satchel"
+      icon={<SatchelIcon />}
+      onBack={() => (fromBattle ? router.push('/campaign') : cameFromAnotherPage() ? router.back() : router.push('/'))}
+    >
       <div className="mb-4 flex gap-2">
         {([['materials', 'Materials', <SatchelIcon key="m" />], ['chronicle', 'Chronicle', <ChronicleIcon key="c" />]] as const).map(([id, label, icon]) => (
           <button

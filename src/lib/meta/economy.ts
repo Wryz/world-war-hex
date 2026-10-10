@@ -41,9 +41,13 @@ export const levelLossReward = (levelId: number, damageRatio: number): BattleRew
   return { coins, breakdown: [{ label: 'Spoils of battle', coins }] };
 };
 
-// Quick battles pay a little, scaled to how far the campaign has got
-export const quickBattleReward = (won: boolean, highestCleared: number): BattleReward => {
-  const coins = Math.round((won ? 12 : 4) + highestCleared * (won ? 0.6 : 0.2));
+// Quick battles pay a little, scaled to how far the campaign has got - and down for a rival weaker
+// than the player's own cards (a challenge link can field a rival of any level), `rivalShare` being
+// its level over theirs
+export const quickBattleReward = (won: boolean, highestCleared: number, rivalShare = 1): BattleReward => {
+  // (a share that isn't a number - from a damaged save - pays in full)
+  const share = Number.isFinite(rivalShare) ? Math.min(1, Math.max(0, rivalShare)) : 1;
+  const coins = Math.round(((won ? 12 : 4) + highestCleared * (won ? 0.6 : 0.2)) * share);
   return { coins, breakdown: [{ label: won ? 'Skirmish won' : 'Skirmish fought', coins }] };
 };
 

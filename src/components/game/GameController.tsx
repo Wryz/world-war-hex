@@ -33,7 +33,7 @@ import { emitMoment, resetEffects } from './effects/effects';
 import { useBattleMoments } from './effects/useBattleMoments';
 import { ACTION_NAMES, castleHealthRatio, getMaxRounds, getSideView, getStarScore, isFogOfWar } from '@/lib/game/gameState';
 import { getLevel, starsForWin, LEVEL_COUNT } from '@/lib/campaign/levels';
-import { battleTroopTypes } from '@/lib/campaign/battleSetup';
+import { averageCardLevel, battleTroopTypes } from '@/lib/campaign/battleSetup';
 import {
   BattleRecordResult, completeTutorial, getProfile, profilePower, recordBattle
 } from '@/lib/meta/profile';
@@ -118,8 +118,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     if (isFogOfWar(gameState)) {
       setTimeout(() => emitMoment({ title: 'Fog of War', subtitle: 'You only see what your troops can see', tone: 'purple', explain: true }), 1200);
     }
-    // A friend's challenge: their score is the one to beat
-    if (battle.mode === 'quick' && battle.challenge) {
+    // A friend's challenge: their score is the one to beat (said once, as the battle begins)
+    if (battle.mode === 'quick' && battle.challenge && !(shouldContinueGame && gameState.turnNumber > 1)) {
       const { score } = battle.challenge;
       setTimeout(() => emitMoment({ title: 'Challenge!', subtitle: `Your friend scored ${score} points here - beat it`, tone: 'blue', explain: true }), isFogOfWar(gameState) ? 3600 : 1200);
     }
@@ -225,7 +225,9 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       playerStats,
       durationSeconds: elapsedRef.current,
       challengeMet: challengeMet(gameState),
-      haul: gameState.haul
+      haul: gameState.haul,
+      // (against the player's cards as they were when the battle began: an upgrade since changes nothing)
+      rivalShare: gameState.rivalLevel !== undefined ? gameState.rivalLevel / (gameState.ownCardLevel ?? averageCardLevel(getProfile())) : undefined
     });
     trackEvent('battle_ended', {
       mode: battle.mode,
@@ -240,7 +242,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       lost: playerStats.lost,
       coins_earned: record.reward.coins,
       challenge_completed: record.challengeCompleted,
-      materials_gathered: haulSize(record.haul)
+      materials_gathered: haulSize(gameState.haul),
+      materials_kept: haulSize(record.haul)
     });
     // Now there's progress worth keeping, ask the browser not to clear it
     void requestPersistentStorage();
@@ -456,6 +459,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
             onRetry={handleRetry}
             onMap={leaveResults(exitPath)}
             onArmy={leaveResults('/army')}
+            onOpen={path => leaveResults(path)()}
             points={{ you: getStarScore(gameState, 'player'), enemy: getStarScore(gameState, 'ai') }}
             challengeMet={challengeMet(gameState)}
             skirmish={skirmish}

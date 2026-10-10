@@ -510,17 +510,41 @@ const buildHistoryMatrices = (hexes: Hex[], theme: string | undefined): Map<stri
     const [cx, , cz] = axialToWorld(hex.coordinates);
     const y = getHexSurfaceHeight(hex);
     if (hex.storySite && site) {
-      layout(site.props, cx, y, cz, 0);
+      // Round the edge of the hex, leaving the middle to the troop that searches it
+      site.props.forEach((prop, i) => {
+        const angle = SITE_FIRST_ANGLE + i * Math.PI * 2 / site.props.length;
+        // (each turned with its place on the ring, so a long prop drawn out from one end - a pile of
+        // rubble - lies along the rim rather than across the middle or off the tile)
+        layout([{ ...prop, x: 0, z: 0 }], cx + Math.cos(angle) * SITE_RADIUS, y, cz + Math.sin(angle) * SITE_RADIUS, -angle - Math.PI / 2);
+      });
       continue;
     }
-    if (!HISTORY_GROUND.has(hex.terrain) || seededRandom(hex, 41) >= HISTORY_SHARE) continue;
-    // Near the edge, clear of the tile's other scenery (which keeps to the other side) and of the
-    // troop standing in the middle
-    const angle = Math.PI / 2 - seededRandom(hex, 43) * 0.4;
+    // (not on ground that is burning or has burned, or under a fallen trunk or stakes)
+    if (!HISTORY_GROUND.has(hex.terrain) || hex.scorched || hex.fire || hex.feature || seededRandom(hex, 41) >= HISTORY_SHARE) continue;
+    // Near the edge, clear of the troop standing in the middle and of the tile's other scenery: across
+    // from a field's rock or tree, between a hill's two mounds, and midway between a desert's (or a
+    // snowfield's) first two dunes
+    const spotAngle = ({ x, z }: { x: number; z: number }) => Math.atan2(z, x);
+    const [first, second] = rimSpots(hex, 3);
+    const angle = hex.terrain === 'plain' ? spotAngle(rimSpots(hex, 1)[0]) + Math.PI
+      : hex.terrain === 'hills' ? spotAngle(rimSpots(hex, 2)[0]) + Math.PI / 2
+        : (spotAngle(first) + spotAngle(second) + (spotAngle(second) < spotAngle(first) ? Math.PI * 2 : 0)) / 2;
     const scene = history[Math.min(history.length - 1, Math.floor(seededRandom(hex, 42) * history.length))];
     layout(scene, cx + Math.cos(angle) * 0.5, y, cz + Math.sin(angle) * 0.5, -angle + Math.PI / 2);
   }
   return result;
+};
+
+// Where a story site's props stand: round the hex's rim, beyond the ring under a troop standing there,
+// the first (its centrepiece) at the back, away from the camera
+const SITE_RADIUS = 0.62;
+const SITE_FIRST_ANGLE = -Math.PI / 2;
+
+// Every pack a region's story site and history could call on, so they load once with the board
+// (and a scene appearing later in the battle never sends the board back to plain shapes while one loads)
+const regionPacks = (theme: string | undefined): PropPack[] => {
+  const models = [...(storySiteFor(theme)?.props ?? []), ...historyFor(theme).flat()].map(prop => prop.model);
+  return [...new Set(models.map(packOfModel))].sort();
 };
 
 const InstancedProp: React.FC<{ library: PropLibrary; model: string; matrices: THREE.Matrix4[] }> = ({ library, model, matrices }) => {
@@ -541,15 +565,23 @@ const InstancedProp: React.FC<{ library: PropLibrary; model: string; matrices: T
 
 const NO_SKIP: ReadonlySet<TerrainType> = new Set();
 
-const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[]; decor?: MapDecor; mapName?: string }> = ({ hexGrid, decor, mapName }) => {
+// `history` off leaves out the region's remnants and story site (the landing page's island, which
+// keeps to the scenery its poster shows and downloads as little as it can)
+const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[]; decor?: MapDecor; mapName?: string; history?: boolean }> = ({
+  hexGrid, decor, mapName, history: showHistory = true
+}) => {
   // Decorations only depend on the terrain, not on units moving around
   // (and on who holds each building, which shows in its colours)
-  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}${isStructure(h.terrain) ? h.owner ?? '' : ''}${h.feature === 'stakes' ? 's' : ''}${h.storySite ? '!' : ''}`).join('|');
+  // (and on how high it stands, once troops dig in or undermine it)
+  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}${isStructure(h.terrain) ? h.owner ?? '' : ''}${h.feature ?? ''}${h.storySite ? '!' : ''}${h.scorched ? '*' : ''}${h.fire ? 'f' : ''}${h.heightOffset ?? ''}`).join('|');
   const hexesRef = useRef(hexGrid);
   hexesRef.current = hexGrid;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const history = useMemo(() => buildHistoryMatrices(hexesRef.current, mapName), [terrainSignature, mapName]);
-  const historyPacks = [...new Set([...history.keys()].map(packOfModel))].sort().join(',');
+  const history = useMemo(
+    () => (showHistory ? buildHistoryMatrices(hexesRef.current, mapName) : new Map<string, THREE.Matrix4[]>()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [terrainSignature, mapName, showHistory]
+  );
+  const historyPacks = useMemo(() => (showHistory ? regionPacks(mapName).join(',') : ''), [mapName, showHistory]);
 
   // Only the packs this map's scenery uses download (Halloween bits for haunted ground, dungeon props
   // for the Underkeep, whichever its history needs)

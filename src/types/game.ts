@@ -117,6 +117,8 @@ export interface Unit {
   shaken?: number;
   // Poisoned (a monster's venom): health it loses at the end of its side's next turn
   poisoned?: number;
+  // Poisoned during its own side's turn: the venom waits for the end of its next one
+  poisonFresh?: boolean;
   // Slowed (a web, a chilling touch): its side's turn-ends left with one hex less movement
   slowed?: number;
 }
@@ -228,6 +230,8 @@ export interface GameState {
   // A quick battle: the card level of the rival kingdom's troops (with the map's seed in settings, all
   // a friend needs to fight the same battle)
   rivalLevel?: number;
+  // ...and the player's own cards' average level when it began (a weaker rival pays less)
+  ownCardLevel?: number;
   // The catapult's most recent stone, for the board to show it flying (serial counts stones)
   lastBombard?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
   // The tree felled most recently, for the board to show it falling (serial counts fellings)
@@ -271,6 +275,8 @@ export interface HealthEvent {
   // The number to float over the troop when it isn't `amount` (a blow an undead rises from: the
   // blow, not the health it rises with)
   shown?: number;
+  // What it follows on from (a troop bursting as the blow that slew it lands), for its timing
+  after?: HealthCause;
 }
 
 export interface Sighting {

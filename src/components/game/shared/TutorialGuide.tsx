@@ -260,7 +260,7 @@ export const TutorialOverlay: React.FC<{
           <button
             onClick={onSkipIntro}
             aria-label="Skip"
-            className="absolute bottom-6 right-6 rounded-full bg-slate-900/80 p-3 text-xl text-slate-100 shadow-lg ring-1 ring-white/20 hover:bg-slate-800"
+            className="absolute bottom-[calc(1.5rem+var(--safe-b))] right-[calc(1.5rem+var(--safe-r))] rounded-full bg-slate-900/80 p-3 text-xl text-slate-100 shadow-lg ring-1 ring-white/20 hover:bg-slate-800"
           >
             <SkipIcon />
           </button>

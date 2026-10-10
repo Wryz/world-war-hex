@@ -19,7 +19,7 @@ try {
 
 const VERSION = self.__PRECACHE.version;
 const CACHE = `wwh-${VERSION}`;
-const PAGES = ['/', '/campaign', '/army', '/bestiary', '/stats', '/style', '/play'];
+const PAGES = ['/', '/campaign', '/army', '/bestiary', '/satchel', '/stats', '/style', '/play'];
 const ASSETS = [
   '/music/manifest.json',
   '/logo.png',
@@ -106,6 +106,7 @@ const isCacheFirst = url =>
   url.pathname.startsWith('/models/') ||
   url.pathname.startsWith('/sounds/') ||
   url.pathname.startsWith('/music/') ||
+  url.pathname === '/manifest.webmanifest' ||
   /\.(?:png|jpg|webp|svg|ico|woff2?)$/.test(url.pathname);
 
 // A cached file, fetching (and caching) the whole of it if needed

@@ -76,20 +76,20 @@ const skill = (name: string, kind: MobSkillKind, numbers: Omit<MobSkill, 'name' 
 
 export const MOB_SKILLS: Partial<Record<TroopId, MobSkill>> = {
   // Bandits: greedy and opportunistic, never a fair fight
-  bandit_thug: skill('Gang Up', 'horde', { share: 0.25, max: 3 }, s => `+${pct(s.share!)} attack for every other bandit beside its target (up to ${s.max}).`),
+  bandit_thug: skill('Gang Up', 'horde', { share: 0.25, max: 3 }, s => `+${pct(s.share!)} attack for every other troop of its warband beside its target (up to ${s.max}).`),
   bandit_archer: skill('Cheap Shot', 'finisher', { share: 0.5 }, s => `+${pct(s.share!)} attack against troops at half health or less.`),
   highwayman: skill('Stand and Deliver', 'plunder', { amount: 5 }, s => `Every blow that lands steals ${s.amount} gold from your treasury.`),
   bandit_raider: skill('Ride Down', 'charge', { share: 0.4, distance: 2 }, s => `+${pct(s.share!)} attack after riding ${s.distance} or more hexes this turn.`),
   // Goblins: dirty fighters who come in numbers
   goblin_scrapper: skill('Dirty Tricks', 'isolate', { share: 0.2 }, s => `+${pct(s.share!)} attack against troops with no friend beside them.`),
   goblin_slinger: skill('Opening Volley', 'firstBlood', { share: 0.35 }, s => `+${pct(s.share!)} attack against unhurt troops.`),
-  goblin_shaman: skill('War Paint', 'aura', { share: 0.2 }, s => `Goblins beside it strike ${pct(s.share!)} harder.`),
+  goblin_shaman: skill('War Paint', 'aura', { share: 0.2 }, s => `Its warband's troops beside it strike ${pct(s.share!)} harder.`),
   goblin_sapper: skill('Kaboom', 'deathburst', { amount: 4 }, s => `Blows up when slain: ${s.amount} damage to every enemy beside it.`),
   // Beasts: hunters that pull down stragglers
   grey_wolf: skill('Bring Down', 'finisher', { share: 0.25 }, s => `+${pct(s.share!)} attack against troops at half health or less.`),
   wild_boar: skill('Gore', 'charge', { share: 0.25, distance: 2 }, s => `+${pct(s.share!)} attack after charging ${s.distance} or more hexes this turn.`),
   giant_spider: skill('Web', 'slow', {}, () => 'Troops it bites are caught in its web: they move one hex less on their next turn.'),
-  cave_bear: skill('Thick Fur', 'hide', { share: 0.2 }, s => `Takes ${pct(s.share!)} less damage from arrows and spells.`),
+  cave_bear: skill('Thick Fur', 'hide', { share: 0.2 }, s => `Takes ${pct(s.share!)} less damage from troops shooting from 2 or more hexes away.`),
   // Swamp: things that lurk in the water
   bog_slime: skill('Engulf', 'leech', { amount: 3 }, s => `Heals ${s.amount} whenever it hurts a troop.`),
   lizardman: skill('Reed Ambush', 'native', { share: 0.4, ground: ['swamp', 'water', 'forest'] }, s => `+${pct(s.share!)} attack striking from swamp, water or forest.`),
@@ -106,14 +106,14 @@ export const MOB_SKILLS: Partial<Record<TroopId, MobSkill>> = {
   yeti: skill('Rampage', 'charge', { share: 0.5, distance: 2 }, s => `+${pct(s.share!)} attack after charging ${s.distance} or more hexes this turn.`),
   frost_huntress: skill('Hunter\'s Mark', 'hunter', { share: 0.5, classes: ['cavalry', 'skirmisher'] }, s => `+${pct(s.share!)} attack against cavalry and skirmishers.`),
   // Undead: endless, and they feed on the living
-  skeleton_minion: skill('Bone Horde', 'horde', { share: 0.15, max: 3 }, s => `+${pct(s.share!)} attack for every other undead beside its target (up to ${s.max}).`),
-  skeleton_warrior: skill('Bone Shield', 'hide', { share: 0.35 }, s => `Takes ${pct(s.share!)} less damage from arrows and spells.`),
+  skeleton_minion: skill('Bone Horde', 'horde', { share: 0.15, max: 3 }, s => `+${pct(s.share!)} attack for every other troop of its horde beside its target (up to ${s.max}).`),
+  skeleton_warrior: skill('Bone Shield', 'hide', { share: 0.35 }, s => `Takes ${pct(s.share!)} less damage from troops shooting from 2 or more hexes away.`),
   skeleton_archer: skill('Grave Volley', 'firstBlood', { share: 0.35 }, s => `+${pct(s.share!)} attack against unhurt troops.`),
   ghost: skill('Life Drain', 'leech', { amount: 3 }, s => `Heals ${s.amount} whenever it hurts a troop.`),
   // Orcs: brute force, and plenty of it
-  orc_grunt: skill('Waaagh!', 'gangUp', { share: 0.3 }, s => `+${pct(s.share!)} attack when another orc stands beside its target.`),
+  orc_grunt: skill('Waaagh!', 'gangUp', { share: 0.3 }, s => `+${pct(s.share!)} attack when another of its warband stands beside its target.`),
   orc_archer: skill('Heavy Bolts', 'hunter', { share: 0.35, classes: ['infantry', 'spear'] }, s => `+${pct(s.share!)} attack against infantry and spears.`),
-  orc_shaman: skill('Blood Rites', 'aura', { share: 0.2 }, s => `Orcs beside it strike ${pct(s.share!)} harder.`),
+  orc_shaman: skill('Blood Rites', 'aura', { share: 0.2 }, s => `Its warband's troops beside it strike ${pct(s.share!)} harder.`),
   ogre: skill('Smash', 'curse', {}, () => 'Troops it hits are stunned: they strike 30% softer on their next turn (the fearless shrug it off).'),
   // Infernal: everything burns
   imp: skill('Scorch', 'venom', { amount: 3 }, s => `Troops it hits are set alight: they lose ${s.amount} health at the end of their next turn.`),
@@ -184,11 +184,12 @@ export const mobAuraShare = (attacker: Unit, from: HexCoordinates, friends: Unit
 };
 
 // The share a target's own skill (or a guarding friend's) takes off a strike from `distance` hexes
+// (the better of its own and a guard's, if both work)
 export const mobDefenceShare = (target: Unit, at: HexCoordinates, distance: number, friends: Unit[]): { label: string; share: number } | null => {
   const own = getMobSkill(target);
-  if (own?.kind === 'hide' && distance > 1) return { label: own.name, share: own.share! };
-  if (own?.kind === 'lastStand' && target.lifespan <= target.maxLifespan / 2) return { label: own.name, share: own.share! };
   let best: { label: string; share: number } | null = null;
+  if (own?.kind === 'hide' && distance > 1) best = { label: own.name, share: own.share! };
+  if (own?.kind === 'lastStand' && target.lifespan <= target.maxLifespan / 2) best = { label: own.name, share: own.share! };
   for (const friend of friends) {
     if (friend.id === target.id || getHexDistance(friend.position, at) !== 1) continue;
     const guard = hasMobSkill(friend, 'guard');

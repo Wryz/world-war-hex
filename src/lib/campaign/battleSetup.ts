@@ -49,6 +49,13 @@ const TUTORIAL_LEVEL = 1;
 // Quick battles are against a rival kingdom whose troops match the player's average card level
 const QUICK_RIVAL_CARDS: TroopId[] = ['infantry', 'artillery', 'tank', 'rogue', 'helicopter', 'medic'];
 
+
+// The level of the player's cards on average (a quick battle's rival fields its cards at it)
+export const averageCardLevel = (profile: Profile): number => {
+  const owned = PLAYER_CARD_IDS.filter(id => profile.cards[id] !== undefined);
+  return Math.max(1, Math.round(owned.reduce((sum, id) => sum + (profile.cards[id] ?? 1), 0) / Math.max(1, owned.length)));
+};
+
 export const buildBattle = (config: BattleConfig, profile: Profile): GameState => {
   if (config.mode === 'campaign') {
     const level = getLevel(config.levelId);
@@ -63,9 +70,8 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
     });
   }
 
-  const owned = PLAYER_CARD_IDS.filter(id => profile.cards[id] !== undefined);
-  const averageLevel = Math.max(1, Math.round(owned.reduce((sum, id) => sum + (profile.cards[id] ?? 1), 0) / Math.max(1, owned.length)));
-  const rivalLevel = clampRivalLevel(config.rivalLevel ?? averageLevel);
+  const ownCardLevel = averageCardLevel(profile);
+  const rivalLevel = clampRivalLevel(config.rivalLevel ?? ownCardLevel);
   const seed = config.seed ?? randomSeed();
   const cards = battleDeck(profile, QUICK_RIVAL_CARDS);
   const state = createBattle({ ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy', seed }, {
@@ -77,7 +83,7 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
     chooseCastle: true,
     battleSeed: quickBattleSeed(seed)
   });
-  return { ...state, rivalLevel };
+  return { ...state, rivalLevel, ownCardLevel };
 };
 
 // Seeds are whole numbers that fit a link

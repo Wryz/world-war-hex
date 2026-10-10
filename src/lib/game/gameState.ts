@@ -1513,7 +1513,10 @@ const fellTree = (state: GameState, order: Move): void => {
   updateHex(state, tree.coordinates, { feature: undefined });
   const victim = [...state.players.player.units, ...state.players.ai.units].find(u => coordsEqual(u.position, landing.coordinates));
   if (landing.terrain === 'water') updateHex(state, landing.coordinates, { feature: 'logBridge', fellFrom: tree.coordinates });
-  else if (landing.terrain !== 'mountain') updateHex(state, landing.coordinates, { feature: 'log', fellFrom: tree.coordinates, fire: undefined });
+  // (a trunk breaks up against a mountain, or the ruins of a story site still to be searched)
+  else if (landing.terrain !== 'mountain' && !(landing.storySite && !landing.plundered)) {
+    updateHex(state, landing.coordinates, { feature: 'log', fellFrom: tree.coordinates, fire: undefined });
+  }
   state.lastFell = { side, from: tree.coordinates, to: landing.coordinates, serial: (state.lastFell?.serial ?? 0) + 1 };
   if (side === 'player') gather(state, 'heartwood', tree.coordinates);
 
@@ -1652,6 +1655,9 @@ export const executeMoves = (state: GameState, { holdTurnEnd = false }: { holdTu
         plunder(newState, hex, side);
         continue;
       }
+      // (a cottage or a village is never held, but whoever gets there first takes its stores)
+      // (a story site keeps its relic for the end of the turn, whatever ground it lies on)
+      if (hex && (hex.terrain === 'house' || hex.terrain === 'village') && !hex.plundered && !hex.storySite) plunder(newState, hex, side);
       if (!hex?.isCamp || hex.owner === side) continue;
       plunder(newState, hex, side);
       addLog(newState, side, hex.owner
@@ -2396,8 +2402,8 @@ export const advanceFires = (state: GameState, roundEnds: boolean, random: (salt
       // A forest burns down to open ground, a house to a shell
       terrain: hex.terrain === 'forest' ? 'plain' : hex.terrain === 'house' ? 'ruins' : hex.terrain,
       feature: hex.feature === 'logBridge' ? hex.feature : undefined,
-      // (and leaves charcoal to gather, where nothing else was)
-      harvest: hex.harvest ?? (hex.storySite ? undefined : 'charcoal')
+      // (and leaves charcoal to gather, where nothing else was - the first time it burns)
+      harvest: hex.harvest ?? (hex.storySite || hex.scorched ? undefined : 'charcoal')
     });
   }
   // (embers set by a troop during its turn glow through the other side's turn before they catch)
@@ -2486,9 +2492,13 @@ const finishTurn = (state: GameState): GameState => {
       return updated;
     });
   }
-  // Units worn down by lava, cursed ground or fire fall
+  // Units worn down by lava, cursed ground or fire fall (all of them leave the field before any
+  // bursts as it falls, so a blast can't catch one that has already fallen)
+  const fallen = new Set(burned.map(unit => unit.id));
+  for (const side of ['player', 'ai'] as const) {
+    newState.players[side].units = newState.players[side].units.filter(unit => !fallen.has(unit.id));
+  }
   for (const unit of burned) {
-    newState.players[unit.owner].units = newState.players[unit.owner].units.filter(u => u.id !== unit.id);
     // (a boss the ground finishes off is slain all the same, and counts for the other side)
     if (unit.isBoss) {
       const killer = getOpponent(unit.owner);
@@ -2503,13 +2513,19 @@ const finishTurn = (state: GameState): GameState => {
       ? `${unitLabel(unit)} perished in the flames.`
       : `${unitLabel(unit)} perished on the ${TERRAIN_EFFECTS[terrainUnder(newState, unit)].name.toLowerCase()}.`);
   }
+  for (const unit of burned) burstOnDeath(newState, unit, groundCause(newState, unit));
   scatterMinions(newState);
   // Venom: this side's poisoned troops lose what the poison takes, and are rid of it
+  // (venom taken during this very turn waits for the end of its next one)
   for (const unit of [...newState.players[activePlayer].units]) {
     if (!unit.poisoned) continue;
+    if (unit.poisonFresh) {
+      unit.poisonFresh = undefined;
+      continue;
+    }
     const amount = unit.poisoned;
     unit.poisoned = undefined;
-    const { destroyed } = inflictDamage(newState, unit, amount, getOpponent(activePlayer), 'venom');
+    const { destroyed } = inflictDamage(newState, unit, amount, getOpponent(activePlayer), 'venom', {}, true);
     addLog(newState, activePlayer, `${unitLabel(unit)} ${destroyed ? 'succumbs to' : 'suffers'} the venom${destroyed ? '' : ` (-${amount})`}.`);
   }
   // Morale: the other side's badly hurt troops caught alone among this side's waver
@@ -3080,7 +3096,7 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
 };
 
 // What a monster's blow leaves behind on the troop it hurt (`victim` as it was before the fight)
-const applyBlowSkill = (state: GameState, hitter: Unit, victim: Unit): void => {
+const applyBlowSkill = (state: GameState, hitter: Unit, victim: Unit, hitterFell: boolean): void => {
   const skill = getMobSkill(hitter);
   if (!skill) return;
   const live = state.players[victim.owner].units.find(u => u.id === victim.id);
@@ -3089,7 +3105,11 @@ const applyBlowSkill = (state: GameState, hitter: Unit, victim: Unit): void => {
   const turns = getActivePlayer(state) === victim.owner ? 2 : 1;
   switch (skill.kind) {
     case 'venom':
-      if (live) live.poisoned = Math.max(live.poisoned ?? 0, skill.amount!);
+      if (live) {
+        // (only fresh venom waits: a troop already poisoned still takes its dose when it's due)
+        if (turns === 2 && !live.poisoned) live.poisonFresh = true;
+        live.poisoned = Math.max(live.poisoned ?? 0, skill.amount!);
+      }
       break;
     case 'slow':
       if (live) live.slowed = Math.max(live.slowed ?? 0, turns);
@@ -3098,7 +3118,8 @@ const applyBlowSkill = (state: GameState, hitter: Unit, victim: Unit): void => {
       if (live && !isFearless(live)) live.shaken = Math.max(live.shaken ?? 0, turns);
       break;
     case 'leech':
-      if (own && own.lifespan > 0 && own.lifespan < own.maxLifespan) {
+      // (not for a troop struck down in the same fight, even one that rises again)
+      if (own && !hitterFell && own.lifespan < own.maxLifespan) {
         const healed = Math.min(own.maxLifespan - own.lifespan, skill.amount!);
         noteHealth(state, own, healed, 'drain');
         own.lifespan += healed;
@@ -3170,11 +3191,12 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
       if (crowd.length > 0) addLog(newState, entry.unit.owner, `Packed together: ${crowd.length === 1 ? 'the goblin beside it takes' : `${crowd.length} goblins beside it take`} ${splash} too.`);
     }
     // Monster skills that work once a blow lands: venom, webs, curses, drained life, stolen gold
+    const fell = new Set([...preview.attackers, ...preview.defenders].filter(entry => entry.destroyed || entry.rises).map(entry => entry.unit.id));
     for (const entry of [...preview.attackers, ...preview.defenders]) {
       if (entry.damageTaken <= 0) continue;
       const isDefender = preview.defenders.includes(entry);
       const hitters = isDefender ? preview.attackers.map(a => a.unit) : preview.defenders.slice(0, 1).map(d => d.unit);
-      for (const hitter of hitters) applyBlowSkill(newState, hitter, entry.unit);
+      for (const hitter of hitters) applyBlowSkill(newState, hitter, entry.unit, fell.has(hitter.id));
     }
     syncHexUnits(newState);
 
@@ -3226,17 +3248,21 @@ export const resolveAllCombats = (state: GameState): GameState => {
   return current;
 };
 
-// Remove a unit from the game
-const removeUnit = (state: GameState, unit: Unit): void => {
+// A sapper's powder keg or a golem's molten heart goes off as it falls (just after `cause`, the blow
+// that slew it, when that shows on the board)
+const burstOnDeath = (state: GameState, unit: Unit, cause?: HealthCause, order?: number): void => {
+  const burst = hasMobSkill(unit, 'deathburst');
+  if (!burst) return;
+  const caught = state.players[getOpponent(unit.owner)].units.filter(enemy => getHexDistance(enemy.position, unit.position) === 1);
+  if (caught.length > 0) addLog(state, unit.owner, `${burst.name}! ${unitLabel(unit)} bursts as it falls.`);
+  for (const enemy of caught) inflictDamage(state, enemy, burst.amount!, unit.owner, 'burst', { from: unit.position, after: cause, order });
+};
+
+// Remove a unit from the game (slain by `cause`, if it wasn't in a fight)
+const removeUnit = (state: GameState, unit: Unit, cause?: HealthCause, order?: number): void => {
   state.players[unit.owner].units = state.players[unit.owner].units.filter(u => u.id !== unit.id);
   if (unit.isBoss) scatterMinions(state);
-  // A sapper's powder keg or a golem's molten heart goes off as it falls
-  const burst = hasMobSkill(unit, 'deathburst');
-  if (burst) {
-    const caught = state.players[getOpponent(unit.owner)].units.filter(enemy => getHexDistance(enemy.position, unit.position) === 1);
-    if (caught.length > 0) addLog(state, unit.owner, `${burst.name}! ${unitLabel(unit)} bursts as it falls.`);
-    for (const enemy of caught) inflictDamage(state, enemy, burst.amount!, unit.owner, 'burst', { from: unit.position });
-  }
+  burstOnDeath(state, unit, cause, order);
   // (falling on its own side's turn, the turn's end would count one off at once: it gets one more)
   if (unit.isBoss || unit.isChampion) {
     const turns = (unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE) + (getActivePlayer(state) === unit.owner ? 1 : 0);
@@ -3272,7 +3298,6 @@ const scatterMinions = (state: GameState): void => {
   }
 };
 
-// Count a destroyed unit for the side that destroyed it (and against the side that lost it)
 // --- Materials (lib/game/materials) and story sites (lib/game/lore) ------------------------------
 
 // Something gathered by the player this battle, and where (for the board to show it)
@@ -3306,7 +3331,7 @@ const gatherFromTheLand = (state: GameState): void => {
     if (hex.storySite && !hex.plundered && site) {
       gather(state, site.relic, hex.coordinates);
       updateHex(state, hex.coordinates, { plundered: true });
-      addLog(state, 'player', `${unitLabel(unit)} recovered a relic from ${site.name.replace(/^A |^The /, 'the ').toLowerCase()}.`);
+      addLog(state, 'player', `${unitLabel(unit)} recovered a relic from ${site.name.replace(/^(A|The) /, 'the ')}.`);
     }
   }
 };
@@ -3315,6 +3340,8 @@ const gatherFromTheLand = (state: GameState): void => {
 // story site, set out once the castles stand. Springs and gold mines always have something.
 const HARVEST_SHARE = 0.2;
 const MIN_HARVEST = 5;
+const SITE_GROUND: TerrainType[] = ['plain', 'desert', 'snow'];
+
 const placeHarvest = (state: GameState, playerBase: HexCoordinates, aiBase: HexCoordinates): void => {
   let draws = 0;
   const random = () => seededRandom((state.battleSeed ?? 0) + 4243 + 17 * draws++);
@@ -3323,13 +3350,16 @@ const placeHarvest = (state: GameState, playerBase: HexCoordinates, aiBase: HexC
     getHexDistance(hex.coordinates, playerBase) > 1 && getHexDistance(hex.coordinates, aiBase) > 1;
 
   // The story site: somewhere neither side reaches first, away from the castles
-  const site = state.levelId !== 1 ? storySiteFor(theme) : undefined;
+  // (the tutorial's field is laid out by hand and never comes here)
+  const site = storySiteFor(theme);
   if (site) {
     const fair = (hex: Hex, tolerance: number) =>
       Math.abs(getHexDistance(hex.coordinates, playerBase) - getHexDistance(hex.coordinates, aiBase)) <= tolerance &&
       Math.min(getHexDistance(hex.coordinates, playerBase), getHexDistance(hex.coordinates, aiBase)) >= 3;
     for (const tolerance of [1, 2, 3]) {
-      const options = state.hexGrid.filter(hex => open(hex) && !hex.isResourceHex && hex.terrain !== 'spring' && fair(hex, tolerance));
+      // (on open ground only: not in a forest or village whose scenery it would replace, and never on
+      // lava or cursed ground, which would hurt - or heal the dead - whoever holds it)
+      const options = state.hexGrid.filter(hex => open(hex) && !hex.isResourceHex && SITE_GROUND.includes(hex.terrain) && fair(hex, tolerance));
       if (options.length === 0) continue;
       const chosen = options[Math.floor(random() * options.length)];
       updateHex(state, chosen.coordinates, { storySite: true });
@@ -3351,6 +3381,7 @@ const placeHarvest = (state: GameState, playerBase: HexCoordinates, aiBase: HexC
   }
 };
 
+// Count a destroyed unit for the side that destroyed it (and against the side that lost it)
 const creditKill = (state: GameState, unit: Unit, killer: PlayerType): void => {
   const killerStats = sideStats(state, killer);
   killerStats.kills++;
@@ -3370,7 +3401,7 @@ const creditKill = (state: GameState, unit: Unit, killer: PlayerType): void => {
 // animation lands. `unit` is the troop as it was just before.
 export const noteHealth = (
   state: GameState, unit: Unit | null, amount: number, cause: HealthCause,
-  extra: { from?: HexCoordinates; order?: number; fatal?: boolean; castle?: PlayerType; shown?: number } = {}
+  extra: { from?: HexCoordinates; order?: number; fatal?: boolean; castle?: PlayerType; shown?: number; after?: HealthCause } = {}
 ): void => {
   if (amount === 0 && !extra.shown) return;
   const serial = (state.healthSerial ?? 0) + 1;
@@ -3382,16 +3413,18 @@ export const noteHealth = (
 // Damage dealt outside a fight (Pegasus Knights' Strafe, a falling tree, fire), softened by armour
 // and Ward as in a fight. A unit it destroys is removed and pays its bounty to `by` - unless nobody
 // (null) or its own side (a tree felled onto a friend) did it. Works on a state the caller has cloned.
+// `raw` damage (venom) gets past armour and Ward; it also works unseen, without giving the troop's
+// position away.
 export const inflictDamage = (
   state: GameState, unit: Unit, amount: number, by: PlayerType | null, cause: HealthCause,
-  event: { from?: HexCoordinates; order?: number } = {}
+  event: { from?: HexCoordinates; order?: number; after?: HealthCause } = {}, raw = false
 ): { damage: number; destroyed: boolean } => {
   const live = state.players[unit.owner].units.find(u => u.id === unit.id);
   if (!live || amount <= 0) return { damage: 0, destroyed: false };
   const before = { ...live };
-  const damage = applyArmor(live, Math.max(1, Math.round(amount * getDamageTakenMultiplier(state, live))));
+  const damage = raw ? Math.round(amount) : applyArmor(live, Math.max(1, Math.round(amount * getDamageTakenMultiplier(state, live))));
   live.lifespan = Math.max(0, live.lifespan - damage);
-  live.revealed = true;
+  if (!raw) live.revealed = true;
   if (live.lifespan > 0) {
     noteHealth(state, before, -damage, cause, event);
     syncHexUnits(state);
@@ -3405,7 +3438,7 @@ export const inflictDamage = (
     return { damage, destroyed: false };
   }
   noteHealth(state, before, -before.lifespan, cause, { ...event, fatal: true });
-  removeUnit(state, live);
+  removeUnit(state, live, cause, event.order);
   if (by && by !== live.owner) {
     creditKill(state, live, by);
     earnGold(state, by, getKillBounty(live));

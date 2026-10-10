@@ -2,7 +2,7 @@
 
 import IntroScreen from '@/components/game/intro/IntroScreen';
 import { useRouter } from 'next/navigation';
-import { BattleConfig, Difficulty, battlePath, loadGameFromLocalStorage } from '@/components/game/storage/GameStorage';
+import { BattleConfig, Difficulty, battlePath, clearSavedGame, loadGameFromLocalStorage } from '@/components/game/storage/GameStorage';
 import { useEffect, useState } from 'react';
 
 export default function Home() {
@@ -14,7 +14,11 @@ export default function Home() {
   }, []);
 
   const handleQuickBattle = (difficulty: Difficulty) => {
-    if (savedBattle && !window.confirm('Start a new battle? Your battle in progress will be lost.')) return;
+    if (savedBattle) {
+      if (!window.confirm('Start a new battle? Your battle in progress will be lost.')) return;
+      // (given up here, so the battle page doesn't ask again)
+      clearSavedGame();
+    }
     router.push(battlePath({ mode: 'quick', difficulty }));
   };
 

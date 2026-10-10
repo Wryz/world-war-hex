@@ -142,22 +142,29 @@ const BuffIcon: React.FC<{ buff: UnitBuff }> = ({ buff }) =>
       : <TerrainIcon terrain={buff.terrain ?? 'plain'} />;
 
 // A unit's buffs as a short row of icons (the first few, then a count). The row sits over the troop,
-// so tapping it first does what tapping the troop does (selects it, or orders an attack on it);
-// tapping the selected troop's row opens each buff's name and numbers.
+// so the first tap on it does what tapping the troop does (selects it, or orders an attack on it);
+// tapping it again (or tapping the selected troop's row) opens each buff's name and numbers.
 // Only the icons take clicks: the open details let clicks through to the board, and close on the
 // next click anywhere else
 const BuffRow: React.FC<{
   buffs: UnitBuff[]; open: boolean; setOpen: (update: (open: boolean) => boolean) => void; onTroopTap?: () => void;
 }> = ({ buffs, open, setOpen, onTroopTap }) => {
   const buttonRef = useRef<HTMLButtonElement>(null);
+  // Tapped once already (the troop tapped): the next tap opens the details
+  const [primed, setPrimed] = useState(false);
+  // (and starts afresh whenever the troop is selected or let go, by tap, key or anything else)
+  const tapSelects = !!onTroopTap;
+  useEffect(() => setPrimed(false), [tapSelects]);
   useEffect(() => {
-    if (!open) return;
+    if (!open && !primed) return;
     const close = (event: PointerEvent) => {
-      if (!buttonRef.current?.contains(event.target as Node)) setOpen(() => false);
+      if (buttonRef.current?.contains(event.target as Node)) return;
+      setOpen(() => false);
+      setPrimed(false);
     };
     window.addEventListener('pointerdown', close);
     return () => window.removeEventListener('pointerdown', close);
-  }, [open, setOpen]);
+  }, [open, primed, setOpen]);
   const loud = buffs.filter(buff => !buff.quiet);
   const shown = loud.slice(0, MAX_BUFF_ICONS);
   const hidden = loud.length - shown.length;
@@ -170,11 +177,13 @@ const BuffRow: React.FC<{
         style={{ pointerEvents: 'auto', touchAction: 'none' }}
         onClick={event => {
           event.stopPropagation();
-          if (onTroopTap) onTroopTap();
-          else setOpen(value => !value);
+          if (onTroopTap && !primed && !open) {
+            onTroopTap();
+            setPrimed(true);
+          } else setOpen(value => !value);
         }}
         aria-expanded={open}
-        title={onTroopTap ? 'Buffs - select the troop, then tap for details' : 'Buffs - tap for details'}
+        title={onTroopTap && !primed ? 'Buffs - tap to select, again for details' : 'Buffs - tap for details'}
         className="flex items-center gap-0.5 rounded-full bg-slate-900/75 px-1 py-px text-[0.6875rem] leading-none shadow hover:bg-slate-800"
       >
         {shown.map(buff => (
