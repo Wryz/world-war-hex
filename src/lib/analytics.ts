@@ -30,7 +30,12 @@ export type AnalyticsEvent =
   | 'castle_chosen'
   | 'ad_reward_offered'
   | 'ad_reward_watched'
-  | 'ad_interstitial_shown';
+  | 'ad_interstitial_shown'
+  | 'cloud_save_enabled'
+  | 'cloud_email_requested'
+  | 'cloud_email_linked'
+  | 'cloud_signed_in'
+  | 'cloud_conflict_resolved';
 
 type Properties = Record<string, string | number | boolean | null | undefined | string[]>;
 

@@ -5,6 +5,7 @@ import { GameState } from '@/types/game';
 import { WeatherId, activeWeather, getFogBankCentres } from '@/lib/game/regionRules';
 import { getNeighbors } from '@/lib/game/hexUtils';
 import { axialToWorld } from './utils/boardGeometry';
+import { particleShare, useGraphicsQuality } from '@/lib/graphics';
 
 // The region's weather on the board: banks of fog drifting across the field, and while a storm
 // rages, sand streaming sideways, snow driving down or ash drifting on the wind.
@@ -78,11 +79,13 @@ const STORMS: Partial<Record<WeatherId, { count: number; color: string; size: nu
 // Particles over the whole field, fading in while the storm rages and out when it blows over
 const Storm: React.FC<{ kind: WeatherId; on: boolean; extent: number }> = ({ kind, on, extent }) => {
   const style = STORMS[kind]!;
+  // (fewer flakes and grains on low graphics)
+  const count = Math.round(style.count * particleShare(useGraphicsQuality()));
   const pointsRef = useRef<THREE.Points>(null);
   const { geometry, phases } = useMemo(() => {
-    const positions = new Float32Array(style.count * 3);
-    const phases = new Float32Array(style.count);
-    for (let i = 0; i < style.count; i++) {
+    const positions = new Float32Array(count * 3);
+    const phases = new Float32Array(count);
+    for (let i = 0; i < count; i++) {
       positions[i * 3] = (Math.random() * 2 - 1) * extent;
       positions[i * 3 + 1] = style.low + Math.random() * (style.high - style.low);
       positions[i * 3 + 2] = (Math.random() * 2 - 1) * extent;
@@ -91,7 +94,7 @@ const Storm: React.FC<{ kind: WeatherId; on: boolean; extent: number }> = ({ kin
     const geometry = new THREE.BufferGeometry();
     geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     return { geometry, phases };
-  }, [style, extent]);
+  }, [style, count, extent]);
   useEffect(() => () => geometry.dispose(), [geometry]);
   useFrame(({ clock }, delta) => {
     const points = pointsRef.current;
@@ -102,7 +105,7 @@ const Storm: React.FC<{ kind: WeatherId; on: boolean; extent: number }> = ({ kin
     if (!points.visible) return;
     const step = Math.min(delta, 0.05);
     const positions = geometry.attributes.position.array as Float32Array;
-    for (let i = 0; i < style.count; i++) {
+    for (let i = 0; i < count; i++) {
       let x = positions[i * 3] + (style.wind + Math.sin(clock.elapsedTime + phases[i]) * style.sway) * step;
       let y = positions[i * 3 + 1] - style.fall * step;
       const z = positions[i * 3 + 2] + Math.cos(clock.elapsedTime * 0.7 + phases[i]) * style.sway * step;

@@ -1,6 +1,7 @@
 import { GameState } from '@/types/game';
 import type { BattleConfig, ChallengeTarget, Difficulty } from '@/lib/campaign/battleSetup';
-import { MAX_SEED, clampRivalLevel } from '@/lib/campaign/battleSetup';
+import { MAX_SEED, clampRivalLevel, dailyBattle } from '@/lib/campaign/battleSetup';
+import { isDayKey } from '@/lib/campaign/daily';
 
 export type { BattleConfig, ChallengeTarget, Difficulty } from '@/lib/campaign/battleSetup';
 
@@ -23,9 +24,10 @@ interface SaveFile {
 }
 
 // A quick battle's address: its difficulty, and when fixed its map, rival and a friend's score to beat
+// (a daily challenge's map and difficulty come from its date)
 const quickQuery = (battle: Extract<BattleConfig, { mode: 'quick' }>) => {
-  const params = new URLSearchParams({ mode: 'quick', difficulty: battle.difficulty });
-  if (battle.seed !== undefined) params.set('seed', String(battle.seed));
+  const params = new URLSearchParams(battle.daily ? { mode: 'quick', daily: battle.daily } : { mode: 'quick', difficulty: battle.difficulty });
+  if (battle.seed !== undefined && !battle.daily) params.set('seed', String(battle.seed));
   if (battle.rivalLevel !== undefined) params.set('rival', String(battle.rivalLevel));
   if (battle.challenge) {
     params.set('score', String(battle.challenge.score));
@@ -51,8 +53,20 @@ const wholeNumber = (value: string | null, min: number, max: number) => {
   return number >= min && number <= max ? number : undefined;
 };
 
+// The link to a day's daily challenge, with a score to beat when it's shared
+export const dailyPath = (day: string, target?: ChallengeTarget) => battlePath(dailyBattle(day, target));
+
 // The quick battle a page's address asks for (a challenge link's map, rival and score included)
 export const quickBattleFromParams = (params: URLSearchParams): Extract<BattleConfig, { mode: 'quick' }> => {
+  const day = params.get('daily');
+  if (isDayKey(day)) {
+    const score = wholeNumber(params.get('score'), 0, 100000);
+    const rival = wholeNumber(params.get('rival'), 1, 99);
+    return {
+      ...dailyBattle(day, score !== undefined ? { score, won: params.get('won') === '1' } : undefined),
+      ...(rival !== undefined ? { rivalLevel: clampRivalLevel(rival) } : {})
+    };
+  }
   const requested = params.get('difficulty') as Difficulty | null;
   const difficulty = requested && DIFFICULTIES.includes(requested) ? requested : 'medium';
   const seed = wholeNumber(params.get('seed'), 0, MAX_SEED);
@@ -69,7 +83,9 @@ export const quickBattleFromParams = (params: URLSearchParams): Extract<BattleCo
 };
 
 const battleKey = (battle: BattleConfig) =>
-  battle.mode === 'campaign' ? `level-${battle.levelId}` : `quick-${battle.difficulty}${battle.seed !== undefined ? `-${battle.seed}` : ''}`;
+  battle.mode === 'campaign' ? `level-${battle.levelId}`
+    : battle.daily ? `daily-${battle.daily}`
+    : `quick-${battle.difficulty}${battle.seed !== undefined ? `-${battle.seed}` : ''}`;
 
 export const sameBattle = (a: BattleConfig, b: BattleConfig) =>
   battleKey(a) === battleKey(b);

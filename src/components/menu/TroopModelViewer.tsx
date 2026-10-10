@@ -8,6 +8,7 @@ import { HexTile } from '../game/HexTile';
 import { getHexSurfaceHeight } from '../game/utils/boardGeometry';
 import { SKY_COLOR } from '@/components/menu/MenuShell';
 import { useReleaseGpuOnUnmount } from '../game/utils/releaseGpu';
+import { canvasQuality, useGraphicsQuality } from '@/lib/graphics';
 
 const noop = () => {};
 const PEDESTAL = { id: 'viewer', coordinates: { q: 0, r: 0 }, terrain: 'plain' as const };
@@ -24,6 +25,7 @@ const Turntable: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 // A troop's 3D model on a hex pedestal, for the bestiary; it can show off its attack
 export const TroopModelViewer: React.FC<{ type: TroopId; owner: PlayerType }> = ({ type, owner }) => {
+  const quality = useGraphicsQuality();
   useReleaseGpuOnUnmount();
   const [attacking, setAttacking] = useState(false);
   const unit = useMemo<Unit>(() => {
@@ -38,7 +40,7 @@ export const TroopModelViewer: React.FC<{ type: TroopId; owner: PlayerType }> = 
 
   return (
     <div className="relative h-64 w-full overflow-hidden rounded-xl" style={{ background: SKY_COLOR }}>
-      <Canvas shadows flat dpr={[1, 1.5]} camera={{ position: [0, 3.2, 4.2], fov: 38 }}>
+      <Canvas key={quality} {...canvasQuality(quality)} flat camera={{ position: [0, 3.2, 4.2], fov: 38 }}>
         <hemisphereLight args={['#ffffff', '#9ccfe8', 1.6]} />
         <directionalLight position={[4, 8, 5]} intensity={1.5} castShadow />
         <group position={[0, -SURFACE - 0.1, 0]}>
