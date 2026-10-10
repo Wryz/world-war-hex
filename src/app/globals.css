@@ -110,6 +110,22 @@ body {
   animation: coinFlight 1.05s cubic-bezier(0.45, 0, 0.55, 1) forwards;
 }
 
+/* The satchel popping up to catch a material a troop found, then tucking itself away */
+@keyframes satchelCatch {
+  0% { opacity: 0; transform: scale(0.5); }
+  12% { opacity: 1; transform: scale(1.08); }
+  20% { transform: scale(1); }
+  62% { transform: scale(1); }
+  70% { transform: scale(1.18); }
+  80% { opacity: 1; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.8); }
+}
+
+.satchel-catch {
+  opacity: 0;
+  animation: satchelCatch 1.7s ease-out forwards;
+}
+
 /* Big battle callouts punching onto the screen */
 @keyframes momentPop {
   0% { opacity: 0; transform: scale(2.2) rotate(-4deg); }

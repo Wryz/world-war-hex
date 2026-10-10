@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { CoinBurst, MomentTone, useEffects } from './effects';
-import { CoinIcon, GoldIcon } from '../icons';
+import { CoinBurst, MATERIAL_FLIGHT_MS, MaterialFlight, MomentTone, useEffects } from './effects';
+import { CoinIcon, GoldIcon, SatchelIcon } from '../icons';
+import { MaterialIcon } from '../MaterialIcon';
 
 // HUD overlay for the battle's big moments: callouts, coins flying to the treasury, confetti and
 // a red flash when your castle is hit
@@ -54,6 +55,42 @@ const CoinFlight: React.FC<{ burst: CoinBurst }> = ({ burst }) => {
   );
 };
 
+// Where found materials fly to: the satchel that pops up below the round counter while they do
+const SATCHEL_POINT = { x: 40, y: 92 };
+
+const MaterialFlightView: React.FC<{ flight: MaterialFlight }> = ({ flight }) => (
+  <span
+    className="coin-flight pointer-events-none fixed left-0 top-0 z-[60] flex h-9 w-9 items-center justify-center rounded-full bg-slate-900/85 text-2xl shadow-lg ring-1 ring-white/30"
+    style={{
+      '--from-x': `${flight.from.x - 18}px`,
+      '--from-y': `${flight.from.y - 18}px`,
+      '--mid-x': `${flight.from.x - 18}px`,
+      '--mid-y': `${flight.from.y - 70}px`,
+      '--to-x': `${SATCHEL_POINT.x - 18}px`,
+      '--to-y': `${SATCHEL_POINT.y - 18}px`,
+      animationDelay: `${flight.delay}s`
+    } as React.CSSProperties}
+  >
+    <MaterialIcon id={flight.material} />
+  </span>
+);
+
+// The satchel itself, there just long enough to catch what flies into it
+const SatchelCatch: React.FC<{ id: number; delay: number }> = ({ id, delay }) => (
+  <span
+    key={id}
+    className="satchel-catch pointer-events-none fixed z-[59] flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900/90 text-3xl shadow-lg ring-2 ring-amber-300/70"
+    style={{
+      left: SATCHEL_POINT.x - 24,
+      top: SATCHEL_POINT.y - 24,
+      animationDuration: `${MATERIAL_FLIGHT_MS / 1000 + delay}s`
+    }}
+    aria-hidden
+  >
+    <SatchelIcon />
+  </span>
+);
+
 const CONFETTI_COLORS = ['#fbbf24', '#f87171', '#60a5fa', '#34d399', '#c084fc', '#f472b6', '#ffffff'];
 
 const Confetti: React.FC = () => {
@@ -102,13 +139,17 @@ const DamageFlash: React.FC<{ count: number }> = ({ count }) => {
 };
 
 export const EffectsLayer: React.FC = () => {
-  const { coins, moments, confetti, flash } = useEffects();
+  const { coins, materials, moments, confetti, flash } = useEffects();
+  // (the satchel stays for the last of the flights in the air)
+  const lastFlight = materials[materials.length - 1];
 
   return (
     <>
       <DamageFlash count={flash} />
       {confetti.map(id => <Confetti key={id} />)}
       {coins.map(burst => <CoinFlight key={burst.id} burst={burst} />)}
+      {lastFlight && <SatchelCatch key={lastFlight.id} id={lastFlight.id} delay={Math.max(...materials.map(flight => flight.delay))} />}
+      {materials.map(flight => <MaterialFlightView key={flight.id} flight={flight} />)}
 
       <div className="pointer-events-none fixed inset-x-0 top-[22%] z-[56] flex flex-col items-center gap-2" role="status" aria-live="polite">
         {moments.map(moment => {
