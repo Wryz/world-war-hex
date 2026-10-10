@@ -1,9 +1,9 @@
 // Tests for lineages, skill trees and the evolved forms' abilities. Run with `npm test`.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import type { UnitType } from '@/types/game';
+import type { Ability, UnitType } from '@/types/game';
 import {
-  ARMOR_REDUCTION, canStrike, getActionTargets, getStrikePowerOnTerrain, getFormationMultiplier, getPointBlankMultiplier, getSightRange, getSituationalBonuses, getUnitAttackRange
+  canStrike, getActionTargets, getCombatPreview, isUnitVisibleTo, getFormationMultiplier, getPointBlankMultiplier, getSightRange, getSituationalBonuses, getUnitAttackRange
 } from './gameState';
 import {
   ATTRIBUTES, ATTRIBUTE_PICKS, BASE_CARD_IDS, LINEAGES, LINEAGE_IDS, PLAYER_SKILLS, applyTree, canAfford, evolvesFrom, lineageCards,
@@ -90,10 +90,20 @@ test('Crossbowmen fight at arm\'s length and their bolts go through armour', () 
   const archer = troop('player', 'artillery', { q: 0, r: 0 }, { abilities: ['rangedAttack'] });
   assert.equal(getPointBlankMultiplier(crossbow, 1), 1);
   assert.ok(getPointBlankMultiplier(archer, 1) < 1);
-  const armoured = troop('ai', 'bandit_thug', { q: 2, r: 0 }, { abilities: ['armored'] });
-  const plainShooter = { ...crossbow, abilities: ['rangedAttack' as const] };
-  const strike = (unit: typeof crossbow) => getStrikePowerOnTerrain(unit, 'plain', armoured, 'plain', 2);
-  assert.equal(strike(crossbow) - strike(plainShooter), ARMOR_REDUCTION, 'what the armour soaks comes back');
+  // Armour soaks nothing in a fight a Crossbowman strikes in - no more than nothing, with several
+  const damageTo = (abilities: Ability[], shooters: number) => {
+    const { state, centre } = makeBattle('player');
+    const target = troop('ai', 'bandit_thug', centre, { abilities, lifespan: 200, maxLifespan: 200 });
+    const bows = Array.from({ length: shooters }, (_, i) =>
+      troop('player', 'crossbow', at(centre, i === 0 ? 2 : i === 1 ? -2 : 0, i === 2 ? 2 : 0), { abilities: ['rangedAttack', 'heavyBolts'], attackPower: 12 }));
+    place(state, target, ...bows);
+    const preview = getCombatPreview(state, { hexCoordinates: centre, attackers: bows, defenders: [target], resolved: false });
+    return { taken: preview.defenders[0].damageTaken, armourShown: preview.defenders[0].modifiers.some(m => m.label === 'Armored') };
+  };
+  for (const shooters of [1, 2, 3]) {
+    assert.equal(damageTo(['armored'], shooters).taken, damageTo([], shooters).taken, `${shooters} crossbows`);
+  }
+  assert.ok(!damageTo(['armored'], 1).armourShown, 'no armour in the preview');
 });
 
 test('keen eyes see further; the steadfast are fearless', () => {
@@ -148,4 +158,34 @@ test('an old save keeps its evolved cards: their bases and earlier forms come to
   assert.deepEqual(sanitizeProfile({ ...profile, deck: ['pegasus'] })!.deck, ['pegasus']);
   assert.deepEqual(profile.trees.tank, { attributes: ['hardy', 'swift'].slice(0, ATTRIBUTE_PICKS), skill: 'impale' });
   assert.equal(profile.trees.rogue, undefined);
+});
+
+test('a hide turns shots, not a halberd swung from 2 hexes', () => {
+  const { state, centre } = makeBattle('player');
+  const skeleton = troop('ai', 'skeleton_warrior', centre);
+  const halberd = troop('player', 'halberdier', at(centre, 2, 0), { abilities: ['reach'] });
+  const archer = troop('player', 'artillery', at(centre, -2, 0), { abilities: ['rangedAttack'] });
+  place(state, skeleton, halberd, archer);
+  const plain = { ...skeleton, type: 'infantry' as UnitType };
+  assert.equal(getFormationMultiplier(state, halberd, skeleton), getFormationMultiplier(state, halberd, plain));
+  assert.ok(getFormationMultiplier(state, archer, skeleton) < getFormationMultiplier(state, archer, plain));
+});
+
+test('a master builder\'s work two hexes away gives no hidden enemy away', () => {
+  const { state, centre } = makeBattle('player', {});
+  state.settings = { ...state.settings, fogOfWar: true };
+  const master = troop('player', 'siege_engineer', centre, { abilities: ['engineering', 'masterBuilder'] });
+  place(state, master);
+  const before = getActionTargets(state, master).map(t => `${t.at.q},${t.at.r},${t.action}`).sort();
+  // A troop out of sight two hexes away (behind a mountain) changes nothing on offer
+  for (const hex of state.hexGrid) {
+    if (getHexDistance(hex.coordinates, centre) === 1 && hex.coordinates.q === centre.q + 1 && hex.coordinates.r === centre.r) hex.terrain = 'mountain';
+  }
+  const offered = getActionTargets(state, master).map(t => `${t.at.q},${t.at.r},${t.action}`).sort();
+  const hidden = troop('ai', 'bandit_thug', at(centre, 2, 0));
+  place(state, hidden);
+  assert.ok(!isUnitVisibleTo(state, 'player', hidden), 'out of sight');
+  assert.ok(offered.includes(`${centre.q + 2},${centre.r},stakes`), 'stakes on offer there');
+  assert.deepEqual(getActionTargets(state, master).map(t => `${t.at.q},${t.at.r},${t.action}`).sort(), offered);
+  assert.ok(before.length > 0);
 });

@@ -76,8 +76,11 @@ export const rivalCards = (rivalLevel: number, seed?: number): TroopId[] => {
     } else if (seed === undefined) {
       cards.push(id, ...tier.forms);
     } else {
-      // About half the time it keeps the base troop
-      const roll = (Math.imul(seed ^ (index + 1) * 0x9e3779b1, 0x85ebca6b) >>> 0) % (tier.forms.length * 2);
+      // About half the time it keeps the base troop (each troop's pick mixed from the seed on its own)
+      let h = (seed ^ Math.imul(index + 1, 0x9e3779b1)) >>> 0;
+      h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+      h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+      const roll = ((h ^ (h >>> 16)) >>> 0) % (tier.forms.length * 2);
       cards.push(roll < tier.forms.length ? tier.forms[roll] : id);
     }
   });
@@ -135,5 +138,10 @@ export const battleTroopTypes = (config: BattleConfig, profile: Profile): TroopI
   const enemies = config.mode === 'campaign'
     ? levelEnemies(getLevel(config.levelId))
     : rivalCards(clampRivalLevel(config.rivalLevel ?? averageCardLevel(profile)), config.seed);
-  return [...new Set([...battleDeck(profile, enemies), ...enemies])];
+  // A quick battle's map (and so its rivals, and the cards picked against them to fill the deck) may
+  // not be chosen yet: then any card the deck might be filled with
+  const own = config.mode === 'quick' && config.seed === undefined && profile.deck.length < MAX_DECK_SIZE
+    ? (Object.keys(profile.cards) as TroopId[])
+    : battleDeck(profile, enemies);
+  return [...new Set([...own, ...enemies])];
 };

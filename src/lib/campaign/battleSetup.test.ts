@@ -55,6 +55,9 @@ test('a seasoned rival kingdom brings evolved forms, the same ones for the same 
   assert.deepEqual(rivalCards(12, 42), veteran);
   const seen = new Set(Array.from({ length: 40 }, (_, seed) => rivalCards(12, seed)).flat());
   for (const form of ['warden', 'warlord', 'crossbow', 'halberdier', 'wolf_rider', 'archmage', 'pegasus']) assert.ok(seen.has(form as never), form);
+  // Each troop is picked on its own: many different armies, not a handful
+  const armies = new Set(Array.from({ length: 400 }, (_, seed) => rivalCards(12, seed).join()));
+  assert.ok(armies.size >= 30, `${armies.size} armies`);
   // Without a seed, every troop it might field (for loading their models)
   for (const id of veteran) assert.ok(rivalCards(12).includes(id));
 });

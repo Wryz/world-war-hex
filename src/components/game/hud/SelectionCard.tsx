@@ -106,7 +106,7 @@ export const SelectionCard: React.FC<SelectionCardProps> = ({ gameState, selecte
             </div>
           )}
           {getMobSkill(unit) && (
-            <div className="mt-2 rounded-md bg-rose-950/50 px-2 py-1 text-rose-100" title="This monster's own skill">
+            <div className="mt-2 rounded-md bg-rose-950/50 px-2 py-1 text-rose-100" title={unit.skill ? 'A skill learnt on its skill tree' : "This monster's own skill"}>
               <span className="flex items-center gap-1.5 font-bold"><MonsterSkillIcon /> {getMobSkill(unit)!.name}</span>
               <span className="block text-[0.6875rem] leading-snug text-rose-200/80">{getMobSkill(unit)!.description}</span>
             </div>
