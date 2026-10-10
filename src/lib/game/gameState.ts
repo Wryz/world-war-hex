@@ -1344,7 +1344,11 @@ const STAKE_GROUND: TerrainType[] = ['plain', 'desert', 'hills', 'snow'];
 // order has already claimed, and never pulling a bridge or gate down from under a troop.
 export const getActionTargets = (state: GameState, unit: Unit): ActionTarget[] => {
   if (unit.hasMoved) return [];
-  const claimed = new Set(state.pendingMoves.filter(m => m.unitId !== unit.id).map(m => coordKey(m.to)));
+  // (nor on a hex a recruit is about to be deployed to)
+  const claimed = new Set([
+    ...state.pendingMoves.filter(m => m.unitId !== unit.id).map(m => coordKey(m.to)),
+    ...state.pendingPurchases.map(p => coordKey(p.position))
+  ]);
   // (only the troops its side can see: a master builder working two hexes away mustn't give away an
   // enemy hiding in the fog - an order onto a hidden troop's hex comes to nothing when carried out)
   const reach = hasAbility(unit, 'masterBuilder') ? MASTER_BUILDER_REACH : 1;
@@ -2197,13 +2201,15 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
   const targetOf = new Map<string, string>();
   // How many attackers already picked each enemy (joining them flanks it)
   const attackersOn = new Map<string, number>();
+  // Enemies a Crossbowman already picked (their fight goes through armour)
+  const piercedTargets = new Set<string>();
   const dealt = (target: Unit, damage: number, pierced = false) => applyArmor(target, damage > 0 ? Math.max(1, Math.round(damage)) : 0, pierced);
 
   for (const { unit, targets } of choices) {
     const options = targets.map(target => {
       const assigned = assignedDamage.get(target.id) ?? 0;
       const strike = getStrikePower(state, unit, target, (attackersOn.get(target.id) ?? 0) + 1);
-      const pierced = piercesArmour([unit]);
+      const pierced = piercesArmour([unit]) || piercedTargets.has(target.id);
       const healthLeft = target.lifespan - dealt(target, assigned, pierced);
       return {
         target,
@@ -2233,6 +2239,7 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
     targetOf.set(unit.id, target.id);
     attackersOn.set(target.id, (attackersOn.get(target.id) ?? 0) + 1);
     assignedDamage.set(target.id, (assignedDamage.get(target.id) ?? 0) + strike);
+    if (piercesArmour([unit])) piercedTargets.add(target.id);
   }
 
   const combats: Combat[] = [];

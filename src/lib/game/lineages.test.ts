@@ -173,7 +173,7 @@ test('a hide turns shots, not a halberd swung from 2 hexes', () => {
 
 test('a master builder\'s work two hexes away gives no hidden enemy away', () => {
   const { state, centre } = makeBattle('player', {});
-  state.settings = { ...state.settings, fogOfWar: true };
+  state.settings = { ...state.settings!, fogOfWar: true } as typeof state.settings;
   const master = troop('player', 'siege_engineer', centre, { abilities: ['engineering', 'masterBuilder'] });
   place(state, master);
   const before = getActionTargets(state, master).map(t => `${t.at.q},${t.at.r},${t.action}`).sort();

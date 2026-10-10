@@ -324,7 +324,7 @@ export const planAITurn = (initial: GameState, options: AIPlanOptions = {}): Gam
   const planned = planTurn(mirrorSides(view), doctrine, getHand(state), options.difficulty, options);
   let result = state;
   for (const move of planned.pendingMoves) {
-    result = addPendingMove(result, move.unitId, state.players.player.id, move.to);
+    result = addPendingMove(result, move.unitId, state.players.player.id, move.to, move.action);
   }
   for (const purchase of planned.pendingPurchases) {
     result = addPendingPurchase(result, state.players.player.id, purchase.unitType, purchase.position);
