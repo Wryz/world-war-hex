@@ -59,7 +59,9 @@ export const estimateDamage = (state: GameState, unit: Unit, at: HexCoordinates,
       heightOf(position) - heightOf(at, targetHex));
   })), 0);
   const damage = Math.max(1, Math.round(total));
-  return unit.abilities.includes('armored') ? Math.max(1, damage - ARMOR_REDUCTION * threats.length) : damage;
+  // (armour soaks some of each strike - unless a crossbow's bolts go through it)
+  const pierced = threats.some(({ enemy }) => enemy.abilities.includes('heavyBolts'));
+  return unit.abilities.includes('armored') && !pierced ? Math.max(1, damage - ARMOR_REDUCTION * threats.length) : damage;
 };
 
 // How dangerous each threatened hex is, from 0 to 1: the attack power that can reach it compared

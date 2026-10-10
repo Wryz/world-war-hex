@@ -88,7 +88,7 @@ export const ownUpgradeLadder = (id: TroopId, level: number): number => {
 };
 
 const upgradeCostAt = (rarity: Rarity, level: number, eliteUnlocked: boolean): number | null => {
-  if (level >= MAX_CARD_LEVEL || (level >= BASE_MAX_CARD_LEVEL && !eliteUnlocked)) return null;
+  if (!Number.isFinite(level) || level >= MAX_CARD_LEVEL || (level >= BASE_MAX_CARD_LEVEL && !eliteUnlocked)) return null;
   const base = UPGRADE_BASE[rarity];
   const cost = level < BASE_MAX_CARD_LEVEL
     ? base * UPGRADE_GROWTH ** (level - 1)

@@ -17,7 +17,9 @@ import { PLAYER_CARD_IDS, cardStats } from './troops';
 import { CARD_UNLOCK_LEVEL, SHOP_UNLOCK_LEVEL, ownUpgradeLadder } from '../meta/economy';
 import { sanitizeProfile } from '../meta/profile';
 import { getHexDistance } from './hexUtils';
-import { at, makeBattle, makeUnit, place } from './testUtils';
+import { at, find, makeBattle, makeUnit, place, playTurn } from './testUtils';
+import { BOSS_FALL_SHAKE } from './regionRules';
+import { estimateDamage } from './threats';
 
 const troop = (owner: 'player' | 'ai', type: string, position: { q: number; r: number }, extra = {}) =>
   makeUnit(owner, position, { type: type as UnitType, ...extra });
@@ -188,4 +190,24 @@ test('a master builder\'s work two hexes away gives no hidden enemy away', () =>
   assert.ok(offered.includes(`${centre.q + 2},${centre.r},stakes`), 'stakes on offer there');
   assert.deepEqual(getActionTargets(state, master).map(t => `${t.at.q},${t.at.r},${t.action}`).sort(), offered);
   assert.ok(before.length > 0);
+});
+
+test('a boss the venom finishes shakes its army as long as one slain in a fight', () => {
+  const { state, centre } = makeBattle('ai');
+  const king = troop('ai', 'bandit_king', centre, { isBoss: true, lifespan: 2, maxLifespan: 80, poisoned: 5 });
+  const thug = troop('ai', 'bandit_thug', at(centre, 1, 0));
+  place(state, king, thug);
+  const after = playTurn(state);
+  assert.equal(find(after, king), undefined, 'the venom finished it');
+  assert.equal(find(after, thug)?.shaken, BOSS_FALL_SHAKE);
+});
+
+test('the threat preview knows crossbow bolts go through armour', () => {
+  const { state, centre } = makeBattle('player');
+  const warden = troop('player', 'warden', centre, { abilities: ['armored'] });
+  const bolts = troop('ai', 'crossbow', at(centre, 2, 0), { abilities: ['rangedAttack', 'heavyBolts'], attackPower: 12 });
+  place(state, warden, bolts);
+  const threat = [{ enemy: bolts, from: [bolts.position] }];
+  const plain = { ...warden, abilities: [] };
+  assert.equal(estimateDamage(state, warden, centre, threat as never), estimateDamage(state, plain, centre, threat as never));
 });

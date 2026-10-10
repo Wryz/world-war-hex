@@ -141,7 +141,12 @@ export const createProfile = (): Profile => {
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
-const toCount = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0);
+// (capped well beyond anything playable, so a tampered save can't break the sums)
+const MAX_COUNT = 1_000_000_000;
+const toCount = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.min(MAX_COUNT, Math.floor(value)) : 0);
+// Materials are capped lower: more than any player could gather
+const MAX_MATERIAL = 99_999;
+const ownKey = (record: object, key: string) => Object.prototype.hasOwnProperty.call(record, key);
 
 // Turn whatever was stored into a valid profile, dropping anything unknown
 export const sanitizeProfile = (raw: unknown): Profile | null => {
@@ -234,14 +239,14 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
 
   const stats = emptyStats();
   if (isRecord(raw.stats)) {
-    for (const key of Object.keys(stats) as (keyof ProfileStats)[]) {
+    for (const key of [...Object.keys(stats), 'fastestWinRounds'] as (keyof ProfileStats)[]) {
       const value = raw.stats[key];
       if (key === 'cardsPlayed') {
         if (isRecord(value)) {
           for (const [id, count] of Object.entries(value)) if (isTroopId(id)) stats.cardsPlayed[id] = toCount(count);
         }
       } else if (key === 'fastestWinRounds') {
-        stats.fastestWinRounds = value === undefined ? undefined : toCount(value);
+        stats.fastestWinRounds = value === undefined || value === null ? undefined : toCount(value) || undefined;
       } else {
         stats[key] = toCount(value);
       }
@@ -261,7 +266,7 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
   const materials: Haul = {};
   if (isRecord(raw.materials)) {
     for (const [id, count] of Object.entries(raw.materials)) {
-      if (isMaterialId(id) && toCount(count) > 0) materials[id] = toCount(count);
+      if (isMaterialId(id) && toCount(count) > 0) materials[id] = Math.min(MAX_MATERIAL, toCount(count));
     }
   }
   const materialsFound = [...new Set([
@@ -395,13 +400,15 @@ export const evolveCard = (id: TroopId): boolean => {
 
 // --- Skill trees -------------------------------------------------------------------------------
 
-export const treeOf = (profile: Profile, lineage: LineageId): LineageTree => profile.trees[lineage] ?? { attributes: [] };
+export const treeOf = (profile: Profile, lineage: LineageId): LineageTree =>
+  (LINEAGE_IDS.includes(lineage) ? profile.trees[lineage] : undefined) ?? { attributes: [] };
 
 const setTree = (profile: Profile, lineage: LineageId, tree: LineageTree, changes: Partial<Profile> = {}) =>
   setProfile({ ...profile, ...changes, trees: { ...profile.trees, [lineage]: tree } });
 
 // Learn one of a lineage's attributes (two of its four), paying its materials
 export const learnAttribute = (lineage: LineageId, id: AttributeId): boolean => {
+  if (!LINEAGE_IDS.includes(lineage)) return false;
   const profile = getProfile();
   const tree = treeOf(profile, lineage);
   const attribute = ATTRIBUTES[id];
@@ -414,6 +421,7 @@ export const learnAttribute = (lineage: LineageId, id: AttributeId): boolean => 
 
 // Learn one of a lineage's two skills (once it has an attribute), paying its materials
 export const learnSkill = (lineage: LineageId, id: PlayerSkillId): boolean => {
+  if (!LINEAGE_IDS.includes(lineage)) return false;
   const profile = getProfile();
   const tree = treeOf(profile, lineage);
   const skill = PLAYER_SKILLS[id];
@@ -426,6 +434,7 @@ export const learnSkill = (lineage: LineageId, id: PlayerSkillId): boolean => {
 
 // Swap an attribute already learnt for another of the lineage's, for coins
 export const respecAttribute = (lineage: LineageId, from: AttributeId, to: AttributeId): boolean => {
+  if (!LINEAGE_IDS.includes(lineage)) return false;
   const profile = getProfile();
   const tree = treeOf(profile, lineage);
   if (!tree.attributes.includes(from) || tree.attributes.includes(to) || !LINEAGES[lineage].attributes.includes(to)) return false;
@@ -440,6 +449,7 @@ export const respecAttribute = (lineage: LineageId, from: AttributeId, to: Attri
 
 // Swap the skill learnt for the lineage's other one, for coins
 export const respecSkill = (lineage: LineageId, to: PlayerSkillId): boolean => {
+  if (!LINEAGE_IDS.includes(lineage)) return false;
   const profile = getProfile();
   const tree = treeOf(profile, lineage);
   if (!tree.skill || tree.skill === to || !LINEAGES[lineage].skills.includes(to) || profile.coins < RESPEC_COST) return false;
@@ -454,6 +464,7 @@ export const respecSkill = (lineage: LineageId, to: PlayerSkillId): boolean => {
 // --- Shop and deck -------------------------------------------------------------------------
 
 export const buyCard = (id: TroopId): boolean => {
+  if (!isTroopId(id)) return false;
   const profile = getProfile();
   if (profile.cards[id] !== undefined || !isCardAvailable(profile, id)) return false;
   const price = cardPrice(id);
@@ -472,6 +483,7 @@ export const buyCard = (id: TroopId): boolean => {
 
 // Train a card up a level - and with it every form of its lineage
 export const upgradeCard = (id: TroopId): boolean => {
+  if (!isTroopId(id)) return false;
   const profile = getProfile();
   const level = profile.cards[id];
   if (level === undefined) return false;
@@ -490,6 +502,7 @@ export const upgradeCard = (id: TroopId): boolean => {
 // Add a card to the deck, or take it out (a deck always keeps at least one card). A form of a
 // lineage already in the deck takes its place there.
 export const toggleDeckCard = (id: TroopId): boolean => {
+  if (!isTroopId(id)) return false;
   const profile = getProfile();
   if (profile.cards[id] === undefined) return false;
   if (profile.deck.includes(id)) {
@@ -514,7 +527,7 @@ export const deckFormOf = (profile: Profile, lineage: LineageId): TroopId | unde
 // Replace the battle loadout (owned cards only, one of each lineage, at most MAX_DECK_SIZE, at least one)
 export const setDeck = (deck: TroopId[]): boolean => {
   const profile = getProfile();
-  const next = oneOfEachLineage(deck.filter((id, index) => profile.cards[id] !== undefined && deck.indexOf(id) === index)).slice(0, MAX_DECK_SIZE);
+  const next = oneOfEachLineage(deck.filter((id, index) => isTroopId(id) && profile.cards[id] !== undefined && deck.indexOf(id) === index)).slice(0, MAX_DECK_SIZE);
   if (next.length === 0) return false;
   setProfile({ ...profile, deck: next });
   return true;
@@ -536,7 +549,7 @@ export const retiredTacticRefund = (tactics: unknown): number => {
   let coins = 0;
   for (const [id, value] of Object.entries(tactics)) {
     const level = Math.min(RETIRED_TACTIC_MAX_LEVEL, Math.max(1, toCount(value)));
-    const unlockAt = RETIRED_TACTIC_UNLOCK[id];
+    const unlockAt = ownKey(RETIRED_TACTIC_UNLOCK, id) ? RETIRED_TACTIC_UNLOCK[id] : undefined;
     if (unlockAt !== undefined) coins += Math.round((100 + 4 * unlockAt) / 10) * 10;
     for (let from = 1; from < level; from++) coins += Math.round(25 * 1.45 ** (from - 1) / 5) * 5;
   }

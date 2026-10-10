@@ -2316,7 +2316,7 @@ const detectIntercepts = (state: GameState, attackerSide: PlayerType, siege: Gam
     const options = targets.map(target => {
       const strike = getStrikePower(state, guard, target, (assigned.get(target.id)?.length ?? 0) + 1);
       const before = damageOn.get(target.id) ?? 0;
-      const pierced = piercesArmour([guard]);
+      const pierced = piercesArmour([guard, ...(assigned.get(target.id) ?? [])]);
       const kills = applyArmor(target, Math.max(1, Math.round(before)), pierced) < target.lifespan &&
         applyArmor(target, Math.max(1, Math.round(before + strike)), pierced) >= target.lifespan;
       return { target, strike, kills };
@@ -2560,6 +2560,7 @@ const finishTurn = (state: GameState): GameState => {
   scatterMinions(newState);
   // Venom: this side's poisoned troops lose what the poison takes, and are rid of it
   // (venom taken during this very turn waits for the end of its next one)
+  const shakenBefore = new Map(newState.players[activePlayer].units.map(unit => [unit.id, unit.shaken ?? 0]));
   for (const unit of [...newState.players[activePlayer].units]) {
     if (!unit.poisoned) continue;
     if (unit.poisonFresh) {
@@ -2570,6 +2571,12 @@ const finishTurn = (state: GameState): GameState => {
     unit.poisoned = undefined;
     const { destroyed } = inflictDamage(newState, unit, amount, getOpponent(activePlayer), 'venom', {}, true);
     addLog(newState, activePlayer, `${unitLabel(unit)} ${destroyed ? 'succumbs to' : 'suffers'} the venom${destroyed ? '' : ` (-${amount})`}.`);
+  }
+  // (a boss or champion the venom finishes shakes its army as though it fell on the enemy's turn:
+  // this turn's count-down has already been taken, so the extra turn a fall on its own turn gets
+  // isn't owed)
+  for (const unit of newState.players[activePlayer].units) {
+    if ((unit.shaken ?? 0) > (shakenBefore.get(unit.id) ?? 0)) unit.shaken = Math.max(shakenBefore.get(unit.id) ?? 0, unit.shaken! - 1) || undefined;
   }
   // Morale: the other side's badly hurt troops caught alone among this side's waver
   const opponent = getOpponent(activePlayer);
@@ -3132,7 +3139,10 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     const total = [...bonuses.values()].reduce((sum, value) => sum + value, 0);
     add(bonuses.size === 1 ? [...bonuses.keys()][0] : 'Bonuses', 'good', `+${total}%`, total);
   }
-  if (hasAbility(target, 'armored') && !piercesArmour(attackers)) add('Armored', 'bad', `-${ARMOR_REDUCTION}`, 15);
+  if (hasAbility(target, 'armored')) {
+    if (piercesArmour(attackers)) add('Armour pierced', 'good', undefined, 15);
+    else add('Armored', 'bad', `-${ARMOR_REDUCTION}`, 15);
+  }
   if (canRise(target) && !finishesUndead(attackers)) add('Undying', 'bad', undefined, 10);
   for (const protection of getProtections(state, target)) {
     add(protection.label, 'bad', `-${Math.round(protection.reduction * 100)}%`, Math.round(protection.reduction * 100));
