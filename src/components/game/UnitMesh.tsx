@@ -319,6 +319,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       deathRef.current = null;
       rigRef.current?.setState('idle');
       rigStateRef.current = null;
+      mountRef.current?.revive();
       actionRef.current?.fadeOut(0.2);
       actionRef.current = null;
     }

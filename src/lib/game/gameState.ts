@@ -2209,8 +2209,10 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
     const options = targets.map(target => {
       const assigned = assignedDamage.get(target.id) ?? 0;
       const strike = getStrikePower(state, unit, target, (attackersOn.get(target.id) ?? 0) + 1);
-      const pierced = piercesArmour([unit]) || piercedTargets.has(target.id);
-      const healthLeft = target.lifespan - dealt(target, assigned, pierced);
+      // (this unit's own strike is what makes the fight go through armour, if it does)
+      const alreadyPierced = piercedTargets.has(target.id);
+      const pierced = piercesArmour([unit]) || alreadyPierced;
+      const healthLeft = target.lifespan - dealt(target, assigned, alreadyPierced);
       return {
         target,
         strike,
@@ -2316,8 +2318,9 @@ const detectIntercepts = (state: GameState, attackerSide: PlayerType, siege: Gam
     const options = targets.map(target => {
       const strike = getStrikePower(state, guard, target, (assigned.get(target.id)?.length ?? 0) + 1);
       const before = damageOn.get(target.id) ?? 0;
-      const pierced = piercesArmour([guard, ...(assigned.get(target.id) ?? [])]);
-      const kills = applyArmor(target, Math.max(1, Math.round(before)), pierced) < target.lifespan &&
+      const others = assigned.get(target.id) ?? [];
+      const pierced = piercesArmour([guard, ...others]);
+      const kills = applyArmor(target, Math.max(1, Math.round(before)), piercesArmour(others)) < target.lifespan &&
         applyArmor(target, Math.max(1, Math.round(before + strike)), pierced) >= target.lifespan;
       return { target, strike, kills };
     }).sort((a, b) => Number(b.kills) - Number(a.kills) || b.target.attackPower - a.target.attackPower || compareIds(a.target, b.target));

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { TroopId } from '@/lib/game/troops';
 import type { LineageSetting } from '@/lib/game/lineages';
@@ -145,6 +145,7 @@ const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (f
   const actionRef = useRef<THREE.AnimationAction | null>(null);
   const rigRef = useRef<UnitModelInstance['rig'] | null>(null);
   const mountRef = useRef<MountRig | null>(null);
+  const invalidate = useThree(state => state.invalidate);
   const ringRef = useRef<THREE.Mesh>(null);
   const burstRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.PointLight>(null);
@@ -189,9 +190,11 @@ const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (f
       mountRef.current?.setWalking(false);
       actionRef.current = null;
       setLoaded(n => n + 1);
+      // (a paused scene draws it once, so its shaders are ready before the scene is shown)
+      invalidate();
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [type]);
+  }, [type, invalidate]);
   // (and the last one goes when the scene closes)
   useEffect(() => {
     const container = containerRef.current;
@@ -230,7 +233,11 @@ const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (f
 
   // Start a moment
   useEffect(() => {
-    if (!moment) return;
+    // (a moment cut short is dropped, rather than picking up where it was when the next scene opens)
+    if (!moment) {
+      momentRef.current = null;
+      return;
+    }
     momentRef.current = { moment, time: 0, swapped: false };
     if (moment.kind === 'learn') {
       play('Spellcast_Raise', true);

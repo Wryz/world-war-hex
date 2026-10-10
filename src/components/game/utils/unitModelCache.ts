@@ -40,6 +40,8 @@ export interface MountRig {
   // The beast lunges with its rider's blow, and falls with it
   strike(duration: number): void;
   die(): void;
+  // Back on its feet with its rider (a unit that fell in a battle it survived after all)
+  revive(): void;
 }
 
 export interface UnitModelInstance {
@@ -339,6 +341,10 @@ const instantiateHumanoid = async (look: HumanoidLook, owner: PlayerType): Promi
       die: () => {
         dead = true;
         rig.setState('death');
+      },
+      revive: () => {
+        dead = false;
+        rig.setState('idle');
       }
     };
     return { scene, animations, mount, wings, beastRig: rig };
@@ -363,7 +369,8 @@ const instantiateHumanoid = async (look: HumanoidLook, owner: PlayerType): Promi
     update: delta => mixer.update(delta),
     stop: () => mixer.stopAllAction(),
     strike: () => {},
-    die: () => { gallop.timeScale = 0; }
+    die: () => { gallop.timeScale = 0; },
+    revive: () => {}
   };
   return { scene, animations, mount, wings };
 };

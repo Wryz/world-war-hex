@@ -202,19 +202,29 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
   // A form just evolved into: pictured at the root once its moment is over (or skipped)
   const evolvedRef = useRef<TroopId | null>(null);
-  const endScene = useCallback((key?: number) => {
-    setScene(current => (key === undefined || current?.key === key ? null : current));
+  // (whatever of it was still to come is dropped: tapped mid-way, it doesn't play on in the next one)
+  const endScene = useCallback(() => {
+    timers.current.forEach(clearTimeout);
+    timers.current.clear();
+    setScene(null);
+    setMoment(null);
+    setFlight(null);
     if (evolvedRef.current) {
       setViewing(evolvedRef.current);
       evolvedRef.current = null;
     }
   }, []);
 
+  // (Escape skips a scene playing, and otherwise closes the sheet)
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => { if (event.key === 'Escape') onClose(); };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (scene) endScene();
+      else onClose();
+    };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+  }, [onClose, scene, endScene]);
   // (moments still to come are dropped when the sheet closes)
   useEffect(() => {
     const pending = timers.current;
@@ -233,15 +243,17 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
   // when tapped)
   const celebrate = (cost: MaterialCost, next: ShowcaseMoment, type: TroopId) => {
     const key = Date.now();
+    timers.current.forEach(clearTimeout);
+    timers.current.clear();
     const materials = costEntries(cost).flatMap(([id, count]) => Array.from({ length: Math.min(3, count) }, () => id));
     setScene({ key, type });
     setFlight(materials.length > 0 ? { key, materials } : null);
     const delay = materials.length > 0 ? FLIGHT_MS : 200;
     later(() => {
-      setFlight(current => (current?.key === key ? null : current));
+      setFlight(null);
       setMoment(next);
     }, delay);
-    later(() => endScene(key), delay + (next.kind === 'evolve' ? EVOLVE_MS : LEARN_MS));
+    later(endScene, delay + (next.kind === 'evolve' ? EVOLVE_MS : LEARN_MS));
   };
 
   // --- Actions ---
@@ -314,8 +326,8 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
         onClick={event => event.stopPropagation()}
         className={`${CARD_CLASS} animate-fadeIn relative flex max-h-[94vh] w-full max-w-2xl flex-col overflow-hidden rounded-b-none p-0 sm:rounded-b-2xl`}
       >
-        {/* Header */}
-        <div className="flex items-center gap-3 border-b border-slate-700/60 px-4 py-3">
+        {/* Header (everything under a scene playing is out of reach of the keyboard too) */}
+        <div inert={!!scene} className="flex items-center gap-3 border-b border-slate-700/60 px-4 py-3">
           <div className="min-w-0 flex-1">
             <h2 className="font-display truncate text-xl leading-tight text-white">{def.name} skill tree</h2>
             <p className="text-xs font-bold text-slate-400">Level {level} · tap a node to see it</p>
@@ -323,7 +335,7 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
           <button onClick={onClose} className="rounded-full bg-slate-800 px-3 py-1 text-sm font-bold text-slate-300 hover:bg-slate-700" aria-label="Close">✕</button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <div inert={!!scene} className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
           {/* The tree */}
           <div ref={containerRef} className="relative grid grid-cols-[minmax(0,5fr)_minmax(0,6fr)] gap-x-6 px-3 py-4 sm:gap-x-12 sm:px-6">
             <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden>
@@ -429,7 +441,7 @@ export const SkillTreeSheet: React.FC<SkillTreeSheetProps> = ({ lineage, onClose
         </div>
 
         {/* What the selected node does */}
-        <div className="border-t border-slate-700/60 bg-slate-950/60 px-4 py-3 pb-[calc(0.75rem+var(--safe-b))]">
+        <div inert={!!scene} className="border-t border-slate-700/60 bg-slate-950/60 px-4 py-3 pb-[calc(0.75rem+var(--safe-b))]">
           <Details
             selection={selected}
             lineage={lineage}
@@ -511,12 +523,21 @@ const Details: React.FC<DetailsProps> = ({ selection, lineage, viewing, deckFull
   if (selection.kind === 'root') {
     const owned = [def.base, ...def.forms.map(f => f.id)].filter(id => profile.cards[id] !== undefined).length;
     return (
-      <div className="text-sm">
-        <div className="font-display text-lg text-white">{TROOPS[viewing].name}</div>
-        <p className="text-slate-300">
-          Learn two attributes, then a skill, and evolve the {def.name} into new forms with the materials you bring home from battle.
-          Every form shares this level and tree.{owned > 1 && ' Tap a form you have to see it here.'}
-        </p>
+      <div className="flex flex-col gap-2 text-sm">
+        <div>
+          <div className="font-display text-lg text-white">{TROOPS[viewing].name}</div>
+          <p className="text-slate-300">
+            Learn two attributes, then a skill, and evolve the {def.name} into new forms with the materials you bring home from battle.
+            Every form shares this level and tree.{owned > 1 && ' Tap a form you have to see it here.'}
+          </p>
+        </div>
+        {viewing !== def.base && (
+          <div>
+            <button onClick={() => onView(def.base)} className={`${BUTTON} bg-slate-700 text-slate-100 shadow-[0_3px_0_#1e293b] hover:bg-slate-600`}>
+              Show the {TROOPS[def.base].name}
+            </button>
+          </div>
+        )}
       </div>
     );
   }
