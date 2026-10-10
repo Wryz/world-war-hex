@@ -68,6 +68,7 @@ import { TutorialMarkers } from './shared/TutorialMarkers';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
 import { isMaterialId } from '@/lib/game/materials';
 import { SKY_COLOR } from '@/components/menu/MenuShell';
+import { useReleaseGpuOnUnmount } from './utils/releaseGpu';
 
 // Identity of a unit's buffs, to keep its props stable while they don't change
 const buffKey = (buffs: UnitBuff[]) => buffs.map(buff => `${buff.id}:${buff.value}`).join('|');
@@ -157,6 +158,7 @@ interface GameBoardProps {
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
   // Use loading state from the parent provider
   const { isComplete: assetsLoaded } = useLoadingManager();
+  useReleaseGpuOnUnmount();
 
 
   return (
@@ -1025,8 +1027,10 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   const signature = unitSignature(unit);
   const situational = getSituationalBonuses(state, unit);
   if (signature) {
-    const bonus = situational.find(entry => entry.label === signature.def.name);
-    const warding = signature.def.id === 'ward' &&
+    // (signatures that work on the friends beside it - Ward, War Cry - show while it has any)
+    const onFriends = signature.def.id === 'ward' || signature.def.id === 'warCry';
+    const bonus = onFriends ? undefined : situational.find(entry => entry.label === signature.def.name);
+    const warding = onFriends &&
       state.players[unit.owner].units.some(ally => ally.id !== unit.id && getHexDistance(ally.position, unit.position) === 1);
     if (bonus || warding) {
       buffs.push({
@@ -1037,7 +1041,7 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   }
   // Its bonuses from others (Ward)
   for (const bonus of situational) {
-    if (bonus.label !== signature?.def.name) {
+    if (bonus.label !== signature?.def.name || signature.def.id === 'warCry') {
       // (a blacksmith's edge is on every troop, so it only shows in the list)
       buffs.push({ id: `bonus-${bonus.label}`, icon: 'attack', label: bonus.label, value: `+${pct(bonus.multiplier - 1)} attack`, good: true, quiet: bonus.label === 'Blacksmith' });
     }

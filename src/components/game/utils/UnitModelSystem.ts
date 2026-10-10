@@ -141,7 +141,7 @@ const LOOKS: Record<TroopId, UnitLook> = {
   }),
   // Evolved forms: built from the same packs' parts no other troop carries
   warden: humanoid({
-    model: 'knight', scale: 0.5, weapons: ['1H_Sword_Offhand', 'Rectangle_Shield'], animations: { ...STAB, idle: 'Blocking' },
+    model: 'knight', scale: 0.5, weapons: ['1H_Sword', 'Rectangle_Shield'], animations: { ...STAB, idle: 'Blocking' },
     palette: { metal: '#64748b', cloth: '#1e3a5f' }
   }),
   warlord: humanoid({
@@ -149,8 +149,8 @@ const LOOKS: Record<TroopId, UnitLook> = {
     palette: { cloth: '#7f1d1d', leather: '#3f2a1a' }
   }),
   crossbow: humanoid({
-    model: 'ranger', scale: 0.45, weapons: ['2H_Crossbow'], hide: ['Rogue_Cape'], animations: CROSSBOW, projectile: 'arrow',
-    palette: { cloth: '#7c2d12', leather: '#3b2a1a', metal: '#4b5563' }
+    model: 'ranger', scale: 0.45, weapons: ['2H_Crossbow'], animations: CROSSBOW, projectile: 'arrow',
+    palette: { cloth: '#57534e', leather: '#3b2a1a', metal: '#4b5563' }
   }),
   halberdier: humanoid({
     model: 'knight', scale: 0.46, weapons: [], pike: true, animations: STAB,

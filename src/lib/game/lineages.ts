@@ -20,7 +20,7 @@ import type { TroopId } from './troops';
 export type LineageId = 'infantry' | 'artillery' | 'tank' | 'rogue' | 'medic' | 'engineer';
 export const LINEAGE_IDS: LineageId[] = ['infantry', 'artillery', 'tank', 'rogue', 'medic', 'engineer'];
 
-export type AttributeId = 'hardy' | 'drilled' | 'swift' | 'trailblazer' | 'keen' | 'steadfast' | 'mender' | 'siegecraft';
+export type AttributeId = 'hardy' | 'drilled' | 'swift' | 'trailblazer' | 'keen' | 'steadfast' | 'mender';
 
 export type PlayerSkillId =
   | 'rally' | 'executioner' | 'fireArrows' | 'huntersMark' | 'bulwark' | 'impale'
@@ -47,8 +47,7 @@ export const ATTRIBUTES: Record<AttributeId, AttributeDef> = {
   trailblazer: { id: 'trailblazer', name: 'Trailblazer', description: 'Desert, swamp, snow and ice cost only 1 movement.', ability: 'pathfinder', cost: { timber: 3, tent_canvas: 2 } },
   keen: { id: 'keen', name: 'Keen Eyes', description: 'Sees one hex further through the fog.', ability: 'keenEyed', cost: { granite: 2, tent_canvas: 3 } },
   steadfast: { id: 'steadfast', name: 'Steadfast', description: 'Fearless: never shaken by curses, fallen champions or being surrounded.', ability: 'fearless', cost: { clay_bricks: 3, granite: 3 } },
-  mender: { id: 'mender', name: 'Field Dressing', description: 'Heals 2 health at the end of each of its turns.', ability: 'regenerate', cost: { wild_herbs: 6, clay_bricks: 2 } },
-  siegecraft: { id: 'siegecraft', name: 'Siegecraft', description: 'Deals double damage to castles.', ability: 'siege', cost: { timber: 4, roof_thatch: 2 } }
+  mender: { id: 'mender', name: 'Field Dressing', description: 'Heals 2 health at the end of each of its turns.', ability: 'regenerate', cost: { wild_herbs: 6, clay_bricks: 2 } }
 };
 
 export interface PlayerSkillDef {
@@ -68,7 +67,7 @@ const playerSkill = (
 export const PLAYER_SKILLS: Record<PlayerSkillId, PlayerSkillDef> = {
   rally: playerSkill('rally', 'Rally', 'aura', { share: 0.15 }, `Friendly troops beside it strike ${pct(0.15)} harder.`, { banner_cloth: 2, gold_nugget: 2 }),
   executioner: playerSkill('executioner', 'Executioner', 'finisher', { share: 0.35 }, `+${pct(0.35)} attack against troops at half health or less.`, { steel_ingot: 2, gold_nugget: 2 }),
-  fireArrows: playerSkill('fireArrows', 'Fire Arrows', 'venom', { amount: 2 }, 'Troops it hits catch fire: they lose 2 health at the end of their next turn.', { spyglass_lens: 1, gold_nugget: 2 }),
+  fireArrows: playerSkill('fireArrows', 'Barbed Arrows', 'venom', { amount: 2 }, 'Troops it hits bleed: they lose 2 health at the end of their next turn.', { spyglass_lens: 1, gold_nugget: 2 }),
   huntersMark: playerSkill('huntersMark', "Hunter's Mark", 'hunter', { share: 0.35, classes: ['cavalry', 'skirmisher'] }, `+${pct(0.35)} attack against cavalry and skirmishers.`, { spyglass_lens: 2, spring_water: 1 }),
   bulwark: playerSkill('bulwark', 'Bulwark', 'guard', { share: 0.15 }, `Friendly troops beside it take ${pct(0.15)} less damage.`, { gate_iron: 1, steel_ingot: 1 }),
   impale: playerSkill('impale', 'Impale', 'charge', { share: 0.35, distance: 2 }, `+${pct(0.35)} attack after moving 2 or more hexes this turn.`, { steel_ingot: 2, spring_water: 1 }),
@@ -76,7 +75,7 @@ export const PLAYER_SKILLS: Record<PlayerSkillId, PlayerSkillDef> = {
   ambush: playerSkill('ambush', 'Ambush', 'isolate', { share: 0.35 }, `+${pct(0.35)} attack against troops with no friend beside them.`, { spyglass_lens: 1, glowcap: 2 }),
   hex: playerSkill('hex', 'Hex', 'curse', {}, 'Troops it hits are hexed: they strike 30% softer on their next turn (the fearless shrug it off).', { glowcap: 2, spring_water: 2 }),
   lifeSiphon: playerSkill('lifeSiphon', 'Life Siphon', 'leech', { amount: 3 }, 'Heals 3 whenever it hurts a troop.', { spring_water: 3, gold_nugget: 1 }),
-  guard: playerSkill('guard', 'Shield Wall', 'guard', { share: 0.2 }, `Friendly troops beside it take ${pct(0.2)} less damage.`, { gate_iron: 1, siege_rope: 1 }),
+  guard: playerSkill('guard', 'Earthworks', 'guard', { share: 0.2 }, `Friendly troops beside it take ${pct(0.2)} less damage.`, { gate_iron: 1, siege_rope: 1 }),
   fortify: playerSkill('fortify', 'Mantlets', 'hide', { share: 0.25 }, `Takes ${pct(0.25)} less damage from troops shooting from 2 or more hexes away.`, { siege_rope: 2, steel_ingot: 1 })
 };
 
