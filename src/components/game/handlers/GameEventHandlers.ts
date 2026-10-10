@@ -345,9 +345,23 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
     if (!linkRef.current?.isRemoteSide?.(orders.side)) return;
     const playerId = current.players[orders.side]?.id;
     if (!playerId) return;
+    // Moves first (a recruit may deploy on a hex a troop is leaving), each order given again until no
+    // more of them take (one may only be valid once another has been given)
     let planned: GameState = { ...current, pendingMoves: [], pendingPurchases: [] };
-    for (const purchase of orders.purchases) planned = addPendingPurchase(planned, playerId, purchase.unitType, purchase.position);
-    for (const move of orders.moves) planned = addPendingMove(planned, move.unitId, playerId, move.to, move.action);
+    const give = (state: GameState, order: Move | Purchase): GameState => 'unitId' in order
+      ? addPendingMove(state, order.unitId, playerId, order.to, order.action)
+      : addPendingPurchase(state, playerId, order.unitType, order.position);
+    let waiting: (Move | Purchase)[] = [...orders.moves, ...orders.purchases];
+    while (waiting.length > 0) {
+      const left: (Move | Purchase)[] = [];
+      for (const order of waiting) {
+        const next = give(planned, order);
+        if (next === planned) left.push(order);
+        planned = next;
+      }
+      if (left.length === waiting.length) break;
+      waiting = left;
+    }
     commitState(executeTurn(planned));
   }, [commitState]);
 

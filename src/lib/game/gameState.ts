@@ -791,6 +791,17 @@ const setUpCamp = (state: GameState, camp: Hex): void => {
   }
 };
 
+// A hex of the edge made fit for a castle that has nowhere better to go: open ground, with room
+// around it to deploy recruits
+const clearForCastle = (state: GameState, at: HexCoordinates): void => {
+  updateHex(state, at, { terrain: 'plain', isResourceHex: false, resourceValue: undefined, feature: undefined, fire: undefined, isCamp: false });
+  for (const neighbor of getNeighbors(at)) {
+    if (countOpenNeighbors(state.hexGrid, at) >= MIN_OPEN_BASE_NEIGHBORS) break;
+    const hex = findHexByCoordinates(state.hexGrid, neighbor);
+    if (hex && (isImpassable(hex) || hex.isResourceHex)) updateHex(state, neighbor, { terrain: 'plain', feature: undefined, isResourceHex: false, resourceValue: undefined });
+  }
+};
+
 // With more than two castles (in the order they stand around the map), a camp between each pair of
 // neighbouring castles: a fair hex whose two nearest castles are that pair, as far as it can be from
 // every other castle and from the camps already placed
@@ -1062,39 +1073,48 @@ export const placeAllCastles = (state: GameState): GameState => {
   const valid = new Set(getValidBaseLocations(state).map(hex => coordKey(hex.coordinates)));
   // Where around the edge the first castle goes comes from the map's seed
   const offset = Math.floor(seededRandom((state.battleSeed ?? 0) + 1361) * rim.length);
-  const newState = cloneState(state);
   const castleHealth = getSettings(state).castleHealth ?? BASE_MAX_HEALTH;
-  const castles: HexCoordinates[] = [];
-  const used = new Set<string>();
   // On a mirrored map the castles of the map's first part are turned into the others (seat i of the
   // first part's `perPart` stands for seats i, i + perPart, ...)
   const symmetry = mapSymmetry(getSettings(state));
   const perPart = seats.length % symmetry === 0 ? seats.length / symmetry : seats.length;
-  const build = (side: PlayerType, at: HexCoordinates) => {
-    used.add(coordKey(at));
-    castles.push(at);
-    updateHex(newState, at, { isBase: true, owner: side, baseHealth: castleHealth });
-    newState.players[side] = { ...newState.players[side], baseLocation: at, baseHealth: castleHealth, maxBaseHealth: castleHealth };
-  };
-  seats.forEach((side, seat) => {
-    if (seat >= perPart) {
-      const original = castles[seat % perPart];
-      const turned = original && rotateHex(original, Math.floor(seat / perPart) * 6 / symmetry);
-      if (turned && valid.has(coordKey(turned)) && !used.has(coordKey(turned))) {
-        build(side, turned);
-        return;
+  // Every side's castle, at least `spacing` hexes apart - on ground a castle may stand on or, as a last
+  // resort (`anyGround`), on any hex of the edge, cleared for it
+  const seatCastles = (spacing: number, anyGround: boolean) => {
+    const newState = cloneState(state);
+    const castles: HexCoordinates[] = [];
+    const used = new Set<string>();
+    const usable = (at: HexCoordinates) => !used.has(coordKey(at)) && (valid.has(coordKey(at)) || anyGround) &&
+      castles.every(castle => getHexDistance(castle, at) >= spacing);
+    const build = (side: PlayerType, at: HexCoordinates) => {
+      used.add(coordKey(at));
+      castles.push(at);
+      if (!valid.has(coordKey(at))) clearForCastle(newState, at);
+      updateHex(newState, at, { isBase: true, owner: side, baseHealth: castleHealth });
+      newState.players[side] = { ...newState.players[side], baseLocation: at, baseHealth: castleHealth, maxBaseHealth: castleHealth };
+    };
+    for (const [seat, side] of seats.entries()) {
+      if (seat >= perPart) {
+        const original = castles[seat % perPart];
+        const turned = original && rotateHex(original, Math.floor(seat / perPart) * 6 / symmetry);
+        if (turned && usable(turned)) {
+          build(side, turned);
+          continue;
+        }
       }
-    }
-    const target = offset + Math.round(seat * rim.length / seats.length);
-    // The nearest usable spot along the edge to its share of it, never next to another castle
-    for (let step = 0; step < rim.length; step++) {
-      const at = rim[(((target + (step % 2 ? 1 : -1) * Math.ceil(step / 2)) % rim.length) + rim.length) % rim.length];
-      if (!valid.has(coordKey(at)) || used.has(coordKey(at)) || castles.some(castle => getHexDistance(castle, at) < 3)) continue;
+      const target = offset + Math.round(seat * rim.length / seats.length);
+      // The nearest usable spot along the edge to its share of it
+      const at = Array.from({ length: rim.length }, (_, step) =>
+        rim[(((target + (step % 2 ? 1 : -1) * Math.ceil(step / 2)) % rim.length) + rim.length) % rim.length]).find(usable);
+      if (!at) return null;
       build(side, at);
-      return;
     }
-  });
-  if (castles.length < seats.length) return state;
+    return { newState, castles };
+  };
+  // (never next to another castle if it can be helped)
+  const seated = seatCastles(3, false) ?? seatCastles(2, false) ?? seatCastles(2, true) ?? seatCastles(1, true);
+  if (!seated) return state;
+  const { newState, castles } = seated;
   // (castles in the order they stand around the map)
   placeCamps(newState, castles, symmetry);
   placeStructures(newState, castles);
@@ -2688,34 +2708,43 @@ export const advanceFires = (state: GameState, roundEnds: boolean, random: (salt
     updateHex(state, hex.coordinates, { fire: turnsLeft > 0 ? { stage: 'smoulder', turnsLeft } : { stage: 'burning', turnsLeft: BURN_TURNS } });
   }
 
-  let fires = state.hexGrid.filter(hex => hex.fire).length;
-  const ignite = (c: HexCoordinates) => {
-    if (fires >= MAX_FIRES) return false;
-    updateHex(state, c, { fire: { stage: 'smoulder', turnsLeft: 1 } });
-    fires++;
-    return true;
-  };
+  const fires = { count: state.hexGrid.filter(hex => hex.fire).length };
   // Spreading from the hexes that were already burning
   for (const hex of burning) {
     for (const c of getNeighbors(hex.coordinates)) {
       const next = hexByKey.get(coordKey(c));
       const chance = (next && isFlammable(next) ? SPREAD_CHANCE[next.terrain] ?? 0 : 0) * (ashfall ? ASH_SPREAD : 1);
-      if (chance > 0 && random(salt++) < chance) ignite(c);
+      if (chance > 0 && random(salt++) < chance) igniteEmbers(state, c, fires);
     }
   }
   // New fires from the lava
-  let flared = 0;
-  if (roundEnds) {
-    for (const lava of state.hexGrid.filter(hex => hex.terrain === 'lava')) {
-      if (random(salt++) >= LAVA_FLARE_CHANCE * (ashfall ? ASH_FLARE : 1)) continue;
-      const dry = getNeighbors(lava.coordinates).map(c => hexByKey.get(coordKey(c))).filter((hex): hex is Hex => !!hex && isFlammable(hex));
-      if (dry.length > 0 && ignite(dry[Math.floor(random(salt++) * dry.length)].coordinates)) flared++;
-    }
-  }
-  if (flared > 0) addLog(state, 'neutral', `Embers from the lava: ${flared === 1 ? 'a fire is' : `${flared} fires are`} about to break out.`);
+  if (roundEnds) flareLava(state, random, salt, fires);
   const caught = smouldering.filter(hex => hex.fire!.turnsLeft <= 1).length;
   if (caught > 0) addLog(state, 'neutral', `${caught === 1 ? 'A fire breaks' : `${caught} fires break`} out!`);
   if (burntOut > 0) addLog(state, 'neutral', `${burntOut === 1 ? 'A fire has' : `${burntOut} fires have`} burned out.`);
+};
+
+// A hex catches (embers that burst into flame next turn), unless the battlefield already has as many
+// fires as it can take
+const igniteEmbers = (state: GameState, c: HexCoordinates, fires: { count: number }): boolean => {
+  if (fires.count >= MAX_FIRES) return false;
+  updateHex(state, c, { fire: { stage: 'smoulder', turnsLeft: 1 } });
+  fires.count++;
+  return true;
+};
+
+// At the end of a round the lava may set dry ground beside it smouldering (drawing chance from
+// `random` from `salt` on)
+const flareLava = (state: GameState, random: (salt: number) => number, salt = 0, fires = { count: state.hexGrid.filter(hex => hex.fire).length }): void => {
+  const hexByKey = new Map(state.hexGrid.map(hex => [coordKey(hex.coordinates), hex]));
+  const ashfall = activeWeather(state) === 'ashfall';
+  let flared = 0;
+  for (const lava of state.hexGrid.filter(hex => hex.terrain === 'lava')) {
+    if (random(salt++) >= LAVA_FLARE_CHANCE * (ashfall ? ASH_FLARE : 1)) continue;
+    const dry = getNeighbors(lava.coordinates).map(c => hexByKey.get(coordKey(c))).filter((hex): hex is Hex => !!hex && isFlammable(hex));
+    if (dry.length > 0 && igniteEmbers(state, dry[Math.floor(random(salt++) * dry.length)].coordinates, fires)) flared++;
+  }
+  if (flared > 0) addLog(state, 'neutral', `Embers from the lava: ${flared === 1 ? 'a fire is' : `${flared} fires are`} about to break out.`);
 };
 
 // Wrap up the active side's turn and hand control to the other side.
@@ -2820,7 +2849,9 @@ const finishTurn = (state: GameState): GameState => {
   }
   bombard(newState, activePlayer);
   if (activePlayer === 'player') gatherFromTheLand(newState);
-  advanceFires(newState, isLastInRound(newState, activePlayer));
+  // (in a battle between more sides, the lava flares once the turn has passed on and it is clear the
+  // round is over: a side knocked out this turn can end it early)
+  advanceFires(newState, !isMultiSide(newState) && isLastInRound(newState, activePlayer));
   unleashBossPowers(newState, activePlayer);
   applyChallenges(newState, activePlayer);
   undermine(newState, diggers.filter(digger => newState.players[activePlayer].units.some(unit => unit.id === digger.id)));
@@ -2867,6 +2898,9 @@ const passTurn = (state: GameState, side: PlayerType): GameState => {
   if (isLastInRound(state, side) && state.turnNumber >= getMaxRounds(state)) return endOnTime(state);
   noteSightings(state);
   const { side: next, newRound } = nextSide(state, side);
+  if (isMultiSide(state) && newRound) {
+    flareLava(state, salt => seededRandom((state.battleSeed ?? 0) + state.turnNumber * 7919 + 104729 + 52361 + salt * 31));
+  }
   return {
     ...state,
     siege: undefined,

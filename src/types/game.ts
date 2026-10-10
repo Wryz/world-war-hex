@@ -277,6 +277,10 @@ export interface GameState {
   healthEvents?: HealthEvent[];
   // Counts health events over the battle, so the board can tell new ones from those it has shown
   healthSerial?: number;
+  // A battle as one side of an online battle is shown it, in the fog (lib/pvp/room): every troop on
+  // the battlefield, seen or not, so the board can tell a troop that slipped into the fog from one
+  // that fell
+  knownUnitIds?: string[];
 }
 
 export type HealthCause =

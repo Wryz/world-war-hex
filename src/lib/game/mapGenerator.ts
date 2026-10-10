@@ -457,14 +457,17 @@ const chooseFeatureHexes = (
   );
 
   const chosen: HexCoordinates[] = [];
+  // (`count` is per part on a mirrored map: each pick brings its copies in the other parts with it)
+  let picks = 0;
   for (const minimumSpacing of [4, 3, 2]) {
     for (const c of candidates) {
-      if (chosen.length >= count) break;
+      if (picks >= count) break;
       const orbit = symmetry === 1 ? [c] : hexOrbit(c, symmetry);
       if (chosen.some(other => orbit.some(copy => getHexDistance(other, copy) < minimumSpacing))) continue;
       // (a mirrored copy too close to its own original isn't worth the extra mine)
       if (orbit.some((copy, i) => orbit.slice(i + 1).some(next => getHexDistance(copy, next) < 2))) continue;
       chosen.push(...orbit);
+      picks++;
     }
   }
   return chosen;

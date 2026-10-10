@@ -1,6 +1,7 @@
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import type { GameState, PlayerType } from '@/types/game';
-import { syncHexUnits } from '../game/gameState';
+import { getSideView, isFogOfWar, isUnitVisibleTo, syncHexUnits } from '../game/gameState';
+import { areAllies, getAllUnits } from '../game/sides';
 import { TroopId } from '../game/troops';
 import { Trees } from '../game/lineages';
 import { Profile, createProfile, sanitizeProfile } from '../meta/profile';
@@ -111,8 +112,11 @@ const randomSecret = (): string => {
   return [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
 };
 
-// Each room's secret for this device, kept so a member coming back can still give orders
+// Each room's secret for this device, kept so a member coming back can still give orders (and kept
+// in memory too, so a member whose device can't store it still sends the secret it joined with)
+const secretsInMemory: Record<string, string> = {};
 const roomSecret = (code: string): string => {
+  if (secretsInMemory[code]) return secretsInMemory[code];
   let secrets: Record<string, string> = {};
   try {
     secrets = JSON.parse(localStorage.getItem(SECRETS_KEY) ?? '{}');
@@ -129,9 +133,20 @@ const roomSecret = (code: string): string => {
       // (a member who can't keep it can still play from this page)
     }
   }
+  secretsInMemory[code] = secrets[code];
   return secrets[code];
 };
 export const mySecret = roomSecret;
+
+// Orders and resignations go out signed with the sender's secret (never the secret itself: everyone
+// in the room hears them), so only the host - who can read every member's secret - can check them
+const signature = async (secret: string, message: string): Promise<string> => {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey('raw', encoder.encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const bytes = new Uint8Array(await crypto.subtle.sign('HMAC', key, encoder.encode(message)));
+  return [...bytes].map(byte => byte.toString(16).padStart(2, '0')).join('');
+};
+const signedMessage = (code: string, userId: string, event: string, body: string) => `${code}|${userId}|${event}|${body}`;
 
 // --- Rooms ------------------------------------------------------------------------------------------
 
@@ -152,6 +167,7 @@ export const createRoom = async (name: string, army: Army, settings: RoomSetting
 };
 
 const remember = (code: string, secret: string) => {
+  secretsInMemory[code] = secret;
   try {
     const secrets = JSON.parse(localStorage.getItem(SECRETS_KEY) ?? '{}');
     secrets[code] = secret;
@@ -281,6 +297,53 @@ const interleaveTeams = (sides: ArenaSideSpec[]): ArenaSideSpec[] => {
 
 // --- Sending the battle over the channel -------------------------------------------------------------
 
+// The battle as one side may know it, in the fog of war: the enemy troops it can't see are left out,
+// and so is anything else that would give them away (what its enemies have ordered, what other sides
+// remember seeing, their hands, and blows landing out of its sight). Without fog, once the side is out
+// of the battle, or once it is over, it sees everything.
+export const sideViewOf = (state: GameState, side: PlayerType): GameState => {
+  if (!isFogOfWar(state) || state.players[side]?.eliminated || state.currentPhase === 'gameOver') return state;
+  const view = getSideView(state, side);
+  const friendly = (owner: PlayerType | undefined) => areAllies(state, owner, side);
+  const ordersOf = (playerId: string) => friendly(Object.values(state.players).find(player => player.id === playerId)?.type);
+  return {
+    ...view,
+    pendingMoves: state.pendingMoves.filter(move => ordersOf(move.playerId)),
+    pendingPurchases: state.pendingPurchases.filter(purchase => ordersOf(purchase.playerId)),
+    sightings: Object.fromEntries(Object.entries(state.sightings ?? {}).filter(([owner]) => friendly(owner))),
+    decks: state.decks && Object.fromEntries(Object.entries(state.decks).filter(([owner]) => owner === side)),
+    healthEvents: state.healthEvents?.filter(event => !event.unit || isUnitVisibleTo(state, side, event.unit)),
+    knownUnitIds: getAllUnits(state).map(unit => unit.id)
+  };
+};
+
+// A state sent to one member only is sealed with a key from their secret (AES-GCM), so the others in
+// the room - who hear every message - can't read it
+const sealingKey = async (code: string, secret: string): Promise<CryptoKey> => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${code}|${secret}`));
+  return crypto.subtle.importKey('raw', digest, { name: 'AES-GCM' }, false, ['encrypt', 'decrypt']);
+};
+const toBase64 = (bytes: Uint8Array) => {
+  let binary = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(binary);
+};
+const fromBase64 = (text: string) => Uint8Array.from(atob(text), char => char.charCodeAt(0));
+const seal = async (key: CryptoKey, text: string): Promise<{ data: string; iv: string }> => {
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const sealed = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, new TextEncoder().encode(text)));
+  return { data: toBase64(sealed), iv: toBase64(iv) };
+};
+const unseal = async (key: CryptoKey, data: string, iv: string): Promise<string> =>
+  new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(iv) }, key, fromBase64(data)));
+
+// (host) Who the battle is sent to, each with the side they play and the secret their copy is sealed with
+export interface StateRecipient {
+  userId: string;
+  side: PlayerType;
+  secret: string;
+}
+
 // A state made small to send: the troops on each hex are left out (they follow from each side's troops)
 // and the whole thing is gzipped
 const packState = async (state: GameState): Promise<string> => {
@@ -289,18 +352,14 @@ const packState = async (state: GameState): Promise<string> => {
   if (typeof CompressionStream === 'undefined') return `j:${json}`;
   const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'));
   const bytes = new Uint8Array(await new Response(stream).arrayBuffer());
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return `z:${btoa(binary)}`;
+  return `z:${toBase64(bytes)}`;
 };
 
 const unpackState = async (packed: string): Promise<GameState> => {
   let json: string;
   if (packed.startsWith('j:')) json = packed.slice(2);
   else {
-    const binary = atob(packed.slice(2));
-    const bytes = Uint8Array.from(binary, char => char.charCodeAt(0));
-    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    const stream = new Blob([fromBase64(packed.slice(2))]).stream().pipeThrough(new DecompressionStream('gzip'));
     json = await new Response(stream).text();
   }
   const state = JSON.parse(json) as GameState;
@@ -311,9 +370,9 @@ const unpackState = async (packed: string): Promise<GameState> => {
 export interface BattleChannelHandlers {
   // (guests) the battle as the host has it
   onState?: (state: GameState, seq: number) => void;
-  // (host) a member's orders or resignation, with the secret they sent
-  onOrders?: (userId: string, secret: string, orders: TurnOrders) => void;
-  onResign?: (userId: string, secret: string) => void;
+  // (host) a member's orders or resignation, with a check of its signature against a member's secret
+  onOrders?: (userId: string, orders: TurnOrders, signedWith: (secret: string) => Promise<boolean>) => void;
+  onResign?: (userId: string, signedWith: (secret: string) => Promise<boolean>) => void;
   // (host) someone (back) in the room asks for the battle as it stands
   onHello?: (userId: string) => void;
   // Who is in the room right now
@@ -321,7 +380,8 @@ export interface BattleChannelHandlers {
 }
 
 export interface BattleChannel {
-  sendState: (state: GameState) => Promise<void>;
+  // (host) the battle to everyone - in the fog, each recipient its own side's view of it
+  sendState: (state: GameState, recipients?: StateRecipient[]) => Promise<void>;
   sendOrders: (orders: TurnOrders) => void;
   sendResign: () => void;
   sendHello: () => void;
@@ -332,6 +392,7 @@ export interface BattleChannel {
 export const openBattleChannel = (code: string, userId: string, handlers: BattleChannelHandlers): BattleChannel => {
   const supabase = getSupabase();
   const secret = roomSecret(code);
+  const ownKey = sealingKey(code, secret);
   let seq = 0;
   // States arrive in the order they were sent, unpacked one after another
   let unpacking: Promise<void> = Promise.resolve();
@@ -340,22 +401,31 @@ export const openBattleChannel = (code: string, userId: string, handlers: Battle
   });
   channel
     .on('broadcast', { event: 'state' }, ({ payload }) => {
-      const { data, seq: sent } = payload as { data: string; seq: number };
+      const { data, seq: sent, to, iv } = payload as { data: string; seq: number; to?: string; iv?: string };
+      // (a copy sealed for someone else isn't ours to read)
+      if (to && to !== userId) return;
       unpacking = unpacking.then(async () => {
         try {
-          handlers.onState?.(await unpackState(data), sent);
+          const packed = to && iv ? await unseal(await ownKey, data, iv) : data;
+          handlers.onState?.(await unpackState(packed), sent);
         } catch (error) {
           console.error('Could not read the battle from the host', error);
         }
       });
     })
     .on('broadcast', { event: 'orders' }, ({ payload }) => {
-      const { userId: from, secret: sentSecret, orders } = payload as { userId: string; secret: string; orders: TurnOrders };
-      handlers.onOrders?.(from, sentSecret, orders);
+      const { userId: from, body, sig } = payload as { userId: string; body: string; sig: string };
+      let orders: TurnOrders;
+      try {
+        orders = JSON.parse(body) as TurnOrders;
+      } catch {
+        return;
+      }
+      handlers.onOrders?.(from, orders, async memberSecret => (await signature(memberSecret, signedMessage(code, from, 'orders', body))) === sig);
     })
     .on('broadcast', { event: 'resign' }, ({ payload }) => {
-      const { userId: from, secret: sentSecret } = payload as { userId: string; secret: string };
-      handlers.onResign?.(from, sentSecret);
+      const { userId: from, sig } = payload as { userId: string; sig: string };
+      handlers.onResign?.(from, async memberSecret => (await signature(memberSecret, signedMessage(code, from, 'resign', ''))) === sig);
     })
     .on('broadcast', { event: 'hello' }, ({ payload }) => handlers.onHello?.((payload as { userId: string }).userId))
     .on('presence', { event: 'sync' }, () => handlers.onPresence?.(Object.keys(channel.presenceState())))
@@ -366,13 +436,28 @@ export const openBattleChannel = (code: string, userId: string, handlers: Battle
       }
     });
   return {
-    sendState: async state => {
-      const data = await packState(state);
+    sendState: async (state, recipients) => {
       seq++;
-      await channel.send({ type: 'broadcast', event: 'state', payload: { data, seq } });
+      // (without fog, or once the battle is over, everyone gets the same)
+      if (!recipients || !isFogOfWar(state) || state.currentPhase === 'gameOver') {
+        await channel.send({ type: 'broadcast', event: 'state', payload: { data: await packState(state), seq } });
+        return;
+      }
+      for (const recipient of recipients) {
+        const view = sideViewOf(state, recipient.side);
+        const sealed = await seal(await sealingKey(code, recipient.secret), await packState(view));
+        await channel.send({ type: 'broadcast', event: 'state', payload: { ...sealed, seq, to: recipient.userId } });
+      }
     },
-    sendOrders: orders => { void channel.send({ type: 'broadcast', event: 'orders', payload: { userId, secret, orders } }); },
-    sendResign: () => { void channel.send({ type: 'broadcast', event: 'resign', payload: { userId, secret } }); },
+    sendOrders: orders => {
+      const body = JSON.stringify(orders);
+      void signature(secret, signedMessage(code, userId, 'orders', body))
+        .then(sig => channel.send({ type: 'broadcast', event: 'orders', payload: { userId, body, sig } }));
+    },
+    sendResign: () => {
+      void signature(secret, signedMessage(code, userId, 'resign', ''))
+        .then(sig => channel.send({ type: 'broadcast', event: 'resign', payload: { userId, sig } }));
+    },
     sendHello: () => { void channel.send({ type: 'broadcast', event: 'hello', payload: { userId } }); },
     close: () => { void supabase.removeChannel(channel); }
   };

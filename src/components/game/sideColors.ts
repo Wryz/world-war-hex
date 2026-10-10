@@ -21,10 +21,15 @@ export const SIDE_PALETTE = [
 
 type SideLook = { color: string; castle?: string; flag?: string };
 
-let looks: Record<string, SideLook> = {
+// The two sides of a battle against the AI (always known, so a battle shown after a bigger one
+// never wears that one's colours)
+const TWO_SIDE_LOOKS: Record<string, SideLook> = {
   player: { color: PLAYER_BLUE, castle: 'building_castle_blue', flag: 'flag_blue' },
   ai: { color: ENEMY_RED, castle: 'building_castle_red', flag: 'flag_red' }
 };
+
+let looks: Record<string, SideLook> = TWO_SIDE_LOOKS;
+const lookOf = (side: PlayerType): SideLook | undefined => looks[side] ?? TWO_SIDE_LOOKS[side];
 
 // The palette entry a side of a battle between more sides wears
 export const paletteOf = (index: number | undefined) => SIDE_PALETTE[((index ?? 0) % SIDE_PALETTE.length + SIDE_PALETTE.length) % SIDE_PALETTE.length];
@@ -32,10 +37,7 @@ export const paletteOf = (index: number | undefined) => SIDE_PALETTE[((index ?? 
 // Note the colours of the battle being shown
 export const registerSides = (state: Pick<GameState, 'players' | 'sides'>): void => {
   if (!state.sides) {
-    looks = {
-      player: { color: PLAYER_BLUE, castle: 'building_castle_blue', flag: 'flag_blue' },
-      ai: { color: ENEMY_RED, castle: 'building_castle_red', flag: 'flag_red' }
-    };
+    looks = TWO_SIDE_LOOKS;
     return;
   }
   looks = Object.fromEntries(state.sides.map(side => {
@@ -46,11 +48,11 @@ export const registerSides = (state: Pick<GameState, 'players' | 'sides'>): void
 
 // A side's colour (neutral yellow for nobody)
 export const sideColor = (side: PlayerType | null | undefined): string =>
-  side ? looks[side]?.color ?? ENEMY_RED : NEUTRAL_YELLOW;
+  side ? lookOf(side)?.color ?? ENEMY_RED : NEUTRAL_YELLOW;
 
 // The KayKit castle a side's castle is built as (a castle of its colour where there is one)
-export const sideCastleModel = (side: PlayerType): string => looks[side]?.castle ?? 'building_castle_red';
+export const sideCastleModel = (side: PlayerType): string => lookOf(side)?.castle ?? 'building_castle_red';
 
 // The KayKit flag a camp held by a side flies, if there is one of its colour
 export const sideFlagModel = (side: PlayerType | null): string | undefined =>
-  side ? looks[side]?.flag : 'flag_yellow';
+  side ? lookOf(side)?.flag : 'flag_yellow';

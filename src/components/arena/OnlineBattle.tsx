@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import type { GameState, PlayerType } from '@/types/game';
-import { BattleChannel, RoomMember, fetchSecrets, memberSide, openBattleChannel, updateRoom } from '@/lib/pvp/room';
+import { BattleChannel, RoomMember, StateRecipient, fetchSecrets, memberSide, openBattleChannel, updateRoom } from '@/lib/pvp/room';
 import { BattleLink, TurnOrders } from '../game/handlers/GameEventHandlers';
 import { CARD_CLASS, PRIMARY_BUTTON, SKY_BACKGROUND } from '../menu/MenuShell';
 import { ArenaBattle, ArenaBattleControls } from './ArenaBattle';
@@ -62,31 +62,48 @@ const HostedBattle: React.FC<OnlineBattleProps> = ({ code, userId, viewer, membe
   const nameOf = useMemo(() => new Map(members.map(member => [memberSide(member), member.name])), [members]);
   const remoteSides = useMemo(() => new Set(members.filter(member => member.user_id !== userId).map(memberSide)), [members, userId]);
 
+  // Everyone else in the room, each with their side and the secret their copy is sealed with (in the fog
+  // each gets only what their side can see)
+  const secretsReadyRef = useRef<Promise<void> | null>(null);
+  const recipients = (): StateRecipient[] => members
+    .filter(member => member.user_id !== userId && secretsRef.current.has(member.user_id))
+    .map(member => ({ userId: member.user_id, side: memberSide(member), secret: secretsRef.current.get(member.user_id)! }));
   const send = (state: GameState) => {
     saveHosted(code, state);
-    sendingRef.current = sendingRef.current.then(() => channelRef.current?.sendState(state)).catch(error => console.error('Could not send the battle', error));
+    sendingRef.current = sendingRef.current
+      .then(() => secretsReadyRef.current)
+      .then(() => channelRef.current?.sendState(state, recipients()))
+      .catch(error => console.error('Could not send the battle', error));
     if (state.currentPhase === 'gameOver') void updateRoom(code, { status: 'finished' }).catch(() => undefined);
   };
 
-  // Orders and resignations count only with the sender's own secret, for the sender's own side
-  const verified = async (from: string, secret: string): Promise<PlayerType | null> => {
-    if (secretsRef.current.get(from) !== secret) secretsRef.current = await fetchSecrets(code);
-    return secretsRef.current.get(from) === secret ? sideOf.get(from) ?? null : null;
+  // Orders and resignations count only signed with the sender's own secret, for the sender's own side
+  const verified = async (from: string, signedWith: (secret: string) => Promise<boolean>): Promise<PlayerType | null> => {
+    const known = secretsRef.current.get(from);
+    if (!known || !(await signedWith(known))) secretsRef.current = await fetchSecrets(code);
+    const secret = secretsRef.current.get(from);
+    return secret && await signedWith(secret) ? sideOf.get(from) ?? null : null;
   };
 
   useEffect(() => {
     if (!initial) return;
-    void fetchSecrets(code).then(secrets => { secretsRef.current = secrets; });
+    secretsReadyRef.current = fetchSecrets(code).then(secrets => { secretsRef.current = secrets; }).catch(() => undefined);
     const channel = openBattleChannel(code, userId, {
-      onOrders: (from, secret, orders: TurnOrders) => {
-        void verified(from, secret).then(side => {
+      onOrders: (from, orders: TurnOrders, signedWith) => {
+        void verified(from, signedWith).then(side => {
           if (side && side === orders.side) controlsRef.current?.applyRemoteOrders(orders);
         });
       },
-      onResign: (from, secret) => {
-        void verified(from, secret).then(side => { if (side) controlsRef.current?.resignSide(side); });
+      onResign: (from, signedWith) => {
+        void verified(from, signedWith).then(side => { if (side) controlsRef.current?.resignSide(side); });
       },
-      onHello: () => send(controlsRef.current?.getState() ?? initial),
+      onHello: from => {
+        // (someone the host has no secret for yet - just joined from a new page - is looked up first)
+        if (!secretsRef.current.has(from)) {
+          secretsReadyRef.current = fetchSecrets(code).then(secrets => { secretsRef.current = secrets; }).catch(() => undefined);
+        }
+        send(controlsRef.current?.getState() ?? initial);
+      },
       onPresence: setOnline
     });
     channelRef.current = channel;

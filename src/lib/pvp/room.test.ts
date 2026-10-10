@@ -1,7 +1,10 @@
 // Online rooms: the battle a room's members fight, and armies from other devices made valid
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { DEFAULT_ROOM_SETTINGS, RoomMember, buildRoomBattle, sanitizeArmy } from './room';
+import { DEFAULT_ROOM_SETTINGS, RoomMember, buildRoomBattle, sanitizeArmy, sideViewOf } from './room';
+import { getAllUnits } from '../game/sides';
+import { isUnitVisibleTo } from '../game/gameState';
+import { makeUnit, place } from '../game/testUtils';
 import { arenaGridSize } from './arena';
 
 const member = (seat: number, team: number | null = null): RoomMember => ({
@@ -39,4 +42,25 @@ test('an army sent from another device is checked like an imported save', () => 
   assert.ok(!army.deck.includes('dragon_boss' as never), 'no monsters');
   assert.ok(Object.values(army.cards).every(level => level! >= 1 && level! <= 15), 'real levels');
   assert.ok(sanitizeArmy(null).deck.length > 0, 'nothing sent still makes an army');
+});
+
+test("in the fog a guest is sent only what their side can see, and nobody else's hand", () => {
+  const state = buildRoomBattle([member(0), member(1), member(2)], { ...DEFAULT_ROOM_SETTINGS, fog: true }, 3);
+  // A troop of each side beside its own castle: far out of the others' sight
+  for (const side of state.sides!) {
+    const castle = state.players[side].baseLocation!;
+    const free = state.hexGrid.find(hex => !hex.isBase && !hex.unit && Math.abs(hex.coordinates.q - castle.q) + Math.abs(hex.coordinates.r - castle.r) === 1);
+    if (free) place(state, makeUnit(side, free.coordinates));
+  }
+  const hidden = getAllUnits(state).filter(unit => !isUnitVisibleTo(state, 's1', unit));
+  assert.ok(hidden.length > 0, 'some troops are out of s1\'s sight');
+  const view = sideViewOf(state, 's1');
+  assert.ok(hidden.every(unit => !getAllUnits(view).some(other => other.id === unit.id)), 'they are left out');
+  assert.ok(getAllUnits(view).every(unit => isUnitVisibleTo(state, 's1', unit)), 'no hidden enemy troops');
+  assert.ok(getAllUnits(view).some(unit => unit.owner === 's1'), 'its own troops');
+  assert.deepEqual(new Set(view.knownUnitIds), new Set(getAllUnits(state).map(unit => unit.id)), 'every troop there is, by id');
+  assert.deepEqual(Object.keys(view.decks ?? {}), ['s1']);
+  // (without fog, everyone sees the same)
+  const clear = buildRoomBattle([member(0), member(1)], { ...DEFAULT_ROOM_SETTINGS, fog: false }, 3);
+  assert.equal(sideViewOf(clear, 's1'), clear);
 });

@@ -144,7 +144,8 @@ const ArenaBattleInner: React.FC<ArenaBattleProps & { isReady: boolean }> = ({
   const isPlanning = currentPhase === 'planning' && !isAITurn && !out && !ordersSent;
   // What the viewer knows: the fog hides what their side can't see (lifted once they're out)
   const viewState = useMemo(() => (out ? gameState : getSideView(gameState, viewer)), [gameState, viewer, out]);
-  const unitIds = useMemo(() => new Set(getAllUnits(gameState).map(unit => unit.id)), [gameState]);
+  // (online in the fog, a guest's copy leaves out what it can't see, but lists every troop there is)
+  const unitIds = useMemo(() => new Set(gameState.knownUnitIds ?? getAllUnits(gameState).map(unit => unit.id)), [gameState]);
 
   // The standings, once the battle is over or the viewer is out of it
   const [showStandings, setShowStandings] = useState(false);
