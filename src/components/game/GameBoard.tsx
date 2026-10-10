@@ -1075,7 +1075,11 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
     const thisTurn = getActivePlayer(state) === unit.owner && !unit.poisonFresh;
     buffs.push({ id: 'venom', icon: 'venom', label: 'Poisoned', value: `-${unit.poisoned} health at the end of ${thisTurn ? 'this' : 'its next'} turn`, good: false });
   }
-  if (unit.slowed) buffs.push({ id: 'slowed', icon: 'slowed', label: 'Slowed', value: '-1 movement on its next turn', good: false });
+  if (unit.slowed) {
+    // (on its own turn, the turn it's slowed for is this one - unless the web caught it this very turn)
+    const thisTurn = getActivePlayer(state) === unit.owner && unit.slowed === 1;
+    buffs.push({ id: 'slowed', icon: 'slowed', label: 'Slowed', value: `-1 movement ${thisTurn ? 'this turn' : 'on its next turn'}`, good: false });
+  }
   if (canRise(unit)) buffs.push({ id: 'undying', icon: 'undying', label: 'Undying', value: 'Rises again once (not against Clerics or fire)', good: true, quiet: true });
   if (furyMultiplier(unit) >= 1.05) buffs.push({ id: 'fury', icon: 'fury', label: 'Fury', value: `+${pct(furyMultiplier(unit) - 1)} attack`, good: true });
   // (when an enemy beside it has another of its pack beside it too)
@@ -1243,7 +1247,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   }, [players, hexByKey, gameState.sightings]);
   // Materials lying on the ground (and the region's story site) where the player can see them
   const harvestMarkers = useMemo(
-    () => hexGrid.filter(hex => ((hex.harvest && isMaterialId(hex.harvest)) || (hex.storySite && !hex.plundered)) && !hex.unit &&
+    // (not under a fallen trunk, where no troop can get at it until the trunk is cleared)
+    () => hexGrid.filter(hex => ((hex.harvest && isMaterialId(hex.harvest)) || (hex.storySite && !hex.plundered)) && !hex.unit && hex.feature !== 'log' &&
       (!visibleKeys || visibleKeys.has(coordKey(hex.coordinates)))),
     [hexGrid, visibleKeys]
   );
@@ -2085,10 +2090,11 @@ const HoverTooltip: React.FC<{ hex: Hex; mapName?: string; fogged?: boolean }> =
               : null;
 
   // Something to pick up here, or a story to dig up (once the player's troops can see the hex)
+  const reachable = hex.feature !== 'log';
   const site = hex.storySite && !fogged ? storySiteFor(mapName) : undefined;
   const find = site
     ? hex.plundered ? <span className="text-slate-400">{site.name} (searched)</span> : <span className="text-amber-200">{site.name}: {site.hint} <b>End a turn here to search it.</b></span>
-    : hex.harvest && !fogged && isMaterialId(hex.harvest)
+    : hex.harvest && !fogged && reachable && isMaterialId(hex.harvest)
       ? <span style={{ color: RARITY_COLORS[MATERIALS[hex.harvest].rarity].text }}><MaterialIcon id={hex.harvest} /> {MATERIALS[hex.harvest].name}: <b>end a turn here to gather it.</b></span>
       : null;
 

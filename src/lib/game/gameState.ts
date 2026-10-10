@@ -1513,7 +1513,10 @@ const fellTree = (state: GameState, order: Move): void => {
   updateHex(state, tree.coordinates, { feature: undefined });
   const victim = [...state.players.player.units, ...state.players.ai.units].find(u => coordsEqual(u.position, landing.coordinates));
   if (landing.terrain === 'water') updateHex(state, landing.coordinates, { feature: 'logBridge', fellFrom: tree.coordinates });
-  else if (landing.terrain !== 'mountain') updateHex(state, landing.coordinates, { feature: 'log', fellFrom: tree.coordinates, fire: undefined });
+  // (a trunk breaks up against a mountain, or the ruins of a story site still to be searched)
+  else if (landing.terrain !== 'mountain' && !(landing.storySite && !landing.plundered)) {
+    updateHex(state, landing.coordinates, { feature: 'log', fellFrom: tree.coordinates, fire: undefined });
+  }
   state.lastFell = { side, from: tree.coordinates, to: landing.coordinates, serial: (state.lastFell?.serial ?? 0) + 1 };
   if (side === 'player') gather(state, 'heartwood', tree.coordinates);
 

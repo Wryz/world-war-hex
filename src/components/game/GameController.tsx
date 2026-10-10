@@ -118,8 +118,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
     if (isFogOfWar(gameState)) {
       setTimeout(() => emitMoment({ title: 'Fog of War', subtitle: 'You only see what your troops can see', tone: 'purple', explain: true }), 1200);
     }
-    // A friend's challenge: their score is the one to beat
-    if (battle.mode === 'quick' && battle.challenge) {
+    // A friend's challenge: their score is the one to beat (said once, as the battle begins)
+    if (battle.mode === 'quick' && battle.challenge && !(shouldContinueGame && gameState.turnNumber > 1)) {
       const { score } = battle.challenge;
       setTimeout(() => emitMoment({ title: 'Challenge!', subtitle: `Your friend scored ${score} points here - beat it`, tone: 'blue', explain: true }), isFogOfWar(gameState) ? 3600 : 1200);
     }

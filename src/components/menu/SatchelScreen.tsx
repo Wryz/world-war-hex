@@ -1,4 +1,6 @@
 import React, { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { cameFromAnotherPage } from '@/lib/navigation';
 import { MATERIALS, MATERIAL_IDS, MaterialCategory, MaterialId, haulSize } from '@/lib/game/materials';
 import { CHRONICLE, ChroniclePage, pageUnlocked } from '@/lib/game/lore';
 import { useHasHydrated, useProfile } from '@/lib/meta/profile';
@@ -99,6 +101,7 @@ const ChronicleView: React.FC<{ found: (id: MaterialId) => boolean; openId: stri
 };
 
 export const SatchelScreen: React.FC = () => {
+  const router = useRouter();
   const profile = useProfile();
   const hydrated = useHasHydrated();
   useMusic('menu');
@@ -106,9 +109,13 @@ export const SatchelScreen: React.FC = () => {
   const [selected, setSelected] = useState<MaterialId | null>(null);
   const [openPage, setOpenPage] = useState<string | null>('prologue');
 
+  // Opened from a battle's results
+  const [fromBattle, setFromBattle] = useState(false);
   // A link to a page of the Chronicle (from the results screen) opens it
   useEffect(() => {
-    const page = new URLSearchParams(window.location.search).get('page');
+    const params = new URLSearchParams(window.location.search);
+    setFromBattle(params.get('from') === 'battle');
+    const page = params.get('page');
     if (page && CHRONICLE.some(entry => entry.id === page)) {
       setTab('chronicle');
       setOpenPage(page);
@@ -120,7 +127,13 @@ export const SatchelScreen: React.FC = () => {
   const found = (id: MaterialId) => foundSet.has(id);
 
   return (
-    <MenuShell title="Satchel" icon={<SatchelIcon />}>
+    // (back where the player came from - from a battle's results, the campaign map, as that battle is
+    // over - or home if they came straight here)
+    <MenuShell
+      title="Satchel"
+      icon={<SatchelIcon />}
+      onBack={() => (fromBattle ? router.push('/campaign') : cameFromAnotherPage() ? router.back() : router.push('/'))}
+    >
       <div className="mb-4 flex gap-2">
         {([['materials', 'Materials', <SatchelIcon key="m" />], ['chronicle', 'Chronicle', <ChronicleIcon key="c" />]] as const).map(([id, label, icon]) => (
           <button

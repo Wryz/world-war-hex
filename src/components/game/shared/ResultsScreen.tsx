@@ -328,7 +328,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                   Gathered <span className="text-slate-200">{haulSize(record.haul)}</span>
                   {gathered !== undefined && gathered > haulSize(record.haul) && ` · ${gathered - haulSize(record.haul)} lost in the retreat`}
                 </span>
-                <button type="button" onClick={() => onOpen('/satchel')} className="text-xs font-bold text-sky-300 hover:text-sky-200">Satchel ›</button>
+                <button type="button" onClick={() => onOpen('/satchel?from=battle')} className="text-xs font-bold text-sky-300 hover:text-sky-200">Satchel ›</button>
               </div>
               <div className="flex flex-wrap gap-2.5">
                 {kept.map(id => (
@@ -344,7 +344,7 @@ export const ResultsScreen: React.FC<ResultsScreenProps> = ({
                 <button
                   type="button"
                   key={page.id}
-                  onClick={() => onOpen(`/satchel?page=${page.id}`)}
+                  onClick={() => onOpen(`/satchel?from=battle&page=${page.id}`)}
                   className="mt-2 flex w-full items-center text-left gap-2 rounded-lg bg-amber-900/60 px-2.5 py-1.5 text-sm font-bold text-amber-100 ring-1 ring-amber-500/60 hover:bg-amber-900/80"
                 >
                   {page.unlockedBy && <MaterialTile id={page.unlockedBy} size="sm" />}

@@ -43,8 +43,9 @@ export const ResourceBadges: React.FC<{ className?: string }> = ({ className = '
 interface MenuShellProps {
   title: string;
   icon?: React.ReactNode;
-  // Where the back button goes
+  // Where the back button goes (or what it does instead, for a page that goes back where it came from)
   backHref?: string;
+  onBack?: () => void;
   children: React.ReactNode;
   // Extra controls in the header
   actions?: React.ReactNode;
@@ -52,16 +53,22 @@ interface MenuShellProps {
 }
 
 // Layout shared by the menu screens: sky background, a header with a back button, and the resources
-export const MenuShell: React.FC<MenuShellProps> = ({ title, icon, backHref = '/', children, actions, wide = false }) => (
+export const MenuShell: React.FC<MenuShellProps> = ({ title, icon, backHref = '/', onBack, children, actions, wide = false }) => (
   <div className="min-h-screen w-full overflow-x-hidden" style={{ background: SKY_BACKGROUND }}>
     <header className="sticky top-0 z-30 flex flex-wrap items-center gap-3 bg-sky-200/95 pb-4 pl-[calc(0.75rem+var(--safe-l))] pr-[calc(0.75rem+var(--safe-r))] pt-[calc(0.75rem+var(--safe-t))] backdrop-blur-[2px] sm:pl-[calc(1.5rem+var(--safe-l))] sm:pr-[calc(1.5rem+var(--safe-r))]">
-      <Link
-        href={backHref}
-        className={`${SECONDARY_BUTTON} flex items-center gap-1 px-3 py-2 text-base`}
-        aria-label="Back"
-      >
-        <BackIcon /> Back
-      </Link>
+      {onBack ? (
+        <button type="button" onClick={onBack} className={`${SECONDARY_BUTTON} flex items-center gap-1 px-3 py-2 text-base`} aria-label="Back">
+          <BackIcon /> Back
+        </button>
+      ) : (
+        <Link
+          href={backHref}
+          className={`${SECONDARY_BUTTON} flex items-center gap-1 px-3 py-2 text-base`}
+          aria-label="Back"
+        >
+          <BackIcon /> Back
+        </Link>
+      )}
       <h1
         className="font-display flex items-center gap-2 text-3xl text-amber-400 sm:text-4xl"
         style={{ WebkitTextStroke: '2px #0f172a', paintOrder: 'stroke fill', textShadow: '0 4px 0 #0f172a' }}

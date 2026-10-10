@@ -37,6 +37,12 @@ function GameContent() {
     const address = searchParams.toString();
     if (checkedRef.current === address) return;
     checkedRef.current = address;
+    // A friend's challenge reaching someone who has never played: the tutorial first, if they like
+    if (battle.mode === 'quick' && battle.challenge && !resume && !getProfile().tutorialDone &&
+      window.confirm('New to Hex Hordes? Play the short tutorial battle first? (Cancel to take on the challenge now.)')) {
+      router.replace('/play?level=1');
+      return;
+    }
     const saved = loadGameFromLocalStorage()?.additionalData.battle;
     // The battle in progress is this one (down to a friend's score to beat, for a challenge)
     const isSaved = !!saved && sameBattle(saved, battle) &&
