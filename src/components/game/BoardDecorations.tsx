@@ -517,22 +517,26 @@ const buildHistoryMatrices = (hexes: Hex[], theme: string | undefined): Map<stri
       });
       continue;
     }
-    // (not on ground that has burned, or under a fallen trunk or stakes)
-    if (!HISTORY_GROUND.has(hex.terrain) || hex.scorched || hex.feature || seededRandom(hex, 41) >= HISTORY_SHARE) continue;
+    // (not on ground that is burning or has burned, or under a fallen trunk or stakes)
+    if (!HISTORY_GROUND.has(hex.terrain) || hex.scorched || hex.fire || hex.feature || seededRandom(hex, 41) >= HISTORY_SHARE) continue;
     // Near the edge, clear of the troop standing in the middle and of the tile's other scenery: across
-    // from a field's rock or tree, and between a hill's mounds or a desert's dunes
-    const first = rimSpots(hex, 1)[0];
-    const away = hex.terrain === 'plain' ? Math.PI : hex.terrain === 'hills' ? Math.PI / 2 : Math.PI / 3;
-    const angle = Math.atan2(first.z, first.x) + away;
+    // from a field's rock or tree, between a hill's two mounds, and midway between a desert's (or a
+    // snowfield's) first two dunes
+    const spotAngle = ({ x, z }: { x: number; z: number }) => Math.atan2(z, x);
+    const [first, second] = rimSpots(hex, 3);
+    const angle = hex.terrain === 'plain' ? spotAngle(rimSpots(hex, 1)[0]) + Math.PI
+      : hex.terrain === 'hills' ? spotAngle(rimSpots(hex, 2)[0]) + Math.PI / 2
+        : (spotAngle(first) + spotAngle(second) + (spotAngle(second) < spotAngle(first) ? Math.PI * 2 : 0)) / 2;
     const scene = history[Math.min(history.length - 1, Math.floor(seededRandom(hex, 42) * history.length))];
     layout(scene, cx + Math.cos(angle) * 0.5, y, cz + Math.sin(angle) * 0.5, -angle + Math.PI / 2);
   }
   return result;
 };
 
-// Where a story site's props stand: round the hex's rim, from the side facing the camera
-const SITE_RADIUS = 0.42;
-const SITE_FIRST_ANGLE = Math.PI / 2;
+// Where a story site's props stand: round the hex's rim, beyond the ring under a troop standing there,
+// the first (its centrepiece) at the back, away from the camera
+const SITE_RADIUS = 0.62;
+const SITE_FIRST_ANGLE = -Math.PI / 2;
 
 // Every pack a region's story site and history could call on, so they load once with the board
 // (and a scene appearing later in the battle never sends the board back to plain shapes while one loads)
@@ -567,7 +571,7 @@ const BoardDecorationsComponent: React.FC<{ hexGrid: Hex[]; decor?: MapDecor; ma
   // Decorations only depend on the terrain, not on units moving around
   // (and on who holds each building, which shows in its colours)
   // (and on how high it stands, once troops dig in or undermine it)
-  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}${isStructure(h.terrain) ? h.owner ?? '' : ''}${h.feature ?? ''}${h.storySite ? '!' : ''}${h.scorched ? '*' : ''}${h.heightOffset ?? ''}`).join('|');
+  const terrainSignature = hexGrid.map(h => `${h.coordinates.q},${h.coordinates.r},${h.terrain}${isStructure(h.terrain) ? h.owner ?? '' : ''}${h.feature ?? ''}${h.storySite ? '!' : ''}${h.scorched ? '*' : ''}${h.fire ? 'f' : ''}${h.heightOffset ?? ''}`).join('|');
   const hexesRef = useRef(hexGrid);
   hexesRef.current = hexGrid;
   const history = useMemo(

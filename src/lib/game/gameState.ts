@@ -2489,9 +2489,13 @@ const finishTurn = (state: GameState): GameState => {
       return updated;
     });
   }
-  // Units worn down by lava, cursed ground or fire fall
+  // Units worn down by lava, cursed ground or fire fall (all of them leave the field before any
+  // bursts as it falls, so a blast can't catch one that has already fallen)
+  const fallen = new Set(burned.map(unit => unit.id));
+  for (const side of ['player', 'ai'] as const) {
+    newState.players[side].units = newState.players[side].units.filter(unit => !fallen.has(unit.id));
+  }
   for (const unit of burned) {
-    newState.players[unit.owner].units = newState.players[unit.owner].units.filter(u => u.id !== unit.id);
     // (a boss the ground finishes off is slain all the same, and counts for the other side)
     if (unit.isBoss) {
       const killer = getOpponent(unit.owner);
@@ -2505,8 +2509,8 @@ const finishTurn = (state: GameState): GameState => {
     addLog(newState, unit.owner, inFire
       ? `${unitLabel(unit)} perished in the flames.`
       : `${unitLabel(unit)} perished on the ${TERRAIN_EFFECTS[terrainUnder(newState, unit)].name.toLowerCase()}.`);
-    burstOnDeath(newState, unit, groundCause(newState, unit));
   }
+  for (const unit of burned) burstOnDeath(newState, unit, groundCause(newState, unit));
   scatterMinions(newState);
   // Venom: this side's poisoned troops lose what the poison takes, and are rid of it
   // (venom taken during this very turn waits for the end of its next one)

@@ -1877,7 +1877,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         const site = hex.storySite && !hex.plundered;
         const material = hex.harvest ? MATERIALS[hex.harvest] : null;
         return (
-          <Html key={`harvest-${coordKey(hex.coordinates)}`} position={[x, y + 0.12, z]} center zIndexRange={[2, 0]} style={{ pointerEvents: 'none' }}>
+          <Html key={`harvest-${coordKey(hex.coordinates)}`} position={[x, y + 0.08, z + 0.32]} center zIndexRange={[2, 0]} style={{ pointerEvents: 'none' }}>
             {site ? (
               <span
                 className="font-display flex h-6 w-6 items-center justify-center rounded-full bg-amber-950/80 text-sm text-amber-200 shadow-lg ring-2 ring-amber-400 animate-pulse"

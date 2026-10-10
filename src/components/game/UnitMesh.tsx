@@ -152,6 +152,9 @@ const BuffRow: React.FC<{
   const buttonRef = useRef<HTMLButtonElement>(null);
   // Tapped once already (the troop tapped): the next tap opens the details
   const [primed, setPrimed] = useState(false);
+  // (and starts afresh whenever the troop is selected or let go, by tap, key or anything else)
+  const tapSelects = !!onTroopTap;
+  useEffect(() => setPrimed(false), [tapSelects]);
   useEffect(() => {
     if (!open && !primed) return;
     const close = (event: PointerEvent) => {
@@ -180,7 +183,7 @@ const BuffRow: React.FC<{
           } else setOpen(value => !value);
         }}
         aria-expanded={open}
-        title={onTroopTap && !primed ? 'Buffs - tap again for details' : 'Buffs - tap for details'}
+        title={onTroopTap && !primed ? 'Buffs - tap to select, again for details' : 'Buffs - tap for details'}
         className="flex items-center gap-0.5 rounded-full bg-slate-900/75 px-1 py-px text-[0.6875rem] leading-none shadow hover:bg-slate-800"
       >
         {shown.map(buff => (

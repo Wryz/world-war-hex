@@ -11,7 +11,7 @@ import {
   GiSwapBag, GiTatteredBanner, GiTiara, GiTotem, GiTusksFlag, GiRolledCloth, GiPolarBear, GiWarhammer, GiWaterFlask, GiWheat, GiWolfHead, GiWoodBeam,
   GiWoodPile, GiWool, GiWaxSeal, GiOrcHead, GiCrossedBones, GiWoodenCrate
 } from 'react-icons/gi';
-import { MATERIALS, MaterialId, MaterialRarity } from '@/lib/game/materials';
+import { MATERIALS, MaterialId, MaterialRarity, isMaterialId } from '@/lib/game/materials';
 
 // Each material's icon, and the colour of its rarity
 
@@ -45,9 +45,9 @@ export const RARITY_COLORS: Record<MaterialRarity, { text: string; ring: string;
 };
 
 export const MaterialIcon: React.FC<{ id: MaterialId; className?: string; color?: string }> = ({ id, className = '', color }) => {
-  const Icon = ICONS[id];
   // (an unknown id, from a hand-edited save, shows nothing rather than breaking the page)
-  if (!Icon) return null;
+  if (!isMaterialId(id)) return null;
+  const Icon = ICONS[id];
   return <Icon className={`inline-block shrink-0 align-[-0.125em] ${className}`} color={color ?? RARITY_COLORS[MATERIALS[id].rarity].text} aria-hidden />;
 };
 
@@ -55,6 +55,7 @@ export const MaterialIcon: React.FC<{ id: MaterialId; className?: string; color?
 export const MaterialTile: React.FC<{ id: MaterialId; count?: number; size?: 'sm' | 'md' | 'lg'; dim?: boolean; title?: string }> = ({
   id, count, size = 'md', dim = false, title
 }) => {
+  if (!isMaterialId(id)) return null;
   const rarity = RARITY_COLORS[MATERIALS[id].rarity];
   const box = size === 'sm' ? 'h-9 w-9 text-xl' : size === 'lg' ? 'h-16 w-16 text-4xl' : 'h-12 w-12 text-2xl';
   return (
