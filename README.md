@@ -214,7 +214,7 @@ Before email linking works for players, the Supabase project needs:
 
 ## Legal pages
 
-`/privacy` and `/terms` describe what the game stores and sends (saves on the device, online rooms and cloud saves in Supabase, PostHog and Google Analytics, AdSense) and the rules for playing. Set `NEXT_PUBLIC_CONTACT_EMAIL` at build time to the address players should write to (it defaults to `support@hexhordes.com`), and update `LEGAL_UPDATED` in `src/lib/legal.ts` whenever either page changes.
+`/privacy` and `/terms` describe what the game stores and sends (saves on the device, online rooms and cloud saves in Supabase, PostHog and Google Analytics, AdSense) and the rules for playing. Set `NEXT_PUBLIC_CONTACT_EMAIL` at build time to the address players should write to (it defaults to `admin@hexhordes.com`), and update `LEGAL_UPDATED` in `src/lib/legal.ts` whenever either page changes.
 
 ## Getting Started
 
