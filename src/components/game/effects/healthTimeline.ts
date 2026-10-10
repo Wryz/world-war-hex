@@ -120,8 +120,9 @@ export const useHealthTimeline = (gameState: GameState, units: Unit[]): HealthTi
   const drawnRef = useRef(new Set<string>());
 
   // The board appearing, or a new battle: start afresh
-  if (gameIdRef.current !== gameState.players.player.id) {
-    gameIdRef.current = gameState.players.player.id;
+  const gameId = Object.values(gameState.players)[0]?.id ?? '';
+  if (gameIdRef.current !== gameId) {
+    gameIdRef.current = gameId;
     scheduledRef.current = [];
     seenSerialRef.current = gameState.healthSerial ?? 0;
     showsAt.clear();

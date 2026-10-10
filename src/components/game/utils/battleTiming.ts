@@ -63,9 +63,9 @@ export const getImpactTimesUntil = (unit: Unit, diesAt: number | null): number[]
 // Seconds the walks of a turn's moves take to play out: battles only start once everyone has arrived
 export const getArrivalTime = (before: GameState, after: GameState): number => {
   let longest = 0;
-  for (const side of ['player', 'ai'] as const) {
+  for (const side of Object.keys(after.players)) {
     for (const unit of after.players[side].units) {
-      const from = before.players[side].units.find(other => other.id === unit.id)?.position;
+      const from = before.players[side]?.units.find(other => other.id === unit.id)?.position;
       if (!from || (from.q === unit.position.q && from.r === unit.position.r)) continue;
       const path = findTerrainPath(after.hexGrid, from, unit.position, unit.abilities.includes('flying')).map(axialToWorld);
       let length = 0;

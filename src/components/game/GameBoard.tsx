@@ -4,7 +4,8 @@ import { Html, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import { GameState, Hex, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
 import { HexTile, HexHighlight } from './HexTile';
-import { UnitMesh, UnitBattle, OWNER_COLORS, DEATH_DURATION } from './UnitMesh';
+import { UnitMesh, UnitBattle, DEATH_DURATION } from './UnitMesh';
+import { sideColor } from './sideColors';
 import { Castle, CastleIncoming } from './Castle';
 import { Camp } from './Camp';
 import { BoardDecorations } from './BoardDecorations';
@@ -43,8 +44,9 @@ import {
   TERRAIN_BONUS_ATTACK_MULTIPLIER,
   getSituationalBonuses,
   getProtections,
-
+  getBesiegedCastles
 } from '@/lib/game/gameState';
+import { areAllies, getAllUnits, getEnemySides, getEnemyUnits, getFriendlyUnits, isMultiSide } from '@/lib/game/sides';
 import { ROMAN, unitSignature } from '@/lib/game/signatures';
 import { getHexDistance } from '@/lib/game/hexUtils';
 import { estimateDamage, getThreatLevels, getThreats } from '@/lib/game/threats';
@@ -152,6 +154,8 @@ interface GameBoardProps {
   showThreats?: boolean;
   // The first battle's tutorial: where it points the camera, and what it marks on the board
   tutorial?: TutorialVisuals | null;
+  // The side the board is seen from (yours): 'player' against the AI
+  viewer?: PlayerType;
 }
 
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
@@ -171,8 +175,9 @@ const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
           <PerspectiveCamera makeDefault fov={CAMERA_FOV} near={0.1} far={3000} position={[0, 35, 14]} />
           <CameraRig
             gameState={props.gameState}
+            viewer={props.viewer ?? 'player'}
             focus={props.selectedUnit?.position ?? (props.selectedHex && (props.selectedHex.isCamp || props.selectedHex.isBase) ? props.selectedHex.coordinates : null)}
-            focusIsOurs={props.selectedUnit ? props.selectedUnit.owner === 'player' : props.selectedHex?.owner === 'player'}
+            focusIsOurs={props.selectedUnit ? props.selectedUnit.owner === (props.viewer ?? 'player') : props.selectedHex?.owner === (props.viewer ?? 'player')}
             deployingCard={props.selectedUnitTypeForPurchase}
             showcase={props.tutorial?.showcase ?? null}
             keepInView={props.tutorial?.keepInView ?? null}
@@ -231,21 +236,26 @@ const KEEP_IN_VIEW = { left: 0.12, right: 0.88, top: 0.16, bottom: 0.66 };
 // What the action view takes in: your troops; the enemies in sight near them or your castle; the
 // enemy castle when your troops are near it; and your castle while a card is being played or
 // enemies are near it. Null (nothing to frame: the overview instead) before you have troops.
-const getActionPoints = (state: GameState, deploying: boolean): HexCoordinates[] | null => {
+const getActionPoints = (state: GameState, deploying: boolean, viewer: PlayerType): HexCoordinates[] | null => {
   if (state.currentPhase === 'setup' || state.currentPhase === 'gameOver') return null;
-  const ours = state.players.player.units.map(unit => unit.position);
+  const ours = state.players[viewer]?.units.map(unit => unit.position) ?? [];
   if (ours.length === 0) return null;
-  const home = findBaseHex(state, 'player')?.coordinates;
-  const enemyCastle = findBaseHex(state, 'ai')?.coordinates;
+  const home = findBaseHex(state, viewer)?.coordinates;
   const near = (at: HexCoordinates, anchors: HexCoordinates[]) => anchors.some(anchor => getHexDistance(anchor, at) <= ACTION_REACH);
-  const foes = state.players.ai.units.map(unit => unit.position).filter(at => near(at, home ? [...ours, home] : ours));
+  const closest = (from: HexCoordinates[], to: HexCoordinates[]) =>
+    Math.min(...from.flatMap(a => to.map(b => getHexDistance(a, b))));
+  // (the nearest enemy castle to your troops)
+  const enemyCastle = getEnemySides(state, viewer)
+    .map(side => findBaseHex(state, side)?.coordinates)
+    .filter((at): at is HexCoordinates => !!at)
+    .sort((a, b) => closest(ours, [a]) - closest(ours, [b]))[0];
+  const enemies = getEnemyUnits(state, viewer);
+  const foes = enemies.map(unit => unit.position).filter(at => near(at, home ? [...ours, home] : ours));
   const points = [...ours, ...foes];
   if (enemyCastle && near(enemyCastle, ours)) points.push(enemyCastle);
   // (nothing to fight close by: where the fight is, or lies)
   if (foes.length === 0) {
-    const closest = (from: HexCoordinates[], to: HexCoordinates[]) =>
-      Math.min(...from.flatMap(a => to.map(b => getHexDistance(a, b))));
-    const seen = state.players.ai.units.map(unit => unit.position);
+    const seen = enemies.map(unit => unit.position);
     const nearest = [...seen].sort((a, b) => closest(ours, [a]) - closest(ours, [b]))[0];
     if (nearest && closest(ours, [nearest]) <= ACTION_REACH * 2) points.push(nearest);
     else if (enemyCastle) {
@@ -261,6 +271,7 @@ const getActionPoints = (state: GameState, deploying: boolean): HexCoordinates[]
 
 const CameraRig: React.FC<{
   gameState: GameState;
+  viewer: PlayerType;
   focus: HexCoordinates | null;
   focusIsOurs?: boolean;
   deployingCard?: UnitType | null;
@@ -269,7 +280,7 @@ const CameraRig: React.FC<{
   // A hex the tutorial is pointing at: the camera drifts until it is well on screen
   keepInView?: HexCoordinates | null;
 }> = ({
-  gameState, focus, focusIsOurs = true, deployingCard, showcase = null, keepInView = null
+  gameState, viewer, focus, focusIsOurs = true, deployingCard, showcase = null, keepInView = null
 }) => {
   const { camera, size, gl } = useThree();
 
@@ -311,7 +322,7 @@ const CameraRig: React.FC<{
   }, []);
 
   // The camera always works from your side of the board, whoever's turn it is
-  const viewSide: PlayerType = 'player';
+  const viewSide: PlayerType = viewer;
 
   // Radius (world units) the camera frames at zoom 1: the board out to its edge hexes plus a margin
   const gridSize = gameState.settings?.gridSize ?? DEFAULT_SETTINGS.gridSize;
@@ -329,7 +340,7 @@ const CameraRig: React.FC<{
     return { targetAzimuth: Math.atan2(x, z), nearEdgeDistance: Math.hypot(x, z) + HEX_SIZE };
     // Only depends on where the bases are, not on the rest of the state
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState.players.player.baseLocation, gameState.players.ai.baseLocation, viewSide, gridSize]);
+  }, [gameState.players[viewSide]?.baseLocation, viewSide, gridSize]);
 
   const sizeRef = useRef(size);
   sizeRef.current = size;
@@ -365,15 +376,15 @@ const CameraRig: React.FC<{
   const defaultLookAt = useMemo(() => getDefaultLookAt(), [getDefaultLookAt]);
 
   // What the action view is worked out from (only when the camera reframes)
-  const actionSourceRef = useRef({ gameState, deploying: !!deployingCard });
-  actionSourceRef.current = { gameState, deploying: !!deployingCard };
+  const actionSourceRef = useRef({ gameState, deploying: !!deployingCard, viewer });
+  actionSourceRef.current = { gameState, deploying: !!deployingCard, viewer };
   const nearEdgeMarginRef = useRef(nearEdgeMargin);
   nearEdgeMarginRef.current = nearEdgeMargin;
 
   // Where to look and how far to pull back for the action view from a direction (an azimuth around
   // the board): everything in it on screen between the top HUD and the hand of cards, centred
   const frameAction = useCallback((azimuth: number): { lookAt: THREE.Vector3; zoom: number } | null => {
-    const points = getActionPoints(actionSourceRef.current.gameState, actionSourceRef.current.deploying);
+    const points = getActionPoints(actionSourceRef.current.gameState, actionSourceRef.current.deploying, actionSourceRef.current.viewer);
     if (!points) return null;
     const perspective = camera as THREE.PerspectiveCamera;
     const tanHalfFov = Math.tan(THREE.MathUtils.degToRad(perspective.fov / 2));
@@ -489,7 +500,7 @@ const CameraRig: React.FC<{
 
   // Your turn begins: frame the action afresh - from the nearest side with your castle or a camp in
   // view, if the camera ended up somewhere with none
-  const yourTurn = gameState.currentPhase === 'planning' && getActivePlayer(gameState) === 'player' ? gameState.turnNumber : null;
+  const yourTurn = gameState.currentPhase === 'planning' && getActivePlayer(gameState) === viewer ? gameState.turnNumber : null;
   useEffect(() => {
     if (yourTurn === null || battleViewRef.current) return;
     const sides = homeSides();
@@ -562,8 +573,10 @@ const CameraRig: React.FC<{
     if (battleKey) {
       const points = gameState.combats.flatMap(combat => [combat.hexCoordinates, ...combat.attackers.map(unit => unit.position)]);
       if (gameState.siege) {
-        const castle = findBaseHex(gameState, gameState.siege.side === 'player' ? 'ai' : 'player');
-        if (castle) points.push(castle.coordinates);
+        for (const { side } of getBesiegedCastles(gameState)) {
+          const castle = findBaseHex(gameState, side);
+          if (castle) points.push(castle.coordinates);
+        }
         for (const id of gameState.siege.attackerIds) {
           const unit = gameState.players[gameState.siege.side].units.find(candidate => candidate.id === id);
           if (unit) points.push(unit.position);
@@ -599,7 +612,7 @@ const CameraRig: React.FC<{
   const bossFocusUntilRef = useRef(0);
   const phaseRef = useRef(gameState.currentPhase);
   phaseRef.current = gameState.currentPhase;
-  const bossThreat = gameState.players.ai.units.find(unit => unit.isBoss && unit.threat)?.threat ?? null;
+  const bossThreat = getAllUnits(gameState).find(unit => unit.isBoss && unit.threat)?.threat ?? null;
   const bossFocus: HexCoordinates[] | null = bossThreat ??
     (gameState.lastBossPower ? [gameState.lastBossPower.from, ...gameState.lastBossPower.hexes] : null);
   const bossFocusKey = bossThreat
@@ -629,8 +642,12 @@ const CameraRig: React.FC<{
 
   // A castle destroyed: swoop down on it as it falls (a battle won on points or given up leaves
   // both standing)
+  // (in a battle between more sides, the castle that fell last)
   const loser = gameState.currentPhase === 'gameOver' && gameState.winner && gameState.winReason === 'destroyed'
-    ? (gameState.winner === 'player' ? 'ai' : 'player')
+    ? isMultiSide(gameState)
+      ? Object.values(gameState.players).filter(player => player.eliminated && (player.baseHealth ?? 1) <= 0)
+        .sort((a, b) => (b.eliminatedOrder ?? 0) - (a.eliminatedOrder ?? 0))[0]?.type ?? null
+      : (gameState.winner === 'player' ? 'ai' : 'player')
     : null;
   useEffect(() => {
     if (!loser) return;
@@ -931,16 +948,18 @@ type SiegeBlows = {
   fallsAt: number | null;
 };
 
-const getSiegeBlows = (state: GameState): SiegeBlows => {
+// (for the castle of `castleSide`, against the troops attacking it)
+const getSiegeBlows = (state: GameState, castleSide: PlayerType): SiegeBlows => {
   const blows = new Map<string, number[]>();
   const siege = state.currentPhase === 'combat' ? state.siege : undefined;
   if (!siege) return { blows, hits: [], damage: 0, fallsAt: null };
+  const attackerIds = getBesiegedCastles(state).find(castle => castle.side === castleSide)?.attackerIds ?? [];
   const doomed = new Set(state.combats
     .filter(combat => combat.intercept && !combat.resolved)
     .flatMap(combat => getCombatPreview(state, combat).defenders.filter(entry => entry.destroyed).map(entry => entry.unit.id)));
   let total = 0;
   const all: { id: string; time: number; damage: number }[] = [];
-  for (const id of siege.attackerIds) {
+  for (const id of attackerIds) {
     const unit = state.players[siege.side].units.find(candidate => candidate.id === id);
     if (!unit || doomed.has(id)) {
       blows.set(id, []);
@@ -953,7 +972,7 @@ const getSiegeBlows = (state: GameState): SiegeBlows => {
     for (const time of times) all.push({ id, time, damage: damage / times.length });
   }
   // The castle falls at the blow that empties its health: nobody strikes it after that
-  const health = state.players[siege.side === 'player' ? 'ai' : 'player'].baseHealth ?? BASE_MAX_HEALTH;
+  const health = state.players[castleSide]?.baseHealth ?? BASE_MAX_HEALTH;
   let landed = 0;
   let fallsAt: number | null = null;
   for (const blow of all.sort((a, b) => a.time - b.time)) {
@@ -1027,7 +1046,7 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
   if (signature) {
     const bonus = situational.find(entry => entry.label === signature.def.name);
     const warding = signature.def.id === 'ward' &&
-      state.players[unit.owner].units.some(ally => ally.id !== unit.id && getHexDistance(ally.position, unit.position) === 1);
+      getFriendlyUnits(state, unit.owner).some(ally => ally.id !== unit.id && getHexDistance(ally.position, unit.position) === 1);
     if (bonus || warding) {
       buffs.push({
         id: 'signature', icon: 'signature', label: `${signature.def.name} ${ROMAN[signature.rank]}`,
@@ -1046,8 +1065,8 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
     buffs.push({ id: `guard-${protection.label}`, icon: 'shield', label: protection.label, value: `-${pct(protection.reduction)} damage`, good: true });
   }
   // Formations: screened by a front-line friend, standing in a shield wall, or pinned by the enemy
-  const friends = state.players[unit.owner].units;
-  const foes = state.players[unit.owner === 'player' ? 'ai' : 'player'].units;
+  const friends = getFriendlyUnits(state, unit.owner);
+  const foes = getEnemyUnits(state, unit.owner);
   if (hasScreenBeside(unit, unit.position, friends)) {
     buffs.push({ id: 'screened', icon: 'shield', label: 'Screened', value: `-${pct(SCREEN_REDUCTION)} damage from beyond its screen`, good: true });
   }
@@ -1155,7 +1174,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   selectedUnitTypeForPurchase = null,
   unitIds,
   showThreats = false,
-  tutorial = null
+  tutorial = null,
+  viewer = 'player'
 }) => {
   const [hoveredKey, setHoveredKey] = useState<string | null>(null);
   const unitIdsRef = useRef(unitIds);
@@ -1168,6 +1188,17 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   const { hexGrid, currentPhase, pendingMoves, pendingPurchases, combats, players, turnNumber } = gameState;
   const activePlayerSide = getActivePlayer(gameState);
+  // Tells one battle from the next (a new battle has new players)
+  const gameId = Object.values(players)[0]?.id ?? '';
+  // Where a side's troops face when there is nothing nearer: the enemy castle nearest its own
+  const enemyCenterOf = (side: PlayerType): [number, number, number] | null => {
+    const home = findBaseHex(gameState, side)?.coordinates;
+    const castle = getEnemySides(gameState, side)
+      .map(enemy => findBaseHex(gameState, enemy))
+      .filter((hex): hex is Hex => !!hex)
+      .sort((a, b) => (home ? getHexDistance(home, a.coordinates) - getHexDistance(home, b.coordinates) : 0))[0];
+    return castle ? axialToWorld(castle.coordinates) : null;
+  };
   const isSetupPhase = currentPhase === 'setup';
 
   const hexByKey = useMemo(() => new Map(hexGrid.map(hex => [coordKey(hex.coordinates), hex])), [hexGrid]);
@@ -1189,7 +1220,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   // Hexes the selected troop can work on (demolish, set alight, build), highlighted like trees to fell
   const actionKeys = useMemo(() => {
     const live = selectedUnit && players[selectedUnit.owner].units.find(unit => unit.id === selectedUnit.id);
-    return new Set(live && live.owner === 'player' ? getActionTargets(gameState, live).map(target => coordKey(target.at)) : []);
+    return new Set(live && live.owner === viewer ? getActionTargets(gameState, live).map(target => coordKey(target.at)) : []);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedUnit, players, hexGrid, pendingMoves]);
 
@@ -1210,7 +1241,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       const hex = hexByKey.get(coordKey(combat.hexCoordinates));
       const effects = getCombatEffects(gameState, combat);
       return hex && effects.length > 0
-        ? [{ key: `callout-${turnNumber}-${index}`, hex, effects, playerAttacking: combat.attackers[0]?.owner === 'player' }]
+        ? [{ key: `callout-${turnNumber}-${index}`, hex, effects, playerAttacking: areAllies(gameState, combat.attackers[0]?.owner, viewer) }]
         : [];
     });
     // The turn's battles decide the callouts
@@ -1221,21 +1252,21 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   // Hexes the player's troops can see (null without fog)
   const visibleKeys = useMemo(
-    () => (isFogOfWar(gameState) ? getVisibleHexKeys(gameState, 'player') : null),
+    () => (isFogOfWar(gameState) ? getVisibleHexKeys(gameState, viewer) : null),
     // Sight only changes when units move or camps change hands
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [players, hexGrid]
   );
   const threats = useMemo(
-    () => (showThreats ? getThreats(gameState, 'player') : null),
+    () => (showThreats ? getThreats(gameState, viewer) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [showThreats, players, hexGrid]
   );
   const threatLevels = useMemo(() => (threats ? getThreatLevels(threats) : null), [threats]);
   // Enemy troops that slipped back into the fog, marked where they were last seen
   const lastSeen = useMemo(() => {
-    const occupied = new Set([...players.player.units, ...players.ai.units].map(unit => coordKey(unit.position)));
-    return getRememberedEnemies(gameState, 'player').flatMap(sighting => {
+    const occupied = new Set(getAllUnits(gameState).map(unit => coordKey(unit.position)));
+    return getRememberedEnemies(gameState, viewer).flatMap(sighting => {
       const hex = hexByKey.get(coordKey(sighting.unit.position));
       return hex && !occupied.has(coordKey(hex.coordinates)) ? [{ ...sighting, hex }] : [];
     });
@@ -1243,7 +1274,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   }, [players, hexByKey, gameState.sightings]);
   // With a troop selected: the most damage it could take next turn on each hex it can move to
   const damageLabels = useMemo(() => {
-    if (!threats || !selectedUnit || selectedUnit.owner !== 'player') return [];
+    if (!threats || !selectedUnit || selectedUnit.owner !== viewer) return [];
     return [selectedUnit.position, ...validMoves].flatMap(coordinates => {
       const hex = hexByKey.get(coordKey(coordinates));
       const damage = estimateDamage(gameState, selectedUnit, coordinates, threats.get(coordKey(coordinates)));
@@ -1296,7 +1327,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       .map(hex => toVector(surfacePosition(hex)));
   }, []);
 
-  const stateUnits = useMemo(() => [...players.player.units, ...players.ai.units], [players]);
+  const stateUnits = useMemo(() => getAllUnits({ players }), [players]);
   // The units as the board shows them: each change to their health outside a fight shows when its
   // animation lands, and a troop it destroyed stands until then (see healthTimeline)
   const timeline = useHealthTimeline(gameState, stateUnits);
@@ -1306,9 +1337,14 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   // Per-unit render data, memoised so units only re-render when something about them changes
   const unitRenderData = useMemo(() => {
-    const enemyBaseCenters: Record<PlayerType, [number, number] | null> = { player: null, ai: null };
-    for (const side of ['player', 'ai'] as const) {
-      const enemyBase = findBaseHex(gameState, side === 'player' ? 'ai' : 'player');
+    // (each side faces the enemy castle nearest its own)
+    const enemyBaseCenters: Record<PlayerType, [number, number] | null> = {};
+    for (const side of Object.keys(players)) {
+      const home = findBaseHex(gameState, side)?.coordinates;
+      const enemyBase = getEnemySides(gameState, side)
+        .map(enemy => findBaseHex(gameState, enemy))
+        .filter((hex): hex is Hex => !!hex)
+        .sort((a, b) => (home ? getHexDistance(home, a.coordinates) - getHexDistance(home, b.coordinates) : 0))[0];
       if (enemyBase) {
         const [x, , z] = axialToWorld(enemyBase.coordinates);
         enemyBaseCenters[side] = [x, z];
@@ -1424,12 +1460,12 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     }
 
     // Troops attacking a castle strike at it, one blow per point of damage they deal
-    const siegeBlows = getSiegeBlows(gameState);
-    if (currentPhase === 'combat' && gameState.siege) {
-      const castle = findBaseHex(gameState, gameState.siege.side === 'player' ? 'ai' : 'player');
-      if (castle) {
+    for (const besieged of currentPhase === 'combat' && gameState.siege ? getBesiegedCastles(gameState) : []) {
+      const siegeBlows = getSiegeBlows(gameState, besieged.side);
+      const castle = findBaseHex(gameState, besieged.side);
+      if (castle && gameState.siege) {
         const target = surfacePosition(castle);
-        for (const id of gameState.siege.attackerIds) {
+        for (const id of besieged.attackerIds) {
           combatFacing.set(id, castle.coordinates);
           // Guards may be striking it as it attacks: keep the blows it takes
           const struck = battles.get(id);
@@ -1451,7 +1487,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
     return allUnits.map(unit => {
       const hex = hexByKey.get(coordKey(unit.position));
-      const enemies = unit.owner === 'player' ? players.ai.units : players.player.units;
+      const enemies = getEnemyUnits(gameState, unit.owner);
 
       // Face the unit we're fighting, else the nearest enemy close by, else the enemy castle
       let faceCoordinates = combatFacing.get(unit.id) ?? null;
@@ -1517,7 +1553,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     for (const purchase of pendingPurchases) {
       const hex = hexByKey.get(coordKey(purchase.position));
       if (!hex) continue;
-      const owner: PlayerType = purchase.playerId === players.player.id ? 'player' : 'ai';
+      const owner: PlayerType = Object.values(players).find(player => player.id === purchase.playerId)?.type ?? 'ai';
       const id = `pending-${coordKey(purchase.position)}`;
       const previous = pendingUnitCache.current.get(id);
       if (previous && previous.unit.type === purchase.unitType && previous.unit.owner === owner) {
@@ -1528,8 +1564,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       const info = getRosterStats(gameState, owner, purchase.unitType);
       if (!info) continue;
       // Face the enemy castle, like units already on the board
-      const enemyBase = hexGrid.find(h => h.isBase && h.owner === (owner === 'player' ? 'ai' : 'player'));
-      const enemyCenter = enemyBase ? axialToWorld(enemyBase.coordinates) : null;
+      const enemyCenter = enemyCenterOf(owner);
       next.set(id, {
         unit: {
           type: purchase.unitType,
@@ -1554,7 +1589,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     return [...next.values()];
     // Rosters never change during a battle
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pendingPurchases, hexByKey, hexGrid, players.player.id]);
+  }, [pendingPurchases, hexByKey, hexGrid, gameId]);
 
   // --- Planned moves -----------------------------------------------------------------------
 
@@ -1570,7 +1605,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       .filter((hex): hex is Hex => !!hex)
       .map(hex => toVector(surfacePosition(hex)));
 
-    return [{ id: move.unitId, points, color: OWNER_COLORS[unit.owner] }];
+    return [{ id: move.unitId, points, color: sideColor(unit.owner) }];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [pendingMoves, allUnits, hexByKey]);
 
@@ -1594,7 +1629,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   // Preview the route to the hovered hex while a unit is selected
   const hoverPreviewPath = useMemo(() => {
-    if (!selectedUnit || selectedUnit.owner !== 'player' || !hoveredKey || !validMoveKeys.has(hoveredKey)) return null;
+    if (!selectedUnit || selectedUnit.owner !== viewer || !hoveredKey || !validMoveKeys.has(hoveredKey)) return null;
     const target = hexByKey.get(hoveredKey);
     if (!target) return null;
 
@@ -1612,7 +1647,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   // --- Damage popups -----------------------------------------------------------------------
 
   const previousUnitsRef = useRef(new Map<string, { unit: Unit; position: [number, number, number]; fallen: boolean }>());
-  const previousGameIdRef = useRef(players.player.id);
+  const previousGameIdRef = useRef(gameId);
   const popupIdRef = useRef(0);
   const popupTimeoutsRef = useRef(new Set<ReturnType<typeof setTimeout>>());
 
@@ -1620,8 +1655,8 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   useEffect(() => {
     // A new game started - forget the old units instead of reporting them all as destroyed
-    if (previousGameIdRef.current !== players.player.id) {
-      previousGameIdRef.current = players.player.id;
+    if (previousGameIdRef.current !== gameId) {
+      previousGameIdRef.current = gameId;
       previousUnitsRef.current = new Map();
       setDyingUnits([]);
     }
@@ -1659,7 +1694,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         fallen.push(before);
         playBattleSound('unitFalls', 0.8);
         // Coins fly from the fallen enemy to the player's treasury
-        if (before.unit.owner === 'ai') {
+        if (!areAllies(gameState, before.unit.owner, viewer)) {
           playBattleSound('bounty', 0.6);
           const screen = projectToScreen([before.position[0], before.position[1] + 1, before.position[2]]);
           if (screen) emitCoins(screen, Math.min(8, Math.ceil(bounty / 2)));
@@ -1685,7 +1720,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       setPopups(current => current.filter(p => !ids.has(p.id)));
     }, 1600);
     popupTimeoutsRef.current.add(timeout);
-  }, [unitRenderData, players.player.id]);
+  }, [unitRenderData, gameId]);
 
   // Materials gathered this turn fly from where they were found into the satchel
   const gatheredSeenRef = useRef<{ game: string; serial: number } | null>(null);
@@ -1693,11 +1728,11 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     const gathered = gameState.gathered ?? [];
     const latest = gathered[gathered.length - 1]?.serial ?? 0;
     const seen = gatheredSeenRef.current;
-    gatheredSeenRef.current = { game: players.player.id, serial: latest };
+    gatheredSeenRef.current = { game: gameId, serial: latest };
     // (nothing to show for what was gathered before the board appeared; in a battle begun since, all
     // of it is new)
     if (!seen) return;
-    const after = seen.game === players.player.id ? seen.serial : 0;
+    const after = seen.game === gameId ? seen.serial : 0;
     const fresh = gathered.filter(entry => entry.serial > after && isMaterialId(entry.material));
     if (fresh.length === 0) return;
     const timeout = setTimeout(() => {
@@ -1714,7 +1749,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     }, GATHER_POPUP_DELAY / getTimeScale());
     popupTimeoutsRef.current.add(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState.gathered, players.player.id]);
+  }, [gameState.gathered, gameId]);
 
   // --- Rendering ---------------------------------------------------------------------------
 
@@ -1723,28 +1758,33 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   const shadowExtent = boardRadius + 2;
   const shadowFar = SHADOW_LIGHT_DISTANCE + boardRadius + 10;
 
-  const playerBase = findBaseHex(gameState, 'player');
-  const aiBase = findBaseHex(gameState, 'ai');
-  const playerCastlePosition = useMemo(() => playerBase ? surfacePosition(playerBase) : null, [playerBase]);
-  // The castle under attack in the battle being fought, and the blows landing on it
-  const castleIncoming = useMemo((): { owner: PlayerType; incoming: CastleIncoming } | null => {
-    if (currentPhase !== 'combat' || !gameState.siege) return null;
-    const { hits, damage } = getSiegeBlows(gameState);
-    if (hits.length === 0 || damage === 0) return null;
-    return {
-      owner: gameState.siege.side === 'player' ? 'ai' : 'player',
-      incoming: {
-        key: `${turnNumber}-${gameState.siege.side}-siege`,
+  // Every castle on the board (the castles of sides knocked out stand in ruins)
+  const castleSignature = hexGrid.filter(hex => hex.isBase).map(hex => `${coordKey(hex.coordinates)}:${hex.owner ?? ''}`).join('|');
+  const castles = useMemo(
+    () => hexGrid.filter(hex => hex.isBase && hex.owner).map(hex => ({ owner: hex.owner!, position: surfacePosition(hex) })),
+    // Only castles going up matters
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [castleSignature]
+  );
+  // The castles under attack in the battle being fought, and the blows landing on each
+  const castleIncoming = useMemo((): Map<PlayerType, CastleIncoming> => {
+    const incoming = new Map<PlayerType, CastleIncoming>();
+    if (currentPhase !== 'combat' || !gameState.siege) return incoming;
+    for (const { side } of getBesiegedCastles(gameState)) {
+      const { hits, damage } = getSiegeBlows(gameState, side);
+      if (hits.length === 0 || damage === 0) continue;
+      incoming.set(side, {
+        key: `${turnNumber}-${gameState.siege.side}-siege-${side}`,
         startDelay: getBattleStartDelay(),
         times: hits.map(hit => hit.time),
         amounts: hits.map(hit => hit.amount),
         damage
-      }
-    };
+      });
+    }
+    return incoming;
     // The siege and the fights around it decide the blows
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPhase, gameState.siege, combats, players, turnNumber]);
-  const aiCastlePosition = useMemo(() => aiBase ? surfacePosition(aiBase) : null, [aiBase]);
 
   const campSignature = hexGrid.filter(hex => hex.isCamp).map(hex => `${coordKey(hex.coordinates)}:${hex.owner ?? ''}`).join('|');
   const campRenderData = useMemo(
@@ -1878,32 +1918,26 @@ const BoardScene: React.FC<BoardSceneProps> = ({
       {/* Great trees, felled trunks and fires */}
       <BattlefieldObjects hexGrid={hexGrid} lastFell={gameState.lastFell} lastBombard={gameState.lastBombard} visibleKeys={visibleKeys} />
       {/* Bosses' powers: the ground they have marked to strike, and each power as it lands */}
-      <BossThreats units={players.ai.units} hexByKey={hexByKey} />
+      <BossThreats units={stateUnits} hexByKey={hexByKey} />
       <BossPowerBursts last={gameState.lastBossPower} hexByKey={hexByKey} />
       <WeatherEffects gameState={gameState} />
 
-      {/* Castles */}
-      {playerCastlePosition && (
+      {/* Castles (yours wears the style you picked) */}
+      {castles.map(({ owner, position }) => (
         <Castle
-          owner="player"
-          look={playerCastleStyle}
-          position={playerCastlePosition}
-          health={timeline.castleHealth('player', players.player.baseHealth ?? BASE_MAX_HEALTH)}
-          maxHealth={players.player.maxBaseHealth ?? BASE_MAX_HEALTH}
-          incoming={castleIncoming?.owner === 'player' ? castleIncoming.incoming : undefined}
-          fallen={currentPhase === 'gameOver' && gameState.winner === 'ai' && gameState.winReason === 'destroyed'}
+          key={owner}
+          owner={owner}
+          look={owner === viewer ? playerCastleStyle : undefined}
+          name={isMultiSide(gameState) ? players[owner]?.name : undefined}
+          position={position}
+          health={timeline.castleHealth(owner, players[owner]?.baseHealth ?? BASE_MAX_HEALTH)}
+          maxHealth={players[owner]?.maxBaseHealth ?? BASE_MAX_HEALTH}
+          incoming={castleIncoming.get(owner)}
+          fallen={isMultiSide(gameState)
+            ? !!players[owner]?.eliminated && (players[owner]?.baseHealth ?? 1) <= 0
+            : currentPhase === 'gameOver' && gameState.winReason === 'destroyed' && gameState.winner !== owner}
         />
-      )}
-      {aiCastlePosition && (
-        <Castle
-          owner="ai"
-          position={aiCastlePosition}
-          health={timeline.castleHealth('ai', players.ai.baseHealth ?? BASE_MAX_HEALTH)}
-          maxHealth={players.ai.maxBaseHealth ?? BASE_MAX_HEALTH}
-          incoming={castleIncoming?.owner === 'ai' ? castleIncoming.incoming : undefined}
-          fallen={currentPhase === 'gameOver' && gameState.winner === 'player' && gameState.winReason === 'destroyed'}
-        />
-      )}
+      ))}
 
       {/* Neutral camps, flying the colours of whoever holds them */}
       {campRenderData.map(camp => (
@@ -2011,17 +2045,19 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
       {/* Hover info */}
       {assetsLoaded && hoveredHex && !isSetupPhase && (
-        <HoverTooltip hex={hoveredHex} />
+        <HoverTooltip hex={hoveredHex} gameState={gameState} viewer={viewer} />
       )}
     </>
   );
 };
 
 // One-line description of the hovered hex: its terrain effect and what's standing on it
-const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
+const HoverTooltip: React.FC<{ hex: Hex; gameState: GameState; viewer: PlayerType }> = ({ hex, gameState, viewer }) => {
   const [x, y, z] = surfacePosition(hex);
+  const holder = !hex.owner ? 'unclaimed' : hex.owner === viewer ? 'yours'
+    : isMultiSide(gameState) ? `${gameState.players[hex.owner]?.name ?? 'enemy'}${areAllies(gameState, hex.owner, viewer) ? ' (ally)' : ''}` : 'enemy';
   const effect = hex.isCamp
-    ? hex.owner === 'player' ? 'your camp: recruits deploy here' : `${hex.owner ? 'enemy' : 'neutral'} camp: move onto it to capture`
+    ? hex.owner === viewer ? 'your camp: recruits deploy here' : `${!hex.owner ? 'neutral' : holder} camp: move onto it to capture`
     : hex.isResourceHex
       ? `+${hex.resourceValue ?? 0} gold/turn`
       : TERRAIN_SHORT_EFFECTS[hex.terrain];
@@ -2048,13 +2084,13 @@ const HoverTooltip: React.FC<{ hex: Hex }> = ({ hex }) => {
         </span>
         <span className="text-slate-400"> · height {getHexHeight(hex).toFixed(1)}</span>
         {isCapturable(hex.terrain) && (
-          <span className="font-semibold" style={{ color: hex.owner ? OWNER_COLORS[hex.owner] : '#cbd5e1' }}>
-            {' '}· {hex.owner === 'player' ? 'yours' : hex.owner === 'ai' ? 'enemy' : 'unclaimed'}
+          <span className="font-semibold" style={{ color: hex.owner ? sideColor(hex.owner) : '#cbd5e1' }}>
+            {' '}· {holder}
           </span>
         )}
         {object ? <span className="text-amber-200"> · {object}</span> : <span className="text-slate-400"> · {effect}</span>}
         {hex.unit && (
-          <span className="ml-1 font-semibold" style={{ color: OWNER_COLORS[hex.unit.owner] }}>
+          <span className="ml-1 font-semibold" style={{ color: sideColor(hex.unit.owner) }}>
             · {getUnitTypeName(hex.unit.type)} <HealthIcon /> {hex.unit.lifespan}
           </span>
         )}

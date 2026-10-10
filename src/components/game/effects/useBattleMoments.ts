@@ -3,6 +3,7 @@ import { GameState, PlayerType } from '@/types/game';
 import { BOSS_POWERS, isBossEnraged } from '@/lib/game/bosses';
 import { WEATHER, activeWeather } from '@/lib/game/regionRules';
 import { castleHealthRatio, findBaseHex, getMaxRounds } from '@/lib/game/gameState';
+import { areAllies, getAllUnits, isMultiSide } from '@/lib/game/sides';
 import { playStinger, setMusicIntensity } from '@/lib/audio/music';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
 import { pendingHealthWait } from './healthTimeline';
@@ -16,7 +17,7 @@ const BOSS_POWER_NAMES = Object.fromEntries(Object.values(BOSS_POWERS).map(power
 
 // A castle down to half its health gets a moment of its own
 const HALF_HEALTH = 0.5;
-const crossedHalf = (before: GameState, after: GameState, side: 'player' | 'ai') =>
+const crossedHalf = (before: GameState, after: GameState, side: PlayerType) =>
   castleHealthRatio(before, side) > HALF_HEALTH && castleHealthRatio(after, side) <= HALF_HEALTH;
 
 // Your castle is in danger below this share of its health
@@ -40,7 +41,8 @@ const castleOnScreen = (state: GameState, side: PlayerType) => {
 
 // Watches the battle and turns its big moments into callouts, shakes, coins and music:
 // kill streaks, a boss falling, camps changing hands, castle hits, the last stand and the final round
-export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
+// (seen from `viewer`'s side: 'player' against the AI)
+export const useBattleMoments = (gameState: GameState, isReady: boolean, viewer: PlayerType = 'player') => {
   const previousRef = useRef<GameState | null>(null);
   const flagsRef = useRef({ lastStand: false, finalRound: false });
   // Announcements waiting for a blow to land (dropped if the battle ends or another begins)
@@ -53,7 +55,7 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
   useEffect(() => {
     const previous = previousRef.current;
     previousRef.current = gameState;
-    if (!isReady || !previous || previous.players.player.id !== gameState.players.player.id) {
+    if (!isReady || !previous || previous.players[viewer]?.id !== gameState.players[viewer]?.id) {
       flagsRef.current = { lastStand: false, finalRound: false };
       waitingRef.current.forEach(clearTimeout);
       waitingRef.current.clear();
@@ -70,20 +72,33 @@ export const useBattleMoments = (gameState: GameState, isReady: boolean) => {
     if (wait > 0) {
       const timer = setTimeout(() => {
         waitingRef.current.delete(timer);
-        announce(previous, gameState, before, after, flagsRef.current);
+        announce(previous, gameState, before, after, flagsRef.current, viewer);
       }, wait);
       waitingRef.current.add(timer);
     }
-    else announce(previous, gameState, before, after, flagsRef.current);
-  }, [gameState, isReady]);
+    else announce(previous, gameState, before, after, flagsRef.current, viewer);
+  }, [gameState, isReady, viewer]);
 };
 
 type Flags = { lastStand: boolean; finalRound: boolean };
 
 // The callouts, shakes, coins and music for the change from one state to the next
 const announce = (
-  previous: GameState, gameState: GameState, before: NonNullable<GameState['battleStats']>, after: NonNullable<GameState['battleStats']>, flags: Flags
+  previous: GameState, gameState: GameState, beforeStats: NonNullable<GameState['battleStats']>, afterStats: NonNullable<GameState['battleStats']>,
+  flags: Flags, viewer: PlayerType
 ) => {
+  // Your side's tally, and the enemies' together
+  const empty = { kills: 0, bossesSlain: 0, ambushed: 0, campsCaptured: 0, siegeDamage: 0 };
+  const isEnemy = (side: PlayerType) => !areAllies(gameState, side, viewer);
+  const enemyTotal = (stats: NonNullable<GameState['battleStats']>) => Object.entries(stats)
+    .filter(([side]) => isEnemy(side))
+    .reduce((sum, [, entry]) => ({
+      kills: sum.kills + entry.kills, bossesSlain: sum.bossesSlain + entry.bossesSlain, ambushed: sum.ambushed + (entry.ambushed ?? 0),
+      campsCaptured: sum.campsCaptured + entry.campsCaptured, siegeDamage: sum.siegeDamage + entry.siegeDamage
+    }), empty);
+  const before = { player: beforeStats[viewer] ?? empty, ai: enemyTotal(beforeStats) };
+  const after = { player: afterStats[viewer] ?? empty, ai: enemyTotal(afterStats) };
+  const enemyUnits = (state: GameState) => getAllUnits(state).filter(unit => isEnemy(unit.owner));
   // Enemies destroyed in one go
   const kills = after.player.kills - before.player.kills;
   if (kills > 0) {
@@ -111,8 +126,8 @@ const announce = (
     shakeScreen(power.power === 'raiseDead' || power.power === 'callTheGang' || power.power === 'howl' || power.power === 'rallyHorde' ? 0.3 : 0.6);
     emitMoment({ title: `${used}!`, tone: 'red' });
   }
-  const boss = gameState.players.ai.units.find(unit => unit.isBoss);
-  const bossBefore = boss && previous.players.ai.units.find(unit => unit.id === boss.id);
+  const boss = enemyUnits(gameState).find(unit => unit.isBoss);
+  const bossBefore = boss && enemyUnits(previous).find(unit => unit.id === boss.id);
   if (boss && bossBefore && isBossEnraged(boss) && !isBossEnraged(bossBefore)) {
     shakeScreen(0.5);
     emitMoment({ title: 'Enraged!', tone: 'red' });
@@ -126,19 +141,20 @@ const announce = (
       : { title: 'The storm passes', tone: 'green' });
   }
   // Undead rising again, and troops losing their nerve
-  const rose = gameState.players.ai.units.filter(unit => unit.risen && !previous.players.ai.units.find(other => other.id === unit.id)?.risen).length;
+  const rose = enemyUnits(gameState).filter(unit => unit.risen && !enemyUnits(previous).find(other => other.id === unit.id)?.risen).length;
   if (rose > 0) emitMoment({ title: 'They Rise Again!', subtitle: 'Finish the undead with War Clerics or fire', tone: 'purple' });
-  const wavering = (side: PlayerType) => gameState.players[side].units.filter(unit =>
-    unit.shaken && !previous.players[side].units.find(other => other.id === unit.id)?.shaken && !unit.isBoss).length;
+  // (yours, or the enemies')
+  const wavering = (mine: boolean) => getAllUnits(gameState).filter(unit => (unit.owner === viewer) === mine && (mine || isEnemy(unit.owner)) &&
+    unit.shaken && !getAllUnits(previous).find(other => other.id === unit.id)?.shaken && !unit.isBoss).length;
   // (a fallen boss or champion shakes the whole army: the boss has its own moment, a champion this one)
-  const leaderFell = previous.players.ai.units.some(unit => (unit.isBoss || unit.isChampion) &&
-    !gameState.players.ai.units.some(other => other.id === unit.id));
-  const bossFell = previous.players.ai.units.some(unit => unit.isBoss && !gameState.players.ai.units.some(other => other.id === unit.id));
+  const leaderFell = enemyUnits(previous).some(unit => (unit.isBoss || unit.isChampion) &&
+    !enemyUnits(gameState).some(other => other.id === unit.id));
+  const bossFell = enemyUnits(previous).some(unit => unit.isBoss && !enemyUnits(gameState).some(other => other.id === unit.id));
   if (leaderFell) {
-    if (!bossFell && wavering('ai') > 0) emitMoment({ title: 'Champion Down!', subtitle: 'The enemy army is shaken', tone: 'gold' });
-  } else if (wavering('ai') > 0) {
+    if (!bossFell && wavering(false) > 0) emitMoment({ title: 'Champion Down!', subtitle: 'The enemy army is shaken', tone: 'gold' });
+  } else if (wavering(false) > 0) {
     emitMoment({ title: 'Wavering!', subtitle: 'Surrounded and alone, it hits softer', tone: 'gold' });
-  } else if (wavering('player') > 0) {
+  } else if (wavering(true) > 0) {
     emitMoment({ title: 'Your troop wavers!', subtitle: 'Surrounded and alone: send help', tone: 'red' });
   }
 
@@ -156,26 +172,29 @@ const announce = (
   if (felled && felled.serial !== previous.lastFell?.serial) {
     shakeScreen(0.45);
     playBattleSound('unitFalls', 0.9);
-    emitMoment({ title: 'Timber!', tone: felled.side === 'player' ? 'gold' : 'red' });
+    emitMoment({ title: 'Timber!', tone: areAllies(gameState, felled.side, viewer) ? 'gold' : 'red' });
   }
 
   if (after.player.campsCaptured > before.player.campsCaptured) {
     playBattleSound('bounty', 0.7);
     emitMoment({ title: 'Camp Captured!', subtitle: 'Deploy your cards there now', tone: 'green', explain: true });
   }
-  if (after.ai.campsCaptured > before.ai.campsCaptured) {
+  const campsHeld = (state: GameState) => state.hexGrid.filter(hex => hex.isCamp && hex.owner === viewer).length;
+  if (campsHeld(gameState) < campsHeld(previous)) {
     emitMoment({ title: 'Camp Lost!', tone: 'red' });
   }
 
-  // Castle hits
-  const aiCastleBefore = previous.players.ai.baseHealth ?? 0;
-  const aiCastleAfter = gameState.players.ai.baseHealth ?? 0;
-  const siegeDamage = aiCastleBefore - aiCastleAfter;
-  if (siegeDamage > 0 && gameState.currentPhase !== 'gameOver') {
+  // Castle hits (the enemy castles your side has struck)
+  const struck = Object.values(gameState.players).filter(player => isEnemy(player.type) &&
+    (gameState.players[player.type].baseHealth ?? 0) < (previous.players[player.type]?.baseHealth ?? 0));
+  const siegeDamage = isMultiSide(gameState)
+    ? after.player.siegeDamage - before.player.siegeDamage
+    : (previous.players.ai.baseHealth ?? 0) - (gameState.players.ai.baseHealth ?? 0);
+  if (siegeDamage > 0 && struck.length > 0 && gameState.currentPhase !== 'gameOver') {
     shakeScreen(Math.min(0.6, 0.15 + siegeDamage / 20));
-    const from = castleOnScreen(gameState, 'ai');
+    const from = castleOnScreen(gameState, struck[0].type);
     if (from) emitCoins(from, Math.min(8, Math.ceil(siegeDamage / 3)));
-    if (crossedHalf(previous, gameState, 'ai')) {
+    if (struck.some(player => crossedHalf(previous, gameState, player.type))) {
       playStinger('levelUp');
       emitMoment({ title: 'Walls Cracking!', subtitle: 'Half its health gone - keep attacking', tone: 'gold', big: true });
     } else if (siegeDamage >= CRUSHING_BLOW) {
@@ -183,15 +202,15 @@ const announce = (
     }
   }
 
-  const playerCastleBefore = previous.players.player.baseHealth ?? 0;
-  const playerCastleAfter = gameState.players.player.baseHealth ?? 0;
-  if (playerCastleAfter < playerCastleBefore && gameState.currentPhase !== 'gameOver') {
+  const playerCastleBefore = previous.players[viewer]?.baseHealth ?? 0;
+  const playerCastleAfter = gameState.players[viewer]?.baseHealth ?? 0;
+  if (playerCastleAfter < playerCastleBefore && gameState.currentPhase !== 'gameOver' && playerCastleAfter > 0) {
     shakeScreen(Math.min(0.7, 0.2 + (playerCastleBefore - playerCastleAfter) / 15));
     flashDamage();
-    if (crossedHalf(previous, gameState, 'player')) {
+    if (crossedHalf(previous, gameState, viewer)) {
       emitMoment({ title: 'Walls Cracking!', subtitle: 'Guard your castle!', tone: 'red', big: true });
     }
-    if (!flags.lastStand && castleHealthRatio(gameState, 'player') <= LAST_STAND_RATIO) {
+    if (!flags.lastStand && castleHealthRatio(gameState, viewer) <= LAST_STAND_RATIO) {
       flags.lastStand = true;
       setMusicIntensity(2);
       emitMoment({ title: 'Last Stand!', subtitle: 'Defend your castle!', tone: 'red', big: true });
@@ -199,10 +218,10 @@ const announce = (
   }
 
   // Turn income: coins stream from your castle to the treasury
-  const startedYourTurn = gameState.currentPhase === 'planning' && gameState.activePlayer === 'player' &&
-    !(previous.currentPhase === 'planning' && previous.activePlayer === 'player');
+  const startedYourTurn = gameState.currentPhase === 'planning' && gameState.activePlayer === viewer &&
+    !(previous.currentPhase === 'planning' && previous.activePlayer === viewer);
   if (startedYourTurn) {
-    const from = castleOnScreen(gameState, 'player');
+    const from = castleOnScreen(gameState, viewer);
     if (from) emitCoins(from, 4);
 
     if (!flags.finalRound && gameState.turnNumber >= getMaxRounds(gameState)) {
@@ -212,9 +231,25 @@ const announce = (
     }
   }
 
+  // A battle between more sides: a side knocked out (you, or another)
+  if (isMultiSide(gameState) && gameState.currentPhase !== 'gameOver') {
+    for (const player of Object.values(gameState.players)) {
+      if (!player.eliminated || previous.players[player.type]?.eliminated) continue;
+      if (player.type === viewer) {
+        triggerSlowMotion(0.35, 1600);
+        shakeScreen(1);
+        playStinger('defeat');
+        emitMoment({ title: 'Your Castle Has Fallen', subtitle: 'You are out of the battle', tone: 'red', big: true });
+      } else {
+        shakeScreen(0.6);
+        emitMoment({ title: `${player.name ?? 'A side'} Is Out!`, subtitle: isEnemy(player.type) ? 'One rival fewer' : 'Your ally has fallen', tone: isEnemy(player.type) ? 'gold' : 'red', big: true });
+      }
+    }
+  }
+
   // The battle is decided
   if (gameState.currentPhase === 'gameOver' && previous.currentPhase !== 'gameOver') {
-    const won = gameState.winner === 'player';
+    const won = areAllies(gameState, gameState.winner, viewer);
     // (only a castle destroyed falls in slow motion: a battle won on points or given up just ends)
     if (gameState.winReason === 'destroyed') {
       triggerSlowMotion(0.35, 1600);
@@ -225,7 +260,7 @@ const announce = (
     // (after the castle's own thud, if it fell)
     setTimeout(() => buzzPattern(won ? VICTORY_PATTERN : DEFEAT_PATTERN), gameState.winReason === 'destroyed' ? 700 : 0);
     emitMoment(won
-      ? { title: 'Victory!', subtitle: gameState.winReason === 'timeout' ? 'You win on points' : 'The enemy castle falls!', tone: 'gold', big: true }
+      ? { title: 'Victory!', subtitle: gameState.winReason === 'timeout' ? 'You win on points' : isMultiSide(gameState) ? 'The last rival is out!' : 'The enemy castle falls!', tone: 'gold', big: true }
       : { title: 'Defeat', subtitle: gameState.winReason === 'timeout' ? 'Time ran out' : gameState.winReason === 'resigned' ? 'You withdrew' : 'Your castle has fallen', tone: 'red', big: true });
   }
 };

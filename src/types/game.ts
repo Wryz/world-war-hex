@@ -375,4 +375,7 @@ export interface GameSettings {
   seed?: number;
   // The region's weather (regionRules.ts)
   weather?: WeatherId;
+  // A mirrored map: the board looks the same turned through each of this many equal parts (2, 3 or
+  // 6), so every side - or team - starts from the same ground
+  symmetry?: number;
 }

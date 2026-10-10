@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { PlayerType } from '@/types/game';
-import { OWNER_COLORS } from './UnitMesh';
+import { sideCastleModel, sideColor } from './sideColors';
 import { CrownIcon } from './icons';
 import { getTimeScale, setCastleShownDamage } from './effects/effects';
 import { KAYKIT_HEX_SCALE, PropPack, usePropLibrary } from './utils/kaykitProps';
@@ -35,8 +35,10 @@ interface CastleProps {
   hideLabel?: boolean;
   // The castle has fallen: it crumbles in a cloud of rubble
   fallen?: boolean;
-  // How it looks (your castle wears the style you picked)
+  // How it looks (your castle wears the style you picked; others are built in their side's colour)
   look?: CastleStyle;
+  // The side's name, shown with its health in a battle between more sides
+  name?: string;
   // Blows landing on it in the battle being fought
   incoming?: CastleIncoming;
 }
@@ -57,7 +59,7 @@ const dustMaterial = new THREE.MeshStandardMaterial({ color: '#e7e1d6', transpar
 
 const HIT_NUMBER_DURATION = 1200;
 
-const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHealth, hideLabel = false, fallen = false, look = getCastleStyle(undefined), incoming }) => {
+const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHealth, hideLabel = false, fallen = false, look, incoming, name }) => {
   const structureRef = useRef<THREE.Group>(null);
   const debrisRef = useRef<THREE.Group>(null);
   const dustRef = useRef<THREE.Group>(null);
@@ -113,12 +115,15 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
     if (fallen && collapseRef.current === null) collapseRef.current = 0;
     if (!fallen) collapseRef.current = null;
   }, [fallen]);
-  const ownerColor = OWNER_COLORS[owner];
-  // Your castle is the KayKit building of your chosen style; the enemy's is always the red castle
-  const isStyled = owner === 'player';
-  const props = usePropLibrary(isStyled && look.pack === 'castles' ? CASTLE_STYLE_PACKS : undefined);
-  const kaykitCastle = props?.get(isStyled ? look.model : 'building_castle_red') ?? null;
-  const kaykitScale = KAYKIT_HEX_SCALE * (isStyled ? look.scale : ENEMY_CASTLE_SCALE);
+  const ownerColor = sideColor(owner);
+  // Your castle is the KayKit building of your chosen style; the others are built in their side's
+  // colour (the enemy's against the AI is always the red castle)
+  const style = look ?? getCastleStyle(undefined);
+  const isStyled = !!look;
+  const model = isStyled ? style.model : sideCastleModel(owner);
+  const props = usePropLibrary((isStyled && style.pack === 'castles') || model === 'building_castle_green' ? CASTLE_STYLE_PACKS : undefined);
+  const kaykitCastle = props?.get(model) ?? null;
+  const kaykitScale = KAYKIT_HEX_SCALE * (isStyled ? style.scale : ENEMY_CASTLE_SCALE);
   const shownHealth = Math.max(0, health - (incoming ? shownDamage : 0));
   const healthRatio = maxHealth > 0 ? shownHealth / maxHealth : 0;
   const healthColor = healthRatio > 0.6 ? '#22c55e' : healthRatio > 0.3 ? '#eab308' : '#ef4444';
@@ -231,6 +236,7 @@ const CastleComponent: React.FC<CastleProps> = ({ owner, position, health, maxHe
             style={{ background: 'rgba(15, 23, 42, 0.85)', border: `2px solid ${ownerColor}` }}
           >
             <CrownIcon />
+            {name && <span className="max-w-[6rem] truncate" style={{ color: ownerColor }}>{name}</span>}
             <span className="w-10 h-1.5 rounded-full bg-slate-600 overflow-hidden inline-block">
               <span className="block h-full" style={{ width: `${healthRatio * 100}%`, background: healthColor }} />
             </span>

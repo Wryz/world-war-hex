@@ -3,7 +3,7 @@ import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import { PlayerType } from '@/types/game';
-import { OWNER_COLORS } from './UnitMesh';
+import { sideColor, sideFlagModel } from './sideColors';
 import { CampIcon } from './icons';
 import { usePropLibrary } from './utils/kaykitProps';
 
@@ -16,7 +16,6 @@ interface CampProps {
   hideLabel?: boolean;
 }
 
-const NEUTRAL_COLOR = '#facc15';
 const WOOD = '#a0703f';
 const WOOD_DARK = '#7a5230';
 const CANVAS = '#f5ecd7';
@@ -27,13 +26,15 @@ const STAKES = Array.from({ length: 14 }, (_, i) => (i / 16) * Math.PI * 2 + Mat
 // A small neutral camp: palisade, tent and a banner in the colour of whoever holds it
 const CampComponent: React.FC<CampProps> = ({ owner, position, hideLabel = false }) => {
   const flagRef = useRef<THREE.Group>(null);
-  const color = owner ? OWNER_COLORS[owner] : NEUTRAL_COLOR;
+  const color = sideColor(owner);
   const props = usePropLibrary();
-  const flag = props?.get(owner === 'player' ? 'flag_blue' : owner === 'ai' ? 'flag_red' : 'flag_yellow');
+  // (a KayKit flag where there is one in the holder's colour, otherwise a banner dyed in it)
+  const flagModel = sideFlagModel(owner);
+  const flag = flagModel ? props?.get(flagModel) : undefined;
   const tent = props?.get('tent');
   const crate = props?.get('crate_A_big');
   const barrel = props?.get('barrel');
-  const kaykit = flag && tent && crate && barrel ? { flag, tent, crate, barrel } : null;
+  const kaykit = tent && crate && barrel ? { flag, tent, crate, barrel } : null;
 
   useFrame((state) => {
     // Banner flutters in the wind
@@ -61,9 +62,24 @@ const CampComponent: React.FC<CampProps> = ({ owner, position, hideLabel = false
           <mesh geometry={kaykit.tent.geometry} material={kaykit.tent.material} position={[0.36, 0, 0.3]} rotation={[0, -Math.PI / 5, 0]} scale={0.7} castShadow />
           <mesh geometry={kaykit.crate.geometry} material={kaykit.crate.material} position={[0.42, 0, -0.12]} rotation={[0, 0.4, 0]} scale={0.9} castShadow />
           <mesh geometry={kaykit.barrel.geometry} material={kaykit.barrel.material} position={[-0.4, 0, 0.28]} scale={0.9} castShadow />
-          <group ref={flagRef} position={[0.3, 0, -0.42]}>
-            <mesh geometry={kaykit.flag.geometry} material={kaykit.flag.material} scale={2.4} castShadow />
-          </group>
+          {kaykit.flag ? (
+            <group ref={flagRef} position={[0.3, 0, -0.42]}>
+              <mesh geometry={kaykit.flag.geometry} material={kaykit.flag.material} scale={2.4} castShadow />
+            </group>
+          ) : (
+            <>
+              <mesh position={[0.3, 0.45, -0.42]} castShadow>
+                <cylinderGeometry args={[0.018, 0.018, 0.9, 6]} />
+                <meshStandardMaterial color={WOOD_DARK} />
+              </mesh>
+              <group ref={flagRef} position={[0.3, 0.78, -0.42]}>
+                <mesh position={[0.15, 0, 0]}>
+                  <boxGeometry args={[0.3, 0.18, 0.012]} />
+                  <meshStandardMaterial color={color} side={THREE.DoubleSide} />
+                </mesh>
+              </group>
+            </>
+          )}
         </>
       ) : (
         <>
@@ -100,7 +116,7 @@ const CampComponent: React.FC<CampProps> = ({ owner, position, hideLabel = false
           <div
             className="flex items-center rounded-full p-1 text-[0.8125rem] leading-none shadow select-none"
             style={{ background: 'rgba(15, 23, 42, 0.8)', border: `2px solid ${color}` }}
-            title={owner ? (owner === 'player' ? 'Your camp' : 'Enemy camp') : 'Neutral camp'}
+            title={owner ? (owner === 'player' ? 'Your camp' : owner === 'ai' ? 'Enemy camp' : 'Camp') : 'Neutral camp'}
           >
             <CampIcon color={color} />
           </div>

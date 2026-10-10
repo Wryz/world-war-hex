@@ -1,6 +1,6 @@
 import React from 'react';
 import { GameLogEntry } from '@/types/game';
-import { SIDE_COLORS } from './styles';
+import { sideColor } from '../sideColors';
 import { CollapsiblePanel } from './CollapsiblePanel';
 import { LogIcon } from '../icons';
 
@@ -10,7 +10,7 @@ interface EventFeedProps {
 
 const Entry: React.FC<{ entry: GameLogEntry }> = ({ entry }) => (
   <div className="flex gap-2 leading-snug">
-    <span className="mt-1 inline-block w-2 h-2 shrink-0 rounded-full" style={{ background: SIDE_COLORS[entry.side] }} />
+    <span className="mt-1 inline-block w-2 h-2 shrink-0 rounded-full" style={{ background: sideColor(entry.side === 'neutral' ? null : entry.side) }} />
     <span>{entry.text}</span>
   </div>
 );

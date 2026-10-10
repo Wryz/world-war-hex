@@ -1,3 +1,4 @@
+import { sideColor } from './sideColors';
 import { memo, useMemo, useRef, useEffect, useLayoutEffect, useState } from 'react';
 import { Html } from '@react-three/drei';
 import { useFrame, ThreeEvent } from '@react-three/fiber';
@@ -55,10 +56,8 @@ const PROJECTILE_COLORS: Record<Exclude<Projectile, 'arrow' | 'rock'>, { core: s
   frost: { core: '#e0f2fe', glow: '#38bdf8', trail: '#7dd3fc' }
 };
 
-export const OWNER_COLORS = {
-  player: '#3b82f6',
-  ai: '#ef4444'
-};
+// (each side's colour: see sideColors)
+
 
 // The fight a unit is taking part in right now, if any
 export interface UnitBattle {
@@ -267,7 +266,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   changes
 }) => {
   const look = getUnitLook(unit.type);
-  const ownerColor = OWNER_COLORS[unit.owner];
+  const ownerColor = sideColor(unit.owner);
   // Humanoid models are scaled here; procedural creatures come already sized
   const modelScale = look.kind === 'humanoid' ? look.scale : 1;
 

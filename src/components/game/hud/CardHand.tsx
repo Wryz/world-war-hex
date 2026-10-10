@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useIsNarrow } from '../../shared/useIsNarrow';
-import { GameState, UnitType } from '@/types/game';
+import { GameState, PlayerType, UnitType } from '@/types/game';
 import { getHand, getNextCard, getRosterStats, getTroopName } from '@/lib/game/gameState';
 import { TroopCard } from '../cards/TroopCard';
 import { CheckIcon, GoldIcon, UndoIcon } from '../icons';
@@ -19,16 +19,19 @@ interface CardHandProps {
   // Take back the last order this turn
   canUndo?: boolean;
   onUndo?: () => void;
+  // The side whose hand this is, and who the others are waiting on while it isn't their turn
+  viewer?: PlayerType;
+  waitingFor?: string;
 }
 
 // The player's hand at the bottom of the screen: the cards they brought into battle. Pick a card,
 // then a glowing hex to play it.
 export const CardHand: React.FC<CardHandProps> = ({
-  gameState, isAITurn, selectedUnitType, hint, onCardSelect, onEndTurn, canUndo = false, onUndo
+  gameState, isAITurn, selectedUnitType, hint, onCardSelect, onEndTurn, canUndo = false, onUndo, viewer = 'player', waitingFor
 }) => {
-  const hand = getHand(gameState);
-  const nextCard = getNextCard(gameState);
-  const gold = gameState.players.player.points;
+  const hand = getHand(gameState, viewer);
+  const nextCard = getNextCard(gameState, viewer);
+  const gold = gameState.players[viewer]?.points ?? 0;
   const isNarrow = useIsNarrow();
 
   // Cards that just arrived in the hand animate in; keyed by slot so each slot redraws when its card changes
@@ -44,14 +47,14 @@ export const CardHand: React.FC<CardHandProps> = ({
     return () => clearTimeout(timeout);
     // The hand is derived from the deck, which is what changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState.deck]);
+  }, [gameState.deck, gameState.decks]);
 
   if (isAITurn) {
     return (
       <div className="fixed bottom-[calc(1rem+var(--safe-b))] left-[var(--safe-l)] right-[var(--safe-r)] z-20 flex justify-center pointer-events-none">
         <div className={`${PANEL_CLASS} px-5 py-2.5 flex items-center gap-3 text-sm`}>
           <span className="inline-block w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
-          <span className="font-semibold">Enemy is planning…</span>
+          <span className="font-semibold">{waitingFor ?? 'Enemy'} is planning…</span>
         </div>
       </div>
     );
@@ -76,7 +79,7 @@ export const CardHand: React.FC<CardHandProps> = ({
         {/* Hand */}
         <div className="pointer-events-auto flex items-end gap-1 sm:gap-2.5" role="group" aria-label="Your hand">
           {hand.map((type, index) => {
-            const stats = getRosterStats(gameState, 'player', type);
+            const stats = getRosterStats(gameState, viewer, type);
             if (!stats) return null;
             const canAfford = gold >= stats.cost;
             const isSelected = selectedUnitType === type;
@@ -108,7 +111,7 @@ export const CardHand: React.FC<CardHandProps> = ({
           {nextCard && (
             <div className="hidden flex-col items-center opacity-80 md:flex" title="Next card">
               <span className="mb-1 text-[0.5625rem] font-bold uppercase tracking-widest text-slate-200 drop-shadow">Next</span>
-              <TroopCard type={nextCard} level={getRosterStats(gameState, 'player', nextCard)?.level ?? 1} size="xs" hideLevel />
+              <TroopCard type={nextCard} level={getRosterStats(gameState, viewer, nextCard)?.level ?? 1} size="xs" hideLevel />
             </div>
           )}
         </div>

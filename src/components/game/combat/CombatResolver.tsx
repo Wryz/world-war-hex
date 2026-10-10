@@ -1,12 +1,18 @@
 import React from 'react';
-import { GameState } from '@/types/game';
-import { CombatEffect, CombatantPreview, describeEffect, getCombatPreview, getKillBounty, getSiegeDamage, strongestEffects } from '@/lib/game/gameState';
+import { GameState, PlayerType } from '@/types/game';
+import {
+  CombatEffect, CombatantPreview, describeEffect, getBesiegedCastles, getCombatPreview, getKillBounty, getSiegeDamage, strongestEffects
+} from '@/lib/game/gameState';
+import { sideColor } from '../sideColors';
+import { sideLabel, sideOwnerLabel } from '../hud/sideLabels';
 import { getUnitTypeName } from '../utils/UnitHelpers';
-import { PANEL_CLASS, SIDE_COLORS } from '../hud/styles';
+import { PANEL_CLASS } from '../hud/styles';
 import { AttackIcon, CrownIcon, GoldIcon, HealthIcon, SkullIcon, TerrainIcon, UnitIcon } from '../icons';
 
 interface CombatResolverProps {
   gameState: GameState;
+  // The side the battle is seen from
+  viewer?: PlayerType;
 }
 
 // Modifier chips shown per unit at most (the biggest); the rest are counted, and all are in its tooltip
@@ -23,7 +29,7 @@ const TONE_CLASS: Record<CombatEffect['tone'], string> = {
 const Combatant: React.FC<{ entry: CombatantPreview }> = ({ entry }) => (
   <div className="rounded-md bg-slate-800 px-2 py-1" title={[getUnitTypeName(entry.unit.type), ...entry.modifiers.map(describeEffect)].join(' · ')}>
     <div className="flex items-center gap-1.5">
-      <UnitIcon type={entry.unit.type} className="text-base" color={SIDE_COLORS[entry.unit.owner]} />
+      <UnitIcon type={entry.unit.type} className="text-base" color={sideColor(entry.unit.owner)} />
       <span className="flex items-center gap-0.5 tabular-nums"><HealthIcon />{entry.unit.lifespan}</span>
       {entry.modifiers.length > 0 && <TerrainIcon terrain={entry.terrain} />}
       <span className={`ml-auto flex items-center gap-1 font-bold tabular-nums ${entry.destroyed ? 'text-red-400' : 'text-amber-300'}`}>
@@ -69,14 +75,15 @@ const Side: React.FC<{ label: string; color: string; power: number; entries: Com
 
 // The turn's battles, all fought at once: who is fighting and what each unit will take.
 // Battles resolve automatically - this card just shows what is happening.
-export const CombatResolver: React.FC<CombatResolverProps> = ({ gameState }) => {
+export const CombatResolver: React.FC<CombatResolverProps> = ({ gameState, viewer = 'player' }) => {
   const combats = gameState.combats.filter(c => !c.resolved);
   const siege = gameState.siege;
-  const siegeAttackers = siege
-    ? gameState.players[siege.side].units.filter(unit => siege.attackerIds.includes(unit.id))
-    : [];
-  const siegeDamage = Math.round(siegeAttackers.reduce((sum, unit) => sum + getSiegeDamage(unit), 0));
-  if (combats.length === 0 && siegeAttackers.length === 0) return null;
+  // The castles under attack, each with the troops attacking it
+  const sieges = siege ? getBesiegedCastles(gameState).map(({ side, attackerIds }) => {
+    const attackers = gameState.players[siege.side].units.filter(unit => attackerIds.includes(unit.id));
+    return { side, attackers, damage: Math.round(attackers.reduce((sum, unit) => sum + getSiegeDamage(unit), 0)) };
+  }).filter(entry => entry.attackers.length > 0) : [];
+  if (combats.length === 0 && sieges.length === 0) return null;
 
   return (
     <div className={`${PANEL_CLASS} fixed right-[calc(0.75rem+var(--safe-r))] bottom-[calc(0.75rem+var(--safe-b))] z-30 hidden max-h-[50vh] w-80 max-w-[calc(100vw-1.5rem)] overflow-y-auto p-3 text-xs sm:block`}>
@@ -87,33 +94,34 @@ export const CombatResolver: React.FC<CombatResolverProps> = ({ gameState }) => 
       </div>
 
       {/* Troops attacking the enemy castle this turn */}
-      {siegeAttackers.length > 0 && siege && (
-        <div className="mb-2 flex items-center gap-2 rounded-lg bg-slate-800/80 px-2.5 py-2">
-          <CrownIcon color={SIDE_COLORS[siege.side === 'player' ? 'ai' : 'player']} />
+      {sieges.map(({ side, attackers, damage }) => (
+        <div key={side} className="mb-2 flex items-center gap-2 rounded-lg bg-slate-800/80 px-2.5 py-2">
+          <CrownIcon color={sideColor(side)} />
           <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1">
-            {siegeAttackers.map(unit => <UnitIcon key={unit.id} type={unit.type} />)}
-            <span className="text-slate-300">{siege.side === 'player' ? 'strike the enemy castle' : 'strike your castle'}</span>
+            {attackers.map(unit => <UnitIcon key={unit.id} type={unit.type} />)}
+            <span className="text-slate-300">strike {side === viewer ? 'your' : sideOwnerLabel(gameState, side, viewer, 'the enemy').replace(/^Enemy$/, 'the enemy')} castle</span>
           </span>
-          <span className="font-display text-sm text-rose-300">-{siegeDamage}</span>
+          <span className="font-display text-sm text-rose-300">-{damage}</span>
         </div>
-      )}
+      ))}
 
       <div className="flex flex-col gap-2">
         {combats.map(combat => {
           const preview = getCombatPreview(gameState, combat);
-          const isPlayerDefending = combat.defenders.some(unit => unit.owner === 'player');
+          const attackerSide = combat.attackers[0]?.owner;
+          const defenderSide = combat.defenders[0]?.owner;
           return (
             <div key={`${combat.hexCoordinates.q},${combat.hexCoordinates.r}`} className="flex gap-2 border-t border-white/5 pt-2 first:border-0 first:pt-0">
               <Side
-                label={isPlayerDefending ? 'Enemy' : 'You'}
-                color={SIDE_COLORS[isPlayerDefending ? 'ai' : 'player']}
+                label={sideLabel(gameState, attackerSide, viewer)}
+                color={sideColor(attackerSide)}
                 power={preview.attackerPower}
                 entries={preview.attackers}
               />
               <div className="self-center font-bold text-slate-500">vs</div>
               <Side
-                label={isPlayerDefending ? 'You' : 'Enemy'}
-                color={SIDE_COLORS[isPlayerDefending ? 'player' : 'ai']}
+                label={sideLabel(gameState, defenderSide, viewer)}
+                color={sideColor(defenderSide)}
                 power={preview.defenderPower}
                 entries={preview.defenders}
               />

@@ -28,6 +28,9 @@ import {
   getNeighbors,
   getHexesInRange,
   getRing,
+  canonicalHex,
+  hexOrbit,
+  rotateHex,
   DIRECTIONS
 } from './hexUtils';
 import { createHexagonalGrid } from './mapGenerator';
@@ -425,7 +428,13 @@ export const initializeGameState = (settings: GameSettings = DEFAULT_SETTINGS, s
   const { hexGrid, theme } = createHexagonalGrid(settings, settings.seed, settings.themeName);
   const battleSeed = setup?.battleSeed ?? Math.floor(Math.random() * 2 ** 31);
   let draws = 0;
-  const trees = new Set(pickGreatTrees(hexGrid, settings.gridSize, () => seededRandom(battleSeed + 7 * draws++)).map(coordKey));
+  const picked = pickGreatTrees(hexGrid, settings.gridSize, () => seededRandom(battleSeed + 7 * draws++));
+  // (on a mirrored map, the trees in its first part grow in every part)
+  const symmetry = mapSymmetry(settings);
+  const trees = new Set((symmetry > 1
+    ? picked.filter(c => coordKey(canonicalHex(c, symmetry)) === coordKey(c)).flatMap(c => hexOrbit(c, symmetry))
+      .filter(c => findHexByCoordinates(hexGrid, c)?.terrain === 'forest')
+    : picked).map(coordKey));
   for (const hex of hexGrid) if (trees.has(coordKey(hex.coordinates))) hex.feature = 'greatTree';
   const startingGold = settings.startingGold ?? DEFAULT_SETTINGS.startingGold!;
 
@@ -507,6 +516,10 @@ export const getOpponent = (playerType: PlayerType): PlayerType =>
 export const getActivePlayer = (state: GameState): PlayerType => state.activePlayer ?? getSides(state)[0];
 
 const getSettings = (state: GameState): GameSettings => state.settings ?? DEFAULT_SETTINGS;
+
+// How many equal parts a mirrored map turns through (1: not mirrored)
+const mapSymmetry = (settings: GameSettings | undefined): number =>
+  settings?.symmetry && [2, 3, 6].includes(settings.symmetry) ? settings.symmetry : 1;
 
 export const getMaxRounds = (state: GameState): number => getSettings(state).maxRounds ?? DEFAULT_SETTINGS.maxRounds!;
 
@@ -726,7 +739,7 @@ const castleMarches = (at: HexCoordinates, castles: HexCoordinates[]): { gap: nu
 // hexes the same distance from both castles, as far apart from each other as possible.
 // (With more castles, one between each pair of neighbouring castles - see placeCampsBetween.)
 // The camp hex becomes open ground with room around it to deploy recruits.
-const placeCamps = (state: GameState, castles: HexCoordinates[]): void => {
+const placeCamps = (state: GameState, castles: HexCoordinates[], symmetry = 1): void => {
   const gridSize = getSettings(state).gridSize;
   const center = { q: 0, r: 0 };
 
@@ -739,8 +752,8 @@ const placeCamps = (state: GameState, castles: HexCoordinates[]): void => {
       // Off the outer ring so camps can be approached from every side
       getHexDistance(hex.coordinates, center) < gridSize;
   });
-  if (castles.length > 2) {
-    placeCampsBetween(state, castles, candidatesWithin);
+  if (castles.length > 2 || symmetry > 1) {
+    placeCampsBetween(state, castles, candidatesWithin, symmetry);
     return;
   }
 
@@ -781,15 +794,34 @@ const setUpCamp = (state: GameState, camp: Hex): void => {
 // With more than two castles (in the order they stand around the map), a camp between each pair of
 // neighbouring castles: a fair hex whose two nearest castles are that pair, as far as it can be from
 // every other castle and from the camps already placed
-const placeCampsBetween = (state: GameState, castles: HexCoordinates[], candidatesWithin: (tolerance: number) => Hex[]): void => {
+// (with two castles, one camp on each flank between them; on a mirrored map the camps of its first
+// part are turned into the others)
+const placeCampsBetween = (state: GameState, castles: HexCoordinates[], candidatesWithin: (tolerance: number) => Hex[], symmetry = 1): void => {
   const placed: Hex[] = [];
-  for (let i = 0; i < castles.length; i++) {
-    const pair = [castles[i], castles[(i + 1) % castles.length]];
+  const campOf: (Hex | undefined)[] = [];
+  const pairs = castles.length === 2 ? 2 : castles.length;
+  const perPart = pairs % symmetry === 0 ? pairs / symmetry : pairs;
+  for (let i = 0; i < pairs; i++) {
+    if (i >= perPart) {
+      const original = campOf[i % perPart];
+      const turned = original && findHexByCoordinates(state.hexGrid, rotateHex(original.coordinates, Math.floor(i / perPart) * 6 / symmetry));
+      if (turned && !turned.isBase && !isImpassable(turned) && !placed.some(camp => coordsEqual(camp.coordinates, turned.coordinates))) {
+        setUpCamp(state, turned);
+        placed.push(turned);
+        campOf[i] = turned;
+        continue;
+      }
+    }
+    const pair = [castles[i % castles.length], castles[(i + 1) % castles.length]];
     const others = castles.filter(castle => !pair.includes(castle));
     for (const tolerance of [0, 1, 2]) {
       const options = candidatesWithin(tolerance).filter(hex => {
         const toPair = Math.max(...pair.map(castle => getHexDistance(hex.coordinates, castle)));
-        return !placed.some(camp => getHexDistance(camp.coordinates, hex.coordinates) < 2) &&
+        // (on a mirrored map, one whose copies stand apart from it, to be turned into the other parts)
+        const copies = symmetry > 1 ? hexOrbit(hex.coordinates, symmetry) : [hex.coordinates];
+        return !placed.some(camp => copies.some(copy => getHexDistance(camp.coordinates, copy) < 2)) &&
+          copies.length === symmetry && copies.every((copy, n) => copies.slice(n + 1).every(next => getHexDistance(copy, next) >= 2)) &&
+          copies.every(copy => { const at = findHexByCoordinates(state.hexGrid, copy); return !!at && !at.isBase && !isImpassable(at); }) &&
           others.every(castle => getHexDistance(hex.coordinates, castle) > toPair);
       });
       if (options.length === 0) continue;
@@ -800,6 +832,7 @@ const placeCampsBetween = (state: GameState, castles: HexCoordinates[], candidat
       const camp = options.reduce((best, hex) => (score(hex) > score(best) ? hex : best));
       setUpCamp(state, camp);
       placed.push(camp);
+      campOf[i] = camp;
       break;
     }
   }
@@ -1033,21 +1066,37 @@ export const placeAllCastles = (state: GameState): GameState => {
   const castleHealth = getSettings(state).castleHealth ?? BASE_MAX_HEALTH;
   const castles: HexCoordinates[] = [];
   const used = new Set<string>();
+  // On a mirrored map the castles of the map's first part are turned into the others (seat i of the
+  // first part's `perPart` stands for seats i, i + perPart, ...)
+  const symmetry = mapSymmetry(getSettings(state));
+  const perPart = seats.length % symmetry === 0 ? seats.length / symmetry : seats.length;
+  const build = (side: PlayerType, at: HexCoordinates) => {
+    used.add(coordKey(at));
+    castles.push(at);
+    updateHex(newState, at, { isBase: true, owner: side, baseHealth: castleHealth });
+    newState.players[side] = { ...newState.players[side], baseLocation: at, baseHealth: castleHealth, maxBaseHealth: castleHealth };
+  };
   seats.forEach((side, seat) => {
+    if (seat >= perPart) {
+      const original = castles[seat % perPart];
+      const turned = original && rotateHex(original, Math.floor(seat / perPart) * 6 / symmetry);
+      if (turned && valid.has(coordKey(turned)) && !used.has(coordKey(turned))) {
+        build(side, turned);
+        return;
+      }
+    }
     const target = offset + Math.round(seat * rim.length / seats.length);
     // The nearest usable spot along the edge to its share of it, never next to another castle
     for (let step = 0; step < rim.length; step++) {
       const at = rim[(((target + (step % 2 ? 1 : -1) * Math.ceil(step / 2)) % rim.length) + rim.length) % rim.length];
       if (!valid.has(coordKey(at)) || used.has(coordKey(at)) || castles.some(castle => getHexDistance(castle, at) < 3)) continue;
-      used.add(coordKey(at));
-      castles.push(at);
-      updateHex(newState, at, { isBase: true, owner: side, baseHealth: castleHealth });
-      newState.players[side] = { ...newState.players[side], baseLocation: at, baseHealth: castleHealth, maxBaseHealth: castleHealth };
+      build(side, at);
       return;
     }
   });
   if (castles.length < seats.length) return state;
-  placeCamps(newState, castles);
+  // (castles in the order they stand around the map)
+  placeCamps(newState, castles, symmetry);
   placeStructures(newState, castles);
   const started: GameState = {
     ...newState,
