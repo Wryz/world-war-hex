@@ -250,8 +250,9 @@ export const getLevel = (levelId: number): LevelDef => {
     (LEVEL_TUNING[id - 1] ?? 1) * 100
   ) / 100;
   const enemyTier = Math.max(1, Math.round((enemyScale - 1) / 0.1) + 1);
-  // The first battle is fought on a small field of its own (tutorialField.ts), castles four hexes apart
-  const gridSize = isTutorial ? 3 : region.id < 2 ? 4 : 5;
+  // The first battle is fought on a small field of its own (tutorialField.ts), castles four hexes apart;
+  // every other battle on a field 9 hexes across
+  const gridSize = isTutorial ? 3 : 4;
   const maxRounds = gridSize === 3 ? 12 : gridSize === 4 ? 14 : 16;
 
   const guards: GuardSpec[] = [];
