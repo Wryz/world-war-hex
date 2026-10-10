@@ -1069,6 +1069,9 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
       : turns === 1 ? 'until the end of its next turn' : `for its next ${turns} turns`;
     buffs.push({ id: 'shaken', icon: 'shaken', label: 'Shaken', value: `-${pct(1 - SHAKEN_ATTACK)} attack ${lasting}`, good: false });
   }
+  // A monster's venom or web working in it
+  if (unit.poisoned) buffs.push({ id: 'venom', icon: 'venom', label: 'Poisoned', value: `-${unit.poisoned} health at the end of its next turn`, good: false });
+  if (unit.slowed) buffs.push({ id: 'slowed', icon: 'slowed', label: 'Slowed', value: '-1 movement on its next turn', good: false });
   if (canRise(unit)) buffs.push({ id: 'undying', icon: 'undying', label: 'Undying', value: 'Rises again once (not against Clerics or fire)', good: true, quiet: true });
   if (furyMultiplier(unit) >= 1.05) buffs.push({ id: 'fury', icon: 'fury', label: 'Fury', value: `+${pct(furyMultiplier(unit) - 1)} attack`, good: true });
   // (when an enemy beside it has another of its pack beside it too)

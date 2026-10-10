@@ -53,7 +53,9 @@ import {
 } from '../game/gameState';
 import { FELL_DAMAGE, FIRE_DAMAGE } from '../game/battlefield';
 import { CATAPULT_DAMAGE, TAVERN_INCOME } from '../game/structures';
-import { TroopClass, getTroopClass } from '../game/troops';
+import { Faction, TROOPS, TroopClass, TroopId, getTroopClass } from '../game/troops';
+import { getMobSkill } from '../game/mobSkills';
+import { SHAKEN_ATTACK, isFearless } from '../game/regionRules';
 
 /**
  * AI difficulty settings affecting various strategic parameters
@@ -182,6 +184,31 @@ const DOCTRINES: Record<AIDoctrine, DoctrineProfile> = {
   }
 };
 
+// How each monster horde fights when nothing says otherwise. Swamp things and the frost's warbands
+// hold the narrow ways; the desert's and the orcs' armies, and the dragons, take the high ground
+// and make you come to them; demons gather round their fire-casters. Bandits, goblins, beasts and
+// the dead come straight at you. (Rival kingdoms fight a balanced war.)
+const FACTION_DOCTRINES: Partial<Record<Faction, AIDoctrine>> = {
+  swamp: 'pikeWall',
+  frost: 'pikeWall',
+  desert: 'archerHill',
+  orcs: 'archerHill',
+  dragons: 'archerHill',
+  infernal: 'mageSupport'
+};
+
+// The doctrine of the faction most of the AI's troops belong to
+const factionDoctrine = (state: GameState): AIDoctrine => {
+  const counts = new Map<Faction, number>();
+  for (const type of getRosterTypes(state, 'ai')) {
+    const troop = TROOPS[type as TroopId];
+    if (!troop || troop.isBoss) continue;
+    counts.set(troop.faction, (counts.get(troop.faction) ?? 0) + 1);
+  }
+  const main = [...counts].sort((a, b) => b[1] - a[1])[0]?.[0];
+  return (main && FACTION_DOCTRINES[main]) ?? 'balanced';
+};
+
 export interface AIPlanOptions {
   // Which side to plan for (the game only ever plans for 'ai'; simulations may use either)
   side?: PlayerType;
@@ -270,11 +297,12 @@ const mirrorSides = (state: GameState): GameState => {
 /**
  * Plan the AI's turn: queue moves for its units, then purchases.
  * Returns the game state with the side's pending purchases and moves added.
- * The game calls this with no options (the 'ai' side, balanced doctrine).
+ * The game calls this with no options (the 'ai' side, its faction's doctrine).
  */
 export const planAITurn = (initial: GameState, options: AIPlanOptions = {}): GameState => {
-  const doctrine = options.doctrine ?? 'balanced';
   const side = options.side ?? 'ai';
+  // (the monsters fight their own way; a side planned for the player keeps to a balanced war)
+  const doctrine = options.doctrine ?? (side === 'ai' ? factionDoctrine(initial) : 'balanced');
   const state = initial;
   // In the fog of war the planner only knows about the enemy troops its side can see, and remembers
   // where it last saw the others
@@ -954,6 +982,8 @@ const attackValueFrom = (planner: Planner, unit: Unit, position: HexCoordinates)
     let value = healthValue(enemy, damage, health);
     // Removing a unit also removes the damage it would have done next turn
     if (damage >= health) value += enemy.attackPower;
+    // ...and what a monster's blow leaves behind is worth having too
+    value += blowSkillValue(unit, enemy, damage, health);
 
     const isSneakAttack = unit.abilities.includes('stealth') && !enemy.abilities.includes('stealth');
     const strikesBack = !isSneakAttack && canStrikeFrom(planner, enemy, enemy.position, position);
@@ -966,6 +996,24 @@ const attackValueFrom = (planner: Planner, unit: Unit, position: HexCoordinates)
   if (best.target) best.value -= healthValue(unit, strikeBackDamage(planner, unit, position, best.target.id));
   return best;
 };
+
+// What a monster's skill adds to a blow that lands, in gold: venom still to come, a slowed or
+// shaken target, life drained back, gold stolen
+const blowSkillValue = (unit: Unit, enemy: Unit, damage: number, health: number): number => {
+  const skill = getMobSkill(unit);
+  if (!skill || damage <= 0) return 0;
+  const survives = damage < health;
+  switch (skill.kind) {
+    case 'venom': return survives ? healthValue(enemy, skill.amount!, health - damage) : 0;
+    case 'slow': return survives ? enemy.cost * SLOW_VALUE : 0;
+    case 'curse': return survives && !isFearless(enemy) ? enemy.attackPower * (1 - SHAKEN_ATTACK) : 0;
+    case 'leech': return healthValue(unit, Math.min(skill.amount!, unit.maxLifespan - unit.lifespan));
+    case 'plunder': return skill.amount!;
+    default: return 0;
+  }
+};
+// Share of a troop's worth a turn of slowed movement is worth
+const SLOW_VALUE = 0.15;
 
 // Damage the enemy troops able to reach a hex would deal a unit attacking from it (they strike
 // back at any attacker in their reach), leaving out its own target

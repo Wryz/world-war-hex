@@ -21,7 +21,7 @@ export const healthEventDelay = (event: HealthEvent): number => {
     case 'boss': return BURST_SECONDS * 0.3 + (event.order ?? 0) * BREATH_SWEEP;
     // (as the flyer passes overhead, part-way through its flight)
     case 'strafe': return 0.7;
-    case 'swarm': case 'bloodlust': return 0.25;
+    case 'swarm': case 'bloodlust': case 'burst': case 'drain': return 0.25;
     // The end of a turn, in order: springs, mages, then the ground
     case 'spring': return 0.35;
     case 'mage': return 0.65;

@@ -19,7 +19,7 @@ import { DRAG_CLICK_TOLERANCE } from './HexTile';
 import { instantiateUnitModel, findAnimationClip, disposeUnitModel, UnitModelInstance } from './utils/unitModelCache';
 import {
   ArrowIcon, AttackIcon, CrownIcon, PinnedIcon, GoldIcon, FireIcon, ShieldIcon, SignatureIcon, TerrainIcon, UnitIcon, WaitIcon, ShakenIcon,
-  UndyingIcon, FuryIcon, PackIcon
+  UndyingIcon, FuryIcon, PackIcon, VenomIcon, SlowedIcon
 } from './icons';
 
 // Height of a troop's invisible click area, for one whose label floats at `labelHeight`
@@ -121,7 +121,7 @@ const DustPuff: React.FC<{ delay: number }> = ({ delay }) => {
 export interface UnitBuff {
   id: string;
   terrain?: TerrainType;
-  icon?: 'gold' | 'attack' | 'signature' | 'shield' | 'fire' | 'pinned' | 'shaken' | 'undying' | 'fury' | 'pack';
+  icon?: 'gold' | 'attack' | 'signature' | 'shield' | 'fire' | 'pinned' | 'shaken' | 'undying' | 'fury' | 'pack' | 'venom' | 'slowed';
   label: string;
   value: string;
   good: boolean;
@@ -138,6 +138,7 @@ const BuffIcon: React.FC<{ buff: UnitBuff }> = ({ buff }) =>
   buff.icon === 'gold' ? <GoldIcon /> : buff.icon === 'attack' ? <AttackIcon />
     : buff.icon === 'signature' ? <SignatureIcon /> : buff.icon === 'shield' ? <ShieldIcon /> : buff.icon === 'fire' ? <FireIcon /> : buff.icon === 'pinned' ? <PinnedIcon />
     : buff.icon === 'shaken' ? <ShakenIcon /> : buff.icon === 'undying' ? <UndyingIcon /> : buff.icon === 'fury' ? <FuryIcon /> : buff.icon === 'pack' ? <PackIcon />
+    : buff.icon === 'venom' ? <VenomIcon /> : buff.icon === 'slowed' ? <SlowedIcon />
       : <TerrainIcon terrain={buff.terrain ?? 'plain'} />;
 
 // A unit's buffs as a short row of icons (the first few, then a count). The row sits over the troop,

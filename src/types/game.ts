@@ -115,6 +115,10 @@ export interface Unit {
   risen?: boolean;
   // Shaken (morale): its side's turns left until it steadies; it hits softer meanwhile
   shaken?: number;
+  // Poisoned (a monster's venom): health it loses at the end of its side's next turn
+  poisoned?: number;
+  // Slowed (a web, a chilling touch): its side's turn-ends left with one hex less movement
+  slowed?: number;
 }
 
 // Every troop - the player's cards and the campaign's monsters - is identified by its troop id
@@ -242,7 +246,9 @@ export interface GameState {
 
 export type HealthCause =
   | 'strafe' | 'fell' | 'catapult' | 'boss' | 'swarm' | 'bloodlust'
-  | 'spring' | 'mage' | 'regenerate' | 'lava' | 'cursed' | 'fire';
+  | 'spring' | 'mage' | 'regenerate' | 'lava' | 'cursed' | 'fire'
+  // Monster skills: venom at a turn's end, a troop bursting as it falls, life drained in a fight
+  | 'venom' | 'burst' | 'drain';
 
 export interface HealthEvent {
   serial: number;

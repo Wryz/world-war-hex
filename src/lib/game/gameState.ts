@@ -44,6 +44,7 @@ import { cardStats, getClassCounter, getTroop, getTroopClass, scaleTroop } from 
 import { aimStrike, getBossPower, isBossEnraged, powerCooldown } from './bosses';
 import { BUILDING_MATERIAL, MaterialId, SPOILS, addToHaul, landMaterials } from './materials';
 import { storySiteFor } from './lore';
+import { SLOW_MOVEMENT, getMobSkill, hasMobSkill, mobAuraShare, mobDefenceShare, mobStrikeShare } from './mobSkills';
 import { TUTORIAL_CAMPS, TUTORIAL_CASTLES, TUTORIAL_LEVEL_ID, TUTORIAL_TERRAIN } from './tutorialField';
 import {
   PIN_BONUS, SHIELD_WALL_REDUCTION, findScreen, inShieldWall, isPinned, screenReduction, strikesPinned
@@ -1151,7 +1152,7 @@ export const unitEnterCost = (unit: { abilities: Ability[]; type?: UnitType; isB
 // How far a unit can walk this turn: its movement, less what the weather takes (a blizzard slows a
 // troop to one hex at the least)
 export const getMovementRange = (state: GameState, unit: Unit): number =>
-  Math.max(1, unit.movementRange - weatherMovePenalty(state, unit));
+  Math.max(1, unit.movementRange - weatherMovePenalty(state, unit) - (unit.slowed ? SLOW_MOVEMENT : 0));
 
 // Cheapest-path search over the board. By default entering a hex costs its terrain's movement cost.
 // `canEnter` decides which hexes may be walked through at all.
@@ -2072,6 +2073,15 @@ export const getFormationEffects = (
   const screen = screenReduction(findScreen(target, at, from, guards));
   if (screen > 0) effects.push({ label: 'Screened', share: -screen });
   if (inShieldWall(target, at, guards)) effects.push({ label: 'Shield wall', share: -SHIELD_WALL_REDUCTION });
+  // Monster skills: the striker's own, a friend's war-cry beside it, and the target's hide or guard
+  const moved = from === attacker.position ? attacker.movedHexes ?? 0 : getHexDistance(attacker.position, from);
+  const groundAt = (c: HexCoordinates) => findHexByCoordinates(state.hexGrid, c)?.terrain ?? 'plain';
+  const mobStrike = mobStrikeShare(attacker, target, from, at, moved, strikers, guards, groundAt);
+  if (mobStrike) effects.push(mobStrike);
+  const aura = mobAuraShare(attacker, from, strikers);
+  if (aura) effects.push(aura);
+  const defence = mobDefenceShare(target, at, getHexDistance(from, at), guards);
+  if (defence) effects.push({ label: defence.label, share: -defence.share });
   // Pack Hunters: beasts are harder for every other beast beside their prey
   if (hasTrait(attacker, 'pack')) {
     const pack = Math.min(MAX_PACK, strikers.filter(friend =>
@@ -2465,7 +2475,9 @@ const finishTurn = (state: GameState): GameState => {
       const updated = {
         ...unit, lifespan, hasMoved: false, isEngagedInCombat: false, movedHexes: 0, frozen: undefined,
         revealed: side === activePlayer ? unit.revealed : false,
-        shaken: side === activePlayer && unit.shaken ? unit.shaken - 1 || undefined : unit.shaken
+        shaken: side === activePlayer && unit.shaken ? unit.shaken - 1 || undefined : unit.shaken,
+        // (and a slowed one shakes off the web)
+        slowed: side === activePlayer && unit.slowed ? unit.slowed - 1 || undefined : unit.slowed
       };
       if (lifespan <= 0) burned.push(updated);
       return updated;
@@ -2489,6 +2501,14 @@ const finishTurn = (state: GameState): GameState => {
       : `${unitLabel(unit)} perished on the ${TERRAIN_EFFECTS[terrainUnder(newState, unit)].name.toLowerCase()}.`);
   }
   scatterMinions(newState);
+  // Venom: this side's poisoned troops lose what the poison takes, and are rid of it
+  for (const unit of [...newState.players[activePlayer].units]) {
+    if (!unit.poisoned) continue;
+    const amount = unit.poisoned;
+    unit.poisoned = undefined;
+    const { destroyed } = inflictDamage(newState, unit, amount, getOpponent(activePlayer), 'venom');
+    addLog(newState, activePlayer, `${unitLabel(unit)} ${destroyed ? 'succumbs to' : 'suffers'} the venom${destroyed ? '' : ` (-${amount})`}.`);
+  }
   // Morale: the other side's badly hurt troops caught alone among this side's waver
   const opponent = getOpponent(activePlayer);
   for (const unit of newState.players[opponent].units) {
@@ -3056,6 +3076,42 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
   return effects;
 };
 
+// What a monster's blow leaves behind on the troop it hurt (`victim` as it was before the fight)
+const applyBlowSkill = (state: GameState, hitter: Unit, victim: Unit): void => {
+  const skill = getMobSkill(hitter);
+  if (!skill) return;
+  const live = state.players[victim.owner].units.find(u => u.id === victim.id);
+  const own = state.players[hitter.owner].units.find(u => u.id === hitter.id);
+  // (an effect meant for the victim's next turn, landing on its own turn, lasts through one more)
+  const turns = getActivePlayer(state) === victim.owner ? 2 : 1;
+  switch (skill.kind) {
+    case 'venom':
+      if (live) live.poisoned = Math.max(live.poisoned ?? 0, skill.amount!);
+      break;
+    case 'slow':
+      if (live) live.slowed = Math.max(live.slowed ?? 0, turns);
+      break;
+    case 'curse':
+      if (live && !isFearless(live)) live.shaken = Math.max(live.shaken ?? 0, turns);
+      break;
+    case 'leech':
+      if (own && own.lifespan > 0 && own.lifespan < own.maxLifespan) {
+        const healed = Math.min(own.maxLifespan - own.lifespan, skill.amount!);
+        noteHealth(state, own, healed, 'drain');
+        own.lifespan += healed;
+      }
+      break;
+    case 'plunder': {
+      const taken = Math.min(skill.amount!, Math.max(0, state.players[victim.owner].points));
+      if (taken <= 0) break;
+      state.players[victim.owner].points -= taken;
+      earnGold(state, hitter.owner, taken);
+      addLog(state, hitter.owner, `${skill.name}! ${unitLabel(hitter)} steals ${taken} gold.`);
+      break;
+    }
+  }
+};
+
 export const resolveCombat = (state: GameState, combatIndex: number): GameState => {
   const combat = state.combats[combatIndex];
   if (state.currentPhase !== 'combat' || !combat || combat.resolved) return state;
@@ -3109,6 +3165,13 @@ export const resolveCombat = (state: GameState, combatIndex: number): GameState 
         !fighting.has(other.id) && hasTrait(other, 'swarm') && getHexDistance(other.position, entry.unit.position) === 1);
       for (const goblin of crowd) inflictDamage(newState, goblin, splash, getOpponent(goblin.owner), 'swarm');
       if (crowd.length > 0) addLog(newState, entry.unit.owner, `Packed together: ${crowd.length === 1 ? 'the goblin beside it takes' : `${crowd.length} goblins beside it take`} ${splash} too.`);
+    }
+    // Monster skills that work once a blow lands: venom, webs, curses, drained life, stolen gold
+    for (const entry of [...preview.attackers, ...preview.defenders]) {
+      if (entry.damageTaken <= 0) continue;
+      const isDefender = preview.defenders.includes(entry);
+      const hitters = isDefender ? preview.attackers.map(a => a.unit) : preview.defenders.slice(0, 1).map(d => d.unit);
+      for (const hitter of hitters) applyBlowSkill(newState, hitter, entry.unit);
     }
     syncHexUnits(newState);
 
@@ -3164,6 +3227,13 @@ export const resolveAllCombats = (state: GameState): GameState => {
 const removeUnit = (state: GameState, unit: Unit): void => {
   state.players[unit.owner].units = state.players[unit.owner].units.filter(u => u.id !== unit.id);
   if (unit.isBoss) scatterMinions(state);
+  // A sapper's powder keg or a golem's molten heart goes off as it falls
+  const burst = hasMobSkill(unit, 'deathburst');
+  if (burst) {
+    const caught = state.players[getOpponent(unit.owner)].units.filter(enemy => getHexDistance(enemy.position, unit.position) === 1);
+    if (caught.length > 0) addLog(state, unit.owner, `${burst.name}! ${unitLabel(unit)} bursts as it falls.`);
+    for (const enemy of caught) inflictDamage(state, enemy, burst.amount!, unit.owner, 'burst', { from: unit.position });
+  }
   // (falling on its own side's turn, the turn's end would count one off at once: it gets one more)
   if (unit.isBoss || unit.isChampion) {
     const turns = (unit.isBoss ? BOSS_FALL_SHAKE : CHAMPION_FALL_SHAKE) + (getActivePlayer(state) === unit.owner ? 1 : 0);

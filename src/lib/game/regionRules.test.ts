@@ -53,6 +53,7 @@ test('beasts hunt in packs', () => {
   const second = troop('ai', 'grey_wolf', at(centre, -1, 0));
   const third = troop('ai', 'grey_wolf', at(centre, 0, 1));
   place(state, prey, wolf, second, third);
+  // (its own Bring Down only works on the wounded: the prey is unhurt)
   close(getFormationMultiplier(state, wolf, prey), 1 + PACK_BONUS * 2);
 });
 
