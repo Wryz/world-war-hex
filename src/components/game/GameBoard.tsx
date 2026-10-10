@@ -55,7 +55,7 @@ import { useLoadingManager } from './utils/LoadingManager';
 import { AnimatedUnitPreview } from './AnimatedUnitPreview';
 import { playSound } from './utils/SoundPlayer';
 import { playBattleSound } from './utils/battleSounds';
-import { getCastleStyle } from '@/lib/meta/cosmetics';
+import { DEFAULT_CASTLE_STYLE, getCastleStyle } from '@/lib/meta/cosmetics';
 import { useProfile } from '@/lib/meta/profile';
 import { getBattleStartDelay, getDeathTime, getImpactTimes, getImpactTimesUntil } from './utils/battleTiming';
 import { getUnitTypeName } from './utils/UnitHelpers';
@@ -1182,7 +1182,11 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   unitIdsRef.current = unitIds;
   const [popups, setPopups] = useState<DamagePopup[]>([]);
   // Your castle wears the style you picked
-  const playerCastleStyle = getCastleStyle(useProfile().cosmetics.castleStyle);
+  const castleStyleId = useProfile().cosmetics.castleStyle;
+  const playerCastleStyle = getCastleStyle(castleStyleId);
+  // (in a battle between more sides your castle is built in your side's colour, unless you picked a
+  // style of your own)
+  const wearsStyle = !isMultiSide(gameState) || (!!castleStyleId && castleStyleId !== DEFAULT_CASTLE_STYLE);
   // Units destroyed a moment ago, still falling on the battlefield
   const [dyingUnits, setDyingUnits] = useState<{ unit: Unit; position: [number, number, number]; fallen: boolean }[]>([]);
 
@@ -1648,6 +1652,9 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
   const previousUnitsRef = useRef(new Map<string, { unit: Unit; position: [number, number, number]; fallen: boolean }>());
   const previousGameIdRef = useRef(gameId);
+  // (who fights whom, for the coins a fallen enemy pays out)
+  const sidesRef = useRef({ state: gameState, viewer });
+  sidesRef.current = { state: gameState, viewer };
   const popupIdRef = useRef(0);
   const popupTimeoutsRef = useRef(new Set<ReturnType<typeof setTimeout>>());
 
@@ -1694,7 +1701,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         fallen.push(before);
         playBattleSound('unitFalls', 0.8);
         // Coins fly from the fallen enemy to the player's treasury
-        if (!areAllies(gameState, before.unit.owner, viewer)) {
+        if (!areAllies(sidesRef.current.state, before.unit.owner, sidesRef.current.viewer)) {
           playBattleSound('bounty', 0.6);
           const screen = projectToScreen([before.position[0], before.position[1] + 1, before.position[2]]);
           if (screen) emitCoins(screen, Math.min(8, Math.ceil(bounty / 2)));
@@ -1927,7 +1934,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         <Castle
           key={owner}
           owner={owner}
-          look={owner === viewer ? playerCastleStyle : undefined}
+          look={owner === viewer && wearsStyle ? playerCastleStyle : undefined}
           name={isMultiSide(gameState) ? players[owner]?.name : undefined}
           position={position}
           health={timeline.castleHealth(owner, players[owner]?.baseHealth ?? BASE_MAX_HEALTH)}

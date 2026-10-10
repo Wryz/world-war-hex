@@ -63,7 +63,9 @@ let shownCastleOwed: Record<PlayerType, number> = { player: 0, ai: 0 };
 const listeners = new Set<() => void>();
 const publish = (health: Map<string, number>, owed: Record<PlayerType, number>) => {
   shownHealth = health;
-  if (owed.player !== shownCastleOwed.player || owed.ai !== shownCastleOwed.ai) shownCastleOwed = owed;
+  // (a new object only when some castle's owed damage changed, so the HUD only redraws then)
+  const sides = new Set([...Object.keys(owed), ...Object.keys(shownCastleOwed)]);
+  if ([...sides].some(side => (owed[side] ?? 0) !== (shownCastleOwed[side] ?? 0))) shownCastleOwed = owed;
   listeners.forEach(listener => listener());
 };
 const subscribe = (listener: () => void) => {
@@ -83,7 +85,7 @@ export const useShownHealthOf = (id: string | null | undefined): number | undefi
 // A castle's health as the board shows it
 export const useShownCastleHealth = (side: PlayerType, health: number): number => {
   const owed = useSyncExternalStore(subscribe, () => shownCastleOwed, () => shownCastleOwed);
-  return Math.max(0, health - owed[side]);
+  return Math.max(0, health - (owed[side] ?? 0));
 };
 
 export interface LandedChange {
@@ -171,7 +173,7 @@ export const useHealthTimeline = (gameState: GameState, units: Unit[]): HealthTi
     drawnRef.current = new Set(drawn.map(unit => unit.id));
 
     const castleOwed: Record<PlayerType, number> = { player: 0, ai: 0 };
-    for (const { event } of pending) if (event.castle) castleOwed[event.castle] += event.amount;
+    for (const { event } of pending) if (event.castle) castleOwed[event.castle] = (castleOwed[event.castle] ?? 0) + event.amount;
 
     const landed = new Map<string, LandedChange[]>();
     for (const { event, showAt } of scheduled) {
@@ -183,7 +185,7 @@ export const useHealthTimeline = (gameState: GameState, units: Unit[]): HealthTi
 
     return {
       units: drawn,
-      castleHealth: (side, health) => Math.max(0, health - castleOwed[side]),
+      castleHealth: (side, health) => Math.max(0, health - (castleOwed[side] ?? 0)),
       castleOwed,
       landed
     };

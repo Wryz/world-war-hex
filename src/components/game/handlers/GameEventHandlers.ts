@@ -226,9 +226,11 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
   const multi = isMultiSide(gameState);
   const { currentPhase, turnNumber } = gameState;
   // Whether the player may act right now (read from the ref so it's correct even before a re-render)
+  const viewerRef = useRef(viewer);
+  viewerRef.current = viewer;
   const isPlayerPlanning = () =>
-    stateRef.current.currentPhase === 'planning' && (stateRef.current.activePlayer ?? 'player') === viewer &&
-    !stateRef.current.players[viewer]?.eliminated && !ordersSentRef.current;
+    stateRef.current.currentPhase === 'planning' && (stateRef.current.activePlayer ?? 'player') === viewerRef.current &&
+    !stateRef.current.players[viewerRef.current]?.eliminated && !ordersSentRef.current;
   // (a guest has sent this turn's orders and waits for the host to carry them out)
   const ordersSentRef = useRef<string | null>(null);
   const turnKey = (state: GameState) => `${state.turnNumber}-${state.activePlayer}`;
@@ -334,7 +336,6 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
       commitState(executeTurn({ ...current, pendingMoves: [], pendingPurchases: [] }));
     }, (stateRef.current.planningTimeRemaining + REMOTE_GRACE_SECONDS) * 1000);
     return () => clearTimeout(timeout);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, currentPhase, isRemoteTurn, turnNumber, activeSide, commitState]);
 
   // (host) A remote side's orders for its turn: given on the board as that side, then carried out
@@ -360,7 +361,6 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
       setBattleStartDelay(getArrivalTime(current, next));
     }
     commitState(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [commitState]);
 
   // AI turn: plan purchases and moves, then execute them
@@ -393,7 +393,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
       commitState(endTurn(stateRef.current));
     }, Math.max((getBattleStartDelay() * 1000 + TURN_END_PAUSE_MS) / getGameSpeed(), timelineWait(stateRef.current)));
     return () => clearTimeout(timeout);
-  }, [isReady, currentPhase, turnNumber, commitState]);
+  }, [isReady, currentPhase, turnNumber, commitState, isGuest]);
 
   // All of the turn's battles play out together, then resolve at once
   useEffect(() => {

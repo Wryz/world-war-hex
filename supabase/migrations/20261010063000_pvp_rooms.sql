@@ -22,12 +22,13 @@ create table public.room_members (
   seat smallint not null check (seat between 0 and 7),
   color smallint not null check (color between 0 and 7),
   team smallint check (team between 0 and 7),
-  -- The cards the member brings: { deck, cards, trees } from their saved profile
   army jsonb not null default '{}'::jsonb,
   joined_at timestamptz not null default now(),
   primary key (room_id, user_id),
   unique (room_id, seat)
 );
+
+comment on column public.room_members.army is 'The cards the member brings: { deck, cards, trees } from their saved profile';
 
 create table public.room_secrets (
   room_id text not null,
@@ -115,7 +116,7 @@ begin
 end;
 $$;
 
--- Open a room as its host (seat 1); rooms left untouched for a day are cleared away
+-- Open a room as its host (seat 1)
 create function public.create_room(p_name text, p_army jsonb, p_settings jsonb, p_secret text) returns text
 language plpgsql volatile security definer set search_path = ''
 as $$
@@ -126,7 +127,6 @@ begin
   if uid is null then
     raise exception 'Sign in first';
   end if;
-  delete from public.rooms where updated_at < now() - interval '1 day';
   code := public.new_room_code();
   insert into public.rooms (id, host_id, settings) values (code, uid, coalesce(p_settings, '{}'::jsonb));
   insert into public.room_members (room_id, user_id, name, seat, color, army)
@@ -192,12 +192,3 @@ grant execute on function public.create_room(text, jsonb, jsonb, text) to authen
 grant execute on function public.join_room(text, text, jsonb, text) to authenticated;
 grant execute on function public.is_room_member(text) to authenticated;
 grant execute on function public.is_room_host(text) to authenticated;
-
--- The lobby follows changes to its room and members
-alter publication supabase_realtime add table public.rooms, public.room_members;
-
--- The room's private channel (`room:<code>`): only its members can listen, talk or be present on it
-create policy "room members receive" on realtime.messages for select to authenticated
-  using (realtime.topic() like 'room:%' and public.is_room_member(substring(realtime.topic() from 6)));
-create policy "room members send" on realtime.messages for insert to authenticated
-  with check (realtime.topic() like 'room:%' and public.is_room_member(substring(realtime.topic() from 6)));

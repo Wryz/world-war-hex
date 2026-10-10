@@ -29,6 +29,7 @@ A turn-based strategy card game on a 3D hexagonal battlefield, built with Next.j
 - **Battle callouts.** When a fight breaks out, its special effects pop up above it - Sneak attack!, Flanked +25%, High ground, Counter x1.5, Cover, Armored, Berserk, Ambush! - green when they help you and red when they help the enemy, and the battle log lists them too.
 - **Resign.** The flag in the top bar gives up the battle on your turn (after asking): it counts as a defeat and earns nothing.
 - **Replays.** Once a battle is over, **Watch the replay** on the results screen plays it again from the first turn, fog lifted so you see what the enemy was up to, at the pace it was fought (your thinking time cut short), with pause, restart and 2x speed. It lasts until you leave the battle.
+- **Battle Friends.** **Battle Friends** on the main menu opens a room and gives you an invite link: up to eight players join with the four cards saved in their own Army, the host sets the rules and starts. A free-for-all or teams; AI kingdoms can make up the numbers; the weather can be chosen; the map can be random or mirrored (the same ground for every side - possible for 2, 3 and 6 sides, and for pairs of sides with 4 and 8); and fair mode puts every card at one level (skill trees off). The map is the usual size for up to four players and grows by a hex each way for every player beyond that, with every castle spread evenly around its edge and a camp between each pair of neighbours. Every side still in the battle strikes back at an attacker within its reach, whoever was attacked; a side whose castle falls is out, and the last team standing wins (or, when the rounds run out, the most points). No coins are won or lost. The same battles can be practised offline against the AI.
 - **Challenge a friend.** After a quick battle, **Challenge** shares a link to the same battlefield and the same enemy army with your score; your friend fights it with their own cards, gets a callout with the score to beat, and the results compare the two.
 - **Big moments.** First blood, double and triple kills, rampages, camp captures, crushing blows, last stands, the final round and boss kills get callouts, screen shake, slow motion, confetti and coins flying into your treasury. Castles shudder when hit and crumble when they fall, and fallen troops play out their deaths.
 - **Music.** Recorded medieval menu, map, battle and boss themes with victory and defeat jingles (CC0 tracks by RandomMind and Juhani Junkala), a battle theme and a boss theme of its own for each region (from OpenGameArt, credited in the game), plus synthesised jingles for stars, unlocks and bosses. Drop your own MP3s into `public/music/` to replace any of them (see its README).
@@ -118,6 +119,9 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 - `meta/economy.ts`: Rewards, card prices, upgrade costs and the progression model behind recommended power
 - `haptics.ts`: Vibration on phones, and its setting
 - `meta/profile.ts`: The player's saved progress, the shop, battle results, stats, and save export and import
+- `game/sides.ts`: The sides of a battle: turn order, teams and allies, enemies, sides knocked out, and how the log names them (the campaign is fought between `player` and `ai`; a bigger battle has sides `s1`...`s8`, and its AI sides `ai1`...)
+- `pvp/arena.ts`: Builds a free-for-all or team battle: the map's size, mirrored maps, weather, fair mode and the AI's kingdoms
+- `pvp/room.ts`, `pvp/supabase.ts`: Online rooms (see **Online battles** below)
 - `audio/`: The music engine: instruments, a lookahead scheduler, the score notation and the tracks
 
 ### Screens (`src/app`)
@@ -128,6 +132,7 @@ Ranged, Long range, Spells (ignore cover and line of sight), Healer, Forest figh
 - `bestiary`: The bestiary and its 3D model viewer (`components/menu/BestiaryScreen`, `TroopModelViewer`)
 - `stats`: Stats and save files (`components/menu/StatsScreen`); the main menu's settings and guide are in `components/menu/SettingsPanel`
 - `play`: A battle (`/play?level=7`, or `/play?mode=quick&difficulty=hard`)
+- `pvp`: Battle Friends: the rooms page, a room's lobby (`/pvp?room=ABC234`) and its battle, and practice against the AI (`components/arena/`: `PvpScreen`, `ArenaSettingsForm`, `ArenaBattle` - the battle screen with the standings - and `OnlineBattle`)
 
 ### Battle (`src/components/game`)
 
@@ -183,6 +188,12 @@ Nothing loads unless `NEXT_PUBLIC_ADSENSE_CLIENT` (your `ca-pub-...` publisher I
 - Campaign map: [Map Pack](https://kenney.nl/assets/map-pack) by [Kenney](https://kenney.nl) ([CC0](http://creativecommons.org/publicdomain/zero/1.0/))
 - Battle sounds are synthesised with [ZzFX](https://github.com/KilledByAPixel/ZzFX) (MIT)
 - Icons from [Game Icons](https://game-icons.net) and [Lucide](https://lucide.dev) via [react-icons](https://react-icons.github.io/react-icons/)
+
+## Online battles
+
+Rooms live in a [Supabase](https://supabase.com) project. Its tables, access rules and functions are in `supabase/migrations` (applied to the project when they reach `main`, through Supabase's GitHub integration). Players are anonymous Supabase users, made on their device the first time they go online. The project's URL and publishable key are in `src/lib/pvp/supabase.ts`; set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` to use another project.
+
+The host's game runs the battle - the same rules engine as everywhere else, the AI's sides included - and sends every step of it, gzipped, to the others over the room's private Realtime channel (`room:<code>`, open only to the room's members). Everyone else plans their own turn on their copy and sends their orders to the host with a secret only the host can read, so nobody can give orders for someone else's side. A player who drops out has their turns end when the timer runs out; the host keeps the battle on their device, so reloading the page carries on. Saves can be edited, so a player's cards are only as honest as their device: fair mode makes that moot.
 
 ## Getting Started
 
