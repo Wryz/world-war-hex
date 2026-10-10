@@ -5,7 +5,7 @@ import { BattleConfig, battlePath, loadGameFromLocalStorage, quickBattleFromPara
 import { LEVEL_COUNT } from '@/lib/campaign/levels';
 import { isLevelUnlocked, getProfile } from '@/lib/meta/profile';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState, Suspense } from 'react';
+import { useEffect, useRef, useState, Suspense } from 'react';
 
 const LoadingFallback = () => <div className="h-screen w-screen bg-slate-900" />;
 
@@ -22,6 +22,8 @@ function GameContent() {
   const searchParams = useSearchParams();
   // The game reads saves from localStorage, so it only renders in the browser
   const [game, setGame] = useState<{ battle: BattleConfig; resume: boolean; key: number } | null>(null);
+  // The address last looked at for a battle in progress
+  const checkedRef = useRef<string | null>(null);
 
   useEffect(() => {
     const battle = battleFromParams(searchParams);
@@ -30,12 +32,25 @@ function GameContent() {
       return;
     }
     const resume = searchParams.get('resume') === '1';
-    // A link to a different battle (a friend's challenge) would replace the one in progress: ask first
+    // (once per address: StrictMode runs effects twice, and a question asked twice is worse than once)
+    const address = searchParams.toString();
+    if (checkedRef.current === address) return;
+    checkedRef.current = address;
     const saved = loadGameFromLocalStorage()?.additionalData.battle;
-    if (!resume && saved && !sameBattle(saved, battle) &&
-      !window.confirm('Start this battle? Your battle in progress will be lost.')) {
-      router.replace(battlePath(saved, true));
-      return;
+    if (!resume && saved) {
+      // The battle in progress, asked for again: carry on with it rather than start it over
+      if (sameBattle(saved, battle)) {
+        router.replace(battlePath(saved, true));
+        return;
+      }
+      // A different one (a friend's challenge, another level) would replace it: ask first, and on
+      // second thoughts go back where the player came from (or, arriving from outside, to the battle)
+      if (!window.confirm('Start this battle? Your battle in progress will be lost.')) {
+        const fromHere = document.referrer !== '' && new URL(document.referrer).origin === window.location.origin && window.history.length > 1;
+        if (fromHere) router.back();
+        else router.replace(battlePath(saved, true));
+        return;
+      }
     }
     // Marking the URL as resumable (below) changes the search params but not the battle
     setGame(current => (current && sameBattle(current.battle, battle) ? current : { battle, resume, key: (current?.key ?? 0) + 1 }));

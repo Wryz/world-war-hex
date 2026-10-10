@@ -70,7 +70,8 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
     });
   }
 
-  const rivalLevel = clampRivalLevel(config.rivalLevel ?? averageCardLevel(profile));
+  const ownCardLevel = averageCardLevel(profile);
+  const rivalLevel = clampRivalLevel(config.rivalLevel ?? ownCardLevel);
   const seed = config.seed ?? randomSeed();
   const cards = battleDeck(profile, QUICK_RIVAL_CARDS);
   const state = createBattle({ ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy', seed }, {
@@ -82,7 +83,7 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
     chooseCastle: true,
     battleSeed: quickBattleSeed(seed)
   });
-  return { ...state, rivalLevel };
+  return { ...state, rivalLevel, ownCardLevel };
 };
 
 // Seeds are whole numbers that fit a link

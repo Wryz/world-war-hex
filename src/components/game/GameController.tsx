@@ -226,7 +226,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       durationSeconds: elapsedRef.current,
       challengeMet: challengeMet(gameState),
       haul: gameState.haul,
-      rivalShare: gameState.rivalLevel !== undefined ? gameState.rivalLevel / averageCardLevel(getProfile()) : undefined
+      // (against the player's cards as they were when the battle began: an upgrade since changes nothing)
+      rivalShare: gameState.rivalLevel !== undefined ? gameState.rivalLevel / (gameState.ownCardLevel ?? averageCardLevel(getProfile())) : undefined
     });
     trackEvent('battle_ended', {
       mode: battle.mode,

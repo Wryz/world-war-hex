@@ -230,6 +230,8 @@ export interface GameState {
   // A quick battle: the card level of the rival kingdom's troops (with the map's seed in settings, all
   // a friend needs to fight the same battle)
   rivalLevel?: number;
+  // ...and the player's own cards' average level when it began (a weaker rival pays less)
+  ownCardLevel?: number;
   // The catapult's most recent stone, for the board to show it flying (serial counts stones)
   lastBombard?: { side: PlayerType; from: HexCoordinates; to: HexCoordinates; serial: number };
   // The tree felled most recently, for the board to show it falling (serial counts fellings)
