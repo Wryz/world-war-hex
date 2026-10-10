@@ -18,7 +18,8 @@ import {
   GiBeerStein, GiWoodPile, GiPointing, GiTargeted, GiDemolish, GiTorch, GiHammerNails, GiStoneWall, GiGate, GiStoneBridge, GiSpikedFence,
   GiThreeFriends, GiUnlitBomb, GiSandstorm, GiStomp, GiTrumpet, GiMeteorImpact, GiFireBreath, GiDespair, GiPawPrint, GiSnowing,
   GiSmokingVolcano, GiGoblinCamp, GiWingedShield, GiFlyingFlag,
-  GiShieldBash, GiWarAxe, GiHalberd, GiHammerDrop, GiPolarBear, GiStrong, GiSpyglass, GiHeavyArrow, GiCompass
+  GiShieldBash, GiWarAxe, GiHalberd, GiHammerDrop, GiPolarBear, GiStrong, GiSpyglass, GiHeavyArrow, GiCompass,
+  GiFlamingArrow, GiCloakDagger, GiPentacle, GiVampireDracula, GiShieldReflect
 } from 'react-icons/gi';
 import {
   LuSave, LuCircleHelp, LuScrollText, LuArrowRight, LuCheck, LuSkipForward, LuUndo2, LuChevronDown, LuRotateCcw, LuTriangleAlert,
@@ -28,6 +29,7 @@ import {
 import { Ability, TerrainType, UnitAction, UnitType } from '@/types/game';
 import type { BossPowerId } from '@/lib/game/bosses';
 import type { FactionTraitId, WeatherId } from '@/lib/game/regionRules';
+import type { AttributeId, PlayerSkillId } from '@/lib/game/lineages';
 
 // SVG icons used throughout the game: Game Icons (game-icons.net) and Lucide, via react-icons
 
@@ -325,4 +327,15 @@ const TRAIT_ICON_COMPONENTS: Record<FactionTraitId, React.FC<IconProps>> = {
 export const TraitIcon: React.FC<IconProps & { trait: FactionTraitId }> = ({ trait, ...props }) => {
   const Icon = TRAIT_ICON_COMPONENTS[trait];
   return <Icon {...props} />;
+};
+
+// Skill tree attributes and skills
+export const ATTRIBUTE_ICONS: Record<AttributeId, IconType> = {
+  hardy: GiHeartPlus, drilled: GiCrossedSwords, swift: GiWingfoot, trailblazer: GiFootprint, keen: GiSpyglass,
+  steadfast: GiStrong, mender: GiRegeneration
+};
+export const PLAYER_SKILL_ICONS: Record<PlayerSkillId, IconType> = {
+  rally: GiFlyingFlag, executioner: GiSharpAxe, fireArrows: GiFlamingArrow, huntersMark: GiTargetArrows, bulwark: GiCheckedShield,
+  impale: GiHalberd, poisonedBlades: GiPoisonBottle, ambush: GiCloakDagger, hex: GiPentacle, lifeSiphon: GiVampireDracula,
+  guard: GiShieldReflect, fortify: GiStoneWall
 };

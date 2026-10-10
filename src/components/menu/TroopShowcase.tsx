@@ -309,10 +309,12 @@ interface TroopShowcaseProps {
   moment: ShowcaseMoment | null;
   // The form shown changed mid-evolution
   onEvolved?: (type: TroopId) => void;
+  // Kept loaded but not drawing (the scene only plays while it's on show)
+  paused?: boolean;
   className?: string;
 }
 
-export const TroopShowcase: React.FC<TroopShowcaseProps> = ({ type, setting, moment, onEvolved, className = '' }) => {
+export const TroopShowcase: React.FC<TroopShowcaseProps> = ({ type, setting, moment, onEvolved, paused = false, className = '' }) => {
   const def = SETTINGS[setting];
   // The form on show: follows `type`, and mid-evolution switches to the new form at the burst's peak
   // (before the parent hears of it through onEvolved)
@@ -324,7 +326,7 @@ export const TroopShowcase: React.FC<TroopShowcaseProps> = ({ type, setting, mom
   }
   return (
     <div className={`relative overflow-hidden ${className}`} style={{ background: `linear-gradient(${def.sky}, #ffffff00 120%)` }}>
-      <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 2.3, 5.4], fov: 34 }} onCreated={({ camera }) => camera.lookAt(0, 0.75, 0)}>
+      <Canvas frameloop={paused ? 'never' : 'always'} shadows dpr={[1, 2]} camera={{ position: [0, 2.3, 5.4], fov: 34 }} onCreated={({ camera }) => camera.lookAt(0, 0.75, 0)}>
         <ambientLight intensity={1.4} />
         <directionalLight position={[3, 6, 4]} intensity={2.2} castShadow shadow-mapSize={[1024, 1024]} />
         <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
