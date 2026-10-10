@@ -223,8 +223,8 @@ const enemyRosterFor = (region: Region, index: number): TroopId[] => {
 // Average power of the model player's cards when reaching a level
 // Evolved forms and skill trees count for part of the power they add: on paper they are worth more
 // than they turn out to be in battle (measured with the balance simulator)
-const FORM_WEIGHT = 0.6;
-const TREE_WEIGHT = 0.85;
+const FORM_WEIGHT = 0.75;
+const TREE_WEIGHT = 0.9;
 const expectedCardPower = (levelId: number) => {
   const { deck, levels, trees } = expectedProgression(levelId);
   return deck.reduce((sum, id) => {
