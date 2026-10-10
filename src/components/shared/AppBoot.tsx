@@ -1,5 +1,7 @@
 'use client';
 
+import { BASE_CARD_IDS, isBaseCard } from '@/lib/game/lineages';
+import type { TroopId } from '@/lib/game/troops';
 import { useEffect } from 'react';
 import { usePathname } from 'next/navigation';
 import { notePageSeen } from '@/lib/navigation';
@@ -27,7 +29,9 @@ export const AppBoot: React.FC = () => {
       highest_cleared: highestCleared(profile),
       power: profilePower(profile),
       battles: profile.stats.battles,
-      cards_owned: Object.keys(profile.cards).length,
+      // (troops bought in the shop, and the forms they have evolved into)
+      cards_owned: BASE_CARD_IDS.filter(id => profile.cards[id] !== undefined).length,
+      forms_owned: (Object.keys(profile.cards) as TroopId[]).filter(id => !isBaseCard(id)).length,
       online: navigator.onLine,
       installed: isStandalone()
     });

@@ -1,7 +1,7 @@
 import { Haul, MATERIALS, MaterialId, RARITY_ORDER, isMaterialId } from '../game/materials';
 import { useSyncExternalStore } from 'react';
 import type { SideStats, WinReason } from '@/types/game';
-import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId, isTroopId } from '../game/troops';
+import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId, cardPower, isTroopId } from '../game/troops';
 import {
   ATTRIBUTES, ATTRIBUTE_PICKS, AttributeId, PLAYER_SKILLS, LINEAGES, LINEAGE_IDS, LineageId, LineageTree, PlayerSkillId, RESPEC_COST, Trees,
   baseOf, canAfford, evolvesFrom, getForm, isBaseCard, isPlayerSkillId, lineageCards, lineageOf, spend, withLineageLevel
@@ -17,6 +17,7 @@ import {
   deckPower,
   levelLossReward,
   levelWinReward,
+  ownUpgradeLadder,
   quickBattleReward,
   upgradeCost
 } from './economy';
@@ -101,6 +102,8 @@ export interface Profile {
   // (for the collection and the Chronicle, whatever has since been spent)
   materials: Haul;
   materialsFound: MaterialId[];
+  // Cards have been merged into lineages (an older save's refund is paid)
+  lineagesMerged: true;
   createdAt: string;
   updatedAt: string;
 }
@@ -127,6 +130,7 @@ export const createProfile = (): Profile => {
     cosmetics: { cardSkins: [DEFAULT_CARD_SKIN], castleStyles: [DEFAULT_CASTLE_STYLE], cardSkin: DEFAULT_CARD_SKIN, castleStyle: DEFAULT_CASTLE_STYLE },
     materials: {},
     materialsFound: [],
+    lineagesMerged: true,
     createdAt: now,
     updatedAt: now
   };
@@ -155,10 +159,18 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
   for (const id of STARTER_CARDS) cards[id] ??= 1;
   // Cards were once bought one by one; they are forms of the six base cards now. Owning a form means
   // owning its base and every form it evolved from, and every card of a lineage shares one level:
-  // the highest any of them had reached.
+  // the highest any of them had reached. A save from before then gets back the coins it spent
+  // training the lineage's other cards, once (they share the one level now).
+  const merging = raw.lineagesMerged !== true;
+  let mergeRefund = 0;
   for (const lineage of LINEAGE_IDS) {
     const members = lineageCards(lineage).filter(id => cards[id] !== undefined);
     if (members.length === 0) continue;
+    if (merging) {
+      // (the highest-level card keeps its training; a tie goes to the earlier card in the lineage)
+      const kept = members.reduce((best, id) => (cards[id]! > cards[best]! ? id : best), members[0]);
+      for (const id of members) if (id !== kept) mergeRefund += ownUpgradeLadder(id, cards[id]!);
+    }
     for (const id of members) {
       for (let from = id; !isBaseCard(from); from = evolvesFrom(from)) cards[evolvesFrom(from)] ??= cards[id];
     }
@@ -166,9 +178,22 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
     for (const id of lineageCards(lineage)) if (cards[id] !== undefined) cards[id] = level;
   }
 
-  const deck = oneOfEachLineage((Array.isArray(raw.deck) ? raw.deck : [])
-    .filter((id): id is TroopId => typeof id === 'string' && isTroopId(id) && cards[id] !== undefined))
-    .slice(0, MAX_DECK_SIZE);
+  const storedDeck = (Array.isArray(raw.deck) ? raw.deck : [])
+    .filter((id): id is TroopId => typeof id === 'string' && isTroopId(id) && cards[id] !== undefined)
+    .filter((id, index, all) => all.indexOf(id) === index);
+  const deck = oneOfEachLineage(storedDeck).slice(0, MAX_DECK_SIZE);
+  // A deck that held two forms of one lineage (from before lineages) is topped back up with the
+  // strongest card of each lineage it doesn't bring yet
+  const wanted = Math.min(MAX_DECK_SIZE, storedDeck.length);
+  if (deck.length < wanted) {
+    const extras = LINEAGE_IDS
+      .filter(lineage => !deck.some(id => lineageOf(id) === lineage))
+      .map(lineage => lineageCards(lineage).filter(id => cards[id] !== undefined)
+        .sort((a, b) => cardPower(b, cards[b]!) - cardPower(a, cards[a]!))[0])
+      .filter((id): id is TroopId => id !== undefined)
+      .sort((a, b) => cardPower(b, cards[b]!) - cardPower(a, cards[a]!));
+    deck.push(...extras.slice(0, wanted - deck.length));
+  }
 
   const trees: Trees = {};
   if (isRecord(raw.trees)) {
@@ -246,7 +271,7 @@ export const sanitizeProfile = (raw: unknown): Profile | null => {
 
   return {
     ...base,
-    coins: toCount(raw.coins) + retiredTacticRefund(raw.tactics),
+    coins: toCount(raw.coins) + retiredTacticRefund(raw.tactics) + mergeRefund,
     materials,
     materialsFound,
     cards,
@@ -697,9 +722,12 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
     materials, materialsFound: [...profile.materialsFound, ...firstFinds]
   };
   const clearedAfter = highestCleared(next);
+  // Base cards new to the shop, and forms the player's own trees can now evolve into (not ones of a
+  // lineage they haven't bought, or that need a form they haven't evolved yet)
   const newCards = PLAYER_CARD_IDS.filter(id => {
     const unlockAt = CARD_UNLOCK_LEVEL[id];
-    return unlockAt !== undefined && unlockAt > clearedBefore && unlockAt <= clearedAfter;
+    if (unlockAt === undefined || unlockAt <= clearedBefore || unlockAt > clearedAfter) return false;
+    return isBaseCard(id) ? next.cards[id] === undefined : next.cards[id] === undefined && next.cards[evolvesFrom(id)] !== undefined;
   });
 
   setProfile(next);

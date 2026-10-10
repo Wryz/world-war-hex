@@ -76,9 +76,20 @@ const ELITE_GROWTH = 1.25;
 
 // Coins to raise a card from `level` to `level + 1`, or null at its max level (level 10 until the
 // elite levels are open)
-export const upgradeCost = (id: TroopId, level: number, eliteUnlocked = false): number | null => {
+export const upgradeCost = (id: TroopId, level: number, eliteUnlocked = false): number | null =>
+  upgradeCostAt(upgradeRarity(id), level, eliteUnlocked);
+
+// Coins every upgrade of a card up to `level` cost at the card's own rarity, back when each card was
+// upgraded on its own (for refunds to old saves)
+export const ownUpgradeLadder = (id: TroopId, level: number): number => {
+  let coins = 0;
+  for (let from = 1; from < Math.min(level, MAX_CARD_LEVEL); from++) coins += upgradeCostAt(getTroop(id).rarity, from, true) ?? 0;
+  return coins;
+};
+
+const upgradeCostAt = (rarity: Rarity, level: number, eliteUnlocked: boolean): number | null => {
   if (level >= MAX_CARD_LEVEL || (level >= BASE_MAX_CARD_LEVEL && !eliteUnlocked)) return null;
-  const base = UPGRADE_BASE[upgradeRarity(id)];
+  const base = UPGRADE_BASE[rarity];
   const cost = level < BASE_MAX_CARD_LEVEL
     ? base * UPGRADE_GROWTH ** (level - 1)
     : base * UPGRADE_GROWTH ** (BASE_MAX_CARD_LEVEL - 2) * ELITE_GROWTH ** (level - BASE_MAX_CARD_LEVEL + 1);
@@ -233,7 +244,7 @@ const buildProgression = (lastLevel: number): ProgressionSnapshot[] => {
             const target = to;
             consider(cost, { ...owned, [id]: target }, () => { owned[id] = target; });
           }
-          const step = upgradeCost(id, to, level > ELITE_UNLOCK_LEVEL);
+          const step = upgradeCost(id, to, level >= ELITE_UNLOCK_LEVEL);
           if (step === null) break;
           cost += step;
           if (cost > coins) break;

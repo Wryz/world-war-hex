@@ -14,7 +14,7 @@ import { getMobSkill } from './mobSkills';
 import { isFearless } from './regionRules';
 import { getSignature } from './signatures';
 import { PLAYER_CARD_IDS, cardStats } from './troops';
-import { CARD_UNLOCK_LEVEL, SHOP_UNLOCK_LEVEL } from '../meta/economy';
+import { CARD_UNLOCK_LEVEL, SHOP_UNLOCK_LEVEL, ownUpgradeLadder } from '../meta/economy';
 import { sanitizeProfile } from '../meta/profile';
 import { getHexDistance } from './hexUtils';
 import { at, makeBattle, makeUnit, place } from './testUtils';
@@ -138,7 +138,14 @@ test('an old save keeps its evolved cards: their bases and earlier forms come to
   assert.equal(profile.cards.tank, 6, 'the lineage takes its highest level');
   assert.equal(profile.cards.medic, 2, 'War Clerics bring the Mages');
   assert.equal(profile.cards.infantry, 7);
-  assert.deepEqual(profile.deck, ['pegasus', 'cleric', 'berserker'], 'one form of each lineage');
+  assert.deepEqual(profile.deck.slice(0, 3), ['pegasus', 'cleric', 'berserker'], 'one form of each lineage');
+  assert.equal(profile.deck.length, 4, 'topped back up from another lineage');
+  assert.equal(new Set(profile.deck.map(lineageOf)).size, 4);
+  // The training of the cards that now share a level comes back as coins, once
+  assert.equal(profile.coins, ownUpgradeLadder('infantry', 3) + ownUpgradeLadder('tank', 4));
+  assert.equal(sanitizeProfile(profile)!.coins, profile.coins, 'not paid twice');
+  // A deck left short on purpose stays short
+  assert.deepEqual(sanitizeProfile({ ...profile, deck: ['pegasus'] })!.deck, ['pegasus']);
   assert.deepEqual(profile.trees.tank, { attributes: ['hardy', 'swift'].slice(0, ATTRIBUTE_PICKS), skill: 'impale' });
   assert.equal(profile.trees.rogue, undefined);
 });
