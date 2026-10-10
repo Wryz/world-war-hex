@@ -14,6 +14,7 @@ import { Camp } from '../Camp';
 import { UnitMesh } from '../UnitMesh';
 import { axialToWorld, getHexSurfaceHeight } from '../utils/boardGeometry';
 import { PropPack, usePropLibrary } from '../utils/kaykitProps';
+import { useReleaseGpuOnUnmount } from '../utils/releaseGpu';
 
 // A small, slowly turning island made of the game's own pieces: themed terrain, both castles,
 // the two camps and a few troops squaring up. It reshapes into a new map theme every few seconds.
@@ -153,6 +154,7 @@ interface IslandDioramaProps {
 }
 
 const IslandDiorama: React.FC<IslandDioramaProps> = ({ onThemeChange, onReady, poster = false }) => {
+  useReleaseGpuOnUnmount();
   const [themeIndex, setThemeIndex] = useState(0);
   const [ready, setReady] = useState(false);
   const live = ready && !poster;

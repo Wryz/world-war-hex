@@ -68,6 +68,7 @@ import { TutorialMarkers } from './shared/TutorialMarkers';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
 import { isMaterialId } from '@/lib/game/materials';
 import { SKY_COLOR } from '@/components/menu/MenuShell';
+import { useReleaseGpuOnUnmount } from './utils/releaseGpu';
 
 // Identity of a unit's buffs, to keep its props stable while they don't change
 const buffKey = (buffs: UnitBuff[]) => buffs.map(buff => `${buff.id}:${buff.value}`).join('|');
@@ -157,6 +158,7 @@ interface GameBoardProps {
 const GameBoardComponent: React.FC<GameBoardProps> = (props) => {
   // Use loading state from the parent provider
   const { isComplete: assetsLoaded } = useLoadingManager();
+  useReleaseGpuOnUnmount();
 
 
   return (

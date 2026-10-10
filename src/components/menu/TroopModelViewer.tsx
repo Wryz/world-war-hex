@@ -7,6 +7,7 @@ import { UnitMesh } from '../game/UnitMesh';
 import { HexTile } from '../game/HexTile';
 import { getHexSurfaceHeight } from '../game/utils/boardGeometry';
 import { SKY_COLOR } from '@/components/menu/MenuShell';
+import { useReleaseGpuOnUnmount } from '../game/utils/releaseGpu';
 
 const noop = () => {};
 const PEDESTAL = { id: 'viewer', coordinates: { q: 0, r: 0 }, terrain: 'plain' as const };
@@ -23,6 +24,7 @@ const Turntable: React.FC<{ children: React.ReactNode }> = ({ children }) => {
 
 // A troop's 3D model on a hex pedestal, for the bestiary; it can show off its attack
 export const TroopModelViewer: React.FC<{ type: TroopId; owner: PlayerType }> = ({ type, owner }) => {
+  useReleaseGpuOnUnmount();
   const [attacking, setAttacking] = useState(false);
   const unit = useMemo<Unit>(() => {
     const stats = cardStats(type, 1);

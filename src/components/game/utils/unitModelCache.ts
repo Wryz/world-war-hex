@@ -12,6 +12,8 @@ import { createCreature, createHorns, createWings } from './creatures';
 // Each model is downloaded once and then cloned for every unit that uses it.
 // The models are meshopt-compressed, so the loader needs the meshopt decoder.
 const gltfCache = new Map<string, Promise<GLTF>>();
+// (the ones that have arrived, for releaseSharedGpuResources)
+const loadedGltfs = new Set<GLTF>();
 
 export const loadGltf = (url: string, onProgress?: (event: ProgressEvent) => void): Promise<GLTF> => {
   let promise = gltfCache.get(url);
@@ -19,7 +21,7 @@ export const loadGltf = (url: string, onProgress?: (event: ProgressEvent) => voi
   if (!promise) {
     promise = new GLTFLoader().setMeshoptDecoder(MeshoptDecoder).loadAsync(url, onProgress);
     // Allow a retry if loading failed
-    promise.catch(() => gltfCache.delete(url));
+    promise.then(gltf => loadedGltfs.add(gltf), () => gltfCache.delete(url));
     gltfCache.set(url, promise);
   }
 
@@ -35,6 +37,9 @@ export interface MountRig {
   setWalking(walking: boolean): void;
   update(delta: number): void;
   stop(): void;
+  // The beast lunges with its rider's blow, and falls with it
+  strike(duration: number): void;
+  die(): void;
 }
 
 export interface UnitModelInstance {
@@ -325,10 +330,16 @@ const instantiateHumanoid = async (look: HumanoidLook, owner: PlayerType): Promi
     rig.object.scale.multiplyScalar(1 / look.scale);
     scene.add(rig.object);
     character.position.set(0, BEAST_SADDLE[beast.variant] * beast.scale / look.scale, beast.variant === 'bear' ? -0.15 : -0.25);
+    let dead = false;
     const mount: MountRig = {
-      setWalking: walking => rig.setState(walking ? 'walk' : 'idle'),
+      setWalking: walking => { if (!dead) rig.setState(walking ? 'walk' : 'idle'); },
       update: delta => rig.update(delta),
-      stop: () => rig.setState('idle')
+      stop: () => { if (!dead) rig.setState('idle'); },
+      strike: duration => { if (!dead) rig.strike(duration); },
+      die: () => {
+        dead = true;
+        rig.setState('death');
+      }
     };
     return { scene, animations, mount, wings, beastRig: rig };
   }
@@ -350,7 +361,9 @@ const instantiateHumanoid = async (look: HumanoidLook, owner: PlayerType): Promi
   const mount: MountRig = {
     setWalking: walking => { gallop.timeScale = walking ? 1.6 : 0; },
     update: delta => mixer.update(delta),
-    stop: () => mixer.stopAllAction()
+    stop: () => mixer.stopAllAction(),
+    strike: () => {},
+    die: () => { gallop.timeScale = 0; }
   };
   return { scene, animations, mount, wings };
 };
@@ -407,4 +420,36 @@ export const findAnimationClip = (
     );
   }
   return lookup.get(animationName);
+};
+
+// --- Releasing shared resources ------------------------------------------------------------------
+
+// Free a material, every texture it uses, and so on
+const disposeMaterial = (material: THREE.Material) => {
+  for (const value of Object.values(material)) if (value instanceof THREE.Texture) value.dispose();
+  material.dispose();
+};
+
+const disposeTree = (root: THREE.Object3D) => root.traverse(child => {
+  const mesh = child as THREE.Mesh;
+  if (!mesh.isMesh) return;
+  mesh.geometry?.dispose();
+  for (const material of Array.isArray(mesh.material) ? mesh.material : [mesh.material]) if (material) disposeMaterial(material);
+});
+
+// Release the GPU copies of everything the units share (models, palettes, team colours).
+// Called as a 3D view closes: each renderer that drew a shared material or texture listens for its
+// disposal, so without this a closed view's renderer - and its canvas and page - stays in memory
+// for as long as the shared object does. The objects themselves stay usable: the next view to
+// draw them uploads them again.
+export const releaseSharedUnitResources = () => {
+  for (const gltf of loadedGltfs) disposeTree(gltf.scene);
+  for (const material of Object.values(teamMaterials)) if (material) disposeMaterial(material);
+  paletteMaterials.forEach(disposeMaterial);
+  paletteTextures.forEach(texture => texture.dispose());
+  tintedHorseMaterials.forEach(disposeMaterial);
+  pikeGeometry.shaft.dispose();
+  pikeGeometry.head.dispose();
+  disposeMaterial(pikeMaterials.shaft);
+  disposeMaterial(pikeMaterials.head);
 };
