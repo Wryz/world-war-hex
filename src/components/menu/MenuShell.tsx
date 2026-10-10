@@ -33,7 +33,7 @@ export const ResourceBadges: React.FC<{ className?: string }> = ({ className = '
       <span className={`${CARD_CLASS} font-display hidden items-center gap-1.5 px-3 py-1.5 text-lg text-amber-200 sm:flex sm:px-4 sm:py-2 sm:text-2xl`} title="Campaign stars">
         <StarIcon /> {totalStars(profile)}
       </span>
-      <Link href="/satchel" className={`${CARD_CLASS} font-display flex items-center gap-1.5 px-3 py-1.5 text-lg text-orange-200 transition-transform hover:-translate-y-0.5 sm:px-4 sm:py-2 sm:text-2xl`} title="Satchel: the materials you have gathered, and the Chronicle">
+      <Link href="/satchel" className={`${CARD_CLASS} font-display hidden items-center gap-1.5 px-3 py-1.5 text-lg text-orange-200 transition-transform hover:-translate-y-0.5 sm:flex sm:px-4 sm:py-2 sm:text-2xl`} title="Satchel: the materials you have gathered, and the Chronicle">
         <SatchelIcon /> {haulSize(profile.materials)}
       </Link>
     </div>

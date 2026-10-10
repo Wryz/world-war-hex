@@ -26,9 +26,9 @@ const MaterialDetail: React.FC<{ id: MaterialId; count: number; found: boolean; 
   const rarity = RARITY_COLORS[material.rarity];
   const page = CHRONICLE.find(entry => entry.unlockedBy === id);
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 backdrop-blur-[2px] sm:items-center" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-slate-950/60 pl-[var(--safe-l)] pr-[var(--safe-r)] pt-[var(--safe-t)] backdrop-blur-[2px] sm:items-center" onClick={onClose}>
       <div
-        className={`${CARD_CLASS} animate-fadeIn relative w-full max-w-md rounded-b-none p-5 sm:rounded-2xl`}
+        className={`${CARD_CLASS} animate-fadeIn relative w-full max-w-md rounded-b-none p-5 pb-[calc(1.25rem+var(--safe-b))] sm:rounded-2xl`}
         onClick={event => event.stopPropagation()}
         role="dialog"
         aria-label={found ? material.name : 'Undiscovered material'}

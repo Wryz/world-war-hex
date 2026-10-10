@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import type { GameState } from '@/types/game';
 import { getMaxRounds } from '@/lib/game/gameState';
 import { GameBoard } from '../GameBoard';
@@ -10,6 +10,7 @@ import { TurnBanner } from '../hud/TurnBanner';
 import { useBattleMoments } from '../effects/useBattleMoments';
 import { ReplayBar } from './ReplayBar';
 import { ReplayFrame, useReplayPlayer } from './replay';
+import { holdVibration } from '@/lib/haptics';
 
 // Nothing on the board can be ordered about while it's being watched
 const ignore = () => undefined;
@@ -41,6 +42,7 @@ const ReplayScene: React.FC<{ state: GameState }> = ({ state }) => {
 // Watch the battle just fought again, fog lifted, at the pace it was fought (see replay.ts)
 export const BattleReplay: React.FC<{ frames: ReplayFrame[]; onClose: () => void }> = ({ frames, onClose }) => {
   const replay = useReplayPlayer(frames);
+  useEffect(() => holdVibration(), []);
   return (
     <div className="relative h-full w-full">
       <ReplayScene key={replay.showing} state={replay.state} />

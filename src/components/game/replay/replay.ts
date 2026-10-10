@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GameState } from '@/types/game';
 import { getGameSpeed } from '../effects/effects';
-import { getBattleStartDelay, setBattleStartDelay } from '../utils/battleTiming';
+import { BATTLE_DURATION_MS, getBattleStartDelay, setBattleStartDelay } from '../utils/battleTiming';
 
 // Watching a battle again once it's over. While it's fought, every state the board is shown (the
 // turns carried out, their battles resolved, the turns ended, each side's orders) is kept with the
@@ -50,11 +50,14 @@ const PLAYER_TURN_MAX_MS = 1500;
 const LONGEST_WAIT_MS = 6000;
 // A moment for the board to appear before the first move
 const START_PAUSE_MS = 1000;
+// (never less than the troops need to walk into their battles and fight them out: a long march
+// takes longer than the limit)
+const BATTLE_MARGIN_MS = 1000;
 const frameWait = (frames: ReplayFrame[], index: number) => {
   const { wait } = frames[index];
-  return isPlayerPlanning(frames[index - 1].state)
-    ? Math.min(PLAYER_TURN_MAX_MS, Math.max(PLAYER_TURN_MIN_MS, wait))
-    : Math.min(LONGEST_WAIT_MS, wait);
+  if (isPlayerPlanning(frames[index - 1].state)) return Math.min(PLAYER_TURN_MAX_MS, Math.max(PLAYER_TURN_MIN_MS, wait));
+  const walk = Math.max(frames[index].startDelay, frames[index - 1].startDelay) * 1000;
+  return Math.min(Math.max(LONGEST_WAIT_MS, walk + BATTLE_DURATION_MS + BATTLE_MARGIN_MS), wait);
 };
 
 // The whole battlefield: a replay lifts the fog of war, so you see what the enemy was up to

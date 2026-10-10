@@ -33,7 +33,7 @@ import { emitMoment, resetEffects } from './effects/effects';
 import { useBattleMoments } from './effects/useBattleMoments';
 import { ACTION_NAMES, castleHealthRatio, getMaxRounds, getSideView, getStarScore, isFogOfWar } from '@/lib/game/gameState';
 import { getLevel, starsForWin, LEVEL_COUNT } from '@/lib/campaign/levels';
-import { battleTroopTypes } from '@/lib/campaign/battleSetup';
+import { averageCardLevel, battleTroopTypes } from '@/lib/campaign/battleSetup';
 import {
   BattleRecordResult, completeTutorial, getProfile, profilePower, recordBattle
 } from '@/lib/meta/profile';
@@ -225,7 +225,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       playerStats,
       durationSeconds: elapsedRef.current,
       challengeMet: challengeMet(gameState),
-      haul: gameState.haul
+      haul: gameState.haul,
+      rivalShare: gameState.rivalLevel !== undefined ? gameState.rivalLevel / averageCardLevel(getProfile()) : undefined
     });
     trackEvent('battle_ended', {
       mode: battle.mode,
@@ -240,7 +241,8 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
       lost: playerStats.lost,
       coins_earned: record.reward.coins,
       challenge_completed: record.challengeCompleted,
-      materials_gathered: haulSize(record.haul)
+      materials_gathered: haulSize(gameState.haul),
+      materials_kept: haulSize(record.haul)
     });
     // Now there's progress worth keeping, ask the browser not to clear it
     void requestPersistentStorage();
@@ -456,6 +458,7 @@ const GameControllerInner: React.FC<GameControllerProps & { isReady: boolean }> 
             onRetry={handleRetry}
             onMap={leaveResults(exitPath)}
             onArmy={leaveResults('/army')}
+            onOpen={path => leaveResults(path)()}
             points={{ you: getStarScore(gameState, 'player'), enemy: getStarScore(gameState, 'ai') }}
             challengeMet={challengeMet(gameState)}
             skirmish={skirmish}

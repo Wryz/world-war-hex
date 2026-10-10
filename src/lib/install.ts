@@ -26,8 +26,12 @@ export const isStandalone = () =>
 const isIos = () =>
   /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
 
+// (listened for as soon as this loads, not once the page has hydrated: the browser fires the
+// prompt once a visit, possibly early)
+let listening = false;
 export const listenForInstallPrompt = () => {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || listening) return;
+  listening = true;
   installed = isStandalone();
   window.addEventListener('beforeinstallprompt', event => {
     // Keep the browser's own mini-bar out of the way; Settings offers the button instead
@@ -71,3 +75,5 @@ const subscribe = (listener: () => void) => {
 };
 
 export const useInstallState = (): InstallState => useSyncExternalStore(subscribe, getInstallState, () => 'unavailable');
+
+listenForInstallPrompt();

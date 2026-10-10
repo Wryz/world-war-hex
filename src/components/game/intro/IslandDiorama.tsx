@@ -116,7 +116,7 @@ const Island: React.FC<{ themeIndex: number; live: boolean; onReady: () => void 
       {hexGrid.map(hex => (
         <HexTile key={hex.id} hex={hex} onHexClick={noop} onHexHover={noop} onHexHoverEnd={noop} />
       ))}
-      <BoardDecorations hexGrid={hexGrid} />
+      <BoardDecorations hexGrid={hexGrid} history={false} />
       {CASTLES.map(([c, owner]) => (
         <Castle key={owner} owner={owner} look={owner === 'player' ? playerCastleStyle : undefined} position={surface(hexGrid, c)} health={50} maxHealth={50} hideLabel />
       ))}

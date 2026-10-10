@@ -42,7 +42,7 @@ export const MATERIALS = {
   iron_ore: { name: 'Iron Ore', rarity: 'uncommon', category: 'land', source: 'Hills of the badlands and the deep', flavour: 'Rust-red seams in the rock.' },
   reeds: { name: 'Reeds', rarity: 'common', category: 'land', source: 'Marsh', flavour: 'Woven into mats, baskets and arrow shafts.' },
   bog_peat: { name: 'Bog Peat', rarity: 'common', category: 'land', source: 'Marsh', flavour: 'Cut in bricks and dried, it burns for days.' },
-  lily_pad: { name: 'Lily Pad', rarity: 'uncommon', category: 'land', source: 'The marsh of Mirefen', flavour: 'The frogs will not miss one. Probably.' },
+  lily_pad: { name: 'Lily Pad', rarity: 'uncommon', category: 'land', source: 'Marshes and swamps', flavour: 'The frogs will not miss one. Probably.' },
   sunstone: { name: 'Sunstone', rarity: 'uncommon', category: 'land', source: 'Desert', flavour: 'Holds the day\'s heat long after dark.' },
   desert_glass: { name: 'Desert Glass', rarity: 'uncommon', category: 'land', source: 'Desert and ruins in the sands', flavour: 'Sand fused into glass by lightning - or something worse.' },
   frost_salt: { name: 'Frost Salt', rarity: 'common', category: 'land', source: 'Snow', flavour: 'Keeps meat on the march and ice off the road.' },
@@ -126,7 +126,7 @@ export const MATERIALS = {
 export type MaterialId = keyof typeof MATERIALS;
 export const MATERIAL_IDS = Object.keys(MATERIALS) as MaterialId[];
 export const getMaterial = (id: MaterialId): MaterialDef => MATERIALS[id];
-export const isMaterialId = (id: string): id is MaterialId => id in MATERIALS;
+export const isMaterialId = (id: string): id is MaterialId => Object.prototype.hasOwnProperty.call(MATERIALS, id);
 
 export const RARITY_ORDER: MaterialRarity[] = ['common', 'uncommon', 'rare', 'epic', 'legendary'];
 

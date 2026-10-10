@@ -8,7 +8,7 @@ import {
   GiMetalBar, GiMummyHead, GiMushroomGills, GiNails, GiOre, GiPoison, GiPowder, GiPumpkin, GiReed, GiRingingBell,
   GiRopeCoil, GiRuneStone, GiSaltShaker, GiScales, GiScarabBeetle, GiScorpionTail, GiScrollUnfurled, GiSkullCrack, GiSlime,
   GiSnowflake1, GiSpectre, GiSpiderWeb, GiSpikedDragonHead, GiSpyglass, GiStoneBlock, GiStonePile, GiStoneTablet, GiSun,
-  GiSwapBag, GiTatteredBanner, GiTiara, GiTotem, GiTusksFlag, GiWarhammer, GiWaterFlask, GiWheat, GiWolfHead, GiWoodBeam,
+  GiSwapBag, GiTatteredBanner, GiTiara, GiTotem, GiTusksFlag, GiRolledCloth, GiPolarBear, GiWarhammer, GiWaterFlask, GiWheat, GiWolfHead, GiWoodBeam,
   GiWoodPile, GiWool, GiWaxSeal, GiOrcHead, GiCrossedBones, GiWoodenCrate
 } from 'react-icons/gi';
 import { MATERIALS, MaterialId, MaterialRarity } from '@/lib/game/materials';
@@ -22,10 +22,10 @@ const ICONS: Record<MaterialId, IconType> = {
   obsidian: GiFireGem, brimstone: GiPowder, grave_dust: GiSkullCrack, ancient_masonry: GiAncientRuins, hallow_pumpkin: GiPumpkin,
   heartwood: GiLog, charcoal: GiCoalPile, spring_water: GiWaterFlask, gold_nugget: GiGoldNuggets,
   tent_canvas: GiCampingTent, roof_thatch: GiHut, clay_bricks: GiBrickWall, spyglass_lens: GiSpyglass, siege_rope: GiRopeCoil,
-  steel_ingot: GiMetalBar, banner_cloth: GiTatteredBanner, oak_staves: GiBarrel, sawn_planks: GiWoodBeam, gate_iron: GiGate,
+  steel_ingot: GiMetalBar, banner_cloth: GiRolledCloth, oak_staves: GiBarrel, sawn_planks: GiWoodBeam, gate_iron: GiGate,
   stolen_purse: GiSwapBag, red_bandana: GiBandana, goblin_tooth: GiFangs, scrap_metal: GiGears, beast_pelt: GiAnimalHide,
   spider_silk: GiSpiderWeb, slime_gel: GiSlime, toad_venom: GiPoison, mummy_wrap: GiMummyHead, scorpion_stinger: GiScorpionTail,
-  yeti_fur: GiWool, wraith_essence: GiSpectre, bone_shard: GiBoneKnife, ectoplasm: GiGhost, orc_tusk: GiTusksFlag,
+  yeti_fur: GiPolarBear, wraith_essence: GiSpectre, bone_shard: GiBoneKnife, ectoplasm: GiGhost, orc_tusk: GiTusksFlag,
   iron_rivets: GiNails, imp_horn: GiHornedSkull, hellfire_ash: GiBurningEmbers, drake_scale: GiScales, wyvern_talon: GiSpikedDragonHead,
   bandit_signet: GiBigDiamondRing, warchief_totem: GiTotem, direwolf_fang: GiWolfHead, hydra_heart: GiHeartBeats,
   pharaoh_scarab: GiScarabBeetle, rime_core: GiFrozenOrb, phylactery_shard: GiCrossedBones, war_horn: GiOrcHead,
@@ -46,6 +46,8 @@ export const RARITY_COLORS: Record<MaterialRarity, { text: string; ring: string;
 
 export const MaterialIcon: React.FC<{ id: MaterialId; className?: string; color?: string }> = ({ id, className = '', color }) => {
   const Icon = ICONS[id];
+  // (an unknown id, from a hand-edited save, shows nothing rather than breaking the page)
+  if (!Icon) return null;
   return <Icon className={`inline-block shrink-0 align-[-0.125em] ${className}`} color={color ?? RARITY_COLORS[MATERIALS[id].rarity].text} aria-hidden />;
 };
 

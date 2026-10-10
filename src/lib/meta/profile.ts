@@ -1,4 +1,4 @@
-import { Haul, MaterialId, isMaterialId } from '../game/materials';
+import { Haul, MATERIALS, MaterialId, RARITY_ORDER, isMaterialId } from '../game/materials';
 import { useSyncExternalStore } from 'react';
 import type { SideStats, WinReason } from '@/types/game';
 import { MAX_CARD_LEVEL, PLAYER_CARD_IDS, TroopId, isTroopId } from '../game/troops';
@@ -440,6 +440,8 @@ export interface BattleOutcome {
   challengeMet?: boolean;
   // What was gathered on the battlefield
   haul?: Haul;
+  // A quick battle's rival card level over the player's own (below 1, it pays less)
+  rivalShare?: number;
 }
 
 export interface BattleRecordResult {
@@ -468,7 +470,7 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
   const reward = outcome.reason === 'resigned'
     ? { coins: 0, breakdown: [] }
     : outcome.mode === 'quick'
-    ? quickBattleReward(outcome.won, clearedBefore)
+    ? quickBattleReward(outcome.won, clearedBefore, outcome.rivalShare)
     : outcome.won
       ? levelWinReward(outcome.levelId!, outcome.stars, previousStars)
       : levelLossReward(outcome.levelId!, outcome.enemyCastleDamage);
@@ -560,15 +562,24 @@ export const recordBattle = (outcome: BattleOutcome): BattleRecordResult => {
   return { reward, previousStars, discovered, newCards, isNewBest, challengeCompleted, haul, firstFinds };
 };
 
-// What of a battle's haul comes home: all of it from a win, half of each kind (rounded up, so a
-// single relic or trophy is never lost) from a defeat, and nothing from a battle given up
+// What of a battle's haul comes home: all of it from a win, nothing from a battle given up, and from
+// a defeat every relic and trophy plus the better half of the rest (rounded up)
 export const keptHaul = (outcome: Pick<BattleOutcome, 'won' | 'reason' | 'haul'>): Haul => {
   if (outcome.reason === 'resigned') return {};
+  // (only real materials, in whole numbers: a battle can come from a save file)
+  const haul = Object.entries(outcome.haul ?? {})
+    .filter((entry): entry is [MaterialId, number] => isMaterialId(entry[0]) && Number.isFinite(entry[1]) && entry[1] > 0)
+    .map(([id, count]) => [id, Math.floor(count)] as const);
+  if (outcome.won) return Object.fromEntries(haul.filter(([, count]) => count > 0));
   const kept: Haul = {};
-  for (const [id, count] of Object.entries(outcome.haul ?? {}) as [MaterialId, number][]) {
-    const amount = outcome.won ? count : Math.ceil(count / 2);
-    if (amount > 0) kept[id] = amount;
+  const rest: MaterialId[] = [];
+  for (const [id, count] of haul) {
+    const { category } = MATERIALS[id];
+    if (category === 'relic' || category === 'trophy') kept[id] = count;
+    else for (let i = 0; i < count; i++) rest.push(id);
   }
+  rest.sort((a, b) => RARITY_ORDER.indexOf(MATERIALS[b].rarity) - RARITY_ORDER.indexOf(MATERIALS[a].rarity));
+  for (const id of rest.slice(0, Math.ceil(rest.length / 2))) kept[id] = (kept[id] ?? 0) + 1;
   return kept;
 };
 

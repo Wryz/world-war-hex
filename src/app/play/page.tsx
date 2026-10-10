@@ -1,7 +1,7 @@
 'use client';
 
 import { GameController } from '@/components/game/GameController';
-import { BattleConfig, battlePath, quickBattleFromParams, sameBattle } from '@/components/game/storage/GameStorage';
+import { BattleConfig, battlePath, loadGameFromLocalStorage, quickBattleFromParams, sameBattle } from '@/components/game/storage/GameStorage';
 import { LEVEL_COUNT } from '@/lib/campaign/levels';
 import { isLevelUnlocked, getProfile } from '@/lib/meta/profile';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -30,6 +30,13 @@ function GameContent() {
       return;
     }
     const resume = searchParams.get('resume') === '1';
+    // A link to a different battle (a friend's challenge) would replace the one in progress: ask first
+    const saved = loadGameFromLocalStorage()?.additionalData.battle;
+    if (!resume && saved && !sameBattle(saved, battle) &&
+      !window.confirm('Start this battle? Your battle in progress will be lost.')) {
+      router.replace(battlePath(saved, true));
+      return;
+    }
     // Marking the URL as resumable (below) changes the search params but not the battle
     setGame(current => (current && sameBattle(current.battle, battle) ? current : { battle, resume, key: (current?.key ?? 0) + 1 }));
 

@@ -94,3 +94,35 @@ test('Kaboom: a goblin sapper bursts over the troops beside it as it falls', () 
   assert.ok(after.log?.some(entry => entry.text.includes('Kaboom')));
   assert.ok(health(after, bystander) <= 20 - MOB_SKILLS.goblin_sapper!.amount!, `bystander at ${health(after, bystander)}`);
 });
+
+test('venom taken on its own turn waits for the end of its next one, and gets past armour', () => {
+  const { state, centre } = makeBattle('player');
+  // (the toad strikes back at the troop attacking it)
+  const toad = troop('ai', 'toxic_toad', centre, { abilities: ['rangedAttack'], lifespan: 40, maxLifespan: 40 });
+  const prey = troop('player', 'infantry', at(centre, 1, 0), { abilities: ['armored'] });
+  place(state, toad, prey);
+  const fought = playTurn(state);
+  assert.equal(find(fought, prey)?.poisoned, MOB_SKILLS.toxic_toad!.amount, 'still to come');
+  // (the toad steps away, and the enemy's turn passes)
+  fought.players.ai.units = [];
+  for (const hex of fought.hexGrid) if (hex.unit?.owner === 'ai') hex.unit = undefined;
+  const enemyTurn = playTurn(fought);
+  const before = health(enemyTurn, prey);
+  const after = playTurn(enemyTurn);
+  assert.equal(health(after, prey), before - MOB_SKILLS.toxic_toad!.amount!, 'the whole dose, armour or not');
+});
+
+test('a sapper bursts when lava finishes it at its turn\'s end', () => {
+  const { state, centre } = makeBattle('ai');
+  const hex = state.hexGrid.find(h => h.coordinates.q === centre.q && h.coordinates.r === centre.r)!;
+  hex.terrain = 'lava';
+  const sapper = troop('ai', 'goblin_sapper', centre, { lifespan: 1, maxLifespan: 6, attackPower: 0 });
+  const bystander = troop('player', 'infantry', at(centre, 2, 0));
+  const neighbour = troop('player', 'infantry', at(centre, 1, 0), { attackPower: 0 });
+  place(state, sapper, bystander, neighbour);
+  const after = playTurn(state);
+  assert.equal(find(after, sapper), undefined);
+  assert.ok(after.log?.some(entry => entry.text.includes('Kaboom')));
+  assert.ok(health(after, neighbour) <= 20 - MOB_SKILLS.goblin_sapper!.amount!);
+  assert.equal(health(after, bystander), 20, 'out of the blast');
+});

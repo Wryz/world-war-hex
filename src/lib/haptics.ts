@@ -50,9 +50,16 @@ const vibrate = (pattern: number | number[]) => {
   }
 };
 
+// While a replay plays, the phone stays still: it's a battle already felt once
+let held = 0;
+export const holdVibration = () => {
+  held++;
+  return () => { held--; };
+};
+
 // A buzz as strong as a screen shake (0-1): from a tap for a small bump to a thud for a big one
 export const buzz = (strength: number) => {
-  if (!isVibrationEnabled() || strength <= 0) return;
+  if (!isVibrationEnabled() || held > 0 || strength <= 0) return;
   vibrate(Math.round(15 + Math.min(1, strength) * 85));
 };
 
@@ -60,5 +67,5 @@ export const VICTORY_PATTERN = [60, 60, 60, 60, 180];
 export const DEFEAT_PATTERN = [250, 100, 400];
 
 export const buzzPattern = (pattern: number[]) => {
-  if (isVibrationEnabled()) vibrate(pattern);
+  if (isVibrationEnabled() && held === 0) vibrate(pattern);
 };

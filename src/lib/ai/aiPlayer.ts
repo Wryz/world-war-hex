@@ -1007,7 +1007,8 @@ const blowSkillValue = (unit: Unit, enemy: Unit, damage: number, health: number)
     case 'venom': return survives ? healthValue(enemy, skill.amount!, health - damage) : 0;
     case 'slow': return survives ? enemy.cost * SLOW_VALUE : 0;
     case 'curse': return survives && !isFearless(enemy) ? enemy.attackPower * (1 - SHAKEN_ATTACK) : 0;
-    case 'leech': return healthValue(unit, Math.min(skill.amount!, unit.maxLifespan - unit.lifespan));
+    // (health won back, without the bounty healthValue adds for a blow that would finish it)
+    case 'leech': return Math.min(skill.amount!, unit.maxLifespan - unit.lifespan) / unit.maxLifespan * unit.cost;
     case 'plunder': return skill.amount!;
     default: return 0;
   }

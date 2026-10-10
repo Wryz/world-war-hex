@@ -66,7 +66,7 @@ import type { UnitBuff } from './UnitMesh';
 import type { TutorialVisuals } from './shared/TutorialGuide';
 import { TutorialMarkers } from './shared/TutorialMarkers';
 import { ALL_THEMES } from '@/lib/game/mapGenerator';
-import { MATERIALS, MaterialId } from '@/lib/game/materials';
+import { MATERIALS, MaterialId, isMaterialId } from '@/lib/game/materials';
 import { storySiteFor } from '@/lib/game/lore';
 import { MaterialIcon, RARITY_COLORS } from './MaterialIcon';
 import { SKY_COLOR } from '@/components/menu/MenuShell';
@@ -1070,7 +1070,11 @@ const getUnitBuffs = (state: GameState, unit: Unit, hex: Hex | undefined): UnitB
     buffs.push({ id: 'shaken', icon: 'shaken', label: 'Shaken', value: `-${pct(1 - SHAKEN_ATTACK)} attack ${lasting}`, good: false });
   }
   // A monster's venom or web working in it
-  if (unit.poisoned) buffs.push({ id: 'venom', icon: 'venom', label: 'Poisoned', value: `-${unit.poisoned} health at the end of its next turn`, good: false });
+  if (unit.poisoned) {
+    // (venom taken on its own turn waits for the end of the next one)
+    const thisTurn = getActivePlayer(state) === unit.owner && !unit.poisonFresh;
+    buffs.push({ id: 'venom', icon: 'venom', label: 'Poisoned', value: `-${unit.poisoned} health at the end of ${thisTurn ? 'this' : 'its next'} turn`, good: false });
+  }
   if (unit.slowed) buffs.push({ id: 'slowed', icon: 'slowed', label: 'Slowed', value: '-1 movement on its next turn', good: false });
   if (canRise(unit)) buffs.push({ id: 'undying', icon: 'undying', label: 'Undying', value: 'Rises again once (not against Clerics or fire)', good: true, quiet: true });
   if (furyMultiplier(unit) >= 1.05) buffs.push({ id: 'fury', icon: 'fury', label: 'Fury', value: `+${pct(furyMultiplier(unit) - 1)} attack`, good: true });
@@ -1239,7 +1243,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
   }, [players, hexByKey, gameState.sightings]);
   // Materials lying on the ground (and the region's story site) where the player can see them
   const harvestMarkers = useMemo(
-    () => hexGrid.filter(hex => (hex.harvest || (hex.storySite && !hex.plundered)) && !hex.unit &&
+    () => hexGrid.filter(hex => ((hex.harvest && isMaterialId(hex.harvest)) || (hex.storySite && !hex.plundered)) && !hex.unit &&
       (!visibleKeys || visibleKeys.has(coordKey(hex.coordinates)))),
     [hexGrid, visibleKeys]
   );
@@ -1696,9 +1700,11 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     const latest = gathered[gathered.length - 1]?.serial ?? 0;
     const seen = gatheredSeenRef.current;
     gatheredSeenRef.current = { game: players.player.id, serial: latest };
-    // (nothing to show for what was gathered before the board appeared, or in another battle)
-    if (!seen || seen.game !== players.player.id) return;
-    const fresh = gathered.filter(entry => entry.serial > seen.serial);
+    // (nothing to show for what was gathered before the board appeared; in a battle begun since, all
+    // of it is new)
+    if (!seen) return;
+    const after = seen.game === players.player.id ? seen.serial : 0;
+    const fresh = gathered.filter(entry => entry.serial > after && isMaterialId(entry.material));
     if (fresh.length === 0) return;
     const timeout = setTimeout(() => {
       popupTimeoutsRef.current.delete(timeout);
@@ -1720,7 +1726,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
     }, GATHER_POPUP_DELAY / getTimeScale());
     popupTimeoutsRef.current.add(timeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState.gathered]);
+  }, [gameState.gathered, players.player.id]);
 
   // --- Rendering ---------------------------------------------------------------------------
 
@@ -1871,7 +1877,7 @@ const BoardScene: React.FC<BoardSceneProps> = ({
         const site = hex.storySite && !hex.plundered;
         const material = hex.harvest ? MATERIALS[hex.harvest] : null;
         return (
-          <Html key={`harvest-${coordKey(hex.coordinates)}`} position={[x, y + 0.08, z + 0.42]} center zIndexRange={[2, 0]} style={{ pointerEvents: 'none' }}>
+          <Html key={`harvest-${coordKey(hex.coordinates)}`} position={[x, y + 0.12, z]} center zIndexRange={[2, 0]} style={{ pointerEvents: 'none' }}>
             {site ? (
               <span
                 className="font-display flex h-6 w-6 items-center justify-center rounded-full bg-amber-950/80 text-sm text-amber-200 shadow-lg ring-2 ring-amber-400 animate-pulse"
@@ -2049,14 +2055,14 @@ const BoardScene: React.FC<BoardSceneProps> = ({
 
       {/* Hover info */}
       {assetsLoaded && hoveredHex && !isSetupPhase && (
-        <HoverTooltip hex={hoveredHex} mapName={gameState.mapName} />
+        <HoverTooltip hex={hoveredHex} mapName={gameState.mapName} fogged={!!visibleKeys && !visibleKeys.has(coordKey(hoveredHex.coordinates))} />
       )}
     </>
   );
 };
 
 // One-line description of the hovered hex: its terrain effect and what's standing on it
-const HoverTooltip: React.FC<{ hex: Hex; mapName?: string }> = ({ hex, mapName }) => {
+const HoverTooltip: React.FC<{ hex: Hex; mapName?: string; fogged?: boolean }> = ({ hex, mapName, fogged }) => {
   const [x, y, z] = surfacePosition(hex);
   const effect = hex.isCamp
     ? hex.owner === 'player' ? 'your camp: recruits deploy here' : `${hex.owner ? 'enemy' : 'neutral'} camp: move onto it to capture`
@@ -2078,12 +2084,12 @@ const HoverTooltip: React.FC<{ hex: Hex; mapName?: string }> = ({ hex, mapName }
               ? <><StakesIcon /> Stakes: cavalry can&apos;t cross, +1 movement for others</>
               : null;
 
-  // Something to pick up here, or a story to dig up
-  const site = hex.storySite ? storySiteFor(mapName) : undefined;
+  // Something to pick up here, or a story to dig up (once the player's troops can see the hex)
+  const site = hex.storySite && !fogged ? storySiteFor(mapName) : undefined;
   const find = site
     ? hex.plundered ? <span className="text-slate-400">{site.name} (searched)</span> : <span className="text-amber-200">{site.name}: {site.hint} <b>End a turn here to search it.</b></span>
-    : hex.harvest
-      ? <span style={{ color: RARITY_COLORS[MATERIALS[hex.harvest].rarity].text }}><MaterialIcon id={hex.harvest} /> {MATERIALS[hex.harvest].name}: end a turn here to gather it</span>
+    : hex.harvest && !fogged && isMaterialId(hex.harvest)
+      ? <span style={{ color: RARITY_COLORS[MATERIALS[hex.harvest].rarity].text }}><MaterialIcon id={hex.harvest} /> {MATERIALS[hex.harvest].name}: <b>end a turn here to gather it.</b></span>
       : null;
 
   return (
