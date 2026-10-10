@@ -1,6 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
+import { usePathname } from 'next/navigation';
+import { notePageSeen } from '@/lib/navigation';
 import { initAnalytics, trackEvent } from '@/lib/analytics';
 import { initAds } from '@/lib/ads';
 import { registerServiceWorker } from '@/lib/offline';
@@ -10,6 +12,10 @@ import { getProfile, highestCleared, profilePower } from '@/lib/meta/profile';
 
 // Starts the background services once the game has loaded in the browser
 export const AppBoot: React.FC = () => {
+  // Each page of the game visited (for a page deciding whether "back" stays in the game)
+  const pathname = usePathname();
+  useEffect(() => notePageSeen(), [pathname]);
+
   useEffect(() => {
     applyUiSize();
     listenForInstallPrompt();

@@ -42,7 +42,7 @@ export const STORY_SITES: Record<string, StorySite> = {
     hint: 'Half-buried by the old road, a stone carved with a hexagon. Something is written on it.',
     props: [
       { model: 'pillar_decorated', x: 0.05, z: -0.1, scale: 0.11, turn: 0.4 },
-      { model: 'rubble_half', x: -0.25, z: 0.15, scale: 0.1, turn: 1.2 },
+      { model: 'rubble_half', x: -0.25, z: 0.15, scale: 0.1 },
       { model: 'rock_single_B', x: 0.28, z: 0.2, scale: 1, turn: 2 }
     ]
   },
@@ -114,7 +114,7 @@ export const STORY_SITES: Record<string, StorySite> = {
     hint: 'The cold ruin of a great forge, its anvil-stone split. A torch still burns in its wall.',
     props: [
       { model: 'barrier_column', x: 0, z: -0.15, scale: 0.09, turn: 0.2 },
-      { model: 'rubble_half', x: -0.22, z: 0.22, scale: 0.1, turn: 2.2 },
+      { model: 'rubble_half', x: -0.22, z: 0.22, scale: 0.1 },
       { model: 'torch_lit', x: 0.3, z: 0.12, scale: 0.5, lift: 0.2 }
     ]
   },

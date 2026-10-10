@@ -45,7 +45,8 @@ export const levelLossReward = (levelId: number, damageRatio: number): BattleRew
 // than the player's own cards (a challenge link can field a rival of any level), `rivalShare` being
 // its level over theirs
 export const quickBattleReward = (won: boolean, highestCleared: number, rivalShare = 1): BattleReward => {
-  const share = Math.min(1, Math.max(0, rivalShare));
+  // (a share that isn't a number - from a damaged save - pays in full)
+  const share = Number.isFinite(rivalShare) ? Math.min(1, Math.max(0, rivalShare)) : 1;
   const coins = Math.round(((won ? 12 : 4) + highestCleared * (won ? 0.6 : 0.2)) * share);
   return { coins, breakdown: [{ label: won ? 'Skirmish won' : 'Skirmish fought', coins }] };
 };

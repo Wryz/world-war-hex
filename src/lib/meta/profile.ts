@@ -454,7 +454,8 @@ export interface BattleRecordResult {
   isNewBest: boolean;
   // The level's challenge was met for the first time (its bonus is in the reward)
   challengeCompleted: boolean;
-  // The materials carried home (all of a win's haul, half of a loss's, none of a battle given up),
+  // The materials carried home (all of a win's haul; from a loss its relics, trophies and the better
+  // half of the rest; none from a battle given up),
   // and the kinds found for the first time
   haul: Haul;
   firstFinds: MaterialId[];

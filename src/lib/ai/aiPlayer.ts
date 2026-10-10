@@ -983,11 +983,12 @@ const attackValueFrom = (planner: Planner, unit: Unit, position: HexCoordinates)
     // Removing a unit also removes the damage it would have done next turn
     if (damage >= health) value += enemy.attackPower;
     // ...and what a monster's blow leaves behind is worth having too
-    value += blowSkillValue(unit, enemy, damage, health);
-
     const isSneakAttack = unit.abilities.includes('stealth') && !enemy.abilities.includes('stealth');
     const strikesBack = !isSneakAttack && canStrikeFrom(planner, enemy, enemy.position, position);
-    if (strikesBack) value -= healthValue(unit, strikeFrom(planner, enemy, enemy.position, self, position) * 0.7);
+    const struckBack = strikesBack ? strikeFrom(planner, enemy, enemy.position, self, position) : 0;
+    if (strikesBack) value -= healthValue(unit, struckBack * 0.7);
+    // (a troop struck down in the fight drains no life, whatever its blow leaves behind otherwise)
+    value += blowSkillValue(unit, enemy, damage, health, struckBack >= unit.lifespan);
 
     if (value > best.value) best = { value, target: enemy, damage };
   }
@@ -999,7 +1000,7 @@ const attackValueFrom = (planner: Planner, unit: Unit, position: HexCoordinates)
 
 // What a monster's skill adds to a blow that lands, in gold: venom still to come, a slowed or
 // shaken target, life drained back, gold stolen
-const blowSkillValue = (unit: Unit, enemy: Unit, damage: number, health: number): number => {
+const blowSkillValue = (unit: Unit, enemy: Unit, damage: number, health: number, falls = false): number => {
   const skill = getMobSkill(unit);
   if (!skill || damage <= 0) return 0;
   const survives = damage < health;
@@ -1008,7 +1009,7 @@ const blowSkillValue = (unit: Unit, enemy: Unit, damage: number, health: number)
     case 'slow': return survives ? enemy.cost * SLOW_VALUE : 0;
     case 'curse': return survives && !isFearless(enemy) ? enemy.attackPower * (1 - SHAKEN_ATTACK) : 0;
     // (health won back, without the bounty healthValue adds for a blow that would finish it)
-    case 'leech': return Math.min(skill.amount!, unit.maxLifespan - unit.lifespan) / unit.maxLifespan * unit.cost;
+    case 'leech': return falls ? 0 : Math.min(skill.amount!, unit.maxLifespan - unit.lifespan) / unit.maxLifespan * unit.cost;
     case 'plunder': return skill.amount!;
     default: return 0;
   }

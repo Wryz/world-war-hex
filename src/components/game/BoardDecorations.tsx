@@ -513,7 +513,9 @@ const buildHistoryMatrices = (hexes: Hex[], theme: string | undefined): Map<stri
       // Round the edge of the hex, leaving the middle to the troop that searches it
       site.props.forEach((prop, i) => {
         const angle = SITE_FIRST_ANGLE + i * Math.PI * 2 / site.props.length;
-        layout([{ ...prop, x: 0, z: 0 }], cx + Math.cos(angle) * SITE_RADIUS, y, cz + Math.sin(angle) * SITE_RADIUS, 0);
+        // (each turned with its place on the ring, so a long prop drawn out from one end - a pile of
+        // rubble - lies along the rim rather than across the middle or off the tile)
+        layout([{ ...prop, x: 0, z: 0 }], cx + Math.cos(angle) * SITE_RADIUS, y, cz + Math.sin(angle) * SITE_RADIUS, -angle - Math.PI / 2);
       });
       continue;
     }
