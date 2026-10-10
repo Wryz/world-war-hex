@@ -19,22 +19,43 @@ const hexAt = (state: GameState, c: HexCoordinates): Hex =>
 const build = (state: GameState, c: HexCoordinates, terrain: TerrainType, owner?: 'player' | 'ai') => updateHex(state, c, { terrain, owner });
 
 test('buildings go up where neither side has the longer march, and not in the tutorial', () => {
-  for (let seed = 1; seed <= 12; seed++) {
-    const state = createBattle({ ...DEFAULT_SETTINGS, seed }, { rosters: { player: defaultRoster(), ai: defaultRoster() }, levelId: 20 });
-    const castles = [findBaseHex(state, 'player')!, findBaseHex(state, 'ai')!];
-    const buildings = state.hexGrid.filter(hex => isStructure(hex.terrain));
-    assert.equal(buildings.filter(hex => hex.terrain === 'catapult').length, 1, `seed ${seed}: one catapult tower`);
-    assert.ok(buildings.some(hex => hex.terrain === 'house'), `seed ${seed}: a hamlet`);
-    // (houses, bridges and stretches of wall go where the ground lets them; the rest are fair)
-    for (const hex of buildings.filter(other => !['house', 'bridge', 'wall'].includes(other.terrain))) {
-      const [toPlayer, toAi] = castles.map(castle => getHexDistance(castle.coordinates, hex.coordinates));
-      assert.ok(Math.abs(toPlayer - toAi) <= 2, `seed ${seed}: ${hex.terrain} is fair (${toPlayer} vs ${toAi})`);
-      assert.ok(Math.min(toPlayer, toAi) >= 3, `seed ${seed}: ${hex.terrain} not by a castle`);
-      assert.equal(hex.owner, undefined, 'nobody holds it yet');
+  // (the usual small field packs them a hex nearer the castles than a larger one)
+  for (const [gridSize, apart] of [[DEFAULT_SETTINGS.gridSize, 2], [4, 3]]) {
+    for (let seed = 1; seed <= 12; seed++) {
+      const state = createBattle({ ...DEFAULT_SETTINGS, gridSize, seed }, { rosters: { player: defaultRoster(), ai: defaultRoster() }, levelId: 20 });
+      const castles = [findBaseHex(state, 'player')!, findBaseHex(state, 'ai')!];
+      const buildings = state.hexGrid.filter(hex => isStructure(hex.terrain));
+      assert.equal(buildings.filter(hex => hex.terrain === 'catapult').length, 1, `size ${gridSize}, seed ${seed}: one catapult tower`);
+      assert.ok(buildings.some(hex => hex.terrain === 'house'), `size ${gridSize}, seed ${seed}: a hamlet`);
+      // (houses, bridges and stretches of wall go where the ground lets them; the rest are fair)
+      for (const hex of buildings.filter(other => !['house', 'bridge', 'wall'].includes(other.terrain))) {
+        const [toPlayer, toAi] = castles.map(castle => getHexDistance(castle.coordinates, hex.coordinates));
+        assert.ok(Math.abs(toPlayer - toAi) <= 2, `size ${gridSize}, seed ${seed}: ${hex.terrain} is fair (${toPlayer} vs ${toAi})`);
+        assert.ok(Math.min(toPlayer, toAi) >= apart, `size ${gridSize}, seed ${seed}: ${hex.terrain} not by a castle`);
+        assert.equal(hex.owner, undefined, 'nobody holds it yet');
+      }
     }
   }
   const tutorial = createBattle({ ...DEFAULT_SETTINGS, seed: 3 }, { rosters: { player: defaultRoster(), ai: defaultRoster() }, levelId: 1 });
   assert.equal(tutorial.hexGrid.some(hex => STRUCTURE_TERRAINS.includes(hex.terrain as never)), false);
+});
+
+test('the usual small field still has its gold mines, camps and buildings, and no castle beside a mine or spring', () => {
+  for (let seed = 1; seed <= 24; seed++) {
+    const state = createBattle({ ...DEFAULT_SETTINGS, seed }, { rosters: { player: defaultRoster(), ai: defaultRoster() }, levelId: 20 });
+    const castles = [findBaseHex(state, 'player')!, findBaseHex(state, 'ai')!];
+    const mines = state.hexGrid.filter(hex => hex.isResourceHex);
+    assert.equal(mines.length, DEFAULT_SETTINGS.resourceHexCount, `seed ${seed}: every gold mine`);
+    assert.equal(state.hexGrid.filter(hex => hex.isCamp).length, 2, `seed ${seed}: two camps`);
+    assert.ok(state.hexGrid.filter(hex => isStructure(hex.terrain) && hex.terrain !== 'house').length >= 2, `seed ${seed}: buildings to fight over`);
+    for (const spring of state.hexGrid.filter(hex => hex.terrain === 'spring')) {
+      assert.ok(castles.every(castle => getHexDistance(castle.coordinates, spring.coordinates) > 1), `seed ${seed}: no castle beside a spring`);
+    }
+    for (const mine of mines) {
+      assert.ok(castles.every(castle => getHexDistance(castle.coordinates, mine.coordinates) > 1), `seed ${seed}: no castle beside a mine`);
+      assert.ok(Math.abs(getHexDistance(castles[0].coordinates, mine.coordinates) - getHexDistance(castles[1].coordinates, mine.coordinates)) <= 2, `seed ${seed}: a fair mine`);
+    }
+  }
 });
 
 test('stepping onto a workshop takes it, and a blacksmith sharpens every blade', () => {

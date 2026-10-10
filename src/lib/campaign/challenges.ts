@@ -25,7 +25,8 @@ export const CHALLENGE_BONUS = 0.6;
 const FIRST_CHALLENGE_LEVEL = 3;
 // Win within this share of the level's rounds
 const SWIFT_SHARE = 0.6;
-const UNBROKEN_HEALTH = 0.9;
+// (the armies meet at once on the small field, so a castle seldom comes through untouched)
+const UNBROKEN_HEALTH = 0.75;
 const THRIFTY_TROOPS = 5;
 
 const swiftRounds = (level: LevelDef) => Math.ceil((level.settings.maxRounds ?? DEFAULT_SETTINGS.maxRounds!) * SWIFT_SHARE);
@@ -65,9 +66,7 @@ export const levelChallenge = (levelOrId: LevelDef | number): Challenge | undefi
   if (level.id < FIRST_CHALLENGE_LEVEL) return undefined;
   if (level.isBoss) return build('slayBoss', level);
   if (level.isElite) return build('topple', level);
-  // (small fields have no camps to speak of)
-  const pool = level.settings.gridSize < 4 ? ROTATION.filter(id => id !== 'twoCamps') : ROTATION;
-  return build(pool[(level.id + level.region.id) % pool.length], level);
+  return build(ROTATION[(level.id + level.region.id) % ROTATION.length], level);
 };
 
 export const challengeBonus = (levelId: number) => Math.round(baseLevelReward(levelId) * CHALLENGE_BONUS);

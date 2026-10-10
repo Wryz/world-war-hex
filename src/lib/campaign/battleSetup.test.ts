@@ -6,6 +6,8 @@ import type { GameState } from '@/types/game';
 import { createProfile } from '../meta/profile';
 import { cardStats } from '../game/troops';
 import { buildBattle, rivalCards } from './battleSetup';
+import { DEFAULT_SETTINGS } from '../game/gameState';
+import { getLevel } from './levels';
 
 // What a friend has to see the same: the ground, everything standing on it, the castle sites offered
 // and the rival army's troops
@@ -60,4 +62,15 @@ test('a seasoned rival kingdom brings evolved forms, the same ones for the same 
   assert.ok(armies.size >= 30, `${armies.size} armies`);
   // Without a seed, every troop it might field (for loading their models)
   for (const id of veteran) assert.ok(rivalCards(12).includes(id));
+});
+
+test('castles grow sturdier with the cards fighting over them, so late battles last as long as early ones', () => {
+  const castle = (state: GameState) => state.settings!.castleHealth!;
+  const novice = buildBattle({ mode: 'quick', difficulty: 'medium', seed: 7, rivalLevel: 1 }, createProfile());
+  const veteran = buildBattle({ mode: 'quick', difficulty: 'medium', seed: 7, rivalLevel: 10 }, createProfile());
+  assert.equal(castle(novice), DEFAULT_SETTINGS.castleHealth);
+  assert.ok(castle(veteran) > castle(novice) * 1.5, 'a rival at level 10 brings a sturdier castle');
+  // (and in the campaign, where the level's expected cards decide it - the tutorial keeps its small castles)
+  assert.ok(getLevel(150).settings.castleHealth! > getLevel(2).settings.castleHealth!);
+  assert.equal(getLevel(1).settings.castleHealth, 20);
 });

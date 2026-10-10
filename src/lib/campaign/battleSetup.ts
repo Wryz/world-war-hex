@@ -5,7 +5,7 @@ import { BASE_CARD_IDS, Trees, applyTree, lineageOf } from '../game/lineages';
 import type { Profile } from '../meta/profile';
 import { MAX_DECK_SIZE } from '../meta/economy';
 import { suggestLoadout } from '../meta/loadout';
-import { LevelDef, enemyRosterStats, getLevel, levelEnemies } from './levels';
+import { LevelDef, castleHealthFor, enemyRosterStats, getLevel, levelEnemies } from './levels';
 import { dailyDifficulty, dailyRegion, dailySeed, todayKey } from './daily';
 
 export type Difficulty = 'easy' | 'medium' | 'hard';
@@ -124,7 +124,7 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
   // (a daily challenge is fought in the day's region, in its weather)
   const region = config.daily ? dailyRegion(config.daily) : undefined;
   const state = createBattle({
-    ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy', seed,
+    ...DEFAULT_SETTINGS, aiDifficulty: config.difficulty, fogOfWar: config.difficulty !== 'easy', seed, castleHealth: castleHealthFor(rivalLevel),
     ...(region ? { themeName: region.theme, weather: region.weather } : {})
   }, {
     rosters: {

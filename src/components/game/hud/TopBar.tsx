@@ -9,6 +9,7 @@ import { PANEL_CLASS } from './styles';
 import { CrownIcon, FogIcon, GoldIcon, HomeIcon, ResignIcon, SaveIcon, SoundOffIcon, SoundOnIcon, SpeedIcon, ThreatIcon, WeatherIcon } from '../icons';
 import { setGameSpeed, useCastleShownDamage, useGameSpeed } from '../effects/effects';
 import { useShownCastleHealth } from '../effects/healthTimeline';
+import { StarMeter } from './StarMeter';
 
 // The time-up points show for this many final rounds
 const POINTS_SHOWN_ROUNDS = 3;
@@ -124,6 +125,8 @@ export const TopBar: React.FC<TopBarProps> = ({
             {timer}s
           </span>
         )}
+        {/* A campaign battle: the stars a win this round would earn */}
+        {!multi && <StarMeter gameState={gameState} />}
         {/* Near the end: the points that decide the battle if time runs out */}
         {!multi && turnNumber > maxRounds - POINTS_SHOWN_ROUNDS && (() => {
           const you = getTimeScore(gameState, 'player');

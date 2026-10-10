@@ -432,6 +432,15 @@ const connectRegions = (coordinates: HexCoordinates[], terrain: Map<string, Terr
   }
 };
 
+// A field this small (or smaller) has no ring between its middle and its edge to spread gold mines
+// and springs over before the castles stand: they go down with the camps and buildings once the
+// castles are up (see placeSmallFieldFeatures in gameState), and the buildings stand closer together
+export const SMALL_FIELD_SIZE = 3;
+export const isSmallField = (gridSize: number) => gridSize <= SMALL_FIELD_SIZE;
+
+// Gold a mine pays each round: 2-4
+export const mineValue = (random: () => number) => 2 + Math.floor(random() * 3);
+
 // Spread special hexes (gold mines, springs) out across the middle of the map,
 // keeping them apart from each other and from any already chosen. On a mirrored map (`symmetry`
 // equal parts) each one chosen comes with its copies in the other parts.
@@ -509,8 +518,9 @@ export const createHexagonalGrid = (
   connectRegions(coordinates, terrain);
   if (symmetry > 1) mirrorTerrain(coordinates, terrain, symmetry, true);
 
-  // (on a mirrored map, the mines and springs are shared out between its parts)
-  const perPart = (count: number) => (symmetry > 1 ? Math.max(1, Math.round(count / symmetry)) : count);
+  // (on a mirrored map, the mines and springs are shared out between its parts; a small field gets
+  // them once its castles stand)
+  const perPart = (count: number) => (isSmallField(settings.gridSize) ? 0 : symmetry > 1 ? Math.max(1, Math.round(count / symmetry)) : count);
   const resourceCoordinates = chooseFeatureHexes(coordinates, terrain, settings.gridSize, perPart(settings.resourceHexCount), random, [], symmetry);
   const resources = new Set(resourceCoordinates.map(coordKey));
   const mineValues = new Map<string, number>();
@@ -530,7 +540,7 @@ export const createHexagonalGrid = (
       hex.isResourceHex = true;
       // 2-4 gold per round (the same for a mine's mirrored copies)
       const lead = coordKey(symmetry > 1 ? canonicalHex(coordinates, symmetry) : coordinates);
-      if (!mineValues.has(lead)) mineValues.set(lead, 2 + Math.floor(random() * 3));
+      if (!mineValues.has(lead)) mineValues.set(lead, mineValue(random));
       hex.resourceValue = mineValues.get(lead);
     }
 
