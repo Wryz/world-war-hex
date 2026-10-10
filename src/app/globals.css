@@ -18,6 +18,19 @@
   --font-display: var(--font-dyna-puff);
 }
 
+/* No rubber-band bounce or pull-to-refresh past the ends of a page: an app, not a web page (and no
+   scroll inside a panel carries on into the page behind it) */
+html,
+body {
+  overscroll-behavior: none;
+}
+
+.overflow-y-auto,
+.overflow-auto,
+.overflow-x-auto {
+  overscroll-behavior: contain;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);

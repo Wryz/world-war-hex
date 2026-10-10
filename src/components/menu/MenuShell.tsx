@@ -1,8 +1,7 @@
 import React from 'react';
 import Link from 'next/link';
 import { profilePower, totalStars, useHasHydrated, useProfile } from '@/lib/meta/profile';
-import { BackIcon, CoinIcon, PowerIcon, SatchelIcon, StarIcon } from '../game/icons';
-import { haulSize } from '@/lib/game/materials';
+import { BackIcon, CoinIcon, PowerIcon, StarIcon } from '../game/icons';
 
 // Chunky dark panel with a solid drop shadow, like a game card
 export const CARD_CLASS = 'rounded-2xl bg-slate-900/90 text-slate-100 ring-1 ring-white/10 shadow-[0_6px_0_rgba(15,23,42,0.45)] backdrop-blur-sm';
@@ -33,9 +32,6 @@ export const ResourceBadges: React.FC<{ className?: string }> = ({ className = '
       <span className={`${CARD_CLASS} font-display hidden items-center gap-1.5 px-3 py-1.5 text-lg text-amber-200 sm:flex sm:px-4 sm:py-2 sm:text-2xl`} title="Campaign stars">
         <StarIcon /> {totalStars(profile)}
       </span>
-      <Link href="/satchel" className={`${CARD_CLASS} font-display hidden items-center gap-1.5 px-3 py-1.5 text-lg text-orange-200 transition-transform hover:-translate-y-0.5 sm:flex sm:px-4 sm:py-2 sm:text-2xl`} title="Satchel: the materials you have gathered, and the Chronicle">
-        <SatchelIcon /> {haulSize(profile.materials)}
-      </Link>
     </div>
   );
 };
