@@ -2318,8 +2318,8 @@ export const getDamageTakenMultiplier = (state: GameState, unit: Unit, at?: HexC
 
 // Troops garrisoned in a house, or holding a bridge or gateway, can't be flanked: only one or two
 // sides of them can be got at
-const canBeFlanked = (state: GameState, target: Unit) => {
-  const hex = findHexByCoordinates(state.hexGrid, target.position);
+export const canBeFlanked = (state: GameState, target: Unit, at: HexCoordinates = target.position) => {
+  const hex = findHexByCoordinates(state.hexGrid, at);
   return !hex || !(['house', 'bridge', 'gate'] as TerrainType[]).includes(hex.terrain) && hex.feature !== 'logBridge';
 };
 
@@ -2429,8 +2429,10 @@ const detectCombat = (state: GameState, attackerSide: PlayerType): Combat[] => {
     const options = targets.map(target => {
       const assigned = assignedDamage.get(target.id) ?? 0;
       const strike = getStrikePower(state, unit, target, (attackersOn.get(target.id) ?? 0) + 1);
-      const pierced = piercesArmour([unit]) || piercedTargets.has(target.id);
-      const healthLeft = target.lifespan - dealt(target, assigned, pierced);
+      // (this unit's own strike is what makes the fight go through armour, if it does)
+      const alreadyPierced = piercedTargets.has(target.id);
+      const pierced = piercesArmour([unit]) || alreadyPierced;
+      const healthLeft = target.lifespan - dealt(target, assigned, alreadyPierced);
       return {
         target,
         strike,
@@ -2569,8 +2571,10 @@ const detectIntercepts = (state: GameState, attackerSide: PlayerType, siege: Gam
     const options = targets.map(target => {
       const strike = getStrikePower(state, guard, target, (assigned.get(target.id)?.length ?? 0) + 1);
       const before = damageOn.get(target.id) ?? 0;
-      const pierced = piercesArmour([guard]);
-      const kills = applyArmor(target, Math.max(1, Math.round(before)), pierced) < target.lifespan &&
+      const others = assigned.get(target.id) ?? [];
+      const pierced = piercesArmour([guard, ...others]);
+      // (nothing on it yet leaves it whole, however little health it has)
+      const kills = (before > 0 ? applyArmor(target, Math.max(1, Math.round(before)), piercesArmour(others)) : 0) < target.lifespan &&
         applyArmor(target, Math.max(1, Math.round(before + strike)), pierced) >= target.lifespan;
       return { target, strike, kills };
     }).sort((a, b) => Number(b.kills) - Number(a.kills) || b.target.attackPower - a.target.attackPower || compareIds(a.target, b.target));
@@ -2822,8 +2826,10 @@ const finishTurn = (state: GameState): GameState => {
   scatterMinions(newState);
   // Venom: this side's poisoned troops lose what the poison takes, and are rid of it
   // (venom taken during this very turn waits for the end of its next one)
+  const shakenBefore = new Map(newState.players[activePlayer].units.map(unit => [unit.id, unit.shaken ?? 0]));
   for (const unit of [...newState.players[activePlayer].units]) {
-    if (!unit.poisoned) continue;
+    // (a minion that fled its fallen boss is gone, venom and all)
+    if (!unit.poisoned || !newState.players[activePlayer].units.some(other => other.id === unit.id)) continue;
     if (unit.poisonFresh) {
       unit.poisonFresh = undefined;
       continue;
@@ -2832,6 +2838,12 @@ const finishTurn = (state: GameState): GameState => {
     unit.poisoned = undefined;
     const { destroyed } = inflictDamage(newState, unit, amount, defaultKiller(newState, activePlayer) ?? null, 'venom', {}, true);
     addLog(newState, activePlayer, `${unitLabel(newState, unit)} ${destroyed ? 'succumbs to' : 'suffers'} the venom${destroyed ? '' : ` (-${amount})`}.`);
+  }
+  // (a boss or champion the venom finishes shakes its army as though it fell on the enemy's turn:
+  // this turn's count-down has already been taken, so the extra turn a fall on its own turn gets
+  // isn't owed)
+  for (const unit of newState.players[activePlayer].units) {
+    if ((unit.shaken ?? 0) > (shakenBefore.get(unit.id) ?? 0)) unit.shaken = Math.max(shakenBefore.get(unit.id) ?? 0, unit.shaken! - 1) || undefined;
   }
   // Morale: the other sides' badly hurt troops caught alone among this side's waver
   for (const unit of getEnemyUnits(newState, activePlayer)) {
@@ -3488,7 +3500,10 @@ export const getCombatEffects = (state: GameState, combat: Combat): CombatEffect
     const total = [...bonuses.values()].reduce((sum, value) => sum + value, 0);
     add(bonuses.size === 1 ? [...bonuses.keys()][0] : 'Bonuses', 'good', `+${total}%`, total);
   }
-  if (hasAbility(target, 'armored') && !piercesArmour(attackers)) add('Armored', 'bad', `-${ARMOR_REDUCTION}`, 15);
+  if (hasAbility(target, 'armored')) {
+    if (piercesArmour(attackers)) add('Armour pierced', 'good', undefined, 15);
+    else add('Armored', 'bad', `-${ARMOR_REDUCTION}`, 15);
+  }
   if (canRise(target) && !finishesUndead(attackers)) add('Undying', 'bad', undefined, 10);
   for (const protection of getProtections(state, target)) {
     add(protection.label, 'bad', `-${Math.round(protection.reduction * 100)}%`, Math.round(protection.reduction * 100));

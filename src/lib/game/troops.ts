@@ -112,7 +112,7 @@ export const TROOPS: Record<TroopId, TroopDef> = {
     lore: 'They strike from the shadows and are gone before anyone can swing back - leaving the hayricks burning behind them.'
   }),
   helicopter: troop({
-    id: 'helicopter', name: 'Knights', faction: 'kingdom', rarity: 'rare', troopClass: 'cavalry', cost: 26, attack: 8, health: 10, move: 5,
+    id: 'helicopter', name: 'Knights', faction: 'kingdom', rarity: 'rare', troopClass: 'cavalry', cost: 26, attack: 10, health: 13, move: 5,
     abilities: ['rapidMovement'], role: 'Fast: first to camps and buildings', attackInterval: 0.7,
     lore: 'Mounted knights who reach camps and gold mines long before anyone else.'
   }),

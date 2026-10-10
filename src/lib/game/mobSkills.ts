@@ -113,7 +113,7 @@ export const MOB_SKILLS: Partial<Record<TroopId, MobSkill>> = {
   ghost: skill('Life Drain', 'leech', { amount: 3 }, s => `Heals ${s.amount} whenever it hurts a troop.`),
   // Orcs: brute force, and plenty of it
   orc_grunt: skill('Waaagh!', 'gangUp', { share: 0.3 }, s => `+${pct(s.share!)} attack when another of its warband stands beside its target.`),
-  orc_archer: skill('Heavy Bolts', 'hunter', { share: 0.35, classes: ['infantry', 'spear'] }, s => `+${pct(s.share!)} attack against infantry and spears.`),
+  orc_archer: skill('Iron Bolts', 'hunter', { share: 0.35, classes: ['infantry', 'spear'] }, s => `+${pct(s.share!)} attack against infantry and spears.`),
   orc_shaman: skill('Blood Rites', 'aura', { share: 0.2 }, s => `Its warband's troops beside it strike ${pct(s.share!)} harder.`),
   ogre: skill('Smash', 'curse', {}, () => 'Troops it hits are stunned: they strike 30% softer on their next turn (the fearless shrug it off).'),
   // Infernal: everything burns

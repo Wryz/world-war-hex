@@ -40,7 +40,8 @@ export const levelWinReward = (levelId: number, stars: number, previousStars: nu
 
 // `damageRatio` is the share of the enemy castle's health destroyed (0..1)
 export const levelLossReward = (levelId: number, damageRatio: number): BattleReward => {
-  const coins = Math.max(5, Math.round(baseLevelReward(levelId) * (LOSS_BASE + LOSS_PER_DAMAGE * damageRatio)));
+  const ratio = Number.isFinite(damageRatio) ? Math.min(1, Math.max(0, damageRatio)) : 0;
+  const coins = Math.max(5, Math.round(baseLevelReward(levelId) * (LOSS_BASE + LOSS_PER_DAMAGE * ratio)));
   return { coins, breakdown: [{ label: 'Spoils of battle', coins }] };
 };
 
@@ -88,7 +89,7 @@ export const ownUpgradeLadder = (id: TroopId, level: number): number => {
 };
 
 const upgradeCostAt = (rarity: Rarity, level: number, eliteUnlocked: boolean): number | null => {
-  if (level >= MAX_CARD_LEVEL || (level >= BASE_MAX_CARD_LEVEL && !eliteUnlocked)) return null;
+  if (!Number.isFinite(level) || level >= MAX_CARD_LEVEL || (level >= BASE_MAX_CARD_LEVEL && !eliteUnlocked)) return null;
   const base = UPGRADE_BASE[rarity];
   const cost = level < BASE_MAX_CARD_LEVEL
     ? base * UPGRADE_GROWTH ** (level - 1)

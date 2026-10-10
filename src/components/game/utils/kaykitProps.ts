@@ -127,3 +127,14 @@ export const usePropLibrary = (packs: PropPack[] = MEDIEVAL_ONLY): PropLibrary |
   }, [key, library]);
   return library;
 };
+
+// Release the GPU copies of the loaded props (see releaseSharedGpuResources in unitModelCache)
+export const releasePropLibraries = () => {
+  for (const library of loadedPacks.values()) {
+    for (const prop of library.values()) {
+      prop.geometry.dispose();
+      for (const value of Object.values(prop.material)) if (value instanceof THREE.Texture) value.dispose();
+      prop.material.dispose();
+    }
+  }
+};

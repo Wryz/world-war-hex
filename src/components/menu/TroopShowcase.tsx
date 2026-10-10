@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { TroopId } from '@/lib/game/troops';
 import type { LineageSetting } from '@/lib/game/lineages';
 import { getAnimationName, getUnitLook } from '../game/utils/UnitModelSystem';
 import { disposeUnitModel, findAnimationClip, instantiateUnitModel, MountRig, UnitModelInstance } from '../game/utils/unitModelCache';
 import { PropPack, usePropLibrary } from '../game/utils/kaykitProps';
+import { useReleaseGpuOnUnmount } from '../game/utils/releaseGpu';
 
 // A troop standing in its own corner of the realm, shown at the top of its skill tree: Swordsmen
 // in a barracks yard, Archers at a woodland range, Mages at a shrine... When it learns something
@@ -38,11 +39,11 @@ const SETTINGS: Record<LineageSetting, SettingDef> = {
   barracks: {
     ground: '#b9a27a', rim: '#8a7452', sky: '#cfe3f5', packs: ['medieval', 'buildings', 'dungeon'],
     props: [
-      { model: 'building_barracks_blue', at: [0.3, -1.9], turn: 0.1, scale: 1.1 },
+      { model: 'building_barracks_blue', at: [0.3, -1.9], turn: 0.1, scale: 1.5 },
       { model: 'weaponrack', at: [-1.1, -0.5], turn: 0.5 },
       { model: 'banner_patternA_red', at: [1.3, -1.0], turn: -0.4, scale: 0.4 },
-      { model: 'barrel', at: [-1.35, 0.35] },
-      { model: 'crate_A_big', at: [1.35, 0.3], turn: 0.3 }
+      { model: 'barrel', at: [-1.35, 0.35], scale: 1.8 },
+      { model: 'crate_A_big', at: [1.35, 0.3], turn: 0.3, scale: 1.6 }
     ]
   },
   // A woodland range: trees all round and a stack of straw by the butts
@@ -52,8 +53,8 @@ const SETTINGS: Record<LineageSetting, SettingDef> = {
       { model: 'trees_A_small', at: [-1.2, -1.5], scale: 1.2 },
       { model: 'tree_single_B', at: [1.4, -1.2], scale: 1.1 },
       { model: 'trees_B_small', at: [0.2, -2.0], scale: 1.1 },
-      { model: 'sack', at: [1.25, 0.25], turn: 0.6 },
-      { model: 'crate_B_small', at: [-1.3, 0.2], turn: -0.3 }
+      { model: 'sack', at: [1.25, 0.25], turn: 0.6, scale: 1.8 },
+      { model: 'crate_B_small', at: [-1.3, 0.2], turn: -0.3, scale: 1.8 }
     ]
   },
   // The stables and the paddock fence
@@ -63,7 +64,7 @@ const SETTINGS: Record<LineageSetting, SettingDef> = {
       { model: 'tent', at: [-0.9, -1.4], turn: 0.5, scale: 1.3 },
       { model: 'fence_wood_straight', at: [0.9, -1.1], turn: 0.3 },
       { model: 'fence_wood_straight', at: [1.5, -0.4], turn: 1.3 },
-      { model: 'sack', at: [-1.3, 0.1] },
+      { model: 'sack', at: [-1.3, 0.1], scale: 1.8 },
       { model: 'flag_blue', at: [1.3, 0.5], scale: 2.2 }
     ]
   },
@@ -73,8 +74,8 @@ const SETTINGS: Record<LineageSetting, SettingDef> = {
     props: [
       { model: 'tree_dead_large', at: [-1.2, -1.4], scale: 1.1 },
       { model: 'tree_dead_medium', at: [1.3, -1.3] },
-      { model: 'chest_gold_lid', at: [1.1, -0.2], turn: -0.6 },
-      { model: 'coin_stack_large', at: [1.45, 0.4] },
+      { model: 'chest_gold', at: [1.6, -0.9], turn: -0.6, scale: 0.75 },
+      { model: 'coin_stack_large', at: [1.7, 0.2], scale: 0.5 },
       { model: 'lantern_standing', at: [-1.3, 0.2] }
     ]
   },
@@ -82,21 +83,21 @@ const SETTINGS: Record<LineageSetting, SettingDef> = {
   shrine: {
     ground: '#c9c3b5', rim: '#9a9384', sky: '#ddd6f3', packs: ['dungeon', 'halloween'],
     props: [
-      { model: 'pillar_decorated', at: [-1.1, -1.2] },
-      { model: 'pillar_decorated', at: [1.1, -1.2] },
+      { model: 'pillar_decorated', at: [-1.1, -1.2], scale: 0.6 },
+      { model: 'pillar_decorated', at: [1.1, -1.2], scale: 0.6 },
       { model: 'shrine_candles', at: [0, -1.6] },
-      { model: 'candle_triple', at: [-1.3, 0.3] },
-      { model: 'torch_lit', at: [1.35, 0.2] }
+      { model: 'candle_triple', at: [-1.3, 0.3], scale: 0.6 },
+      { model: 'torch_lit', at: [1.35, 0.2], scale: 0.7 }
     ]
   },
   // The workshop: a sawmill, a forge and stacked timber
   workshop: {
     ground: '#b49a6a', rim: '#86704a', sky: '#f1e3c8', packs: ['medieval', 'buildings'],
     props: [
-      { model: 'building_blacksmith_blue', at: [-0.9, -1.8], turn: 0.3 },
+      { model: 'building_blacksmith_blue', at: [-0.9, -1.8], turn: 0.3, scale: 1.4 },
       { model: 'resource_lumber', at: [1.2, -1.0], turn: -0.4 },
       { model: 'tree_single_A_cut', at: [1.4, 0.2] },
-      { model: 'crate_A_big', at: [-1.35, 0.2], turn: 0.4 }
+      { model: 'crate_A_big', at: [-1.35, 0.2], turn: 0.4, scale: 1.6 }
     ]
   }
 };
@@ -119,6 +120,8 @@ const Props: React.FC<{ setting: SettingDef }> = ({ setting }) => {
             position={[prop.at[0], 0, prop.at[1]]}
             rotation={[0, prop.turn ?? 0, 0]}
             scale={prop.scale ?? 1}
+            // (the library's meshes are shared: they're released with the rest, not with this scene)
+            dispose={null}
             castShadow
             receiveShadow
           />
@@ -142,6 +145,7 @@ const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (f
   const actionRef = useRef<THREE.AnimationAction | null>(null);
   const rigRef = useRef<UnitModelInstance['rig'] | null>(null);
   const mountRef = useRef<MountRig | null>(null);
+  const invalidate = useThree(state => state.invalidate);
   const ringRef = useRef<THREE.Mesh>(null);
   const burstRef = useRef<THREE.Mesh>(null);
   const lightRef = useRef<THREE.PointLight>(null);
@@ -186,9 +190,11 @@ const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (f
       mountRef.current?.setWalking(false);
       actionRef.current = null;
       setLoaded(n => n + 1);
+      // (a paused scene draws it once, so its shaders are ready before the scene is shown)
+      invalidate();
     }).catch(() => {});
     return () => { cancelled = true; };
-  }, [type]);
+  }, [type, invalidate]);
   // (and the last one goes when the scene closes)
   useEffect(() => {
     const container = containerRef.current;
@@ -227,7 +233,11 @@ const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (f
 
   // Start a moment
   useEffect(() => {
-    if (!moment) return;
+    // (a moment cut short is dropped, rather than picking up where it was when the next scene opens)
+    if (!moment) {
+      momentRef.current = null;
+      return;
+    }
     momentRef.current = { moment, time: 0, swapped: false };
     if (moment.kind === 'learn') {
       play('Spellcast_Raise', true);
@@ -289,7 +299,8 @@ const Troop: React.FC<{ type: TroopId; moment: ShowcaseMoment | null; onSwap: (f
 
   return (
     <group>
-      <group ref={containerRef} />
+      {/* (turned three-quarters to the camera, so a rider isn't hidden behind its mount's head) */}
+      <group ref={containerRef} rotation={[0, -0.55, 0]} />
       <mesh ref={ringRef} rotation={[-Math.PI / 2, 0, 0]} visible={false}>
         <torusGeometry args={[0.75, 0.05, 8, 48]} />
         <meshBasicMaterial color="#fde68a" transparent opacity={0} depthWrite={false} />
@@ -309,10 +320,13 @@ interface TroopShowcaseProps {
   moment: ShowcaseMoment | null;
   // The form shown changed mid-evolution
   onEvolved?: (type: TroopId) => void;
+  // Kept loaded but only drawing on changes (the scene only plays while it's on show)
+  paused?: boolean;
   className?: string;
 }
 
-export const TroopShowcase: React.FC<TroopShowcaseProps> = ({ type, setting, moment, onEvolved, className = '' }) => {
+export const TroopShowcase: React.FC<TroopShowcaseProps> = ({ type, setting, moment, onEvolved, paused = false, className = '' }) => {
+  useReleaseGpuOnUnmount();
   const def = SETTINGS[setting];
   // The form on show: follows `type`, and mid-evolution switches to the new form at the burst's peak
   // (before the parent hears of it through onEvolved)
@@ -324,14 +338,17 @@ export const TroopShowcase: React.FC<TroopShowcaseProps> = ({ type, setting, mom
   }
   return (
     <div className={`relative overflow-hidden ${className}`} style={{ background: `linear-gradient(${def.sky}, #ffffff00 120%)` }}>
-      <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 2.3, 5.4], fov: 34 }} onCreated={({ camera }) => camera.lookAt(0, 0.75, 0)}>
+      {/* (paused, it still draws whenever something in it changes - a model arriving - so its shaders
+          and textures are ready before it's shown, rather than stalling its first moment) */}
+      <Canvas frameloop={paused ? 'demand' : 'always'} shadows dpr={[1, 2]} camera={{ position: [0, 2.3, 5.4], fov: 34 }} onCreated={({ camera }) => camera.lookAt(0, 0.75, 0)}>
         <ambientLight intensity={1.4} />
         <directionalLight position={[3, 6, 4]} intensity={2.2} castShadow shadow-mapSize={[1024, 1024]} />
         <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
           <circleGeometry args={[2.6, 40]} />
           <meshStandardMaterial color={def.ground} />
         </mesh>
-        <mesh position={[0, -0.08, 0]}>
+        {/* (its top sits just below the ground, so the two never fight over the same depth) */}
+        <mesh position={[0, -0.09, 0]}>
           <cylinderGeometry args={[2.62, 2.75, 0.16, 40]} />
           <meshStandardMaterial color={def.rim} />
         </mesh>

@@ -56,18 +56,20 @@ const CoinFlight: React.FC<{ burst: CoinBurst }> = ({ burst }) => {
 };
 
 // Where found materials fly to: the satchel that pops up below the round counter while they do
-const SATCHEL_POINT = { x: 40, y: 92 };
+// (clear of a phone's notch and rounded corners, like the counter itself)
+const SATCHEL_POINT = { x: 'calc(40px + var(--safe-l, 0px))', y: 'calc(92px + var(--safe-t, 0px))' };
+const offset = (point: string, by: number) => `calc(${point} - ${by}px)`;
 
 const MaterialFlightView: React.FC<{ flight: MaterialFlight }> = ({ flight }) => (
   <span
-    className="coin-flight pointer-events-none fixed left-0 top-0 z-[60] flex h-9 w-9 items-center justify-center rounded-full bg-slate-900/85 text-2xl shadow-lg ring-1 ring-white/30"
+    className="material-flight pointer-events-none fixed left-0 top-0 z-[60] flex h-9 w-9 items-center justify-center rounded-full bg-slate-900/85 text-2xl shadow-lg ring-1 ring-white/30"
     style={{
       '--from-x': `${flight.from.x - 18}px`,
       '--from-y': `${flight.from.y - 18}px`,
       '--mid-x': `${flight.from.x - 18}px`,
       '--mid-y': `${flight.from.y - 70}px`,
-      '--to-x': `${SATCHEL_POINT.x - 18}px`,
-      '--to-y': `${SATCHEL_POINT.y - 18}px`,
+      '--to-x': offset(SATCHEL_POINT.x, 18),
+      '--to-y': offset(SATCHEL_POINT.y, 18),
       animationDelay: `${flight.delay}s`
     } as React.CSSProperties}
   >
@@ -81,8 +83,8 @@ const SatchelCatch: React.FC<{ id: number; delay: number }> = ({ id, delay }) =>
     key={id}
     className="satchel-catch pointer-events-none fixed z-[59] flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-900/90 text-3xl shadow-lg ring-2 ring-amber-300/70"
     style={{
-      left: SATCHEL_POINT.x - 24,
-      top: SATCHEL_POINT.y - 24,
+      left: offset(SATCHEL_POINT.x, 24),
+      top: offset(SATCHEL_POINT.y, 24),
       animationDuration: `${MATERIAL_FLIGHT_MS / 1000 + delay}s`
     }}
     aria-hidden

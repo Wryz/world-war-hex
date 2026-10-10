@@ -129,7 +129,7 @@ export const buildBattle = (config: BattleConfig, profile: Profile): GameState =
 // Seeds are whole numbers that fit a link
 export const MAX_SEED = 2 ** 31 - 1;
 const randomSeed = () => Math.floor(Math.random() * MAX_SEED);
-export const clampRivalLevel = (level: number) => Math.min(MAX_CARD_LEVEL, Math.max(1, Math.round(level)));
+export const clampRivalLevel = (level: number) => (Number.isFinite(level) ? Math.min(MAX_CARD_LEVEL, Math.max(1, Math.round(level))) : 1);
 // (the great trees and fires come from a seed of their own, made from the map's)
 const quickBattleSeed = (seed: number) => (Math.imul(seed, 2654435761) >>> 1) % MAX_SEED;
 

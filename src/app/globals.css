@@ -110,6 +110,20 @@ body {
   animation: coinFlight 1.05s cubic-bezier(0.45, 0, 0.55, 1) forwards;
 }
 
+/* A found material's flight: as a coin's, but it drops into the satchel at the end */
+@keyframes materialFlight {
+  0% { transform: translate(var(--from-x), var(--from-y)) scale(0.4); opacity: 0; }
+  12% { opacity: 1; }
+  35% { transform: translate(var(--mid-x), var(--mid-y)) scale(1.15); }
+  85% { transform: translate(var(--to-x), var(--to-y)) scale(0.7); opacity: 1; }
+  100% { transform: translate(var(--to-x), calc(var(--to-y) + 6px)) scale(0.3); opacity: 0; }
+}
+
+.material-flight {
+  opacity: 0;
+  animation: materialFlight 1.15s cubic-bezier(0.45, 0, 0.55, 1) forwards;
+}
+
 /* The satchel popping up to catch a material a troop found, then tucking itself away */
 @keyframes satchelCatch {
   0% { opacity: 0; transform: scale(0.5); }

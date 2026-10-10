@@ -318,6 +318,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       deathRef.current = null;
       rigRef.current?.setState('idle');
       rigStateRef.current = null;
+      mountRef.current?.revive();
       actionRef.current?.fadeOut(0.2);
       actionRef.current = null;
     }
@@ -459,6 +460,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
 
   // Play one strike of the attack animation, sped up to fit the unit's attack interval
   const strike = () => {
+    mountRef.current?.strike(attackInterval * 0.8);
     const rig = rigRef.current;
     if (rig) {
       if (rigStateRef.current !== 'attack') {
@@ -483,6 +485,9 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
   // Fall when destroyed: the death animation plays (or, for a unit that already fell, is shown
   // finished), then the body sinks into the ground
   const playDeath = (alreadyFallen: boolean) => {
+    // (a rider's beast falls with it)
+    mountRef.current?.die();
+    if (alreadyFallen) for (let i = 0; i < 20; i++) mountRef.current?.update(0.1);
     const rig = rigRef.current;
     if (rig) {
       rig.setState('death');
@@ -560,6 +565,7 @@ const UnitMeshComponent: React.FC<UnitMeshProps> = ({
       if (arrowRef.current) arrowRef.current.visible = false;
       mixerRef.current?.update(delta);
       rigRef.current?.update(delta);
+      mountRef.current?.update(delta);
       return;
     }
 

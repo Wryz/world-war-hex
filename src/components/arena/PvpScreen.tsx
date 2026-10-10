@@ -18,6 +18,9 @@ import { ArenaSettingsForm } from './ArenaSettingsForm';
 import { ArenaBattle } from './ArenaBattle';
 import { OnlineBattle } from './OnlineBattle';
 
+// How often the lobby looks the room over again, besides following its changes
+const LOBBY_REFRESH_MS = 4000;
+
 const INPUT = 'w-full rounded-lg bg-slate-800 px-3 py-2 text-base text-slate-100 ring-1 ring-white/10 placeholder:text-slate-500';
 
 // Battles against friends online (and practice against the AI): /pvp, and /pvp?room=CODE for a room
@@ -31,8 +34,12 @@ export const PvpScreen: React.FC = () => {
 
 // --- The front page: name, a new room, a code to join, or practice ---------------------------------
 
+// Online rooms sign and seal what they send with the browser's crypto, which only a secure page has
+const isSecure = () => typeof window === 'undefined' || (window.isSecureContext && !!window.crypto?.subtle);
+
 const PvpHome: React.FC = () => {
   const router = useRouter();
+  const [secure] = useState(isSecure);
   const [name, setName] = useState(() => getPlayerName());
   const [joinCode, setJoinCode] = useState('');
   const [busy, setBusy] = useState(false);
@@ -92,8 +99,9 @@ const PvpHome: React.FC = () => {
         <section className={`${CARD_CLASS} p-4`}>
           <h2 className="font-display text-2xl text-amber-300">Play online</h2>
           <p className="mt-1 text-sm text-slate-300">Open a room, send its link to up to seven friends, and start when everyone is in. The map grows with the number of players.</p>
+          {!secure && <p className="mt-2 text-sm font-bold text-rose-300">Online battles need the game opened over https (or on localhost). Practice against the AI works anywhere.</p>}
           <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button className={PRIMARY_BUTTON} disabled={busy} onClick={create}>{busy ? 'Opening…' : 'Open a room'}</button>
+            <button className={PRIMARY_BUTTON} disabled={busy || !secure} onClick={create}>{busy ? 'Opening…' : 'Open a room'}</button>
             <span className="text-sm text-slate-400">or join with a code</span>
             <input
               className={`${INPUT} w-32 font-mono uppercase tracking-widest`}
@@ -102,7 +110,7 @@ const PvpHome: React.FC = () => {
               onChange={event => setJoinCode(normaliseCode(event.target.value))}
               onKeyDown={event => { if (event.key === 'Enter' && joinCode.length === 6) router.push(invitePath(joinCode)); }}
             />
-            <button className={SECONDARY_BUTTON} disabled={joinCode.length !== 6} onClick={() => router.push(invitePath(joinCode))}>Join</button>
+            <button className={SECONDARY_BUTTON} disabled={joinCode.length !== 6 || !secure} onClick={() => router.push(invitePath(joinCode))}>Join</button>
           </div>
           {error && <p className="mt-2 text-sm font-bold text-rose-300">{error}</p>}
         </section>
@@ -122,6 +130,7 @@ const PvpHome: React.FC = () => {
 
 const RoomScreen: React.FC<{ code: string }> = ({ code }) => {
   const router = useRouter();
+  const [secure] = useState(isSecure);
   const profile = useProfile();
   const [userId, setUserId] = useState<string | null>(null);
   const [room, setRoom] = useState<Room | null>(null);
@@ -158,15 +167,27 @@ const RoomScreen: React.FC<{ code: string }> = ({ code }) => {
   // A player already named joins straight away; someone new to the game is asked their name first
   const triedRef = useRef(false);
   useEffect(() => {
+    if (!secure) {
+      setError('Online battles need the game opened over https (or on localhost).');
+      return;
+    }
     if (triedRef.current || !getPlayerName()) return;
     triedRef.current = true;
     void join(getPlayerName());
-  }, [join]);
+  }, [join, secure]);
 
+  // The lobby follows the room as it changes - and, in case a change is missed, looks again every few
+  // seconds while the battle hasn't begun
+  const status = room?.status;
   useEffect(() => {
     if (!joined) return;
     return watchRoom(code, () => { void refresh(); });
   }, [joined, code, refresh]);
+  useEffect(() => {
+    if (!joined || status !== 'lobby') return;
+    const interval = setInterval(() => { void refresh(); }, LOBBY_REFRESH_MS);
+    return () => clearInterval(interval);
+  }, [joined, status, refresh]);
 
   const me = members.find(member => member.user_id === userId);
   const isHost = !!room && room.host_id === userId;
