@@ -65,7 +65,7 @@ const bosses: ReelProps = {
     bossCut("b70_lich_king", 4, { text: "LVL 70", sub: "LICH KING", accent: HOT }),
     bossCut("b90_demon_lord", 4, { text: "LVL 90", sub: "DEMON LORD", accent: HOT }),
     bossCut("b100_elder_dragon", 8, { text: "LVL *100*", sub: "ELDER DRAGON", accent: HOT, push: 1.12 }),
-    koCut("b100_elder_dragon", 8, { push: 1.15 }),
+    koCut("b100_elder_dragon", 8, { push: 1.3, focus: [25, 32] }),
   ],
 };
 
@@ -90,7 +90,7 @@ const tour: ReelProps = {
     fightCut("b60_frost_giant", 4, { text: "FROSTPEAK", sub: "BLIZZARDS" }),
     fightCut("b70_lich_king", 4, { text: "GRAVEMOOR", sub: "THE DEAD RISE", accent: HOT }),
     fightCut("b90_demon_lord", 4, { text: "EMBERFORGE", sub: "LAVA & FIRE", accent: HOT }),
-    koCut("b100_elder_dragon", 6, { text: "DRAGONSPIRE", sub: "THE LAST ONE", accent: HOT, push: 1.12 }, 0.6),
+    koCut("b100_elder_dragon", 6, { text: "DRAGONSPIRE", sub: "THE LAST ONE", accent: HOT, push: 1.25, focus: [25, 32] }, 0.6),
   ],
 };
 
@@ -115,7 +115,7 @@ const castles: ReelProps = {
     koCut("b60_frost_giant", 4, { text: "*5*", sub: "ICE HOLD" }),
     koCut("b70_lich_king", 4, { text: "*6*", sub: "THE CRYPT", accent: HOT }),
     koCut("b90_demon_lord", 4, { text: "*7*", sub: "HELL GATE", accent: HOT }),
-    koCut("b100_elder_dragon", 12, { text: "*8*", sub: "DRAGON'S LAIR", accent: HOT, rate: 0.6, push: 1.15 }),
+    koCut("b100_elder_dragon", 12, { text: "*8*", sub: "DRAGON'S LAIR", accent: HOT, rate: 0.6, push: 1.35, focus: [25, 32] }),
   ],
 };
 

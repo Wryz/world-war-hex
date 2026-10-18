@@ -48,7 +48,13 @@ const Cut: React.FC<{ s: Segment; frames: number; beatFrames: number; gameVolume
   const trim = Math.round(s.from * FPS);
   return (
     <AbsoluteFill>
-      <AbsoluteFill style={{ scale: punch * push, translate: `${Math.sin(f * 2.1) * shake}px ${Math.cos(f * 2.7) * shake}px` }}>
+      <AbsoluteFill
+        style={{
+          scale: punch * push,
+          transformOrigin: s.focus ? `${s.focus[0]}% ${s.focus[1]}%` : "50% 50%",
+          translate: `${Math.sin(f * 2.1) * shake}px ${Math.cos(f * 2.7) * shake}px`,
+        }}
+      >
         <Video src={staticFile(`footage/${s.clip}.mp4`)} trimBefore={trim} playbackRate={rate} muted objectFit="cover" />
       </AbsoluteFill>
       <Audio src={staticFile(`footage/${s.clip}.wav`)} trimBefore={trim} playbackRate={rate} volume={s.sound ?? gameVolume} />

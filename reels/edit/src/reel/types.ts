@@ -20,6 +20,8 @@ export type Segment = {
   sound?: number;
   /** Push in slowly over the cut (1 = none, 1.15 = 15% closer by the end). */
   push?: number;
+  /** Where the punch and push zoom in toward, as % of the frame [x, y] (default the centre). */
+  focus?: [number, number];
 };
 
 export type ReelProps = {
