@@ -35,6 +35,8 @@ import {
 import { getHexDistance } from '@/lib/game/hexUtils';
 import { isAiSide, isMultiSide } from '@/lib/game/sides';
 import { planAITurn } from '@/lib/ai/aiPlayer';
+import { bestCastleSite } from '@/lib/game/tutorialPlan';
+import { getReelHooks, isReelAutoplay } from '@/lib/reelHooks';
 import { trackEvent } from '@/lib/analytics';
 import { buildBattle } from '@/lib/campaign/battleSetup';
 import { getProfile } from '@/lib/meta/profile';
@@ -219,7 +221,9 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
   // Another side's turn (the AI's, or someone else's online): the viewer waits
   const isAITurn = activeSide !== viewer;
   // The AI plays this turn (on the game that runs the battle: never a guest's)
-  const isAiPlaying = isAiSide(gameState, activeSide) && link?.role !== 'guest' && !gameState.players[activeSide]?.eliminated;
+  // (filming a reel on a local copy, the AI plays the player's side too: see lib/reelHooks)
+  const reelAutoplay = !link && !isMultiSide(gameState) && isReelAutoplay();
+  const isAiPlaying = (isAiSide(gameState, activeSide) || reelAutoplay) && link?.role !== 'guest' && !gameState.players[activeSide]?.eliminated;
   // Someone elsewhere plays this turn (the host waits for their orders)
   const isRemoteTurn = link?.role === 'host' && !!link.isRemoteSide?.(activeSide);
   const isGuest = link?.role === 'guest';
@@ -386,7 +390,8 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
 
     // (once the board has shown everything from the turn before)
     const planningTimeout = setTimeout(() => {
-      commitState(planAITurn(stateRef.current));
+      const side = stateRef.current.activePlayer ?? 'player';
+      commitState(planAITurn(stateRef.current, isAiSide(stateRef.current, side) ? {} : { side, difficulty: 'hard' }));
 
       executionTimeout = setTimeout(() => {
         commitState(executeTurn(stateRef.current));
@@ -398,6 +403,16 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
       if (executionTimeout) clearTimeout(executionTimeout);
     };
   }, [isReady, currentPhase, isAiPlaying, turnNumber, activeSide, commitState]);
+
+  // (reel) The castle goes up on the best site, and the battle is there for the capture script to read
+  useEffect(() => {
+    const hooks = getReelHooks();
+    if (!hooks || link) return;
+    hooks.battle = { get: () => stateRef.current, set: (state: GameState) => commitState(state) };
+    if (!isReady || currentPhase !== 'setup' || !hooks.autoplay || !stateRef.current.castleChoices) return;
+    const site = bestCastleSite(stateRef.current) ?? stateRef.current.castleChoices[0];
+    commitState(chooseCastle(stateRef.current, site));
+  }, [isReady, currentPhase, commitState, link]);
 
   // A turn without a fight ends once its troops have arrived and the board has shown its moves
   // (a guest's board waits for the host to say so)
