@@ -1,5 +1,5 @@
 import beatsJson from "./beats.json";
-import { ACCENT, HOT, TONES } from "./reel/Caption";
+import { HOT, TONES } from "./reel/Caption";
 import type { CoverProps } from "./reel/Cover";
 import type { ReelProps, Segment } from "./reel/types";
 import takesJson from "./takes.json";
@@ -147,21 +147,22 @@ const { gold, red, purple, green, blue } = TONES;
 // (a real defeat), then the rematch with War Clerics, who finish the undead for good (a real win).
 const undead: ReelProps = {
   music: "music/spooky_bounce.mp3",
-  grid: grid("spooky_bounce", 0),
+  grid: grid("spooky_bounce", 62.0),
   musicVolume: 0.7,
   gameVolume: 0.9,
   hook: "The undead won't *stay dead*",
+  hookAccent: TONES.purple.text,
   hookBeats: 8,
   endBeats: 4,
   title: "Hex *Hordes*",
   cta: "LINK IN BIO",
   segments: [
     { clip: "b70_lich_king", from: 19.8, beats: 4, accent: purple.text },
-    atCut("b70_lich_king", "moment", /They Rise Again/, 4, { text: "They got *back up*", accent: purple.text }, 1.8, 3),
-    atCut("b70_lich_king", "moment", /They Rise Again/, 4, { text: "*Again.*", accent: purple.text }, 1.8, 4),
-    koCut("b70_lich_king", 6, { text: "*Defeat*", sub: "Level 70 · the Lich King", accent: red.text, push: 1.15 }, 0.4),
+    atCut("b70_lich_king", "moment", /They Rise Again/, 6, { text: "They got *back up*", accent: purple.text }, 1.8, 3),
+    atCut("b70_lich_king", "moment", /They Rise Again/, 6, { text: "*Again.*", accent: purple.text }, 1.8, 4),
+    koCut("b70_lich_king", 10, { text: "*Defeat*", sub: "Level 70 · the Lich King", accent: red.text, push: 1.15 }, 0.4),
     atCut("b70_lich_king_r1", "boss", /Boss Defeated/, 8, { text: "Rematch: *War Clerics*", sub: "they finish the undead", accent: gold.text, push: 1.1 }, 2.4),
-    atCut("b70_lich_king_r1", "moment", /Victory/, 6, { text: "*Victory!*", accent: green.text }, 0.4),
+    atCut("b70_lich_king_r1", "boss", /Boss Defeated/, 8, { text: "Gone *for good.*", accent: green.text, push: 1.12 }, -1.0),
   ],
 };
 
@@ -169,22 +170,22 @@ const undead: ReelProps = {
 // The game's own callouts, one per beat-cut, climbing: First Blood to Victory.
 const streak: ReelProps = {
   music: "music/phonk_streak.mp3",
-  grid: grid("phonk_streak", 0),
+  grid: grid("phonk_streak", 36.0),
   musicVolume: 0.7,
   gameVolume: 0.95,
-  hook: "How far can you *chain it?*",
-  hookBeats: 8,
-  endBeats: 4,
+  hook: "Can you *chain it?*",
+  hookBeats: 4,
+  endBeats: 3,
   title: "Hex *Hordes*",
   cta: "LINK IN BIO",
   segments: [
-    atCut("b10_bandit_king", "kill", /First Blood/, 4, { text: "First *Blood!*", accent: red.text }),
-    atCut("b90_demon_lord", "kill", /Double Kill/, 4, { text: "Double *Kill!*", accent: gold.text }),
-    atCut("b20_goblin_warchief", "kill", /Double Kill/, 4, { text: "Double *Kill!*", sub: "again", accent: gold.text }),
-    atCut("b90_demon_lord", "kill", /Triple Kill/, 4, { text: "Triple *Kill!*", accent: purple.text }),
-    atCut("b20_goblin_warchief", "boss", /Boss Defeated/, 6, { text: "*Boss* Defeated!", accent: red.text, push: 1.1 }),
-    atCut("b30_alpha_direwolf", "moment", /Crushing Blow/, 4, { text: "Crushing *Blow!*", accent: blue.text }),
-    koCut("b100_elder_dragon", 10, { text: "*Victory!*", accent: green.text, rate: 0.7, push: 1.3, focus: [25, 32] }),
+    atCut("b10_bandit_king", "kill", /First Blood/, 3, { text: "First *Blood!*", accent: red.text }),
+    atCut("b90_demon_lord", "kill", /Double Kill/, 3, { text: "Double *Kill!*", accent: gold.text }),
+    atCut("b20_goblin_warchief", "kill", /Double Kill/, 3, { text: "Double *Kill!*", sub: "again", accent: gold.text }),
+    atCut("b90_demon_lord", "kill", /Triple Kill/, 3, { text: "Triple *Kill!*", accent: purple.text }),
+    atCut("b20_goblin_warchief", "boss", /Boss Defeated/, 4, { text: "*Boss* Defeated!", accent: red.text, push: 1.1 }),
+    atCut("b30_alpha_direwolf", "moment", /Crushing Blow/, 3, { text: "Crushing *Blow!*", accent: blue.text }),
+    koCut("b100_elder_dragon", 7, { text: "*Victory!*", accent: green.text, rate: 0.7, push: 1.3, focus: [25, 32] }),
   ],
 };
 
@@ -195,7 +196,7 @@ export const REELS: Record<string, ReelProps> = {
 
 export const COVERS: Record<string, CoverProps> = {
   Cover4Undead: { still: "stills/undead.jpg", text: "The undead won't *stay dead*", sub: "so I brought clerics", accent: purple.text },
-  Cover5Streak: { still: "stills/streak.jpg", text: "How far can you *chain it?*", sub: "First Blood → Victory", accent: gold.text },
+  Cover5Streak: { still: "stills/streak.jpg", text: "Can you *chain it?*", sub: "First Blood → Victory", accent: gold.text },
 };
 
 // Every cut has to stay inside its take (a cut running off the end of the footage freezes).

@@ -136,7 +136,7 @@ export const Reel: React.FC<ReelProps> = (p) => {
       <AbsoluteFill style={{ background: "radial-gradient(ellipse at 50% 45%, rgba(0,0,0,0) 55%, rgba(0,0,0,0.45) 100%)" }} />
       {p.hook && hookFrames > 0 ? (
         <Sequence durationInFrames={hookFrames} name="Hook">
-          <Caption text={p.hook} top={190} size={100} />
+          <Caption text={p.hook} accent={p.hookAccent} top={170} size={118} />
         </Sequence>
       ) : null}
       <Sequence from={endFrom} durationInFrames={total - endFrom} name="End card">

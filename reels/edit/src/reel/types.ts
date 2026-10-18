@@ -34,6 +34,8 @@ export type ReelProps = {
   /** A line held across the opening cuts (the hook). */
   hook?: string;
   hookBeats?: number;
+  /** Colour of the hook's *highlighted* words (default the gold accent). */
+  hookAccent?: string;
   segments: Segment[];
   /** Where the cuts' captions sit (px from the top; default high, lower while the hook shows). */
   captionTop?: number;

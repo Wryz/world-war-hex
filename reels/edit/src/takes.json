@@ -876,6 +876,167 @@
    }
   ]
  },
+ "b70_lich_king": {
+  "seconds": 53.467,
+  "ko": 49.46666666666667,
+  "marks": [
+   {
+    "t": 6,
+    "kind": "moment",
+    "label": "Raise the Dead!"
+   },
+   {
+    "t": 6,
+    "kind": "moment",
+    "label": "Ambush! - Hidden enemies stopped your troops"
+   },
+   {
+    "t": 7.933,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 11.067,
+    "kind": "kill",
+    "label": "unit-f28fcebb-3f95-40e0-a8ff-9c64e6e047a6"
+   },
+   {
+    "t": 13,
+    "kind": "kill",
+    "label": "unit-5409152f-4421-4a72-9e80-3844492226e4"
+   },
+   {
+    "t": 13,
+    "kind": "kill",
+    "label": "unit-4246c655-926b-4f5f-9a6d-c95bafb9c557"
+   },
+   {
+    "t": 13,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 15.333,
+    "kind": "kill",
+    "label": "unit-2c95c7d5-811d-4107-ac99-3dd0d77b5728"
+   },
+   {
+    "t": 15.333,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 20.4,
+    "kind": "kill",
+    "label": "unit-ca617f0f-28df-4d3d-b2be-ff20cfe56030"
+   },
+   {
+    "t": 20.4,
+    "kind": "moment",
+    "label": "Raise the Dead!"
+   },
+   {
+    "t": 22.333,
+    "kind": "moment",
+    "label": "Enraged!"
+   },
+   {
+    "t": 22.333,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 27.4,
+    "kind": "kill",
+    "label": "unit-fb32c852-dd48-4fee-97e0-aa5e1a2a3876"
+   },
+   {
+    "t": 27.4,
+    "kind": "kill",
+    "label": "unit-09a46b1c-53c3-48dc-a7d2-a86ee84a5e9a"
+   },
+   {
+    "t": 27.4,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 29.733,
+    "kind": "kill",
+    "label": "unit-ae731cda-3f37-406d-b1ec-deb01552c76d"
+   },
+   {
+    "t": 29.733,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 32.467,
+    "kind": "kill",
+    "label": "unit-0d57f3e8-776e-484c-a8d0-8517fe1cef8c"
+   },
+   {
+    "t": 32.467,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 34.8,
+    "kind": "kill",
+    "label": "unit-f9e93aa7-e275-429d-ac69-ba2687101052"
+   },
+   {
+    "t": 37.533,
+    "kind": "kill",
+    "label": "unit-80b75b76-44c9-4f57-b04c-51e907ea4dd6"
+   },
+   {
+    "t": 37.533,
+    "kind": "kill",
+    "label": "unit-bed9e52c-4fac-4be4-8c38-e6a4fa593559"
+   },
+   {
+    "t": 37.533,
+    "kind": "kill",
+    "label": "unit-0f875b36-f9a5-4a29-a102-84bacdff4439"
+   },
+   {
+    "t": 37.533,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 44,
+    "kind": "kill",
+    "label": "unit-7e1fb25c-e5a7-4e7b-96de-639b126277de"
+   },
+   {
+    "t": 46.333,
+    "kind": "kill",
+    "label": "unit-031912ac-9ae1-439e-96d2-a9a0ad9ad734"
+   },
+   {
+    "t": 46.333,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 49.467,
+    "kind": "ko",
+    "label": "ai wins (destroyed)"
+   },
+   {
+    "t": 49.967,
+    "kind": "moment",
+    "label": "Raise the Dead!"
+   },
+   {
+    "t": 49.967,
+    "kind": "moment",
+    "label": "Defeat - Your castle has fallen"
+   }
+  ]
+ },
  "b70_lich_king_r1": {
   "seconds": 55.4,
   "ko": 51.4,
