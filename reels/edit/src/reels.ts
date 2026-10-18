@@ -4,14 +4,15 @@ import type { CoverProps } from "./reel/Cover";
 import type { ReelProps, Segment } from "./reel/types";
 import takesJson from "./takes.json";
 
-// Written by the music step (scripts/beats.py, bed.py) and by stage.sh.
+// Written by the music step (reels/beats.py, bed.py) and by reels/stage.sh.
+type Mark = { t: number; kind: string; label: string };
 const BEATS: Record<string, { beats: number[] }> = beatsJson;
-const TAKES: Record<string, { ko: number; seconds: number }> = takesJson;
+const TAKES: Record<string, { ko: number; seconds: number; marks: Mark[] }> = takesJson;
 
 /** The measured beats of a track from `start` (s) on: the reel's grid. */
 const grid = (track: string, start = 0) => (BEATS[track]?.beats ?? [0, 0.5]).filter((b) => b >= start - 0.02);
 
-/** Second of a take at which its finishing blow lands. */
+/** Second of a take at which the battle is won (the enemy castle starts to fall). */
 const ko = (take: string) => {
   const t = TAKES[take]?.ko ?? -1;
   // (Missing a take: the other reels still build.)
@@ -19,37 +20,115 @@ const ko = (take: string) => {
   return Math.max(0, t);
 };
 
-/** A cut that opens `lead` seconds before the take's KO, so the blow lands just after the beat. */
+/** Time of the n-th moment of a kind ('boss', 'kill', 'moment', 'castle') whose label matches, or `fallback`. */
+const mark = (take: string, kind: string, fallback: number, n = 0, label?: RegExp) =>
+  (TAKES[take]?.marks ?? []).filter((m) => m.kind === kind && (!label || label.test(m.label)))[n]?.t ?? fallback;
+
+/** A cut that opens `lead` seconds before the castle starts to fall, so it crumbles just after the beat. */
 const koCut = (take: string, beats: number, extra: Partial<Segment> = {}, lead = 0.3): Segment => ({ clip: take, from: ko(take) - lead, beats, ...extra });
 
-/**
- * EXAMPLE: replace with this game's three concepts. Segment beats must add up to the
- * reel's length (~20 s of the grid). Captions: *word* is highlighted in `accent`.
- */
-const example: ReelProps = {
-  music: "music/TRACK.mp3",
-  grid: grid("TRACK", 0),
+/** The boss going down (or, if it never fell, the castle). The blow lands ~1 s into the cut. */
+const bossCut = (take: string, beats: number, extra: Partial<Segment> = {}, lead = 1.1): Segment => ({
+  clip: take,
+  from: Math.max(0.5, mark(take, "boss", ko(take)) - lead),
+  beats,
+  ...extra,
+});
+
+/** A fight in full swing: just before the n-th kill. */
+const fightCut = (take: string, beats: number, extra: Partial<Segment> = {}, n = 0, lead = 1.6): Segment => ({
+  clip: take,
+  from: Math.max(0.5, mark(take, "kill", ko(take) / 2, n, /^(?!unit-)/) - lead),
+  beats,
+  ...extra,
+});
+
+// ---------------------------------------------------------------------------- 1. The bosses
+// "The bosses keep getting bigger": one region's boss per cut, level 10 to 100, each going down.
+const bosses: ReelProps = {
+  music: "music/dubstep_epic.mp3",
+  grid: grid("dubstep_epic", 132.2),
   musicVolume: 0.7,
-  gameVolume: 0.85,
-  hook: "EVERY LEVEL IS *DIFFERENT*",
+  gameVolume: 0.9,
+  hook: "THE BOSSES KEEP GETTING *BIGGER*",
   hookBeats: 8,
-  endBeats: 4,
-  title: "GAME*NAME*",
+  endBeats: 6,
+  title: "HEX *HORDES*",
   cta: "LINK IN BIO",
   segments: [
-    koCut("take_a", 4, { text: "LEVEL 1", sub: "THE CAVE" }),
-    koCut("take_b", 4, { text: "LEVEL 2", sub: "THE CASTLE" }),
-    { clip: "take_boss", from: 0.1, beats: 4, text: "THE BOSS", sub: "2× YOUR SIZE", accent: HOT, push: 1.12 },
-    koCut("take_boss", 8, {}, 0.4),
+    bossCut("b10_bandit_king", 4, { text: "LVL 10", sub: "BANDIT KING" }),
+    bossCut("b20_goblin_warchief", 4, { text: "LVL 20", sub: "GOBLIN WARCHIEF" }),
+    bossCut("b30_alpha_direwolf", 4, { text: "LVL 30", sub: "ALPHA DIREWOLF" }),
+    bossCut("b40_bog_hydra", 4, { text: "LVL 40", sub: "BOG HYDRA" }),
+    bossCut("b50_pharaoh", 4, { text: "LVL 50", sub: "THE PHARAOH" }),
+    bossCut("b60_frost_giant", 4, { text: "LVL 60", sub: "FROST GIANT" }),
+    bossCut("b70_lich_king", 4, { text: "LVL 70", sub: "LICH KING", accent: HOT }),
+    bossCut("b90_demon_lord", 4, { text: "LVL 90", sub: "DEMON LORD", accent: HOT }),
+    bossCut("b100_elder_dragon", 8, { text: "LVL *100*", sub: "ELDER DRAGON", accent: HOT, push: 1.12 }),
+    koCut("b100_elder_dragon", 8, { push: 1.15 }),
+  ],
+};
+
+// ---------------------------------------------------------------------------- 2. The world tour
+// "Every map is a new war": a fight in each region, its ground and weather.
+const tour: ReelProps = {
+  music: "music/war_drums.mp3",
+  grid: grid("war_drums", 113.2),
+  musicVolume: 0.75,
+  gameVolume: 0.85,
+  hook: "EVERY MAP IS A NEW *WAR*",
+  hookBeats: 8,
+  endBeats: 4,
+  title: "HEX *HORDES*",
+  cta: "LINK IN BIO",
+  segments: [
+    fightCut("b10_bandit_king", 4, { text: "MEADOWS", sub: "BANDITS" }),
+    fightCut("b20_goblin_warchief", 4, { text: "DEEP WOODS", sub: "GOBLINS" }),
+    fightCut("b30_alpha_direwolf", 4, { text: "HOWLING HILLS", sub: "WOLF PACKS" }),
+    fightCut("b40_bog_hydra", 4, { text: "THE MARSH", sub: "FOG HIDES THEM" }),
+    fightCut("b50_pharaoh", 4, { text: "THE DESERT", sub: "SANDSTORMS" }),
+    fightCut("b60_frost_giant", 4, { text: "FROSTPEAK", sub: "BLIZZARDS" }),
+    fightCut("b70_lich_king", 4, { text: "GRAVEMOOR", sub: "THE DEAD RISE", accent: HOT }),
+    fightCut("b90_demon_lord", 4, { text: "EMBERFORGE", sub: "LAVA & FIRE", accent: HOT }),
+    koCut("b100_elder_dragon", 6, { text: "DRAGONSPIRE", sub: "THE LAST ONE", accent: HOT, push: 1.12 }, 0.6),
+  ],
+};
+
+// ---------------------------------------------------------------------------- 3. The castles
+// "Watch their castle crumble": the siege, then castle after castle coming down on the beat.
+const castles: ReelProps = {
+  music: "music/hybrid_drop.mp3",
+  grid: grid("hybrid_drop", 9.3),
+  musicVolume: 0.7,
+  gameVolume: 0.95,
+  hook: "WATCH THEIR CASTLE *CRUMBLE*",
+  hookBeats: 8,
+  endBeats: 6,
+  title: "HEX *HORDES*",
+  cta: "LINK IN BIO",
+  segments: [
+    koCut("b30_alpha_direwolf", 4, {}, 0.5),
+    koCut("b10_bandit_king", 4, { text: "*1*", sub: "BANDIT FORT" }),
+    koCut("b20_goblin_warchief", 4, { text: "*2*", sub: "GOBLIN KEEP" }),
+    koCut("b40_bog_hydra", 4, { text: "*3*", sub: "SWAMP TOWER" }),
+    koCut("b50_pharaoh", 4, { text: "*4*", sub: "DESERT PALACE" }),
+    koCut("b60_frost_giant", 4, { text: "*5*", sub: "ICE HOLD" }),
+    koCut("b70_lich_king", 4, { text: "*6*", sub: "THE CRYPT", accent: HOT }),
+    koCut("b90_demon_lord", 4, { text: "*7*", sub: "HELL GATE", accent: HOT }),
+    koCut("b100_elder_dragon", 12, { text: "*8*", sub: "DRAGON'S LAIR", accent: HOT, rate: 0.6, push: 1.15 }),
   ],
 };
 
 export const REELS: Record<string, ReelProps> = {
-  Reel1Example: example,
+  Reel1Bosses: bosses,
+  Reel2Worlds: tour,
+  Reel3Castles: castles,
 };
 
 export const COVERS: Record<string, CoverProps> = {
-  Cover1Example: { still: "stills/example.jpg", text: "EVERY LEVEL IS *DIFFERENT*", sub: "HOW FAR CAN YOU GET?", accent: ACCENT },
+  Cover1Bosses: { still: "stills/bosses.jpg", text: "THE BOSSES KEEP GETTING *BIGGER*", sub: "HOW FAR CAN YOU GET?", accent: ACCENT },
+  Cover2Worlds: { still: "stills/worlds.jpg", text: "EVERY MAP IS A NEW *WAR*", sub: "15 REGIONS · 150 BATTLES", accent: ACCENT },
+  Cover3Castles: { still: "stills/castles.jpg", text: "WATCH IT *CRUMBLE*", sub: "8 CASTLES · 20 SECONDS", accent: HOT },
 };
 
 // Every cut has to stay inside its take (a cut running off the end of the footage freezes).

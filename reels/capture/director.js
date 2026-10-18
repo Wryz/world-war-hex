@@ -210,7 +210,7 @@
       if (!aim) aim = f.slice();
       for (let i = 0; i < 3; i++) aim[i] += (f[i] - aim[i]) * k;
       const over = state?.currentPhase === 'gameOver';
-      const wantDist = over ? (R.opts.fallDist ?? 13) : wide ? (R.opts.wideDist ?? 12.5) : (R.opts.dist ?? 11);
+      const wantDist = over ? (R.opts.fallDist ?? 10) : wide ? (R.opts.wideDist ?? 12.5) : (R.opts.dist ?? 11);
       dist = dist ?? wantDist;
       dist += (wantDist - dist) * (1 - Math.exp(-1.8 * delta));
       const el = ((over ? 40 : (R.opts.elevation ?? 48)) * Math.PI) / 180;
