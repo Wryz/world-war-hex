@@ -129,5 +129,21 @@
    "archmage",
    "berserker"
   ]
+ },
+ {
+  "name": "h15_goblin_woods",
+  "path": "/play?level=15",
+  "level": 15,
+  "seconds": 90,
+  "tail": 4,
+  "hud": true
+ },
+ {
+  "name": "h35_mirefen",
+  "path": "/play?level=35",
+  "level": 35,
+  "seconds": 90,
+  "tail": 4,
+  "hud": true
  }
 ]

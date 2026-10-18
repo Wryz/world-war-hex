@@ -110,6 +110,9 @@
     localStorage.setItem('wwhGraphics', 'high');
     localStorage.setItem('wwhSpeed', String(shot.speed ?? 2));
     localStorage.setItem('wwhVibration', 'false');
+    // (first-time tips and the pointing hand: seen, so they don't cover the battle)
+    localStorage.setItem('wwhTipsSeen', JSON.stringify(['flank', 'height', 'village', 'follow', 'signature', 'morale', 'undying', 'weather-fogBanks', 'weather-sandstorm', 'weather-blizzard', 'weather-ashfall']));
+    localStorage.setItem('wwhGuideSeen', JSON.stringify(['fog', 'bossPower', 'felling', 'catapult', 'gate']));
     const level = shot.level ?? 1;
     const deck = shot.deck ?? ['tank', 'pegasus', 'archmage', 'berserker'];
     const cardLevel = shot.cardLevel ?? 15;
@@ -246,6 +249,8 @@
     R.opts = { ...shot, ...opts };
     pumping = false;
     real.clearInterval(pump);
+    // (hud: film the game as a player sees it - cards, gold, callouts - and every phase, planning included)
+    if (R.opts.hud) return;
     // Only the board: hide the HUD, keep the canvas and the HTML drawn over it (health tags, hits).
     const canvas = document.querySelector('canvas');
     // (R3F: outer div > div > canvas; drei's <Html> labels go in the outer div)
@@ -264,7 +269,7 @@
     document.head.appendChild(css);
   };
 
-  const recordable = () => state && !['setup', 'planning'].includes(state.currentPhase);
+  const recordable = () => state && (R.opts?.hud ? state.currentPhase !== 'setup' : !['setup', 'planning'].includes(state.currentPhase));
   let gameFrames = 0;
 
   /** One recorded frame (skipping the planning phase, where nothing moves). */

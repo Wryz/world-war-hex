@@ -1,5 +1,5 @@
 import beatsJson from "./beats.json";
-import { ACCENT, HOT } from "./reel/Caption";
+import { ACCENT, HOT, TONES } from "./reel/Caption";
 import type { CoverProps } from "./reel/Cover";
 import type { ReelProps, Segment } from "./reel/types";
 import takesJson from "./takes.json";
@@ -129,16 +129,73 @@ const castles: ReelProps = {
   ],
 };
 
+// The first batch (rendered to media/reels in the old caption style), kept for reference.
+export const BATCH1: Record<string, ReelProps> = { Reel1Bosses: bosses, Reel2Worlds: tour, Reel3Castles: castles };
+
+/** A cut that opens `lead` s before the n-th callout whose label matches (kind: 'kill', 'boss', 'moment'...). */
+const atCut = (take: string, kind: string, label: RegExp, beats: number, extra: Partial<Segment> = {}, lead = 0.6, n = 0): Segment => ({
+  clip: take,
+  from: Math.max(0.5, mark(take, kind, ko(take) / 2, n, label) - lead),
+  beats,
+  ...extra,
+});
+
+const { gold, red, purple, green, blue } = TONES;
+
+// ---------------------------------------------------------------------------- 4. The undead story
+// "The undead won't stay dead": the Lich King's skeletons keep getting back up and our castle falls
+// (a real defeat), then the rematch with War Clerics, who finish the undead for good (a real win).
+const undead: ReelProps = {
+  music: "music/spooky_bounce.mp3",
+  grid: grid("spooky_bounce", 0),
+  musicVolume: 0.7,
+  gameVolume: 0.9,
+  hook: "The undead won't *stay dead*",
+  hookBeats: 8,
+  endBeats: 4,
+  title: "Hex *Hordes*",
+  cta: "LINK IN BIO",
+  segments: [
+    { clip: "b70_lich_king", from: 19.8, beats: 4, accent: purple.text },
+    atCut("b70_lich_king", "moment", /They Rise Again/, 4, { text: "They got *back up*", accent: purple.text }, 1.8, 3),
+    atCut("b70_lich_king", "moment", /They Rise Again/, 4, { text: "*Again.*", accent: purple.text }, 1.8, 4),
+    koCut("b70_lich_king", 6, { text: "*Defeat*", sub: "Level 70 · the Lich King", accent: red.text, push: 1.15 }, 0.4),
+    atCut("b70_lich_king_r1", "boss", /Boss Defeated/, 8, { text: "Rematch: *War Clerics*", sub: "they finish the undead", accent: gold.text, push: 1.1 }, 2.4),
+    atCut("b70_lich_king_r1", "moment", /Victory/, 6, { text: "*Victory!*", accent: green.text }, 0.4),
+  ],
+};
+
+// ---------------------------------------------------------------------------- 5. The kill streak
+// The game's own callouts, one per beat-cut, climbing: First Blood to Victory.
+const streak: ReelProps = {
+  music: "music/phonk_streak.mp3",
+  grid: grid("phonk_streak", 0),
+  musicVolume: 0.7,
+  gameVolume: 0.95,
+  hook: "How far can you *chain it?*",
+  hookBeats: 8,
+  endBeats: 4,
+  title: "Hex *Hordes*",
+  cta: "LINK IN BIO",
+  segments: [
+    atCut("b10_bandit_king", "kill", /First Blood/, 4, { text: "First *Blood!*", accent: red.text }),
+    atCut("b90_demon_lord", "kill", /Double Kill/, 4, { text: "Double *Kill!*", accent: gold.text }),
+    atCut("b20_goblin_warchief", "kill", /Double Kill/, 4, { text: "Double *Kill!*", sub: "again", accent: gold.text }),
+    atCut("b90_demon_lord", "kill", /Triple Kill/, 4, { text: "Triple *Kill!*", accent: purple.text }),
+    atCut("b20_goblin_warchief", "boss", /Boss Defeated/, 6, { text: "*Boss* Defeated!", accent: red.text, push: 1.1 }),
+    atCut("b30_alpha_direwolf", "moment", /Crushing Blow/, 4, { text: "Crushing *Blow!*", accent: blue.text }),
+    koCut("b100_elder_dragon", 10, { text: "*Victory!*", accent: green.text, rate: 0.7, push: 1.3, focus: [25, 32] }),
+  ],
+};
+
 export const REELS: Record<string, ReelProps> = {
-  Reel1Bosses: bosses,
-  Reel2Worlds: tour,
-  Reel3Castles: castles,
+  Reel4Undead: undead,
+  Reel5Streak: streak,
 };
 
 export const COVERS: Record<string, CoverProps> = {
-  Cover1Bosses: { still: "stills/bosses.jpg", text: "THE BOSSES KEEP GETTING *BIGGER*", sub: "HOW FAR CAN YOU GET?", accent: ACCENT, top: 900 },
-  Cover2Worlds: { still: "stills/worlds.jpg", text: "EVERY MAP IS A NEW *WAR*", sub: "15 REGIONS · 150 BATTLES", accent: ACCENT },
-  Cover3Castles: { still: "stills/castles.jpg", text: "WATCH IT *CRUMBLE*", sub: "6 CASTLES · 20 SECONDS", accent: HOT },
+  Cover4Undead: { still: "stills/undead.jpg", text: "The undead won't *stay dead*", sub: "so I brought clerics", accent: purple.text },
+  Cover5Streak: { still: "stills/streak.jpg", text: "How far can you *chain it?*", sub: "First Blood → Victory", accent: gold.text },
 };
 
 // Every cut has to stay inside its take (a cut running off the end of the footage freezes).

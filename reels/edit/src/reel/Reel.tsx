@@ -1,7 +1,7 @@
 import { Audio, Video } from "@remotion/media";
 import React from "react";
 import { AbsoluteFill, Easing, Img, interpolate, Sequence, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import { ANTON, Caption, CREAM, HOT, ACCENT, INK } from "./Caption";
+import { ACCENT, BUTTON, Caption, CREAM, DISPLAY, FONT, INK, momentPop } from "./Caption";
 import type { ReelProps, Segment } from "./types";
 
 export const FPS = 30;
@@ -68,26 +68,24 @@ const Cut: React.FC<{ s: Segment; frames: number; beatFrames: number; gameVolume
   );
 };
 
-/** Logo + call to action over the last beats; fades back toward the opening for the loop. */
+/** Logo + call to action over the last beats, as the game's own menus look; fades back toward the opening for the loop. */
 const EndCard: React.FC<{ title: string; cta: string; frames: number }> = ({ title, cta, frames }) => {
   const f = useCurrentFrame();
-  const pop = { ...clamp, easing: Easing.bezier(0.2, 1.4, 0.4, 1) };
   return (
     <AbsoluteFill style={{ alignItems: "center", justifyContent: "center" }}>
-      <AbsoluteFill style={{ background: `radial-gradient(circle at 50% 45%, rgba(17,18,22,0.55), rgba(17,18,22,0.92))`, opacity: interpolate(f, [0, 4], [0, 1], clamp) }} />
-      <Img
-        src={staticFile("brand/logo.png")}
-        style={{ width: 520, marginTop: -160, scale: interpolate(f, [0, 6], [1.8, 1], pop), opacity: interpolate(f, [0, 3], [0, 1], clamp) }}
-      />
+      <AbsoluteFill style={{ background: `radial-gradient(circle at 50% 42%, rgba(30,41,59,0.6), rgba(15,23,42,0.94))`, opacity: interpolate(f, [0, 4], [0, 1], clamp) }} />
+      <Img src={staticFile("brand/logo.png")} style={{ width: 500, marginTop: -170, ...momentPop(f) }} />
       <div
         style={{
-          fontFamily: ANTON,
-          fontSize: 132,
+          fontFamily: DISPLAY,
+          fontWeight: 700,
+          fontSize: 150 * FONT.scale,
           color: CREAM,
-          letterSpacing: 2,
-          marginTop: 10,
-          translate: interpolate(f, [2, 8], ["0px 60px", "0px 0px"], pop),
-          opacity: interpolate(f, [2, 5], [0, 1], clamp),
+          marginTop: 6,
+          WebkitTextStroke: `${Math.round(150 * FONT.scale * FONT.stroke)}px ${INK}`,
+          paintOrder: "stroke fill",
+          textShadow: `0 9px 0 ${INK}, 0 0 50px rgba(245, 158, 11, 0.45)`,
+          ...momentPop(f - 3),
         }}
       >
         {title.split(/(\*[^*]+\*)/).filter(Boolean).map((r, i) => (
@@ -96,19 +94,20 @@ const EndCard: React.FC<{ title: string; cta: string; frames: number }> = ({ tit
           </span>
         ))}
       </div>
+      {/* The game's primary button: emerald on a darker ledge */}
       <div
         style={{
-          marginTop: 34,
-          fontFamily: ANTON,
-          fontSize: 64,
-          letterSpacing: 6,
-          color: INK,
-          background: ACCENT,
-          padding: "10px 34px 6px",
-          rotate: "-2deg",
-          scale: interpolate(f, [6, 12], [0.4, 1], pop),
-          opacity: interpolate(f, [6, 8], [0, 1], clamp),
-          boxShadow: `0 10px 0 ${HOT}`,
+          marginTop: 40,
+          fontFamily: DISPLAY,
+          fontWeight: 700,
+          fontSize: 78 * FONT.scale,
+          color: "white",
+          background: BUTTON.bg,
+          borderRadius: 28,
+          padding: "16px 48px 18px",
+          boxShadow: `0 12px 0 ${BUTTON.ledge}, 0 18px 40px rgba(0,0,0,0.45)`,
+          border: `4px solid ${INK}`,
+          ...momentPop(f - 7),
         }}
       >
         {cta}

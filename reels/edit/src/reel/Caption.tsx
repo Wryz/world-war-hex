@@ -1,56 +1,83 @@
 import { loadFont } from "@remotion/fonts";
 import React from "react";
-import { Easing, interpolate, staticFile, useCurrentFrame } from "remotion";
+import { interpolate, staticFile, useCurrentFrame } from "remotion";
 
-// Anton (SIL Open Font License), bundled: renders don't depend on reaching Google Fonts.
-export const ANTON = "Anton";
-loadFont({ family: ANTON, url: staticFile("fonts/Anton-Regular.ttf") });
+// FONT: the captions' typeface - Hex Hordes' own: DynaPuff for titles (its font-display) and
+// Fredoka for small text (its body font), both SIL OFL, bundled so renders don't need Google Fonts.
+//   scale: size multiplier (DynaPuff is wide and round: ~0.8 fits the same lines as a condensed font)
+//   stroke: outline width as a share of the size
+//   caps: set captions in capitals (the game writes its callouts in title case: "Double Kill!")
+export const FONT = { family: "DynaPuff", file: "fonts/DynaPuff-Bold.ttf", scale: 0.8, stroke: 0.06, caps: false };
+export const DISPLAY = FONT.family;
+export const BODY = "Fredoka";
+loadFont({ family: FONT.family, url: staticFile(FONT.file), weight: "700" });
+loadFont({ family: BODY, url: staticFile("fonts/Fredoka-SemiBold.ttf"), weight: "600" });
 
-// BRAND: take these from the game's logo/brand files.
+// BRAND: the game's own colours - its callout tones (components/game/effects/EffectsLayer.tsx),
+// the slate-900 it outlines everything in, and the logo's gold.
+export const TONES = {
+  gold: { text: "#fcd34d", glow: "rgba(245, 158, 11, 0.55)" },
+  red: { text: "#fca5a5", glow: "rgba(239, 68, 68, 0.55)" },
+  blue: { text: "#93c5fd", glow: "rgba(59, 130, 246, 0.55)" },
+  purple: { text: "#d8b4fe", glow: "rgba(168, 85, 247, 0.55)" },
+  green: { text: "#86efac", glow: "rgba(34, 197, 94, 0.55)" },
+} as const;
 /** Highlight colour for *words* and labels. */
-export const ACCENT = "#ffd23f";
-/** Second, hotter highlight (bosses, danger, top tier). */
-export const HOT = "#ff4d2e";
-/** Light text on the end card. */
-export const CREAM = "#fcf3c7";
-/** Outline / dark. */
-export const INK = "#1b1d22";
+export const ACCENT = TONES.gold.text;
+/** Second, hotter highlight (bosses, danger, defeat). */
+export const HOT = TONES.red.text;
+/** Light text (the game's slate-50). */
+export const CREAM = "#f8fafc";
+/** Outline / dark (the game's slate-900). */
+export const INK = "#0f172a";
+/** The logo's gold. */
+export const LOGO_GOLD = "#d9a200";
+/** The game's primary button (emerald-600 on an emerald-800 ledge). */
+export const BUTTON = { bg: "#059669", ledge: "#065f46" };
 
-/** Splits "THE *BOSS*" into plain and highlighted runs. */
+const glowOf = (color: string) => Object.values(TONES).find((t) => t.text === color)?.glow ?? "rgba(0,0,0,0.5)";
+
+/** Splits "Double *Kill!*" into plain and highlighted runs. */
 const runs = (text: string) => text.split(/(\*[^*]+\*)/).filter(Boolean).map((r) => (r.startsWith("*") ? { hi: true, t: r.slice(1, -1) } : { hi: false, t: r }));
 
-/** The big punchy caption: Anton caps, heavy black outline, slams in. */
+/** The game's own callout entrance (globals.css momentPop): slams in big and tilted, overshoots, settles. */
+export const momentPop = (f: number) => ({
+  scale: interpolate(f, [0, 4, 6, 8], [2.2, 0.92, 1.04, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+  rotate: `${interpolate(f, [0, 4, 6], [-4, 1, 0], { extrapolateLeft: "clamp", extrapolateRight: "clamp" })}deg`,
+  opacity: interpolate(f, [0, 2], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+});
+
+/** A caption in the style of the game's battle callouts: DynaPuff, slate outline and ledge, a tone's glow. */
 export const Caption: React.FC<{ text: string; sub?: string; accent?: string; top?: number; size?: number; delay?: number }> = ({
   text,
   sub,
   accent = ACCENT,
   top = 300,
-  size = 150,
+  size: baseSize = 150,
   delay = 0,
 }) => {
   const f = useCurrentFrame() - delay;
   if (f < 0) return null;
-  const pop = { extrapolateLeft: "clamp", extrapolateRight: "clamp", easing: Easing.bezier(0.2, 1.4, 0.4, 1) } as const;
+  const size = baseSize * FONT.scale;
   return (
-    <div style={{ position: "absolute", left: 60, right: 60, top, display: "flex", flexDirection: "column", alignItems: "center" }}>
+    <div style={{ position: "absolute", left: 50, right: 50, top, display: "flex", flexDirection: "column", alignItems: "center" }}>
       <div
         style={{
-          fontFamily: ANTON,
+          fontFamily: DISPLAY,
+          fontWeight: 700,
           fontSize: size,
-          lineHeight: 0.98,
+          lineHeight: 1.02,
           textAlign: "center",
-          textTransform: "uppercase",
-          color: "white",
-          WebkitTextStroke: `${Math.round(size * 0.09)}px ${INK}`,
+          textTransform: FONT.caps ? "uppercase" : "none",
+          color: CREAM,
+          WebkitTextStroke: `${Math.round(size * FONT.stroke)}px ${INK}`,
           paintOrder: "stroke fill",
-          textShadow: `0 ${size * 0.06}px 0 ${INK}, 0 0 40px rgba(0,0,0,0.55)`,
-          scale: interpolate(f, [0, 5], [1.6, 1], pop),
-          rotate: interpolate(f, [0, 5], ["-7deg", "-2deg"], pop),
-          opacity: interpolate(f, [0, 2], [0, 1], { extrapolateRight: "clamp" }),
+          textShadow: `0 ${Math.round(size * 0.07)}px 0 ${INK}, 0 0 ${Math.round(size * 0.35)}px ${glowOf(accent)}`,
+          ...momentPop(f),
         }}
       >
         {runs(text).map((r, i) => (
-          <span key={i} style={{ color: r.hi ? accent : "white" }}>
+          <span key={i} style={{ color: r.hi ? accent : CREAM }}>
             {r.t}
           </span>
         ))}
@@ -58,17 +85,18 @@ export const Caption: React.FC<{ text: string; sub?: string; accent?: string; to
       {sub ? (
         <div
           style={{
-            marginTop: 26,
-            fontFamily: ANTON,
-            fontSize: size * 0.36,
-            letterSpacing: 4,
-            textTransform: "uppercase",
-            color: INK,
-            background: accent,
-            padding: "6px 22px 4px",
-            rotate: "-2deg",
-            translate: interpolate(f, [2, 7], ["0px 40px", "0px 0px"], pop),
-            opacity: interpolate(f, [2, 4], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+            marginTop: size * 0.22,
+            fontFamily: BODY,
+            fontWeight: 600,
+            fontSize: Math.round(size * 0.34),
+            color: CREAM,
+            background: "rgba(15, 23, 42, 0.85)",
+            border: `3px solid ${accent}`,
+            borderRadius: 999,
+            padding: `${Math.round(size * 0.06)}px ${Math.round(size * 0.24)}px`,
+            boxShadow: `0 6px 0 ${INK}`,
+            translate: interpolate(f, [3, 8], ["0px 30px", "0px 0px"], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
+            opacity: interpolate(f, [3, 6], [0, 1], { extrapolateLeft: "clamp", extrapolateRight: "clamp" }),
           }}
         >
           {sub}
