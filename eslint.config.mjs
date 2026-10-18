@@ -10,6 +10,8 @@ const compat = new FlatCompat({
 });
 
 const eslintConfig = [
+  // (reels/ is the promo-video pipeline, with its own tooling)
+  { ignores: ["reels/**"] },
   ...compat.extends("next/core-web-vitals", "next/typescript"),
 ];
 

@@ -1,4 +1,5 @@
 import { useSyncExternalStore } from 'react';
+import { reelHook } from '@/lib/reelHook';
 import type { MaterialId } from '@/lib/game/materials';
 import { buzz } from '@/lib/haptics';
 
@@ -201,6 +202,7 @@ export const emitMaterial = (from: { x: number; y: number }, material: MaterialI
 };
 
 export const emitMoment = (moment: Omit<Moment, 'id'>) => {
+  reelHook()?.onMoment?.(moment);
   const id = nextId++;
   // One callout at a time: a new one replaces the last, unless that one is huge and this isn't
   let shown = false;

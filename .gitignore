@@ -5,3 +5,10 @@ node_modules
 # OS files
 .DS_Store
 /public/sw-manifest.js
+
+# Reel pipeline: raw takes and build output (finished reels go to media/reels)
+/reels/out
+/reels/final
+/reels/edit/node_modules
+/reels/edit/public/footage
+/reels/.venv

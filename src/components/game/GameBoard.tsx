@@ -1,5 +1,6 @@
 import { memo, useState, useCallback, useMemo, Suspense, useEffect, useRef } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { reelHook } from '@/lib/reelHook';
 import { Html, PerspectiveCamera } from '@react-three/drei';
 import * as THREE from 'three';
 import { GameState, Hex, HexCoordinates, PlayerType, Unit, UnitType } from '@/types/game';
@@ -931,6 +932,7 @@ const CameraRig: React.FC<{
       lookAt.z + Math.cos(azimuth) * horizontal + shakeZ
     );
     camera.lookAt(lookAt.x + shakeX * 0.5, lookAt.y, lookAt.z + shakeZ * 0.5);
+    reelHook()?.onCamera?.(camera, lookAt, delta);
   });
 
   return null;

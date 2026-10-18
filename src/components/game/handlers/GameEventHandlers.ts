@@ -35,6 +35,8 @@ import {
 import { getHexDistance } from '@/lib/game/hexUtils';
 import { isAiSide, isMultiSide } from '@/lib/game/sides';
 import { planAITurn } from '@/lib/ai/aiPlayer';
+import { bestCastleSite } from '@/lib/game/tutorialPlan';
+import { reelHook } from '@/lib/reelHook';
 import { trackEvent } from '@/lib/analytics';
 import { buildBattle } from '@/lib/campaign/battleSetup';
 import { getProfile } from '@/lib/meta/profile';
@@ -220,6 +222,8 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
   const isAITurn = activeSide !== viewer;
   // The AI plays this turn (on the game that runs the battle: never a guest's)
   const isAiPlaying = isAiSide(gameState, activeSide) && link?.role !== 'guest' && !gameState.players[activeSide]?.eliminated;
+  // (filming a reel: the AI plays the viewer's turns too - see lib/reelHook)
+  const isAutoplaying = !!reelHook()?.autoplay && !link && !isMultiSide(gameState) && activeSide === viewer;
   // Someone elsewhere plays this turn (the host waits for their orders)
   const isRemoteTurn = link?.role === 'host' && !!link.isRemoteSide?.(activeSide);
   const isGuest = link?.role === 'guest';
@@ -305,7 +309,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
   // Planning timer for the player's turn - when it runs out the turn ends automatically.
   // It doesn't start until the board is visible, and pauses while the tab is in the background.
   useEffect(() => {
-    if (!isReady || currentPhase !== 'planning' || isAITurn || untimed || gameState.players[viewer]?.eliminated) return;
+    if (!isReady || currentPhase !== 'planning' || isAITurn || isAutoplaying || untimed || gameState.players[viewer]?.eliminated) return;
 
     let remaining = stateRef.current.planningTimeRemaining;
     setTimer(remaining);
@@ -323,7 +327,7 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
 
     return () => clearInterval(timerInterval);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isReady, currentPhase, isAITurn, turnNumber, executeAllMoves, untimed]);
+  }, [isReady, currentPhase, isAITurn, isAutoplaying, turnNumber, executeAllMoves, untimed]);
 
   // Another side's turn online: the host waits for its orders, a little longer than the turn lasts
   // (they arrive through applyRemoteOrders), then ends the turn without them
@@ -379,14 +383,16 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
 
   // AI turn: plan purchases and moves, then execute them
   useEffect(() => {
-    if (!isReady || currentPhase !== 'planning' || !isAiPlaying) return;
+    if (!isReady || currentPhase !== 'planning' || !(isAiPlaying || isAutoplaying)) return;
 
     let executionTimeout: ReturnType<typeof setTimeout> | undefined;
     const speed = getGameSpeed();
 
     // (once the board has shown everything from the turn before)
     const planningTimeout = setTimeout(() => {
-      commitState(planAITurn(stateRef.current));
+      commitState(isAutoplaying
+        ? planAITurn(stateRef.current, { side: viewer, difficulty: 'hard', caution: 0.35 })
+        : planAITurn(stateRef.current));
 
       executionTimeout = setTimeout(() => {
         commitState(executeTurn(stateRef.current));
@@ -397,7 +403,20 @@ export const useGameHandlers = ({ battle, resume, isReady, untimed = false, view
       clearTimeout(planningTimeout);
       if (executionTimeout) clearTimeout(executionTimeout);
     };
-  }, [isReady, currentPhase, isAiPlaying, turnNumber, activeSide, commitState]);
+  }, [isReady, currentPhase, isAiPlaying, isAutoplaying, turnNumber, activeSide, commitState, viewer]);
+
+  // Filming a reel: build the castle on the suggested site, and report every state of the battle
+  useEffect(() => {
+    if (!isReady || currentPhase !== 'setup' || !reelHook()?.autoplay) return;
+    const timeout = setTimeout(() => {
+      const site = bestCastleSite(stateRef.current);
+      if (site) commitState(chooseCastle(stateRef.current, site));
+    }, 600);
+    return () => clearTimeout(timeout);
+  }, [isReady, currentPhase, commitState]);
+  useEffect(() => {
+    reelHook()?.onState?.(gameState);
+  }, [gameState]);
 
   // A turn without a fight ends once its troops have arrived and the board has shown its moves
   // (a guest's board waits for the host to say so)
