@@ -85,3 +85,85 @@ drop so each castle falls on a hit.
 - Reply to every comment in the first hour (the question in each caption is there to start them),
   and pin the best answer.
 - The music credit line must stay in the caption of the baked-in versions (CC BY).
+
+---
+---
+
+# Batch 2 — in the game's own look
+
+Same deal: each reel has a music version (post as is, keep the credit line) and a `-game-sound`
+version for adding a trending sound in the app's audio picker. This batch is styled after the
+game itself: its own fonts (DynaPuff titles, Fredoka labels), its battle callouts' colours, slate
+outline and pop-in, and its emerald button for "LINK IN BIO". Real battles throughout: every win
+and the defeat in reel 4 were played at the enemy's full strength.
+
+## 4. The undead story — `Reel4Undead.mp4`
+
+**Caption**
+
+> The undead won't stay dead 💀
+> Level 70: the Lich King's skeletons kept getting back up… until the rematch with War Clerics.
+> What would you have brought? 👇
+> 🎮 Link in bio
+>
+> Music: "Graveyard Shift" Kevin MacLeod (incompetech.com). Licensed under Creative Commons: By Attribution 4.0 License http://creativecommons.org/licenses/by/4.0/
+
+**Hashtags:** #hexhordes #strategygame #indiegame #undead #gamingmemes #mobilegames #cardgame #gamedev
+
+**Alt text:** Hex Hordes gameplay: a red-hatted Lich King and his glowing skeletons keep rising
+again, the player's castle falls ("Defeat"), then in a rematch War Clerics take the Lich King down
+for good.
+
+**Game-sound version:** a spooky-comedy trend — Róisín Murphy "Ramalama (Bang Bang)" (cut "Defeat"
+on the vocal switch) or The Cramps "Goo Goo Muck". Both unverified for business accounts: check the
+audio picker.
+
+---
+
+## 5. The kill streak — `Reel5Streak.mp4`
+
+**Caption**
+
+> Can you chain it? ⚔️
+> First Blood → Double Kill → Triple Kill → Rampage → Boss Defeated → Victory. All real callouts from real battles.
+> What's your best streak? 👇
+> 🎮 Link in bio
+>
+> Music: "Mystery Go Brrrr" by Fupi (CC0)
+
+**Hashtags:** #hexhordes #strategygame #killstreak #indiegame #mobilegames #gaming #satisfying #gamedev
+
+**Alt text:** A montage of Hex Hordes battle callouts, each on its own cut: First Blood, Double
+Kill, Triple Kill, the game's own Rampage, Boss Defeated, Crushing Blow, and a slow-motion
+Victory as a castle crumbles.
+
+**Game-sound version:** a fast-cut highlight sound — Lil Uzi Vert "POP", or a phonk / Brazilian
+funk edit (e.g. "WINDOWS IN BRAZIL (Sped Up)"), started on its drop.
+
+---
+
+## 6. How to play — `Reel6HowTo.mp4`
+
+**Caption**
+
+> Hex Hordes in 20 seconds 🃏🏰
+> Play your cards, march, let them fight, gang up, topple their castle. Filmed straight from the game, HUD and all.
+> Which step would you mess up first? 👇
+> 🎮 Link in bio
+>
+> Music: "Swing Along" by bramd (opengameart.org/content/swing-along), CC BY 4.0
+
+**Hashtags:** #hexhordes #strategygame #cardgame #howtoplay #indiegame #mobilegames #turnbased #gamedev
+
+**Alt text:** A five-step tour of a Hex Hordes battle as the player sees it: the hand of troop
+cards, troops marching across the hex board, an automatic fight, a four-enemy Rampage, and the
+enemy castle collapsing into the Victory screen with stars and coins.
+
+**Game-sound version:** a bouncy trend — Lipps Inc. "Funkytown" (unverified as still trending), or
+any upbeat "tutorial"-style sound; start it on its first downbeat.
+
+## Posting tips (batch 2)
+
+- One a day, strongest first: **Undead story → Kill streak → How to play**.
+- Pin a comment on the how-to-play reel with the link, for viewers who skip the bio.
+- Reply to every answer to the caption's question in the first hour.

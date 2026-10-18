@@ -1383,5 +1383,222 @@
     "label": "Victory! - You win on points"
    }
   ]
+ },
+ "h15_goblin_woods": {
+  "seconds": 39.933,
+  "ko": 35.93333333333333,
+  "marks": [
+   {
+    "t": 0.033,
+    "kind": "moment",
+    "label": "Fog of War - You only see what your troops can see"
+   },
+   {
+    "t": 7.867,
+    "kind": "kill",
+    "label": "unit-ed58ae6b-925e-4ae5-8e4d-2376b92c6d73"
+   },
+   {
+    "t": 7.867,
+    "kind": "kill",
+    "label": "unit-c7e5b787-4dcd-45e5-a4fb-8137b752fc57"
+   },
+   {
+    "t": 8,
+    "kind": "kill",
+    "label": "First Blood!"
+   },
+   {
+    "t": 8,
+    "kind": "moment",
+    "label": "Champion Down! - The enemy army is shaken"
+   },
+   {
+    "t": 13.6,
+    "kind": "kill",
+    "label": "unit-69c9247b-e71f-483b-bea0-e53d6d265c06"
+   },
+   {
+    "t": 16.133,
+    "kind": "kill",
+    "label": "unit-b30f30c6-342b-4a49-93b6-55343a3204ef"
+   },
+   {
+    "t": 23.933,
+    "kind": "kill",
+    "label": "unit-46eaffe3-f860-430e-9945-66c97faf8bb8"
+   },
+   {
+    "t": 27.267,
+    "kind": "kill",
+    "label": "unit-67cd19a9-4a71-4eb1-9b67-36e87b4ea18c"
+   },
+   {
+    "t": 27.267,
+    "kind": "kill",
+    "label": "unit-863d4a89-c4a9-424d-9744-9a136dc3bb34"
+   },
+   {
+    "t": 27.267,
+    "kind": "kill",
+    "label": "unit-5315702f-7f26-42c3-ab0f-1ddd82cef01b"
+   },
+   {
+    "t": 27.267,
+    "kind": "kill",
+    "label": "unit-93974c6d-3a7b-432e-95e4-ac9c12d1c7a3"
+   },
+   {
+    "t": 27.4,
+    "kind": "kill",
+    "label": "Rampage! - 4 enemies destroyed"
+   },
+   {
+    "t": 30.6,
+    "kind": "kill",
+    "label": "unit-eff286a0-3703-43e4-88b2-6a1654ee427e"
+   },
+   {
+    "t": 30.6,
+    "kind": "moment",
+    "label": "Walls Cracking! - Half its health gone - keep attacking"
+   },
+   {
+    "t": 32.6,
+    "kind": "kill",
+    "label": "unit-99d20485-ba06-4585-ba11-93ebf21819d4"
+   },
+   {
+    "t": 35.933,
+    "kind": "ko",
+    "label": "player wins (destroyed)"
+   },
+   {
+    "t": 35.933,
+    "kind": "moment",
+    "label": "Victory! - The enemy castle falls!"
+   }
+  ]
+ },
+ "h35_mirefen": {
+  "seconds": 68.667,
+  "ko": 64.66666666666667,
+  "marks": [
+   {
+    "t": 0.4,
+    "kind": "moment",
+    "label": "Fog of War - You only see what your troops can see"
+   },
+   {
+    "t": 4.7,
+    "kind": "kill",
+    "label": "unit-30c33381-5ff8-414b-b442-98d74449af73"
+   },
+   {
+    "t": 4.7,
+    "kind": "kill",
+    "label": "First Blood!"
+   },
+   {
+    "t": 4.7,
+    "kind": "moment",
+    "label": "Champion Down! - The enemy army is shaken"
+   },
+   {
+    "t": 13.033,
+    "kind": "kill",
+    "label": "unit-b50507a3-2c3a-48f9-baaa-7d256a0e098c"
+   },
+   {
+    "t": 13.033,
+    "kind": "kill",
+    "label": "unit-17d43602-f513-4d94-8922-e5725b57fefa"
+   },
+   {
+    "t": 19.1,
+    "kind": "kill",
+    "label": "unit-a0d94b01-185e-4de6-9218-2724498e3ed4"
+   },
+   {
+    "t": 19.1,
+    "kind": "kill",
+    "label": "unit-e1aa269e-68ee-41a8-8c65-580bd1760617"
+   },
+   {
+    "t": 25.367,
+    "kind": "kill",
+    "label": "unit-eb778e2c-28e8-44fe-b21c-efc2f6b60692"
+   },
+   {
+    "t": 32.433,
+    "kind": "kill",
+    "label": "unit-21278b68-acee-4bcb-a532-a8406804ff99"
+   },
+   {
+    "t": 32.433,
+    "kind": "kill",
+    "label": "unit-a5a11a7c-808d-4d69-9ef0-8e0504b6c102"
+   },
+   {
+    "t": 37.633,
+    "kind": "kill",
+    "label": "unit-1679a61f-e289-422d-90cb-8b0098815edd"
+   },
+   {
+    "t": 40.167,
+    "kind": "kill",
+    "label": "unit-cd813613-0809-4045-832d-56b1dee7142b"
+   },
+   {
+    "t": 45.067,
+    "kind": "kill",
+    "label": "unit-98774d7c-ac4a-4e7f-b69e-f405b93c68b6"
+   },
+   {
+    "t": 50.067,
+    "kind": "kill",
+    "label": "unit-7f202d39-52f0-4a34-9b74-234015613747"
+   },
+   {
+    "t": 52.6,
+    "kind": "kill",
+    "label": "unit-8f6ca145-c3da-411a-a295-8c3a0d8ae7c6"
+   },
+   {
+    "t": 57.667,
+    "kind": "kill",
+    "label": "unit-13bb239b-d2a4-462a-8200-f7ca865e7e3d"
+   },
+   {
+    "t": 57.667,
+    "kind": "kill",
+    "label": "unit-f35dde33-daef-4848-a8c9-0f21762fa79d"
+   },
+   {
+    "t": 58.267,
+    "kind": "moment",
+    "label": "Camp Captured! - Deploy your cards there now"
+   },
+   {
+    "t": 60.467,
+    "kind": "moment",
+    "label": "Final Round! - Kills, gold and camps decide it"
+   },
+   {
+    "t": 62.333,
+    "kind": "moment",
+    "label": "Ambush Sprung! - The enemy walked into your hidden troops"
+   },
+   {
+    "t": 64.667,
+    "kind": "ko",
+    "label": "player wins (timeout)"
+   },
+   {
+    "t": 64.667,
+    "kind": "moment",
+    "label": "Victory! - You win on points"
+   }
+  ]
  }
 }

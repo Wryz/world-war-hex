@@ -24,6 +24,12 @@ for id in "${ids[@]}"; do
       af="loudnorm=I=-14:TP=-1.5:LRA=11"
       case "$id" in *-game-sound) af="acompressor=threshold=-26dB:ratio=4:attack=4:release=90:makeup=2,$af" ;; esac
       ffmpeg -y -loglevel error -i "$tmp/$id.mp4" -c:v copy -af "$af" -ar 48000 -c:a aac -b:a 192k -movflags +faststart "$dest/$id.mp4"
+      # (A battle with few sounds can still land well under target: squeeze it harder and redo.)
+      lufs=$(ffmpeg -nostats -i "$dest/$id.mp4" -af ebur128 -f null - 2>&1 | awk '/^ +I:/ {v=$2} END {print v}')
+      if awk "BEGIN {exit !(${lufs:-0} < -16)}"; then
+        echo "  $id at $lufs LUFS: compressing harder"
+        ffmpeg -y -loglevel error -i "$tmp/$id.mp4" -c:v copy -af "acompressor=threshold=-34dB:ratio=6:attack=3:release=80:makeup=8,loudnorm=I=-14:TP=-1.5:LRA=11" -ar 48000 -c:a aac -b:a 192k -movflags +faststart "$dest/$id.mp4"
+      fi
       ;;
   esac
   echo "-> $dest/$id"

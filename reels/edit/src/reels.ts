@@ -157,10 +157,10 @@ const undead: ReelProps = {
   title: "Hex *Hordes*",
   cta: "LINK IN BIO",
   segments: [
-    { clip: "b70_lich_king", from: 19.8, beats: 4, accent: purple.text },
+    { clip: "b70_lich_king", from: 19.8, beats: 6, accent: purple.text },
     atCut("b70_lich_king", "moment", /They Rise Again/, 6, { text: "They got *back up*", accent: purple.text }, 1.8, 3),
     atCut("b70_lich_king", "moment", /They Rise Again/, 6, { text: "*Again.*", accent: purple.text }, 1.8, 4),
-    koCut("b70_lich_king", 10, { text: "*Defeat*", sub: "Level 70 · the Lich King", accent: red.text, push: 1.15 }, 0.4),
+    koCut("b70_lich_king", 8, { text: "*Defeat*", sub: "Level 70 · the Lich King", accent: red.text, push: 1.15 }, 0.4),
     atCut("b70_lich_king_r1", "boss", /Boss Defeated/, 8, { text: "Rematch: *War Clerics*", sub: "they finish the undead", accent: gold.text, push: 1.1 }, 2.4),
     atCut("b70_lich_king_r1", "boss", /Boss Defeated/, 8, { text: "Gone *for good.*", accent: green.text, push: 1.12 }, -1.0),
   ],
@@ -181,22 +181,50 @@ const streak: ReelProps = {
   segments: [
     atCut("b10_bandit_king", "kill", /First Blood/, 3, { text: "First *Blood!*", accent: red.text }),
     atCut("b90_demon_lord", "kill", /Double Kill/, 3, { text: "Double *Kill!*", accent: gold.text }),
-    atCut("b20_goblin_warchief", "kill", /Double Kill/, 3, { text: "Double *Kill!*", sub: "again", accent: gold.text }),
     atCut("b90_demon_lord", "kill", /Triple Kill/, 3, { text: "Triple *Kill!*", accent: purple.text }),
+    // (filmed with the HUD on: the game's own "Rampage!" callout, so no caption of ours)
+    atCut("h15_goblin_woods", "kill", /Rampage/, 4, {}, 1.4),
     atCut("b20_goblin_warchief", "boss", /Boss Defeated/, 4, { text: "*Boss* Defeated!", accent: red.text, push: 1.1 }),
     atCut("b30_alpha_direwolf", "moment", /Crushing Blow/, 3, { text: "Crushing *Blow!*", accent: blue.text }),
     koCut("b100_elder_dragon", 7, { text: "*Victory!*", accent: green.text, rate: 0.7, push: 1.3, focus: [25, 32] }),
   ],
 };
 
+// ---------------------------------------------------------------------------- 6. How to play
+// "Hex Hordes in 20 seconds", filmed as a player sees it (cards, gold, the game's own callouts).
+const howto: ReelProps = {
+  music: "music/quirky_tactics.mp3",
+  grid: grid("quirky_tactics", 15.0),
+  musicVolume: 0.7,
+  gameVolume: 0.9,
+  hook: "Hex Hordes in *20 seconds*",
+  hookAccent: green.text,
+  // (the game's own callouts pop up a fifth of the way down: our captions sit in the lower third)
+  captionTop: 1230,
+  hookBeats: 8,
+  endBeats: 3,
+  title: "Hex *Hordes*",
+  cta: "LINK IN BIO",
+  segments: [
+    { clip: "h15_goblin_woods", from: 4.2, beats: 7, rate: 0.6, text: "1. Play your *cards*", sub: "every troop is a card", accent: gold.text },
+    { clip: "h15_goblin_woods", from: 11.0, beats: 8, text: "2. *March* out", sub: "grab the high ground", accent: blue.text },
+    { clip: "h15_goblin_woods", from: 21.6, beats: 8, text: "3. They *fight* on their own", accent: red.text },
+    atCut("h15_goblin_woods", "kill", /Rampage/, 8, { text: "4. *Gang up* on them", sub: "+25% per extra attacker", accent: purple.text }, 2.0),
+    // (the castle crumbles, then the game's own results screen: stars, coins, new monsters)
+    koCut("h15_goblin_woods", 10, { text: "5. *Topple* their castle", accent: green.text, rate: 0.85 }, 0.5),
+  ],
+};
+
 export const REELS: Record<string, ReelProps> = {
   Reel4Undead: undead,
   Reel5Streak: streak,
+  Reel6HowTo: howto,
 };
 
 export const COVERS: Record<string, CoverProps> = {
   Cover4Undead: { still: "stills/undead.jpg", text: "The undead won't *stay dead*", sub: "so I brought clerics", accent: purple.text },
-  Cover5Streak: { still: "stills/streak.jpg", text: "Can you *chain it?*", sub: "First Blood → Victory", accent: gold.text },
+  Cover5Streak: { still: "stills/streak.jpg", text: "Can you *chain it?*", sub: "First Blood → Victory", accent: gold.text, size: 140 },
+  Cover6HowTo: { still: "stills/howto.jpg", text: "Hex Hordes in *20 seconds*", sub: "a strategy game you play with cards", accent: green.text },
 };
 
 // Every cut has to stay inside its take (a cut running off the end of the footage freezes).
