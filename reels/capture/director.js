@@ -183,6 +183,8 @@
   let unitIds = null;
   const hook = (window.__reelHook = {
     autoplay: true,
+    // (late regions outclass the autopiloted army: a shot can weaken the enemy so the battle is won)
+    enemyStrength: shot.enemyStrength ?? 1,
     onState: (s) => {
       state = s;
       if (!R.opts) return;

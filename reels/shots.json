@@ -107,5 +107,27 @@
    "archmage",
    "longbow"
   ]
+ },
+ {
+  "name": "b60_frost_giant_e1",
+  "path": "/play?level=60",
+  "level": 60,
+  "seconds": 100,
+  "tail": 4,
+  "enemyStrength": 0.65
+ },
+ {
+  "name": "b70_lich_king_e1",
+  "path": "/play?level=70",
+  "level": 70,
+  "seconds": 100,
+  "tail": 4,
+  "enemyStrength": 0.65,
+  "deck": [
+   "cleric",
+   "tank",
+   "archmage",
+   "berserker"
+  ]
  }
 ]

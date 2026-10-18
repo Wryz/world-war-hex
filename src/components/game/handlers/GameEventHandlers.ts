@@ -36,7 +36,7 @@ import { getHexDistance } from '@/lib/game/hexUtils';
 import { isAiSide, isMultiSide } from '@/lib/game/sides';
 import { planAITurn } from '@/lib/ai/aiPlayer';
 import { bestCastleSite } from '@/lib/game/tutorialPlan';
-import { reelHook } from '@/lib/reelHook';
+import { reelHook, withReelEdge } from '@/lib/reelHook';
 import { trackEvent } from '@/lib/analytics';
 import { buildBattle } from '@/lib/campaign/battleSetup';
 import { getProfile } from '@/lib/meta/profile';
@@ -106,7 +106,7 @@ const AI_EXECUTION_DELAY = 450;
 const createInitialGame = (battle: BattleConfig, resume: boolean) => {
   const saved = resume ? loadGameFromLocalStorage() : null;
   if (!saved || !sameBattle(saved.additionalData.battle, battle)) {
-    return { gameState: buildBattle(battle, getProfile()), elapsedSeconds: 0, isResumed: false };
+    return { gameState: withReelEdge(buildBattle(battle, getProfile())), elapsedSeconds: 0, isResumed: false };
   }
 
   const savedState = saved.gameState;
