@@ -122,6 +122,62 @@
     console.error('reel settings', err);
   }
 
+
+  // ---------------------------------------------------------------- what the camera looks at
+  const HEIGHT = { water: 0.5, swamp: 0.6, ice: 0.6, lava: 0.6, plains: 1.3, desert: 1.3, snow: 2.0, hills: 2.1, mountains: 2.7 };
+  const world = (c) => {
+    const hex = state?.hexGrid?.find((h) => h.coordinates.q === c.q && h.coordinates.r === c.r);
+    const y = (HEIGHT[hex?.terrain] ?? 1.3) + (hex?.heightOffset ?? 0) + 0.4;
+    return [Math.sqrt(3) * (c.q + c.r / 2), y, 1.5 * c.r];
+  };
+  const hexDist = (a, b) => (Math.abs(a.q - b.q) + Math.abs(a.r - b.r) + Math.abs(a.q + a.r - b.q - b.r)) / 2;
+  const mean = (pts) => pts.reduce((a, p) => [a[0] + p[0] / pts.length, a[1] + p[1] / pts.length, a[2] + p[2] / pts.length], [0, 0, 0]);
+  let aim = null;
+  let dist = null;
+  let wide = false;
+  let held = null;
+  /** The fight to watch: a boss's, else the biggest; a siege; the falling castle; else null (the rig's choice). */
+  const focus = () => {
+    const s = state;
+    if (!s) return null;
+    wide = false;
+    if (s.currentPhase === 'gameOver') {
+      const loser = s.winner === 'player' ? 'ai' : 'player';
+      const at = s.players?.[loser]?.baseLocation;
+      return at ? world(at) : null;
+    }
+    if (s.currentPhase === 'combat') {
+      const fights = (s.combats ?? []).filter((c) => !c.resolved || held === c);
+      if (fights.length) {
+        const score = (c) => [...c.attackers, ...c.defenders].reduce((n, u) => n + (u.isBoss ? 10 : 1), 0);
+        // (keep watching the same fight while it lasts)
+        const pick = fights.includes(held) ? held : fights.slice().sort((a, b) => score(b) - score(a))[0];
+        held = pick;
+        return mean([world(pick.hexCoordinates), world(pick.hexCoordinates), ...pick.attackers.map((u) => world(u.position))]);
+      }
+      if (s.siege) {
+        const at = s.players?.[s.siege.side]?.baseLocation;
+        if (at) return world(at);
+      }
+    }
+    held = null;
+    // Troops on the march: the player's troops and whatever is near them, from a little further back.
+    const mine = (s.players?.player?.units ?? []).map((u) => u.position);
+    if (!mine.length) return null;
+    const near = (s.players?.ai?.units ?? []).map((u) => u.position).filter((p) => mine.some((m) => hexDist(m, p) <= 3));
+    const enemy = s.players?.ai?.baseLocation;
+    wide = true;
+    const c = mean([...mine, ...near].map(world));
+    // (a little toward the enemy castle: the march is going that way, and the near board edge is empty)
+    if (enemy) {
+      const e = world(enemy);
+      const d = Math.hypot(e[0] - c[0], e[2] - c[2]) || 1;
+      c[0] += ((e[0] - c[0]) / d) * 1.5;
+      c[2] += ((e[2] - c[2]) / d) * 1.5;
+    }
+    return c;
+  };
+
   // ---------------------------------------------------------------- the game's reel hook
   let state = null;
   let unitIds = null;
@@ -146,22 +202,22 @@
       const kind = /defeated|slain/i.test(title) ? 'boss' : /fallen|is out/i.test(title) ? 'castle' : /blood|kill|rampage/i.test(title) ? 'kill' : 'moment';
       R.marks.push({ t: t(), kind, label: m.subtitle ? `${title} - ${m.subtitle}` : title });
     },
-    onCamera: (camera, lookAt) => {
+    onCamera: (camera, lookAt, delta) => {
       if (!R.opts) return;
-      // Pull in (zoom) and tilt down a little (drop) from the rig's view: a phone-portrait close-up.
-      const zoom = R.opts.zoom ?? 0.6;
-      const drop = ((R.opts.drop ?? 14) * Math.PI) / 180;
+      // Our own shot: close on the fight that matters (see focus()), from the rig's side of the board.
+      const f = focus() ?? [lookAt.x, lookAt.y, lookAt.z];
+      const k = 1 - Math.exp(-(R.opts.follow ?? 2.6) * delta);
+      if (!aim) aim = f.slice();
+      for (let i = 0; i < 3; i++) aim[i] += (f[i] - aim[i]) * k;
+      const over = state?.currentPhase === 'gameOver';
+      const wantDist = over ? (R.opts.fallDist ?? 13) : wide ? (R.opts.wideDist ?? 12.5) : (R.opts.dist ?? 11);
+      dist = dist ?? wantDist;
+      dist += (wantDist - dist) * (1 - Math.exp(-1.8 * delta));
+      const el = ((over ? 40 : (R.opts.elevation ?? 48)) * Math.PI) / 180;
       const off = camera.position.clone().sub(lookAt);
-      const dist = off.length() * zoom;
-      const horiz = Math.hypot(off.x, off.z) || 1e-6;
-      const el = Math.max(0.5, Math.atan2(off.y, horiz) - drop);
       const az = Math.atan2(off.x, off.z) + ((R.opts.turn ?? 0) * Math.PI) / 180;
-      // (the rig frames the fight for a top-down view: tilted, it sits high, so aim further ahead)
-      const ahead = R.opts.ahead ?? 1.6;
-      const x = lookAt.x - (off.x / horiz) * ahead;
-      const z = lookAt.z - (off.z / horiz) * ahead;
-      camera.position.set(x + Math.sin(az) * Math.cos(el) * dist, lookAt.y + Math.sin(el) * dist, z + Math.cos(az) * Math.cos(el) * dist);
-      camera.lookAt(x, lookAt.y, z);
+      camera.position.set(aim[0] + Math.sin(az) * Math.cos(el) * dist, aim[1] + Math.sin(el) * dist, aim[2] + Math.cos(az) * Math.cos(el) * dist);
+      camera.lookAt(aim[0], aim[1], aim[2]);
     },
   });
 
