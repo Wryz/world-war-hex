@@ -1,11 +1,85 @@
 [
- { "name": "b10_bandit_king", "path": "/play?level=10", "level": 10, "seconds": 100, "tail": 4 },
- { "name": "b20_goblin_warchief", "path": "/play?level=20", "level": 20, "seconds": 100, "tail": 4 },
- { "name": "b30_alpha_direwolf", "path": "/play?level=30", "level": 30, "seconds": 100, "tail": 4 },
- { "name": "b40_bog_hydra", "path": "/play?level=40", "level": 40, "seconds": 100, "tail": 4 },
- { "name": "b50_pharaoh", "path": "/play?level=50", "level": 50, "seconds": 100, "tail": 4 },
- { "name": "b60_frost_giant", "path": "/play?level=60", "level": 60, "seconds": 100, "tail": 4 },
- { "name": "b70_lich_king", "path": "/play?level=70", "level": 70, "seconds": 100, "tail": 4 },
- { "name": "b90_demon_lord", "path": "/play?level=90", "level": 90, "seconds": 100, "tail": 4 },
- { "name": "b100_elder_dragon", "path": "/play?level=100", "level": 100, "seconds": 100, "tail": 4 }
+ {
+  "name": "b10_bandit_king",
+  "path": "/play?level=10",
+  "level": 10,
+  "seconds": 100,
+  "tail": 4
+ },
+ {
+  "name": "b20_goblin_warchief",
+  "path": "/play?level=20",
+  "level": 20,
+  "seconds": 100,
+  "tail": 4
+ },
+ {
+  "name": "b30_alpha_direwolf",
+  "path": "/play?level=30",
+  "level": 30,
+  "seconds": 100,
+  "tail": 4
+ },
+ {
+  "name": "b40_bog_hydra",
+  "path": "/play?level=40",
+  "level": 40,
+  "seconds": 100,
+  "tail": 4
+ },
+ {
+  "name": "b50_pharaoh",
+  "path": "/play?level=50",
+  "level": 50,
+  "seconds": 100,
+  "tail": 4
+ },
+ {
+  "name": "b60_frost_giant",
+  "path": "/play?level=60",
+  "level": 60,
+  "seconds": 100,
+  "tail": 4
+ },
+ {
+  "name": "b70_lich_king",
+  "path": "/play?level=70",
+  "level": 70,
+  "seconds": 100,
+  "tail": 4
+ },
+ {
+  "name": "b90_demon_lord",
+  "path": "/play?level=90",
+  "level": 90,
+  "seconds": 100,
+  "tail": 4
+ },
+ {
+  "name": "b100_elder_dragon",
+  "path": "/play?level=100",
+  "level": 100,
+  "seconds": 100,
+  "tail": 4
+ },
+ {
+  "name": "b60_frost_giant_r1",
+  "path": "/play?level=60",
+  "level": 60,
+  "seconds": 100,
+  "tail": 4
+ },
+ {
+  "name": "b60_frost_giant_r2",
+  "path": "/play?level=60",
+  "level": 60,
+  "seconds": 100,
+  "tail": 4,
+  "deck": [
+   "tank",
+   "archmage",
+   "berserker",
+   "longbow"
+  ]
+ }
 ]
