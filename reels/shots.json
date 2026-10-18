@@ -81,5 +81,31 @@
    "berserker",
    "longbow"
   ]
+ },
+ {
+  "name": "b70_lich_king_r1",
+  "path": "/play?level=70",
+  "level": 70,
+  "seconds": 100,
+  "tail": 4,
+  "deck": [
+   "cleric",
+   "tank",
+   "archmage",
+   "berserker"
+  ]
+ },
+ {
+  "name": "b70_lich_king_r2",
+  "path": "/play?level=70",
+  "level": 70,
+  "seconds": 100,
+  "tail": 4,
+  "deck": [
+   "cleric",
+   "pegasus",
+   "archmage",
+   "longbow"
+  ]
  }
 ]
