@@ -27,10 +27,10 @@ const mark = (take: string, kind: string, fallback: number, n = 0, label?: RegEx
 /** A cut that opens `lead` seconds before the castle starts to fall, so it crumbles just after the beat. */
 const koCut = (take: string, beats: number, extra: Partial<Segment> = {}, lead = 0.3): Segment => ({ clip: take, from: ko(take) - lead, beats, ...extra });
 
-/** The boss going down (or, if it never fell, the castle). The blow lands ~1 s into the cut. */
+/** The boss going down: the blow lands ~1 s into the cut. (A boss that never fell: it raging in the fight.) */
 const bossCut = (take: string, beats: number, extra: Partial<Segment> = {}, lead = 1.1): Segment => ({
   clip: take,
-  from: Math.max(0.5, mark(take, "boss", ko(take)) - lead),
+  from: Math.max(0.5, mark(take, "boss", mark(take, "moment", ko(take), 0, /Enraged/) + lead - 0.4) - lead),
   beats,
   ...extra,
 });
@@ -39,6 +39,14 @@ const bossCut = (take: string, beats: number, extra: Partial<Segment> = {}, lead
 const fightCut = (take: string, beats: number, extra: Partial<Segment> = {}, n = 0, lead = 1.6): Segment => ({
   clip: take,
   from: Math.max(0.5, mark(take, "kill", ko(take) / 2, n, /^(?!unit-)/) - lead),
+  beats,
+  ...extra,
+});
+
+/** Troops battering a castle: just before its walls crack (or a crushing blow lands). */
+const siegeCut = (take: string, beats: number, extra: Partial<Segment> = {}): Segment => ({
+  clip: take,
+  from: Math.max(0.5, mark(take, "moment", ko(take) - 4, 0, /Walls Cracking|Crushing Blow/) - 0.8),
   beats,
   ...extra,
 });
@@ -90,7 +98,7 @@ const tour: ReelProps = {
     fightCut("b60_frost_giant_e1", 4, { text: "FROSTPEAK", sub: "BLIZZARDS" }),
     fightCut("b70_lich_king_r1", 4, { text: "GRAVEMOOR", sub: "THE DEAD RISE", accent: HOT }),
     fightCut("b90_demon_lord", 4, { text: "EMBERFORGE", sub: "LAVA & FIRE", accent: HOT }),
-    koCut("b100_elder_dragon", 6, { text: "DRAGONSPIRE", sub: "THE LAST ONE", accent: HOT, push: 1.25, focus: [25, 32] }, 0.6),
+    koCut("b100_elder_dragon", 8, { text: "DRAGONSPIRE", sub: "THE LAST ONE", accent: HOT, push: 1.25, focus: [25, 32] }, 0.6),
   ],
 };
 
@@ -103,19 +111,21 @@ const castles: ReelProps = {
   gameVolume: 0.95,
   hook: "WATCH THEIR CASTLE *CRUMBLE*",
   hookBeats: 8,
+  // (the castle falls in the upper middle of the frame: count them below it)
+  captionTop: 1180,
   endBeats: 6,
   title: "HEX *HORDES*",
   cta: "LINK IN BIO",
   segments: [
-    { clip: "b30_alpha_direwolf", from: mark("b30_alpha_direwolf", "moment", ko("b30_alpha_direwolf") - 3, 0, /Walls Cracking|Crushing/) - 0.8, beats: 4 },
+    siegeCut("b30_alpha_direwolf", 4),
     koCut("b10_bandit_king", 4, { text: "*1*", sub: "BANDIT FORT" }),
     koCut("b20_goblin_warchief", 4, { text: "*2*", sub: "GOBLIN KEEP" }),
+    siegeCut("b40_bog_hydra", 4),
     koCut("b30_alpha_direwolf", 4, { text: "*3*", sub: "WOLF DEN" }),
     koCut("b40_bog_hydra", 4, { text: "*4*", sub: "SWAMP TOWER" }),
     koCut("b50_pharaoh", 4, { text: "*5*", sub: "DESERT PALACE" }),
-    koCut("b60_frost_giant_e1", 4, { text: "*6*", sub: "ICE HOLD" }),
-    koCut("b70_lich_king_e1", 4, { text: "*7*", sub: "THE CRYPT", accent: HOT }),
-    koCut("b100_elder_dragon", 12, { text: "*8*", sub: "DRAGON'S LAIR", accent: HOT, rate: 0.6, push: 1.35, focus: [25, 32] }),
+    siegeCut("b50_pharaoh", 4),
+    koCut("b100_elder_dragon", 12, { text: "*6*", sub: "DRAGON'S LAIR", accent: HOT, rate: 0.6, push: 1.35, focus: [25, 32] }),
   ],
 };
 
@@ -126,9 +136,9 @@ export const REELS: Record<string, ReelProps> = {
 };
 
 export const COVERS: Record<string, CoverProps> = {
-  Cover1Bosses: { still: "stills/bosses.jpg", text: "THE BOSSES KEEP GETTING *BIGGER*", sub: "HOW FAR CAN YOU GET?", accent: ACCENT },
+  Cover1Bosses: { still: "stills/bosses.jpg", text: "THE BOSSES KEEP GETTING *BIGGER*", sub: "HOW FAR CAN YOU GET?", accent: ACCENT, top: 900 },
   Cover2Worlds: { still: "stills/worlds.jpg", text: "EVERY MAP IS A NEW *WAR*", sub: "15 REGIONS · 150 BATTLES", accent: ACCENT },
-  Cover3Castles: { still: "stills/castles.jpg", text: "WATCH IT *CRUMBLE*", sub: "8 CASTLES · 20 SECONDS", accent: HOT },
+  Cover3Castles: { still: "stills/castles.jpg", text: "WATCH IT *CRUMBLE*", sub: "6 CASTLES · 20 SECONDS", accent: HOT },
 };
 
 // Every cut has to stay inside its take (a cut running off the end of the footage freezes).

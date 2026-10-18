@@ -130,7 +130,7 @@ export const Reel: React.FC<ReelProps> = (p) => {
     <AbsoluteFill style={{ backgroundColor: INK }}>
       {p.segments.map((s, i) => (
         <Sequence key={i} from={cuts[i]} durationInFrames={cuts[i + 1] - cuts[i]} name={`${i + 1}. ${s.clip}${s.text ? ` · ${s.text}` : ""}`}>
-          <Cut s={s} frames={cuts[i + 1] - cuts[i]} beatFrames={beatFrames} gameVolume={p.gameVolume} hookTop={cuts[i] < hookFrames ? 470 : 300} textFrames={endFrom - cuts[i]} />
+          <Cut s={s} frames={cuts[i + 1] - cuts[i]} beatFrames={beatFrames} gameVolume={p.gameVolume} hookTop={p.captionTop ?? (cuts[i] < hookFrames ? 470 : 300)} textFrames={endFrom - cuts[i]} />
         </Sequence>
       ))}
       {/* Vignette: pulls the eye to the fight, darkens the edges under Instagram's buttons. */}

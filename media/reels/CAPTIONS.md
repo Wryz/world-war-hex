@@ -62,7 +62,7 @@ reel 1, started on the drop.
 **Caption**
 
 > Watch their castle crumble 🏰💥
-> In Hex Hordes you win by tearing the enemy castle down. Eight of them, back to back.
+> In Hex Hordes you win by tearing the enemy castle down. Six of them, back to back.
 > Which one fell hardest? 👇
 > 🎮 Link in bio
 >

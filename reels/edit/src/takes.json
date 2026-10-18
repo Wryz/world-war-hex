@@ -1,1 +1,1226 @@
-{}
+{
+ "b100_elder_dragon": {
+  "seconds": 40.367,
+  "ko": 36.36666666666667,
+  "marks": [
+   {
+    "t": 2.667,
+    "kind": "moment",
+    "label": "Ambush! - Hidden enemies stopped your troops"
+   },
+   {
+    "t": 5,
+    "kind": "kill",
+    "label": "unit-c15673a3-9b71-4733-85b9-77c7af35cbea"
+   },
+   {
+    "t": 5,
+    "kind": "kill",
+    "label": "First Blood!"
+   },
+   {
+    "t": 6.433,
+    "kind": "kill",
+    "label": "unit-ced5a9b6-93ef-409b-b22b-ed80c057c6de"
+   },
+   {
+    "t": 10.7,
+    "kind": "moment",
+    "label": "Dragon Breath!"
+   },
+   {
+    "t": 13.433,
+    "kind": "kill",
+    "label": "unit-bef4df3c-52c6-4534-80d6-e4055b25e8c2"
+   },
+   {
+    "t": 19.167,
+    "kind": "kill",
+    "label": "unit-31d7f37e-7b1d-4080-8e90-fdbc536cb762"
+   },
+   {
+    "t": 19.167,
+    "kind": "moment",
+    "label": "Enraged!"
+   },
+   {
+    "t": 25.633,
+    "kind": "kill",
+    "label": "unit-747eab1f-ab87-4e7f-a8d3-de5a85a04630"
+   },
+   {
+    "t": 25.633,
+    "kind": "kill",
+    "label": "unit-8242c2c2-65cf-4643-bf9a-a80b5de33d57"
+   },
+   {
+    "t": 25.633,
+    "kind": "kill",
+    "label": "unit-b9cc9cb9-4bb7-4303-ae51-b2bfa869a216"
+   },
+   {
+    "t": 25.633,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 25.633,
+    "kind": "boss",
+    "label": "Boss Defeated! - Its army is shaken"
+   },
+   {
+    "t": 29.767,
+    "kind": "moment",
+    "label": "Walls Cracking! - Half its health gone - keep attacking"
+   },
+   {
+    "t": 33.5,
+    "kind": "kill",
+    "label": "unit-0900755a-4f48-4f3b-80f1-dd765d5c6143"
+   },
+   {
+    "t": 33.5,
+    "kind": "kill",
+    "label": "unit-a3009f3a-f569-42c5-81a5-aa9941666dc3"
+   },
+   {
+    "t": 36.367,
+    "kind": "kill",
+    "label": "unit-5128aac3-6ce1-437b-8163-d284240fe7f8"
+   },
+   {
+    "t": 36.367,
+    "kind": "ko",
+    "label": "player wins (destroyed)"
+   },
+   {
+    "t": 36.933,
+    "kind": "moment",
+    "label": "Victory! - The enemy castle falls!"
+   }
+  ]
+ },
+ "b10_bandit_king": {
+  "seconds": 25.967,
+  "ko": 21.966666666666665,
+  "marks": [
+   {
+    "t": 0.233,
+    "kind": "moment",
+    "label": "Call the Gang!"
+   },
+   {
+    "t": 2.967,
+    "kind": "kill",
+    "label": "unit-61dffa81-969a-4147-a550-ef22bb1f4589"
+   },
+   {
+    "t": 2.967,
+    "kind": "kill",
+    "label": "First Blood!"
+   },
+   {
+    "t": 6.5,
+    "kind": "kill",
+    "label": "unit-0f64d30e-d6ec-4e34-b08e-cf37916728b3"
+   },
+   {
+    "t": 6.5,
+    "kind": "kill",
+    "label": "unit-1019a8f0-96d8-4dab-94c0-b9343a1137ab"
+   },
+   {
+    "t": 11.167,
+    "kind": "moment",
+    "label": "Enraged!"
+   },
+   {
+    "t": 13.1,
+    "kind": "kill",
+    "label": "unit-537361fa-9cf9-403b-aa8f-5de61821e9f3"
+   },
+   {
+    "t": 15.433,
+    "kind": "moment",
+    "label": "Two Stars in Reach! - Keep scoring for the third"
+   },
+   {
+    "t": 15.433,
+    "kind": "kill",
+    "label": "unit-f590a7ba-c0d5-40c8-93b5-defbc780d21a"
+   },
+   {
+    "t": 15.433,
+    "kind": "kill",
+    "label": "unit-d0a05bbe-5adc-4dac-9deb-5b1359845025"
+   },
+   {
+    "t": 15.433,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 15.433,
+    "kind": "moment",
+    "label": "Call the Gang!"
+   },
+   {
+    "t": 21.967,
+    "kind": "ko",
+    "label": "player wins (destroyed)"
+   },
+   {
+    "t": 22.533,
+    "kind": "moment",
+    "label": "Victory! - The enemy castle falls!"
+   }
+  ]
+ },
+ "b20_goblin_warchief": {
+  "seconds": 31.8,
+  "ko": 27.8,
+  "marks": [
+   {
+    "t": 7.533,
+    "kind": "kill",
+    "label": "unit-e8272699-1cc1-4564-8593-e06d74bcc512"
+   },
+   {
+    "t": 7.533,
+    "kind": "kill",
+    "label": "unit-b819e657-7916-4dec-8d87-6bcc36f08cdb"
+   },
+   {
+    "t": 7.533,
+    "kind": "kill",
+    "label": "unit-c06ffc38-7cf6-4b4f-97c6-4bdf1cadbbcf"
+   },
+   {
+    "t": 7.533,
+    "kind": "kill",
+    "label": "First Blood!"
+   },
+   {
+    "t": 9.867,
+    "kind": "kill",
+    "label": "unit-7158aa35-1010-4a2e-b41a-63f9bd1d9795"
+   },
+   {
+    "t": 9.867,
+    "kind": "kill",
+    "label": "unit-1f2b755c-64cc-4452-9366-a487889859ae"
+   },
+   {
+    "t": 9.867,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 9.867,
+    "kind": "moment",
+    "label": "Goblin Bombs!"
+   },
+   {
+    "t": 9.867,
+    "kind": "moment",
+    "label": "Camp Captured! - Deploy your cards there now"
+   },
+   {
+    "t": 12.2,
+    "kind": "kill",
+    "label": "unit-b954058d-8f42-4e65-8c08-7f813b7478af"
+   },
+   {
+    "t": 12.2,
+    "kind": "kill",
+    "label": "unit-ad5a1ada-3b3e-4033-bf53-2948af9a3631"
+   },
+   {
+    "t": 16,
+    "kind": "kill",
+    "label": "unit-e3b4b096-9a30-48e1-beee-c73096717a1f"
+   },
+   {
+    "t": 18.733,
+    "kind": "kill",
+    "label": "unit-b93a6b25-2a61-4dfa-9fe9-c92139196dd5"
+   },
+   {
+    "t": 18.733,
+    "kind": "kill",
+    "label": "unit-b4a291b7-9f30-4859-8e57-78c7f5cf872b"
+   },
+   {
+    "t": 21.467,
+    "kind": "moment",
+    "label": "Enraged!"
+   },
+   {
+    "t": 23.4,
+    "kind": "kill",
+    "label": "unit-06169e23-5109-4b58-9b5c-95b46317f67d"
+   },
+   {
+    "t": 25.733,
+    "kind": "moment",
+    "label": "Three Stars in Reach! - Win now for every star"
+   },
+   {
+    "t": 25.733,
+    "kind": "kill",
+    "label": "unit-4d2104a5-79e8-4bca-9a3f-100c94eaa13a"
+   },
+   {
+    "t": 25.733,
+    "kind": "kill",
+    "label": "unit-cc2b5c73-f7d1-468a-bae2-5e67b0c15c8a"
+   },
+   {
+    "t": 25.733,
+    "kind": "kill",
+    "label": "unit-883de456-15e9-4482-93a0-95fbbff40665"
+   },
+   {
+    "t": 25.733,
+    "kind": "kill",
+    "label": "Triple Kill! - 3 enemies destroyed"
+   },
+   {
+    "t": 25.733,
+    "kind": "boss",
+    "label": "Boss Defeated! - Its army is shaken"
+   },
+   {
+    "t": 25.867,
+    "kind": "moment",
+    "label": "Ambush! - Hidden enemies stopped your troops"
+   },
+   {
+    "t": 27.8,
+    "kind": "kill",
+    "label": "unit-8321c034-dffc-46ff-ad7f-ef7bd4a20b2a"
+   },
+   {
+    "t": 27.8,
+    "kind": "ko",
+    "label": "player wins (destroyed)"
+   },
+   {
+    "t": 27.8,
+    "kind": "moment",
+    "label": "Victory! - The enemy castle falls!"
+   }
+  ]
+ },
+ "b30_alpha_direwolf": {
+  "seconds": 32.333,
+  "ko": 28.333333333333332,
+  "marks": [
+   {
+    "t": 1.4,
+    "kind": "moment",
+    "label": "Ambush Sprung! - The enemy walked into your hidden troops"
+   },
+   {
+    "t": 4.133,
+    "kind": "moment",
+    "label": "Howl of the Pack!"
+   },
+   {
+    "t": 4.133,
+    "kind": "moment",
+    "label": "Enraged!"
+   },
+   {
+    "t": 6.067,
+    "kind": "kill",
+    "label": "unit-8c4bc078-567e-4d95-8730-65791b0adc14"
+   },
+   {
+    "t": 6.067,
+    "kind": "kill",
+    "label": "unit-eef0d398-8b6e-46b7-b93a-c6f34d1c8ed5"
+   },
+   {
+    "t": 6.067,
+    "kind": "kill",
+    "label": "First Blood!"
+   },
+   {
+    "t": 6.067,
+    "kind": "boss",
+    "label": "Boss Defeated! - Its army is shaken"
+   },
+   {
+    "t": 11.733,
+    "kind": "kill",
+    "label": "unit-6eec526d-a267-45c1-a7ad-7711940f13a2"
+   },
+   {
+    "t": 11.733,
+    "kind": "kill",
+    "label": "unit-c0e523f2-954a-466f-a62c-aca5c96e9411"
+   },
+   {
+    "t": 14.067,
+    "kind": "kill",
+    "label": "unit-dc65c24c-0f77-4127-99c3-64b5c6c1db4f"
+   },
+   {
+    "t": 14.067,
+    "kind": "kill",
+    "label": "unit-37470c03-d172-4921-a46c-e38e6b71b9c1"
+   },
+   {
+    "t": 14.067,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 16,
+    "kind": "kill",
+    "label": "unit-191c7f72-cbec-46ea-b2f7-bd216f9d0678"
+   },
+   {
+    "t": 16,
+    "kind": "kill",
+    "label": "unit-c0a06259-3b6d-46c6-b979-c6ca526219c0"
+   },
+   {
+    "t": 19.4,
+    "kind": "moment",
+    "label": "Two Stars in Reach! - Keep scoring for the third"
+   },
+   {
+    "t": 19.4,
+    "kind": "kill",
+    "label": "unit-f7ed16f0-29f1-4c39-aea4-9ee119fb11e5"
+   },
+   {
+    "t": 19.4,
+    "kind": "moment",
+    "label": "Camp Captured! - Deploy your cards there now"
+   },
+   {
+    "t": 22.133,
+    "kind": "kill",
+    "label": "unit-67a65b0d-e9a0-411a-b0c4-98f678d4279c"
+   },
+   {
+    "t": 22.133,
+    "kind": "moment",
+    "label": "Crushing Blow! - -19 castle health"
+   },
+   {
+    "t": 25.867,
+    "kind": "moment",
+    "label": "Three Stars in Reach! - Win now for every star"
+   },
+   {
+    "t": 25.867,
+    "kind": "kill",
+    "label": "unit-dd541e0e-3ece-4b47-b681-0f6bf646a06f"
+   },
+   {
+    "t": 25.867,
+    "kind": "moment",
+    "label": "Walls Cracking! - Half its health gone - keep attacking"
+   },
+   {
+    "t": 28.333,
+    "kind": "ko",
+    "label": "player wins (destroyed)"
+   },
+   {
+    "t": 28.9,
+    "kind": "moment",
+    "label": "Victory! - The enemy castle falls!"
+   }
+  ]
+ },
+ "b40_bog_hydra": {
+  "seconds": 30.333,
+  "ko": 26.333333333333332,
+  "marks": [
+   {
+    "t": 3.933,
+    "kind": "kill",
+    "label": "unit-bc9c7d49-2c4f-44a0-a3ff-c0daa777e23e"
+   },
+   {
+    "t": 3.933,
+    "kind": "kill",
+    "label": "First Blood!"
+   },
+   {
+    "t": 3.933,
+    "kind": "moment",
+    "label": "Ambush! - Hidden enemies stopped your troops"
+   },
+   {
+    "t": 3.933,
+    "kind": "moment",
+    "label": "Camp Captured! - Deploy your cards there now"
+   },
+   {
+    "t": 5.867,
+    "kind": "moment",
+    "label": "Enraged!"
+   },
+   {
+    "t": 9.467,
+    "kind": "moment",
+    "label": "Ambush! - Hidden enemies stopped your troops"
+   },
+   {
+    "t": 11.8,
+    "kind": "kill",
+    "label": "unit-ec28d705-b93d-48e3-bfe6-95d5d421cf5a"
+   },
+   {
+    "t": 11.8,
+    "kind": "moment",
+    "label": "Ambush Sprung! - The enemy walked into your hidden troops"
+   },
+   {
+    "t": 11.8,
+    "kind": "moment",
+    "label": "Camp Lost!"
+   },
+   {
+    "t": 13.733,
+    "kind": "kill",
+    "label": "unit-dd52e8fa-11ce-4bcc-a1ae-b3bce3d14a0b"
+   },
+   {
+    "t": 16.467,
+    "kind": "kill",
+    "label": "unit-aafdb599-f78a-41a4-8c34-54bf6c4fb879"
+   },
+   {
+    "t": 16.467,
+    "kind": "kill",
+    "label": "unit-5fc509db-802b-4833-9772-00615c82c8fb"
+   },
+   {
+    "t": 16.467,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 16.467,
+    "kind": "boss",
+    "label": "Boss Defeated! - Its army is shaken"
+   },
+   {
+    "t": 19.333,
+    "kind": "kill",
+    "label": "unit-12f376f6-2e6a-45a1-916b-f8c1e001499f"
+   },
+   {
+    "t": 19.333,
+    "kind": "kill",
+    "label": "unit-c3da4e0f-1552-4d43-b48f-06cd4782deca"
+   },
+   {
+    "t": 19.467,
+    "kind": "moment",
+    "label": "Camp Captured! - Deploy your cards there now"
+   },
+   {
+    "t": 22.2,
+    "kind": "moment",
+    "label": "Walls Cracking! - Half its health gone - keep attacking"
+   },
+   {
+    "t": 23.6,
+    "kind": "kill",
+    "label": "unit-121225e1-4f4d-45ad-9326-b417fdefea35"
+   },
+   {
+    "t": 23.6,
+    "kind": "kill",
+    "label": "unit-e4b2fa0b-541b-4193-80d5-99838b4d33dd"
+   },
+   {
+    "t": 26.333,
+    "kind": "kill",
+    "label": "unit-6e83a21d-e804-497d-a6a5-0680cc1142a5"
+   },
+   {
+    "t": 26.333,
+    "kind": "ko",
+    "label": "player wins (destroyed)"
+   },
+   {
+    "t": 26.9,
+    "kind": "moment",
+    "label": "Victory! - The enemy castle falls!"
+   }
+  ]
+ },
+ "b50_pharaoh": {
+  "seconds": 43.7,
+  "ko": 39.7,
+  "marks": [
+   {
+    "t": 2.7,
+    "kind": "moment",
+    "label": "Sandstorm! - Every shot reaches one hex less (not the Sand Court's)."
+   },
+   {
+    "t": 5.033,
+    "kind": "kill",
+    "label": "unit-be4743cd-52f9-4888-b198-dd2cb303fe1d"
+   },
+   {
+    "t": 5.033,
+    "kind": "kill",
+    "label": "First Blood!"
+   },
+   {
+    "t": 6.1,
+    "kind": "moment",
+    "label": "Sandstorm!"
+   },
+   {
+    "t": 9.5,
+    "kind": "moment",
+    "label": "The storm passes"
+   },
+   {
+    "t": 11.433,
+    "kind": "kill",
+    "label": "unit-36888534-0e8f-46ab-b20b-5ba40a6515f8"
+   },
+   {
+    "t": 16.3,
+    "kind": "moment",
+    "label": "Sandstorm!"
+   },
+   {
+    "t": 16.3,
+    "kind": "moment",
+    "label": "Sandstorm! - Every shot reaches one hex less (not the Sand Court's)."
+   },
+   {
+    "t": 16.3,
+    "kind": "moment",
+    "label": "Ambush! - Hidden enemies stopped your troops"
+   },
+   {
+    "t": 18.633,
+    "kind": "kill",
+    "label": "unit-c4cf7159-9c6f-4a82-b2e4-03352019b469"
+   },
+   {
+    "t": 20.967,
+    "kind": "kill",
+    "label": "unit-00e83eb4-5c45-4299-bf70-84bee5aa6823"
+   },
+   {
+    "t": 20.967,
+    "kind": "kill",
+    "label": "unit-b088d656-66ec-4f65-ab33-b07144c2c8f5"
+   },
+   {
+    "t": 20.967,
+    "kind": "moment",
+    "label": "Your troop wavers! - Surrounded and alone: send help"
+   },
+   {
+    "t": 23.3,
+    "kind": "kill",
+    "label": "unit-b01cacad-3187-4375-8c85-ae0aeaf49d3e"
+   },
+   {
+    "t": 23.3,
+    "kind": "moment",
+    "label": "Enraged!"
+   },
+   {
+    "t": 26.033,
+    "kind": "moment",
+    "label": "The storm passes"
+   },
+   {
+    "t": 27.967,
+    "kind": "kill",
+    "label": "unit-f37aeb04-b44c-4838-924a-4a2ba573d311"
+   },
+   {
+    "t": 27.967,
+    "kind": "kill",
+    "label": "unit-01eaccd6-0dd4-4453-94dd-fa69def916a1"
+   },
+   {
+    "t": 27.967,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 27.967,
+    "kind": "boss",
+    "label": "Boss Defeated! - Its army is shaken"
+   },
+   {
+    "t": 33.033,
+    "kind": "kill",
+    "label": "unit-1ce3182a-3031-4cb7-8155-e59d023c811a"
+   },
+   {
+    "t": 34.1,
+    "kind": "moment",
+    "label": "Sandstorm! - Every shot reaches one hex less (not the Sand Court's)."
+   },
+   {
+    "t": 36.833,
+    "kind": "kill",
+    "label": "unit-b025b315-5821-41fc-8d59-d891bdb59490"
+   },
+   {
+    "t": 36.833,
+    "kind": "moment",
+    "label": "Your troop wavers! - Surrounded and alone: send help"
+   },
+   {
+    "t": 36.833,
+    "kind": "moment",
+    "label": "Crushing Blow! - -19 castle health"
+   },
+   {
+    "t": 39.7,
+    "kind": "ko",
+    "label": "player wins (destroyed)"
+   },
+   {
+    "t": 39.7,
+    "kind": "moment",
+    "label": "Victory! - The enemy castle falls!"
+   }
+  ]
+ },
+ "b60_frost_giant_e1": {
+  "seconds": 57.333,
+  "ko": 53.333333333333336,
+  "marks": [
+   {
+    "t": 5.633,
+    "kind": "kill",
+    "label": "unit-a293f672-9059-423f-9303-6d7a6ff60c35"
+   },
+   {
+    "t": 5.633,
+    "kind": "moment",
+    "label": "Blizzard! - Every troop moves one hex less (not the Frostborn)."
+   },
+   {
+    "t": 7.067,
+    "kind": "kill",
+    "label": "unit-0c17f508-f89e-40eb-a9cc-4ce5f2b434a1"
+   },
+   {
+    "t": 9.4,
+    "kind": "kill",
+    "label": "unit-338b658a-f400-406f-8b70-85fb9d24326c"
+   },
+   {
+    "t": 9.4,
+    "kind": "kill",
+    "label": "unit-e2a30b9a-a055-4b48-b175-e3d5800207fa"
+   },
+   {
+    "t": 11,
+    "kind": "moment",
+    "label": "The storm passes"
+   },
+   {
+    "t": 15,
+    "kind": "moment",
+    "label": "Ambush Sprung! - The enemy walked into your hidden troops"
+   },
+   {
+    "t": 17.333,
+    "kind": "kill",
+    "label": "unit-e40760b8-744c-4bb6-a563-97bc68f8fef0"
+   },
+   {
+    "t": 17.333,
+    "kind": "kill",
+    "label": "unit-f3a3c2cc-5a4c-481c-b53a-97272c087c35"
+   },
+   {
+    "t": 17.333,
+    "kind": "moment",
+    "label": "Blizzard! - Every troop moves one hex less (not the Frostborn)."
+   },
+   {
+    "t": 19.667,
+    "kind": "kill",
+    "label": "unit-71c8b384-a14b-42ea-924c-b7be3984f78e"
+   },
+   {
+    "t": 22,
+    "kind": "kill",
+    "label": "unit-87783a01-c6fe-4a7b-b218-ebec3e601d10"
+   },
+   {
+    "t": 26.267,
+    "kind": "kill",
+    "label": "unit-7d6127ff-da3c-47d7-b8a3-100d61fc8bcc"
+   },
+   {
+    "t": 26.267,
+    "kind": "kill",
+    "label": "unit-16178912-5566-43fa-bddf-126e7910f604"
+   },
+   {
+    "t": 26.267,
+    "kind": "moment",
+    "label": "The storm passes"
+   },
+   {
+    "t": 28.6,
+    "kind": "kill",
+    "label": "unit-049d3c4c-e252-436c-be7b-c81e088a2df6"
+   },
+   {
+    "t": 30.933,
+    "kind": "moment",
+    "label": "Ice Stomp!"
+   },
+   {
+    "t": 30.933,
+    "kind": "moment",
+    "label": "Enraged!"
+   },
+   {
+    "t": 33.667,
+    "kind": "kill",
+    "label": "unit-1e0f297c-99f7-475c-bbbc-a96908e965e8"
+   },
+   {
+    "t": 33.667,
+    "kind": "boss",
+    "label": "Boss Defeated! - Its army is shaken"
+   },
+   {
+    "t": 36,
+    "kind": "moment",
+    "label": "Blizzard! - Every troop moves one hex less (not the Frostborn)."
+   },
+   {
+    "t": 38.333,
+    "kind": "kill",
+    "label": "unit-ed42b256-e7b7-4bfe-a58e-988f43799fd2"
+   },
+   {
+    "t": 43.2,
+    "kind": "kill",
+    "label": "unit-e2a93fe8-cc44-4277-8ef4-52c733e5058e"
+   },
+   {
+    "t": 43.2,
+    "kind": "moment",
+    "label": "The storm passes"
+   },
+   {
+    "t": 43.2,
+    "kind": "moment",
+    "label": "Camp Captured! - Deploy your cards there now"
+   },
+   {
+    "t": 45.933,
+    "kind": "kill",
+    "label": "unit-ac148384-cec2-4d6e-8d13-8691f39eb125"
+   },
+   {
+    "t": 48.667,
+    "kind": "moment",
+    "label": "Two Stars in Reach! - Keep scoring for the third"
+   },
+   {
+    "t": 48.667,
+    "kind": "kill",
+    "label": "unit-93a99d25-5851-4d8d-8dcf-411dcb000ddc"
+   },
+   {
+    "t": 48.667,
+    "kind": "kill",
+    "label": "unit-cbf9e820-1e58-448c-be2d-0fa6bf759c2f"
+   },
+   {
+    "t": 48.667,
+    "kind": "moment",
+    "label": "Final Round! - Kills, gold and camps decide it"
+   },
+   {
+    "t": 51.4,
+    "kind": "kill",
+    "label": "unit-92227b09-373f-4409-8b17-89c28a2244d3"
+   },
+   {
+    "t": 53.333,
+    "kind": "kill",
+    "label": "unit-e2e67ca9-26cd-4f93-9b3e-44fc9f9c4e7c"
+   },
+   {
+    "t": 53.333,
+    "kind": "ko",
+    "label": "player wins (timeout)"
+   },
+   {
+    "t": 53.333,
+    "kind": "moment",
+    "label": "Victory! - You win on points"
+   }
+  ]
+ },
+ "b70_lich_king_r1": {
+  "seconds": 55.4,
+  "ko": 51.4,
+  "marks": [
+   {
+    "t": 1.2,
+    "kind": "moment",
+    "label": "Ambush Sprung! - The enemy walked into your hidden troops"
+   },
+   {
+    "t": 3.933,
+    "kind": "moment",
+    "label": "Raise the Dead!"
+   },
+   {
+    "t": 5.867,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 9,
+    "kind": "kill",
+    "label": "unit-17901b9c-eacf-42ca-a5e1-2b5454abc14d"
+   },
+   {
+    "t": 10.933,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 13.267,
+    "kind": "kill",
+    "label": "unit-0cf716f9-8e87-4d4e-a31d-01ee789e6466"
+   },
+   {
+    "t": 15.2,
+    "kind": "kill",
+    "label": "unit-36ca84ff-33d7-41e5-9f2f-af0ce32b50ef"
+   },
+   {
+    "t": 15.2,
+    "kind": "moment",
+    "label": "Enraged!"
+   },
+   {
+    "t": 17.533,
+    "kind": "moment",
+    "label": "Raise the Dead!"
+   },
+   {
+    "t": 19.867,
+    "kind": "kill",
+    "label": "unit-9837af77-5440-4937-8cff-f239c38095c1"
+   },
+   {
+    "t": 19.867,
+    "kind": "kill",
+    "label": "unit-ca03a84b-6c57-4c3e-a63f-2c2693492c3f"
+   },
+   {
+    "t": 19.867,
+    "kind": "kill",
+    "label": "unit-2fb49236-40fa-4a69-b531-672d1b84662d"
+   },
+   {
+    "t": 19.867,
+    "kind": "boss",
+    "label": "Boss Defeated! - Its army is shaken"
+   },
+   {
+    "t": 19.867,
+    "kind": "moment",
+    "label": "Ambush Sprung! - The enemy walked into your hidden troops"
+   },
+   {
+    "t": 22.2,
+    "kind": "moment",
+    "label": "Camp Captured! - Deploy your cards there now"
+   },
+   {
+    "t": 24.533,
+    "kind": "kill",
+    "label": "unit-82e8c9c5-879a-4c3c-905d-d5f8ef2622cb"
+   },
+   {
+    "t": 25.6,
+    "kind": "moment",
+    "label": "Ambush! - Hidden enemies stopped your troops"
+   },
+   {
+    "t": 27.933,
+    "kind": "kill",
+    "label": "unit-2463a4a0-41b4-41ed-8620-14be29b8ec69"
+   },
+   {
+    "t": 27.933,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 30.267,
+    "kind": "kill",
+    "label": "unit-ef103664-7173-42c7-a7fa-ecc9a06779ce"
+   },
+   {
+    "t": 32.2,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 36,
+    "kind": "kill",
+    "label": "unit-a26bb544-178d-4150-aef9-cc5617abd70e"
+   },
+   {
+    "t": 36,
+    "kind": "kill",
+    "label": "unit-3afac3cc-bf4d-46a9-ae50-d5de1fde60d0"
+   },
+   {
+    "t": 45.933,
+    "kind": "kill",
+    "label": "unit-5fd8f748-4179-4453-b59c-c43a6aff5cb5"
+   },
+   {
+    "t": 45.933,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 45.933,
+    "kind": "moment",
+    "label": "Final Round! - Kills, gold and camps decide it"
+   },
+   {
+    "t": 48.267,
+    "kind": "kill",
+    "label": "unit-aba47538-3710-40bb-ad57-28c3d9b243cb"
+   },
+   {
+    "t": 48.267,
+    "kind": "kill",
+    "label": "unit-a49475a8-6ab6-4e9f-bcf2-ccdcb3f1b875"
+   },
+   {
+    "t": 48.267,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 51.4,
+    "kind": "kill",
+    "label": "unit-f5bae622-3722-4f96-93e1-e930e7a21605"
+   },
+   {
+    "t": 51.4,
+    "kind": "kill",
+    "label": "unit-b5758d5c-2739-49b4-a1ad-ae8849ee7c6e"
+   },
+   {
+    "t": 51.4,
+    "kind": "kill",
+    "label": "unit-dd257480-d252-40dd-bb5e-3cad6e9caf62"
+   },
+   {
+    "t": 51.4,
+    "kind": "ko",
+    "label": "player wins (timeout)"
+   },
+   {
+    "t": 51.4,
+    "kind": "moment",
+    "label": "They Rise Again! - Finish the undead with War Clerics or fire"
+   },
+   {
+    "t": 51.4,
+    "kind": "moment",
+    "label": "Victory! - You win on points"
+   }
+  ]
+ },
+ "b90_demon_lord": {
+  "seconds": 51.067,
+  "ko": 47.06666666666667,
+  "marks": [
+   {
+    "t": 4.433,
+    "kind": "moment",
+    "label": "Enraged!"
+   },
+   {
+    "t": 6.367,
+    "kind": "kill",
+    "label": "unit-c14ab347-00f7-4679-bc31-6d779c206fb9"
+   },
+   {
+    "t": 6.367,
+    "kind": "kill",
+    "label": "First Blood!"
+   },
+   {
+    "t": 6.367,
+    "kind": "boss",
+    "label": "Boss Defeated! - Its army is shaken"
+   },
+   {
+    "t": 9.5,
+    "kind": "kill",
+    "label": "unit-fd3ca2af-fc56-4b28-9ebf-68ac4aa710c6"
+   },
+   {
+    "t": 9.5,
+    "kind": "kill",
+    "label": "unit-ddce4185-9329-4581-9b23-991532f9d7e6"
+   },
+   {
+    "t": 12.233,
+    "kind": "kill",
+    "label": "unit-76dc8287-f676-41df-8fe8-0b8c645a7a19"
+   },
+   {
+    "t": 21.1,
+    "kind": "kill",
+    "label": "unit-ba067326-5744-447f-94fb-4978f6826487"
+   },
+   {
+    "t": 21.1,
+    "kind": "kill",
+    "label": "unit-1255dce5-d84a-4cdf-8117-240dd384fc28"
+   },
+   {
+    "t": 21.1,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 24.233,
+    "kind": "kill",
+    "label": "unit-bd253afd-42a5-48bb-a585-0abe0173ffff"
+   },
+   {
+    "t": 24.233,
+    "kind": "kill",
+    "label": "unit-dd62c76a-1e49-434f-b438-1adcdc1bbdef"
+   },
+   {
+    "t": 24.233,
+    "kind": "kill",
+    "label": "unit-0f787ba9-4798-40c9-81b6-ef94014458de"
+   },
+   {
+    "t": 24.233,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 26.567,
+    "kind": "kill",
+    "label": "unit-a7874b1b-53e6-4f38-a754-13292cb7ca9f"
+   },
+   {
+    "t": 26.567,
+    "kind": "kill",
+    "label": "unit-cce2b8a5-45ec-4870-a820-e53d358e7c8a"
+   },
+   {
+    "t": 26.567,
+    "kind": "kill",
+    "label": "unit-538668ce-fff8-45ed-b3ee-5df6dfe00e63"
+   },
+   {
+    "t": 26.567,
+    "kind": "kill",
+    "label": "Double Kill! - 2 enemies destroyed"
+   },
+   {
+    "t": 27.967,
+    "kind": "kill",
+    "label": "unit-66cbf019-5d66-49c8-a9f8-a0b5c7ddd52f"
+   },
+   {
+    "t": 27.967,
+    "kind": "kill",
+    "label": "unit-e1140b18-3040-4aec-8463-63a3e39ee0cd"
+   },
+   {
+    "t": 30.7,
+    "kind": "kill",
+    "label": "unit-15869b91-3e83-4d17-95de-441c898eccd4"
+   },
+   {
+    "t": 30.7,
+    "kind": "kill",
+    "label": "unit-8d1d8d15-86e0-4b7b-86cb-ae9106c94fbd"
+   },
+   {
+    "t": 36.5,
+    "kind": "kill",
+    "label": "unit-81f7a589-9d27-4710-9c81-840c1ec55532"
+   },
+   {
+    "t": 39.633,
+    "kind": "kill",
+    "label": "unit-8c53c602-0fb3-44ea-8b0e-4905bfbe29cd"
+   },
+   {
+    "t": 39.633,
+    "kind": "kill",
+    "label": "unit-cf9983b9-192b-4a6e-9fd3-110505a6f70e"
+   },
+   {
+    "t": 39.633,
+    "kind": "kill",
+    "label": "unit-40140ad0-b403-4b1f-9fc2-53c806c9a66d"
+   },
+   {
+    "t": 39.633,
+    "kind": "kill",
+    "label": "Triple Kill! - 3 enemies destroyed"
+   },
+   {
+    "t": 45.467,
+    "kind": "kill",
+    "label": "unit-79b84eb7-87c1-41d2-8a89-b7746a575fc0"
+   },
+   {
+    "t": 45.467,
+    "kind": "kill",
+    "label": "unit-25b13922-ab8d-43b9-8a4b-ff64ba02cd96"
+   },
+   {
+    "t": 45.467,
+    "kind": "moment",
+    "label": "Final Round! - Kills, gold and camps decide it"
+   },
+   {
+    "t": 47.067,
+    "kind": "ko",
+    "label": "player wins (timeout)"
+   },
+   {
+    "t": 47.067,
+    "kind": "moment",
+    "label": "Victory! - You win on points"
+   }
+  ]
+ }
+}

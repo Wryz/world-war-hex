@@ -35,6 +35,8 @@ export type ReelProps = {
   hook?: string;
   hookBeats?: number;
   segments: Segment[];
+  /** Where the cuts' captions sit (px from the top; default high, lower while the hook shows). */
+  captionTop?: number;
   /** Beats of end card (logo + call to action) over the last cut. */
   endBeats: number;
   /** The game's name on the end card; *part* in the accent colour. */
