@@ -86,7 +86,7 @@ const tour: ReelProps = {
     fightCut("b20_goblin_warchief", 4, { text: "DEEP WOODS", sub: "GOBLINS" }),
     fightCut("b30_alpha_direwolf", 4, { text: "HOWLING HILLS", sub: "WOLF PACKS" }),
     fightCut("b40_bog_hydra", 4, { text: "THE MARSH", sub: "FOG HIDES THEM" }),
-    fightCut("b50_pharaoh", 4, { text: "THE DESERT", sub: "SANDSTORMS" }),
+    fightCut("b50_pharaoh", 4, { text: "THE DESERT", sub: "THE SAND COURT" }),
     fightCut("b60_frost_giant", 4, { text: "FROSTPEAK", sub: "BLIZZARDS" }),
     fightCut("b70_lich_king", 4, { text: "GRAVEMOOR", sub: "THE DEAD RISE", accent: HOT }),
     fightCut("b90_demon_lord", 4, { text: "EMBERFORGE", sub: "LAVA & FIRE", accent: HOT }),
